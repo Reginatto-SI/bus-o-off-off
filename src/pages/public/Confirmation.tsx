@@ -1,0 +1,178 @@
+import { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { Sale } from '@/types/database';
+import { PublicLayout } from '@/components/layout/PublicLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import {
+  CheckCircle2,
+  Calendar,
+  MapPin,
+  Clock,
+  Loader2,
+  Ticket,
+  User,
+  Phone,
+  ExternalLink,
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+export default function Confirmation() {
+  const { id } = useParams<{ id: string }>();
+  const [sale, setSale] = useState<Sale | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSale = async () => {
+      if (!id) return;
+
+      const { data } = await supabase
+        .from('sales')
+        .select(
+          '*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)'
+        )
+        .eq('id', id)
+        .single();
+
+      if (data) setSale(data as Sale);
+      setLoading(false);
+    };
+
+    fetchSale();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <PublicLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  if (!sale) {
+    return (
+      <PublicLayout>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <p className="text-center text-muted-foreground">Reserva não encontrada</p>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  return (
+    <PublicLayout>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success/10 mb-4">
+            <CheckCircle2 className="h-8 w-8 text-success" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            Reserva Confirmada!
+          </h1>
+          <p className="text-muted-foreground">
+            Sua passagem foi reservada com sucesso
+          </p>
+        </div>
+
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Detalhes da Reserva</CardTitle>
+              <StatusBadge status={sale.status} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-lg mb-2">{sale.event?.name}</h3>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  {sale.event &&
+                    format(new Date(sale.event.date), "EEEE, dd 'de' MMMM 'de' yyyy", {
+                      locale: ptBR,
+                    })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  {sale.event?.city}
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h4 className="font-medium mb-2">Informações de Embarque</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>Horário de saída: {sale.trip?.departure_time.slice(0, 5)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span>{sale.boarding_location?.name}</span>
+                </div>
+                <p className="text-muted-foreground pl-6">
+                  {sale.boarding_location?.address}
+                </p>
+                <p className="text-muted-foreground pl-6">
+                  Chegue às {sale.boarding_location?.time.slice(0, 5)}
+                </p>
+                {sale.boarding_location?.maps_url && (
+                  <a
+                    href={sale.boarding_location.maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline pl-6"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Ver no Google Maps
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h4 className="font-medium mb-2">Passageiro</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span>{sale.customer_name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span>{sale.customer_phone}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Ticket className="h-4 w-4 text-muted-foreground" />
+                  <span>{sale.quantity} passagem(ns)</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="bg-muted/50 rounded-lg p-4 mb-6">
+          <p className="text-sm text-muted-foreground text-center">
+            <strong>Importante:</strong> Apresente este comprovante no momento do embarque.
+            Chegue ao local de embarque com pelo menos 15 minutos de antecedência.
+          </p>
+        </div>
+
+        <Link to="/eventos">
+          <Button variant="outline" className="w-full">
+            Ver outros eventos
+          </Button>
+        </Link>
+      </div>
+    </PublicLayout>
+  );
+}
