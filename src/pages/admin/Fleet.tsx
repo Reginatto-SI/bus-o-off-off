@@ -46,8 +46,10 @@ import {
   Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Fleet() {
+  const { isGerente, isOperador } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -100,6 +102,15 @@ export default function Fleet() {
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
     const capacity = Number.parseInt(form.capacity, 10);
     const normalizedPlate = form.plate.trim().toUpperCase();
+    const isAdmin = isGerente || isOperador;
+
+    if (!isAdmin) {
+      // Comentário: bloqueia tentativa de escrita para usuários sem permissão (RLS exige admin).
+      console.warn('Permissão insuficiente ao salvar veículo: usuário não-admin.');
+      toast.error('Você não tem permissão para salvar veículos');
+      setSaving(false);
+      return;
+    }
 
     if (!normalizedPlate) {
       // Comentário: evita request inválida quando a placa obrigatória está vazia.
@@ -152,7 +163,19 @@ export default function Fleet() {
           plate: normalizedPlate,
         },
       });
-      toast.error(error.message.includes('unique') ? 'Placa já cadastrada' : 'Erro ao salvar veículo');
+      const isRlsError =
+        error.message.includes('row-level security') ||
+        error.message.includes('permission denied') ||
+        error.code === '42501';
+      const isDuplicatePlate = error.message.includes('unique') || error.message.includes('duplicate key');
+      // Comentário: mensagens mais úteis para RLS/constraint sem expor detalhes técnicos.
+      toast.error(
+        isRlsError
+          ? 'Sem permissão para salvar veículos'
+          : isDuplicatePlate
+            ? 'Placa já cadastrada'
+            : 'Erro ao salvar veículo'
+      );
     } else {
       toast.success(editingId ? 'Veículo atualizado' : 'Veículo cadastrado');
       setDialogOpen(false);
