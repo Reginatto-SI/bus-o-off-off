@@ -1,9 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Calendar, Bus, Users, MapPin, ShoppingCart, UserCheck, LogOut, Menu, X, Home, Link as LinkIcon } from 'lucide-react';
+import { Calendar, Bus, Users, MapPin, ShoppingCart, UserCheck, LogOut, Menu, X, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import { Logo } from '@/components/Logo';
+
 const navigation = [{
   name: 'Eventos',
   href: '/admin/eventos',
@@ -50,17 +52,14 @@ export function AdminSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const filteredNavigation = navigation.filter(item => userRole && item.roles.includes(userRole));
   const sidebarContent = <>
-      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border bg-slate-700">
-        <div className="flex items-center gap-2">
-          <Bus className="h-8 w-8 text-sidebar-primary" />
-          <span className="text-xl font-bold text-sidebar-foreground">PassBus</span>
-        </div>
+      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border bg-sidebar-background">
+        <Logo size="md" />
         <Button variant="ghost" size="icon" className="lg:hidden text-sidebar-foreground" onClick={() => setMobileOpen(false)}>
           <X className="h-5 w-5" />
         </Button>
       </div>
 
-      <nav className="flex-1 px-2 py-4 space-y-1 bg-slate-700">
+      <nav className="flex-1 px-2 py-4 space-y-1 bg-sidebar-background">
         {filteredNavigation.map(item => {
         const isActive = location.pathname === item.href;
         return <NavLink key={item.name} to={item.href} onClick={() => setMobileOpen(false)} className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', isActive ? 'bg-sidebar-accent text-sidebar-primary' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground')}>
@@ -70,7 +69,7 @@ export function AdminSidebar() {
       })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border bg-slate-700">
+      <div className="p-4 border-t border-sidebar-border bg-sidebar-background">
         <div className="mb-3">
           <p className="text-sm font-medium text-sidebar-foreground truncate">
             {profile?.name}
@@ -94,9 +93,8 @@ export function AdminSidebar() {
         <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
           <Menu className="h-6 w-6" />
         </Button>
-        <div className="flex items-center gap-2 ml-2">
-          <Bus className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold">PassBus</span>
+        <div className="ml-2">
+          <Logo size="sm" />
         </div>
       </div>
 
