@@ -126,7 +126,3 @@ export function useAuth() {
   }
   return context;
 }
-
-export function useAuthContext() {
-  return useAuth();
-}
