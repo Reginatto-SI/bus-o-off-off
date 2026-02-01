@@ -187,7 +187,7 @@ export default function Fleet() {
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Tabs defaultValue="identificacao" className="space-y-4">
-                  <TabsList>
+                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                     <TabsTrigger value="identificacao">Identificação</TabsTrigger>
                     <TabsTrigger value="capacidade">Capacidade</TabsTrigger>
                     <TabsTrigger value="tecnicos">Dados Técnicos</TabsTrigger>
