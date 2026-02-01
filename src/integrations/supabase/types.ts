@@ -351,28 +351,58 @@ export type Database = {
       }
       vehicles: {
         Row: {
+          brand: string | null
           capacity: number
+          chassis: string | null
+          color: string | null
           created_at: string
           id: string
+          model: string | null
+          notes: string | null
+          owner: string | null
           plate: string
+          renavam: string | null
+          status: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at: string
+          whatsapp_group_link: string | null
+          year_model: number | null
         }
         Insert: {
+          brand?: string | null
           capacity: number
+          chassis?: string | null
+          color?: string | null
           created_at?: string
           id?: string
+          model?: string | null
+          notes?: string | null
+          owner?: string | null
           plate: string
+          renavam?: string | null
+          status?: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
+          whatsapp_group_link?: string | null
+          year_model?: number | null
         }
         Update: {
+          brand?: string | null
           capacity?: number
+          chassis?: string | null
+          color?: string | null
           created_at?: string
           id?: string
+          model?: string | null
+          notes?: string | null
+          owner?: string | null
           plate?: string
+          renavam?: string | null
+          status?: Database["public"]["Enums"]["seller_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
+          whatsapp_group_link?: string | null
+          year_model?: number | null
         }
         Relationships: []
       }

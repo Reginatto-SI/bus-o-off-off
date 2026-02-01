@@ -1,6 +1,7 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van';
+export type VehicleStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
 
@@ -32,7 +33,17 @@ export interface Vehicle {
   id: string;
   type: VehicleType;
   plate: string;
+  owner: string | null;
+  brand: string | null;
+  model: string | null;
+  year_model: number | null;
   capacity: number;
+  chassis: string | null;
+  renavam: string | null;
+  color: string | null;
+  whatsapp_group_link: string | null;
+  notes: string | null;
+  status: VehicleStatus;
   created_at: string;
   updated_at: string;
 }
