@@ -47,26 +47,41 @@ export type Database = {
       drivers: {
         Row: {
           cnh: string
+          cnh_category: string | null
+          cnh_expires_at: string | null
+          cpf: string | null
           created_at: string
           id: string
           name: string
+          notes: string | null
           phone: string
+          status: string
           updated_at: string
         }
         Insert: {
           cnh: string
+          cnh_category?: string | null
+          cnh_expires_at?: string | null
+          cpf?: string | null
           created_at?: string
           id?: string
           name: string
+          notes?: string | null
           phone: string
+          status?: string
           updated_at?: string
         }
         Update: {
           cnh?: string
+          cnh_category?: string | null
+          cnh_expires_at?: string | null
+          cpf?: string | null
           created_at?: string
           id?: string
           name?: string
+          notes?: string | null
           phone?: string
+          status?: string
           updated_at?: string
         }
         Relationships: []

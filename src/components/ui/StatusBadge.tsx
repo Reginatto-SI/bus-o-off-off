@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
-import { EventStatus, SaleStatus, SellerStatus, VehicleStatus } from '@/types/database';
+import { DriverStatus, EventStatus, SaleStatus, SellerStatus, VehicleStatus } from '@/types/database';
 
-type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus;
+type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus;
 
 interface StatusBadgeProps {
   status: StatusType;

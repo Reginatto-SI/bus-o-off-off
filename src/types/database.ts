@@ -2,6 +2,7 @@ export type UserRole = 'gerente' | 'operador' | 'vendedor';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van';
 export type VehicleStatus = 'ativo' | 'inativo';
+export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
 
@@ -52,7 +53,12 @@ export interface Driver {
   id: string;
   name: string;
   phone: string;
+  cpf: string | null;
   cnh: string;
+  cnh_category: string | null;
+  cnh_expires_at: string | null;
+  notes: string | null;
+  status: DriverStatus;
   created_at: string;
   updated_at: string;
 }
