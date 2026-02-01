@@ -75,6 +75,13 @@ export default function Fleet() {
       .order('created_at', { ascending: false });
 
     if (error) {
+      // Comentário: log detalhado para diagnosticar falhas de leitura na frota sem expor dados sensíveis no UI.
+      console.error('Erro ao carregar frota (vehicles.select)', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       toast.error('Erro ao carregar frota');
     } else {
       setVehicles(data as Vehicle[]);
@@ -92,10 +99,27 @@ export default function Fleet() {
 
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
     const capacity = Number.parseInt(form.capacity, 10);
+    const normalizedPlate = form.plate.trim().toUpperCase();
+
+    if (!normalizedPlate) {
+      // Comentário: evita request inválida quando a placa obrigatória está vazia.
+      console.warn('Validação de veículo: placa ausente no modal de frota.');
+      toast.error('Informe a placa do veículo');
+      setSaving(false);
+      return;
+    }
+
+    if (Number.isNaN(capacity)) {
+      // Comentário: previne envio de NaN para o Supabase (erro de tipo em coluna integer).
+      console.warn('Validação de veículo: capacidade inválida (NaN) no modal de frota.');
+      toast.error('Informe uma capacidade válida');
+      setSaving(false);
+      return;
+    }
 
     const vehicleData = {
       type: form.type,
-      plate: form.plate.trim().toUpperCase(),
+      plate: normalizedPlate,
       owner: form.owner.trim(),
       brand: form.brand || null,
       model: form.model || null,
@@ -116,6 +140,18 @@ export default function Fleet() {
     }
 
     if (error) {
+      // Comentário: log detalhado para entender causa raiz (RLS, constraint, validação) sem expor no toast.
+      console.error('Erro ao salvar veículo (vehicles.insert/update)', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        editingId,
+        payload: {
+          ...vehicleData,
+          plate: normalizedPlate,
+        },
+      });
       toast.error(error.message.includes('unique') ? 'Placa já cadastrada' : 'Erro ao salvar veículo');
     } else {
       toast.success(editingId ? 'Veículo atualizado' : 'Veículo cadastrado');
