@@ -194,7 +194,8 @@ export default function Fleet() {
               </Button>
             </DialogTrigger>
             {/* Admin Modal UI: preset visual reutilizável (não altera layout/responsividade) */}
-            <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0">
+            {/* Admin Modal UI: remove gap do container para evitar espaço entre header e tabs */}
+            <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
               {/* Admin Modal UI: header com separação sutil sem mexer no grid */}
               <DialogHeader className="admin-modal__header px-6 py-4">
                 <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
