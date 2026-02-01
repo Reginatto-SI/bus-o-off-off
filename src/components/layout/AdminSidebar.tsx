@@ -39,21 +39,17 @@ type NavigationGroup = {
   items: NavigationItem[];
 };
 
-const allRoles: UserRole[] = ['gerente', 'operador', 'vendedor'];
-
 const navigationGroups: NavigationGroup[] = [{
   id: 'eventos',
   label: 'Eventos',
   items: [{
     name: 'Eventos',
     href: '/admin/eventos',
-    icon: Calendar,
-    roles: allRoles
+    icon: Calendar
   }, {
     name: 'Vendas',
     href: '/admin/vendas',
-    icon: ShoppingCart,
-    roles: ['gerente', 'operador']
+    icon: ShoppingCart
   }]
 }, {
   id: 'cadastros',
@@ -61,23 +57,19 @@ const navigationGroups: NavigationGroup[] = [{
   items: [{
     name: 'Frota (Veículos)',
     href: '/admin/frota',
-    icon: Bus,
-    roles: ['gerente', 'operador']
+    icon: Bus
   }, {
     name: 'Motoristas',
     href: '/admin/motoristas',
-    icon: Users,
-    roles: ['gerente', 'operador']
+    icon: Users
   }, {
     name: 'Locais de Embarque',
     href: '/admin/locais',
-    icon: MapPin,
-    roles: ['gerente', 'operador']
+    icon: MapPin
   }, {
     name: 'Vendedores',
     href: '/admin/vendedores',
-    icon: UserCheck,
-    roles: ['gerente', 'operador']
+    icon: UserCheck
   }]
 }, {
   id: 'vendas-comissao',
@@ -95,20 +87,17 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Relatório de Vendas',
     icon: FileText,
     disabled: true,
-    statusLabel: 'Em breve',
-    roles: allRoles
+    statusLabel: 'Em breve'
   }, {
     name: 'Relatório por Evento',
     icon: BarChart3,
     disabled: true,
-    statusLabel: 'Em breve',
-    roles: allRoles
+    statusLabel: 'Em breve'
   }, {
     name: 'Comissão de Vendedores',
     icon: BadgePercent,
     disabled: true,
-    statusLabel: 'Em breve',
-    roles: allRoles
+    statusLabel: 'Em breve'
   }]
 }, {
   id: 'configuracoes',
@@ -117,14 +106,12 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     icon: Settings,
     disabled: true,
-    statusLabel: 'Em breve',
-    roles: allRoles
+    statusLabel: 'Em breve'
   }, {
     name: 'Minha Conta',
     icon: User,
     disabled: true,
-    statusLabel: 'Em breve',
-    roles: allRoles
+    statusLabel: 'Em breve'
   }]
 }];
 
