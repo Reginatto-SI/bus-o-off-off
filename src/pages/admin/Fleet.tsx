@@ -181,7 +181,7 @@ export default function Fleet() {
                 Adicionar Veículo
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="h-[650px] max-h-[650px] w-[1200px] max-w-[1200px] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
               </DialogHeader>
