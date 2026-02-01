@@ -155,7 +155,8 @@ export function AdminSidebar() {
       <nav className="flex-1 bg-sidebar px-3 py-5">
         <Accordion type="multiple" defaultValue={defaultOpenGroups} className="space-y-2">
           {visibleGroups.map(group => <AccordionItem key={group.id} value={group.id} className="border-0">
-              <AccordionTrigger className="rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#94A3B8] hover:bg-[#1E293B] hover:text-sidebar-foreground hover:no-underline">
+              {/* Sidebar UX: cabeçalhos sem ícones reforçam hierarquia ERP/SaaS como seções, não ações */}
+              <AccordionTrigger className="mt-3 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#64748B] hover:bg-[#1E293B] hover:text-sidebar-foreground hover:no-underline">
                 {group.label}
               </AccordionTrigger>
               <AccordionContent className="pb-1 pt-0">
@@ -164,12 +165,14 @@ export function AdminSidebar() {
               const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
               if (item.href && !item.disabled) {
                 return <NavLink key={item.name} to={item.href} onClick={() => setMobileOpen(false)} className={cn('relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors', isActive ? 'bg-[#243B63] text-sidebar-foreground before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-r before:bg-[#F97316]' : 'text-[#94A3B8] hover:bg-[#1E293B] hover:text-sidebar-foreground')}>
-                          <item.icon className="h-5 w-5" />
+                          {/* Sidebar UX: reduzir ícones dos itens internos para destacar o texto sem mudar a área de clique */}
+                          <item.icon className="h-4 w-4" />
                           <span className="flex-1">{item.name}</span>
                         </NavLink>;
               }
               return <button key={item.name} type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#64748B] opacity-70" disabled aria-disabled="true">
-                        <item.icon className="h-5 w-5" />
+                        {/* Sidebar UX: reduzir ícones dos itens internos para melhorar hierarquia visual ERP/SaaS */}
+                        <item.icon className="h-4 w-4" />
                         <span className="flex-1 text-left">{item.name}</span>
                         {item.statusLabel ? <span className="rounded-full bg-[#1E293B] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
                             {item.statusLabel}
