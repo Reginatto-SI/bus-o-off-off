@@ -142,7 +142,8 @@ export function AdminSidebar() {
     ...group,
     items: group.items.filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
   })).filter(group => group.items.length > 0);
-  const defaultOpenGroups = visibleGroups.map(group => group.id);
+  // Mantém o menu lateral colapsado por padrão, deixando a expansão por ação do usuário.
+  const defaultOpenGroups: string[] = [];
   const sidebarContent = <>
       <div className="flex items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-4">
         <BrandHeader />
