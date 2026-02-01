@@ -51,14 +51,14 @@ export function AdminSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const filteredNavigation = navigation.filter(item => userRole && item.roles.includes(userRole));
   const sidebarContent = <>
-      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border bg-sidebar-background bg-primary-foreground">
+      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border bg-sidebar-background bg-[sidebar-accent-foreground] bg-slate-700">
         <Logo size="md" />
         <Button variant="ghost" size="icon" className="lg:hidden text-sidebar-foreground" onClick={() => setMobileOpen(false)}>
           <X className="h-5 w-5" />
         </Button>
       </div>
 
-      <nav className="flex-1 px-2 py-4 space-y-1 bg-sidebar-background bg-primary-foreground">
+      <nav className="flex-1 px-2 py-4 space-y-1 bg-sidebar-background bg-slate-700">
         {filteredNavigation.map(item => {
         const isActive = location.pathname === item.href;
         return <NavLink key={item.name} to={item.href} onClick={() => setMobileOpen(false)} className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', isActive ? 'bg-sidebar-accent text-sidebar-primary' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground')}>
@@ -68,7 +68,7 @@ export function AdminSidebar() {
       })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border bg-sidebar-background bg-primary-foreground">
+      <div className="p-4 border-t border-sidebar-border bg-sidebar-background bg-slate-700">
         <div className="mb-3 text-secondary-foreground">
           <p className="text-sm font-medium truncate text-secondary-foreground">
             {profile?.name}
