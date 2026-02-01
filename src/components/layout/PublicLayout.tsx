@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Bus } from 'lucide-react';
+import { Logo } from '@/components/Logo';
 
 interface PublicLayoutProps {
   children: ReactNode;
@@ -13,8 +13,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/eventos" className="flex items-center gap-2">
-              <Bus className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">PassBus</span>
+              <Logo size="md" />
             </Link>
             <Link
               to="/login"
@@ -33,7 +32,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
       <footer className="bg-card border-t py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} PassBus. Todos os direitos reservados.
+            © {new Date().getFullYear()} Busão Off Off. Todos os direitos reservados.
           </p>
         </div>
       </footer>

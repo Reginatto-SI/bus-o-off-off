@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bus, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Logo } from '@/components/Logo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -47,10 +48,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md animate-fade-in">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-            <Bus className="h-8 w-8 text-primary-foreground" />
+          <div className="mx-auto mb-4">
+            <Logo size="xl" />
           </div>
-          <CardTitle className="text-2xl">PassBus</CardTitle>
+          <CardTitle className="text-2xl">Busão Off Off</CardTitle>
           <CardDescription>
             Entre com suas credenciais para acessar o painel
           </CardDescription>
