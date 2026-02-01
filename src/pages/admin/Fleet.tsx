@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -181,151 +182,170 @@ export default function Fleet() {
                 Adicionar Veículo
               </Button>
             </DialogTrigger>
-            <DialogContent className="h-[650px] max-h-[650px] w-[1200px] max-w-[1200px] overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0">
+              <DialogHeader className="border-b bg-background px-6 py-4">
                 <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <Tabs defaultValue="identificacao" className="space-y-4">
-                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+              <form onSubmit={handleSubmit} className="flex h-full flex-col">
+                <Tabs defaultValue="identificacao" className="flex h-full flex-col">
+                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b bg-muted/30 px-6 py-2">
                     <TabsTrigger value="identificacao">Identificação</TabsTrigger>
                     <TabsTrigger value="capacidade">Capacidade</TabsTrigger>
                     <TabsTrigger value="tecnicos">Dados Técnicos</TabsTrigger>
                     <TabsTrigger value="operacao">Operação/Comunicação</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="identificacao" className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Tipo de Frota</Label>
-                      <Select
-                        value={form.type}
-                        onValueChange={(value: Vehicle['type']) => setForm({ ...form, type: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="onibus">Ônibus</SelectItem>
-                          <SelectItem value="van">Van</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="plate">Placa</Label>
-                      <Input
-                        id="plate"
-                        value={form.plate}
-                        onChange={(e) => setForm({ ...form, plate: e.target.value })}
-                        placeholder="ABC-1234"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="owner">Proprietário</Label>
-                      <Input
-                        id="owner"
-                        value={form.owner}
-                        onChange={(e) => setForm({ ...form, owner: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="brand">Marca</Label>
-                      <Input
-                        id="brand"
-                        value={form.brand}
-                        onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="model">Modelo</Label>
-                      <Input
-                        id="model"
-                        value={form.model}
-                        onChange={(e) => setForm({ ...form, model: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="year_model">Ano Modelo</Label>
-                      <Input
-                        id="year_model"
-                        type="number"
-                        value={form.year_model}
-                        onChange={(e) => setForm({ ...form, year_model: e.target.value })}
-                        placeholder="2024"
-                      />
-                    </div>
-                  </TabsContent>
+                  <div className="flex-1 overflow-y-auto px-6 py-4">
+                    <TabsContent value="identificacao" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Tipo de Frota</Label>
+                          <Select
+                            value={form.type}
+                            onValueChange={(value: Vehicle['type']) => setForm({ ...form, type: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="onibus">Ônibus</SelectItem>
+                              <SelectItem value="van">Van</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="plate">Placa</Label>
+                          <Input
+                            id="plate"
+                            value={form.plate}
+                            onChange={(e) => setForm({ ...form, plate: e.target.value })}
+                            placeholder="ABC-1234"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="owner">Proprietário</Label>
+                          <Input
+                            id="owner"
+                            value={form.owner}
+                            onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="brand">Marca</Label>
+                          <Input
+                            id="brand"
+                            value={form.brand}
+                            onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="model">Modelo</Label>
+                          <Input
+                            id="model"
+                            value={form.model}
+                            onChange={(e) => setForm({ ...form, model: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="year_model">Ano Modelo</Label>
+                          <Input
+                            id="year_model"
+                            type="number"
+                            value={form.year_model}
+                            onChange={(e) => setForm({ ...form, year_model: e.target.value })}
+                            placeholder="2024"
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
 
-                  <TabsContent value="capacidade" className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="capacity">Capacidade máxima de passageiros</Label>
-                      <Input
-                        id="capacity"
-                        type="number"
-                        min="1"
-                        value={form.capacity}
-                        onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                        placeholder="46"
-                        required
-                      />
-                    </div>
-                  </TabsContent>
+                    <TabsContent value="capacidade" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="space-y-2 sm:col-span-1 xl:col-span-1">
+                          <Label htmlFor="capacity">Capacidade máxima de passageiros</Label>
+                          <Input
+                            id="capacity"
+                            type="number"
+                            min="1"
+                            value={form.capacity}
+                            onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                            placeholder="46"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
 
-                  <TabsContent value="tecnicos" className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="chassis">Chassi</Label>
-                      <Input
-                        id="chassis"
-                        value={form.chassis}
-                        onChange={(e) => setForm({ ...form, chassis: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="renavam">Renavam</Label>
-                      <Input
-                        id="renavam"
-                        value={form.renavam}
-                        onChange={(e) => setForm({ ...form, renavam: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="color">Cor</Label>
-                      <Input
-                        id="color"
-                        value={form.color}
-                        onChange={(e) => setForm({ ...form, color: e.target.value })}
-                      />
-                    </div>
-                  </TabsContent>
+                    <TabsContent value="tecnicos" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="chassis">Chassi</Label>
+                          <Input
+                            id="chassis"
+                            value={form.chassis}
+                            onChange={(e) => setForm({ ...form, chassis: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="renavam">Renavam</Label>
+                          <Input
+                            id="renavam"
+                            value={form.renavam}
+                            onChange={(e) => setForm({ ...form, renavam: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="color">Cor</Label>
+                          <Input
+                            id="color"
+                            value={form.color}
+                            onChange={(e) => setForm({ ...form, color: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
 
-                  <TabsContent value="operacao" className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="whatsapp_group_link">Link do grupo de WhatsApp</Label>
-                      <Input
-                        id="whatsapp_group_link"
-                        type="url"
-                        value={form.whatsapp_group_link}
-                        onChange={(e) =>
-                          setForm({ ...form, whatsapp_group_link: e.target.value })
-                        }
-                        placeholder="https://chat.whatsapp.com/..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="notes">Observações permanentes</Label>
-                      <Textarea
-                        id="notes"
-                        value={form.notes}
-                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                        rows={4}
-                      />
-                    </div>
-                  </TabsContent>
+                    <TabsContent value="operacao" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="whatsapp_group_link">Link do grupo de WhatsApp</Label>
+                          <Input
+                            id="whatsapp_group_link"
+                            type="url"
+                            value={form.whatsapp_group_link}
+                            onChange={(e) =>
+                              setForm({ ...form, whatsapp_group_link: e.target.value })
+                            }
+                            placeholder="https://chat.whatsapp.com/..."
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2 xl:col-span-3">
+                          <Label htmlFor="notes">Observações permanentes</Label>
+                          <Textarea
+                            id="notes"
+                            value={form.notes}
+                            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                            rows={4}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </div>
                 </Tabs>
-                <Button type="submit" className="w-full" disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                </Button>
+                <div className="border-t bg-background px-6 py-4">
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        Cancelar
+                      </Button>
+                    </DialogClose>
+                    <Button type="submit" disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
               </form>
             </DialogContent>
           </Dialog>
