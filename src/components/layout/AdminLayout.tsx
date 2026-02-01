@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminSidebar } from './AdminSidebar';
+import { AdminHeader } from './AdminHeader';
 import { Loader2 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -27,6 +28,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     <div className="min-h-screen bg-background">
       <AdminSidebar />
       <div className="lg:pl-64">
+        <AdminHeader />
         <main className="pt-16 lg:pt-0">
           {children}
         </main>
