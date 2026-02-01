@@ -33,7 +33,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Bus, CircleMinus, CirclePlus, Loader2, Pencil, Plus } from 'lucide-react';
+import {
+  Bus,
+  CircleMinus,
+  CirclePlus,
+  IdCard,
+  Loader2,
+  Pencil,
+  Plus,
+  Radio,
+  Users,
+  Wrench,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Fleet() {
@@ -182,20 +193,48 @@ export default function Fleet() {
                 Adicionar Veículo
               </Button>
             </DialogTrigger>
-            <DialogContent className="flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0">
-              <DialogHeader className="border-b bg-background px-6 py-4">
+            {/* Admin Modal UI: preset visual reutilizável (não altera layout/responsividade) */}
+            <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0">
+              {/* Admin Modal UI: header com separação sutil sem mexer no grid */}
+              <DialogHeader className="admin-modal__header px-6 py-4">
                 <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="flex h-full flex-col">
                 <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b bg-muted/30 px-6 py-2">
-                    <TabsTrigger value="identificacao">Identificação</TabsTrigger>
-                    <TabsTrigger value="capacidade">Capacidade</TabsTrigger>
-                    <TabsTrigger value="tecnicos">Dados Técnicos</TabsTrigger>
-                    <TabsTrigger value="operacao">Operação/Comunicação</TabsTrigger>
+                  {/* Tabs: ícone inline + truncate para evitar overflow em telas menores */}
+                  <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                    <TabsTrigger
+                      value="identificacao"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                    >
+                      <IdCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Identificação</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="capacidade"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                    >
+                      <Users className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Capacidade</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="tecnicos"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                    >
+                      <Wrench className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Dados Técnicos</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="operacao"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                    >
+                      <Radio className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Operação/Comunicação</span>
+                    </TabsTrigger>
                   </TabsList>
 
-                  <div className="flex-1 overflow-y-auto px-6 py-4">
+                  {/* Admin Modal UI: body com scroll interno preservado */}
+                  <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
                     <TabsContent value="identificacao" className="mt-0">
                       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         <div className="space-y-2">
@@ -334,7 +373,8 @@ export default function Fleet() {
                     </TabsContent>
                   </div>
                 </Tabs>
-                <div className="border-t bg-background px-6 py-4">
+                {/* Admin Modal UI: footer com separador sutil e botões alinhados à direita */}
+                <div className="admin-modal__footer px-6 py-4">
                   <div className="flex flex-wrap justify-end gap-3">
                     <DialogClose asChild>
                       <Button type="button" variant="outline">

@@ -128,6 +128,27 @@
     @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
   }
 
+  /* Admin Modal UI: preset visual reutilizável (não altera layout/responsividade) */
+  .admin-modal {
+    @apply rounded-lg border bg-background shadow-sm;
+  }
+
+  .admin-modal__header {
+    @apply border-b bg-muted/30;
+  }
+
+  .admin-modal__tabs {
+    @apply border-b bg-muted/20;
+  }
+
+  .admin-modal__body {
+    @apply bg-background;
+  }
+
+  .admin-modal__footer {
+    @apply border-t bg-muted/20;
+  }
+
   .card-corporate {
     @apply bg-card rounded-lg border shadow-sm hover:shadow-md transition-shadow;
   }
