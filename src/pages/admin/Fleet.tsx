@@ -33,18 +33,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  BadgeCheck,
-  Bus,
-  CircleMinus,
-  CirclePlus,
-  Loader2,
-  Pencil,
-  Plus,
-  Radio,
-  Users,
-  Wrench,
-} from 'lucide-react';
+import { Bus, CircleMinus, CirclePlus, Loader2, Pencil, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Fleet() {
@@ -193,32 +182,20 @@ export default function Fleet() {
                 Adicionar Veículo
               </Button>
             </DialogTrigger>
-            <DialogContent className="admin-dialog">
-              <DialogHeader className="admin-dialog-header">
+            <DialogContent className="flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0">
+              <DialogHeader className="border-b bg-background px-6 py-4">
                 <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="flex h-full flex-col">
                 <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                  <TabsList className="admin-dialog-tabs">
-                    <TabsTrigger value="identificacao" className="admin-dialog-tab">
-                      <BadgeCheck className="h-4 w-4" />
-                      Identificação
-                    </TabsTrigger>
-                    <TabsTrigger value="capacidade" className="admin-dialog-tab">
-                      <Users className="h-4 w-4" />
-                      Capacidade
-                    </TabsTrigger>
-                    <TabsTrigger value="tecnicos" className="admin-dialog-tab">
-                      <Wrench className="h-4 w-4" />
-                      Dados Técnicos
-                    </TabsTrigger>
-                    <TabsTrigger value="operacao" className="admin-dialog-tab">
-                      <Radio className="h-4 w-4" />
-                      Operação/Comunicação
-                    </TabsTrigger>
+                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b bg-muted/30 px-6 py-2">
+                    <TabsTrigger value="identificacao">Identificação</TabsTrigger>
+                    <TabsTrigger value="capacidade">Capacidade</TabsTrigger>
+                    <TabsTrigger value="tecnicos">Dados Técnicos</TabsTrigger>
+                    <TabsTrigger value="operacao">Operação/Comunicação</TabsTrigger>
                   </TabsList>
 
-                  <div className="admin-dialog-body">
+                  <div className="flex-1 overflow-y-auto px-6 py-4">
                     <TabsContent value="identificacao" className="mt-0">
                       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         <div className="space-y-2">
@@ -357,7 +334,7 @@ export default function Fleet() {
                     </TabsContent>
                   </div>
                 </Tabs>
-                <div className="admin-dialog-footer">
+                <div className="border-t bg-background px-6 py-4">
                   <div className="flex flex-wrap justify-end gap-3">
                     <DialogClose asChild>
                       <Button type="button" variant="outline">

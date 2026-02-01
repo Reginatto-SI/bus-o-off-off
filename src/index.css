@@ -159,28 +159,4 @@
   .status-badge-paid {
     @apply bg-success/10 text-success;
   }
-
-  .admin-dialog {
-    @apply flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col p-0;
-  }
-
-  .admin-dialog-header {
-    @apply border-b bg-muted/40 px-6 py-4;
-  }
-
-  .admin-dialog-tabs {
-    @apply flex h-auto w-full flex-wrap justify-start gap-1 border-b bg-muted/30 px-6 py-2;
-  }
-
-  .admin-dialog-tab {
-    @apply inline-flex items-center gap-2 whitespace-nowrap rounded-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-semibold;
-  }
-
-  .admin-dialog-body {
-    @apply flex-1 overflow-y-auto px-6 py-4;
-  }
-
-  .admin-dialog-footer {
-    @apply border-t bg-muted/40 px-6 py-4;
-  }
 }
