@@ -46,8 +46,10 @@ import {
   Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Fleet() {
+  const { isGerente, isOperador } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,6 +77,13 @@ export default function Fleet() {
       .order('created_at', { ascending: false });
 
     if (error) {
+      // Comentário: log detalhado para diagnosticar falhas de leitura na frota sem expor dados sensíveis no UI.
+      console.error('Erro ao carregar frota (vehicles.select)', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       toast.error('Erro ao carregar frota');
     } else {
       setVehicles(data as Vehicle[]);
@@ -92,10 +101,36 @@ export default function Fleet() {
 
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
     const capacity = Number.parseInt(form.capacity, 10);
+    const normalizedPlate = form.plate.trim().toUpperCase();
+    const isAdmin = isGerente || isOperador;
+
+    if (!isAdmin) {
+      // Comentário: bloqueia tentativa de escrita para usuários sem permissão (RLS exige admin).
+      console.warn('Permissão insuficiente ao salvar veículo: usuário não-admin.');
+      toast.error('Você não tem permissão para salvar veículos');
+      setSaving(false);
+      return;
+    }
+
+    if (!normalizedPlate) {
+      // Comentário: evita request inválida quando a placa obrigatória está vazia.
+      console.warn('Validação de veículo: placa ausente no modal de frota.');
+      toast.error('Informe a placa do veículo');
+      setSaving(false);
+      return;
+    }
+
+    if (Number.isNaN(capacity)) {
+      // Comentário: previne envio de NaN para o Supabase (erro de tipo em coluna integer).
+      console.warn('Validação de veículo: capacidade inválida (NaN) no modal de frota.');
+      toast.error('Informe uma capacidade válida');
+      setSaving(false);
+      return;
+    }
 
     const vehicleData = {
       type: form.type,
-      plate: form.plate.trim().toUpperCase(),
+      plate: normalizedPlate,
       owner: form.owner.trim(),
       brand: form.brand || null,
       model: form.model || null,
@@ -116,7 +151,31 @@ export default function Fleet() {
     }
 
     if (error) {
-      toast.error(error.message.includes('unique') ? 'Placa já cadastrada' : 'Erro ao salvar veículo');
+      // Comentário: log detalhado para entender causa raiz (RLS, constraint, validação) sem expor no toast.
+      console.error('Erro ao salvar veículo (vehicles.insert/update)', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        editingId,
+        payload: {
+          ...vehicleData,
+          plate: normalizedPlate,
+        },
+      });
+      const isRlsError =
+        error.message.includes('row-level security') ||
+        error.message.includes('permission denied') ||
+        error.code === '42501';
+      const isDuplicatePlate = error.message.includes('unique') || error.message.includes('duplicate key');
+      // Comentário: mensagens mais úteis para RLS/constraint sem expor detalhes técnicos.
+      toast.error(
+        isRlsError
+          ? 'Sem permissão para salvar veículos'
+          : isDuplicatePlate
+            ? 'Placa já cadastrada'
+            : 'Erro ao salvar veículo'
+      );
     } else {
       toast.success(editingId ? 'Veículo atualizado' : 'Veículo cadastrado');
       setDialogOpen(false);
