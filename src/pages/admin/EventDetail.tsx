@@ -48,12 +48,12 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canViewFinancials } = useAuth();
+  const { canViewFinancials } = useAuthContext();
   const [event, setEvent] = useState<Event | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [eventLocations, setEventLocations] = useState<EventBoardingLocation[]>([]);
