@@ -1,5 +1,5 @@
 import { Bell, ChevronDown, LogOut, User } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -57,7 +57,7 @@ const mockNotifications: Notification[] = [
 ];
 
 export function AdminHeader() {
-  const { profile, userRole, signOut } = useAuth();
+  const { profile, userRole, signOut } = useAuthContext();
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
 
   const unreadCount = notifications.filter((n) => !n.read).length;

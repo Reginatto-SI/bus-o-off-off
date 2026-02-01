@@ -18,10 +18,10 @@ import { ShoppingCart, Loader2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function Sales() {
-  const { canViewFinancials } = useAuth();
+  const { canViewFinancials } = useAuthContext();
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
 
