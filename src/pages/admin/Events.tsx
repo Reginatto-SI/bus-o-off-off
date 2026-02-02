@@ -80,11 +80,11 @@ export default function Events() {
 
     if (!activeCompanyId) {
       const context = { action: 'insert', table: 'events', companyId: null, userId: user?.id };
-      // Comentário: mensagem amigável com detalhes só em DEBUG_ERRORS.
-      console.error('Nenhuma empresa ativa ao criar evento.', context);
+      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
+      console.error('active_company_id ausente ao criar evento.', context);
       toast.error(
         buildDebugToastMessage({
-          title: 'Nenhuma empresa ativa',
+          title: 'active_company_id ausente',
           context,
         })
       );

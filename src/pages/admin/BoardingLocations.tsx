@@ -71,11 +71,11 @@ export default function BoardingLocations() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'boarding_locations', companyId: null, userId: user?.id };
-      // Comentário: mantém toast amigável, com contexto adicional apenas no modo debug.
-      console.error('Nenhuma empresa ativa ao salvar local de embarque.', context);
+      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
+      console.error('active_company_id ausente ao salvar local de embarque.', context);
       toast.error(
         buildDebugToastMessage({
-          title: 'Nenhuma empresa ativa',
+          title: 'active_company_id ausente',
           context,
         })
       );
