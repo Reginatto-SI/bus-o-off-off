@@ -106,11 +106,11 @@ export default function Fleet() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'vehicles', companyId: null, userId: user?.id };
-      // Comentário: feedback amigável, com detalhes apenas em modo debug.
-      console.error('Nenhuma empresa ativa ao salvar veículo.', context);
+      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
+      console.error('active_company_id ausente ao salvar veículo.', context);
       toast.error(
         buildDebugToastMessage({
-          title: 'Nenhuma empresa ativa',
+          title: 'active_company_id ausente',
           context,
         })
       );

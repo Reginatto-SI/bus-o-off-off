@@ -83,11 +83,11 @@ export default function Sellers() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'sellers', companyId: null, userId: user?.id };
-      // Comentário: mantém mensagem amigável; detalhes completos apenas em DEBUG_ERRORS.
-      console.error('Nenhuma empresa ativa ao salvar vendedor.', context);
+      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
+      console.error('active_company_id ausente ao salvar vendedor.', context);
       toast.error(
         buildDebugToastMessage({
-          title: 'Nenhuma empresa ativa',
+          title: 'active_company_id ausente',
           context,
         })
       );

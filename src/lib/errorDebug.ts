@@ -1,7 +1,3 @@
-// Comentário: em DEV mostramos erro bruto; em PROD só quando VITE_DEBUG_ERRORS=true (fácil de reverter).
-export const DEBUG_ERRORS =
-  import.meta.env.DEV || import.meta.env.VITE_DEBUG_ERRORS === 'true';
-
 const DEFAULT_MAX_TOAST_CHARS = 400;
 
 type ErrorLike = {
@@ -44,10 +40,7 @@ export const buildDebugToastMessage = ({
   context,
   maxChars = DEFAULT_MAX_TOAST_CHARS,
 }: ToastMessageInput) => {
-  if (!DEBUG_ERRORS) {
-    return title;
-  }
-
+  // Comentário: sempre incluímos detalhes brutos do erro/contexto para depuração em qualquer ambiente.
   const errorDetails = formatErrorDetails(error);
   const contextDetails = formatContext(context);
   const suffix = [errorDetails, contextDetails].filter(Boolean).join(' | ');

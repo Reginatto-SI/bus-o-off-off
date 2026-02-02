@@ -121,11 +121,11 @@ export default function Drivers() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'drivers', companyId: null, userId: user?.id };
-      // Comentário: mantém mensagem amigável; detalhes completos só em DEBUG_ERRORS.
-      console.error('Nenhuma empresa ativa ao salvar motorista.', context);
+      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
+      console.error('active_company_id ausente ao salvar motorista.', context);
       toast.error(
         buildDebugToastMessage({
-          title: 'Nenhuma empresa ativa',
+          title: 'active_company_id ausente',
           context,
         })
       );
