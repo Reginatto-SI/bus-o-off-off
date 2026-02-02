@@ -29,9 +29,10 @@ import { Calendar, MapPin, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
 export default function Events() {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -51,7 +52,18 @@ export default function Events() {
       .order('date', { ascending: false });
 
     if (error) {
-      toast.error('Erro ao carregar eventos');
+      logSupabaseError({
+        label: 'Erro ao carregar eventos (events.select)',
+        error,
+        context: { action: 'select', table: 'events', companyId: activeCompanyId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao carregar eventos',
+          error,
+          context: { action: 'select', table: 'events', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       setEvents(data as Event[]);
     }
@@ -67,7 +79,15 @@ export default function Events() {
     setSaving(true);
 
     if (!activeCompanyId) {
-      toast.error('Nenhuma empresa ativa');
+      const context = { action: 'insert', table: 'events', companyId: null, userId: user?.id };
+      // Comentário: mensagem amigável com detalhes só em DEBUG_ERRORS.
+      console.error('Nenhuma empresa ativa ao criar evento.', context);
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Nenhuma empresa ativa',
+          context,
+        })
+      );
       setSaving(false);
       return;
     }
@@ -75,7 +95,18 @@ export default function Events() {
     const { error } = await supabase.from('events').insert([{ ...form, company_id: activeCompanyId }]);
 
     if (error) {
-      toast.error('Erro ao criar evento');
+      logSupabaseError({
+        label: 'Erro ao criar evento (events.insert)',
+        error,
+        context: { action: 'insert', table: 'events', companyId: activeCompanyId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao criar evento',
+          error,
+          context: { action: 'insert', table: 'events', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       toast.success('Evento criado com sucesso');
       setDialogOpen(false);
