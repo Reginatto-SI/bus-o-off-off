@@ -37,53 +37,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     // Fetch profile
-    const { data: profileData } = await supabase
+    const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
+
+    if (profileError) {
+      // Comentário: visibilidade de falhas ao carregar perfil (necessário para resolver empresa ativa).
+      console.error('Erro ao carregar profile (profiles.select)', {
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+      });
+    }
 
     if (profileData) {
       setProfile(profileData as Profile);
     }
 
     // Fetch user roles and companies
-    const { data: rolesData } = await supabase
+    const { data: rolesData, error: rolesError } = await supabase
       .from('user_roles')
-      .select('*, companies(*)')
+      .select('*')
       .eq('user_id', userId);
 
+    if (rolesError) {
+      // Comentário: diagnóstico de falhas ao carregar vínculos do usuário com empresas.
+      console.error('Erro ao carregar roles (user_roles.select)', {
+        code: rolesError.code,
+        message: rolesError.message,
+        details: rolesError.details,
+        hint: rolesError.hint,
+      });
+    }
+
     if (rolesData && rolesData.length > 0) {
-      // Extract unique companies
-      const companies = rolesData
-        .map((r: any) => r.companies)
-        .filter((c: Company | null): c is Company => c !== null);
-      
-      // Remove duplicates based on id
+      const companyIds = rolesData.map((role: any) => role.company_id).filter(Boolean);
+
+      const { data: companiesData, error: companiesError } = await supabase
+        .from('companies')
+        .select('*')
+        .in('id', companyIds)
+        .eq('is_active', true);
+
+      if (companiesError) {
+        // Comentário: diagnóstico de falhas ao carregar empresas ativas vinculadas ao usuário.
+        console.error('Erro ao carregar empresas (companies.select)', {
+          code: companiesError.code,
+          message: companiesError.message,
+          details: companiesError.details,
+          hint: companiesError.hint,
+        });
+      }
+
+      const companies = (companiesData ?? []) as Company[];
       const uniqueCompanies = companies.filter(
         (company: Company, index: number, self: Company[]) =>
           index === self.findIndex((c) => c.id === company.id)
       );
-      
+
       setUserCompanies(uniqueCompanies);
 
-      // Get stored company preference or use first one
-      const storedCompanyId = localStorage.getItem(`activeCompany_${userId}`);
-      const validCompanyId = uniqueCompanies.find((c: Company) => c.id === storedCompanyId)?.id 
-        || uniqueCompanies[0]?.id;
+      const profileCompanyId = profileData?.company_id ?? null;
+      const profileActiveCompanyId =
+        uniqueCompanies.find((company) => company.id === profileCompanyId)?.id ?? null;
+
+      // Comentário: se o profile estiver inválido/inativo, usa a primeira empresa ativa vinculada.
+      const validCompanyId = profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null;
 
       if (validCompanyId) {
         setActiveCompanyId(validCompanyId);
         setActiveCompany(uniqueCompanies.find((c: Company) => c.id === validCompanyId) || null);
         localStorage.setItem(`activeCompany_${userId}`, validCompanyId);
 
-        // Find role for active company
         const roleForCompany = rolesData.find((r: any) => r.company_id === validCompanyId);
         if (roleForCompany) {
           setUserRole(roleForCompany.role as UserRole);
           setSellerId(roleForCompany.seller_id);
         }
+      } else {
+        // Comentário: garante estado limpo quando não há empresa ativa disponível.
+        setActiveCompanyId(null);
+        setActiveCompany(null);
+        setUserRole(null);
+        setSellerId(null);
       }
+    } else {
+      // Comentário: evita resíduos de estado quando o usuário não possui vínculos.
+      setUserCompanies([]);
+      setActiveCompanyId(null);
+      setActiveCompany(null);
+      setUserRole(null);
+      setSellerId(null);
     }
   };
 
