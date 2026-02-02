@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function Events() {
+  const { activeCompanyId } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -64,7 +66,13 @@ export default function Events() {
     e.preventDefault();
     setSaving(true);
 
-    const { error } = await supabase.from('events').insert([form]);
+    if (!activeCompanyId) {
+      toast.error('Nenhuma empresa ativa');
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.from('events').insert([{ ...form, company_id: activeCompanyId }]);
 
     if (error) {
       toast.error('Erro ao criar evento');

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Driver } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,6 +48,7 @@ import {
 import { toast } from 'sonner';
 
 export default function Drivers() {
+  const { activeCompanyId } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -112,6 +114,12 @@ export default function Drivers() {
     e.preventDefault();
     setSaving(true);
 
+    if (!activeCompanyId) {
+      toast.error('Nenhuma empresa ativa');
+      setSaving(false);
+      return;
+    }
+
     const normalizedCpf = form.cpf.replace(/\D/g, '');
     const normalizedPhone = form.phone.replace(/\D/g, '');
 
@@ -152,11 +160,14 @@ export default function Drivers() {
       cnh_expires_at: form.cnh_expires_at || null,
       notes: form.notes.trim() || null,
       status: form.status,
+      company_id: activeCompanyId,
     };
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('drivers').update(driverData).eq('id', editingId));
+      // Não atualiza company_id na edição
+      const { company_id, ...updateData } = driverData;
+      ({ error } = await supabase.from('drivers').update(updateData).eq('id', editingId));
     } else {
       ({ error } = await supabase.from('drivers').insert([driverData]));
     }

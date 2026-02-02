@@ -17,6 +17,7 @@ export type Database = {
       boarding_locations: {
         Row: {
           address: string
+          company_id: string
           created_at: string
           id: string
           maps_url: string | null
@@ -26,6 +27,7 @@ export type Database = {
         }
         Insert: {
           address: string
+          company_id: string
           created_at?: string
           id?: string
           maps_url?: string | null
@@ -35,11 +37,56 @@ export type Database = {
         }
         Update: {
           address?: string
+          company_id?: string
           created_at?: string
           id?: string
           maps_url?: string | null
           name?: string
           time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boarding_locations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          address: string | null
+          created_at: string
+          document: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          document?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -49,6 +96,7 @@ export type Database = {
           cnh: string
           cnh_category: string | null
           cnh_expires_at: string | null
+          company_id: string
           cpf: string | null
           created_at: string
           id: string
@@ -62,6 +110,7 @@ export type Database = {
           cnh: string
           cnh_category?: string | null
           cnh_expires_at?: string | null
+          company_id: string
           cpf?: string | null
           created_at?: string
           id?: string
@@ -75,6 +124,7 @@ export type Database = {
           cnh?: string
           cnh_category?: string | null
           cnh_expires_at?: string | null
+          company_id?: string
           cpf?: string | null
           created_at?: string
           id?: string
@@ -84,7 +134,15 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "drivers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_boarding_locations: {
         Row: {
@@ -122,6 +180,7 @@ export type Database = {
       events: {
         Row: {
           city: string
+          company_id: string
           created_at: string
           date: string
           description: string | null
@@ -132,6 +191,7 @@ export type Database = {
         }
         Insert: {
           city: string
+          company_id: string
           created_at?: string
           date: string
           description?: string | null
@@ -142,6 +202,7 @@ export type Database = {
         }
         Update: {
           city?: string
+          company_id?: string
           created_at?: string
           date?: string
           description?: string | null
@@ -150,7 +211,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["event_status"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -256,6 +325,7 @@ export type Database = {
       sellers: {
         Row: {
           commission_percent: number
+          company_id: string
           created_at: string
           id: string
           name: string
@@ -264,6 +334,7 @@ export type Database = {
         }
         Insert: {
           commission_percent?: number
+          company_id: string
           created_at?: string
           id?: string
           name: string
@@ -272,13 +343,22 @@ export type Database = {
         }
         Update: {
           commission_percent?: number
+          company_id?: string
           created_at?: string
           id?: string
           name?: string
           status?: Database["public"]["Enums"]["seller_status"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sellers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trips: {
         Row: {
@@ -337,24 +417,34 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          company_id: string
           id: string
           role: Database["public"]["Enums"]["user_role"]
           seller_id: string | null
           user_id: string
         }
         Insert: {
+          company_id: string
           id?: string
           role: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
           user_id: string
         }
         Update: {
+          company_id?: string
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_roles_seller_id_fkey"
             columns: ["seller_id"]
@@ -370,6 +460,7 @@ export type Database = {
           capacity: number
           chassis: string | null
           color: string | null
+          company_id: string
           created_at: string
           id: string
           model: string | null
@@ -388,6 +479,7 @@ export type Database = {
           capacity: number
           chassis?: string | null
           color?: string | null
+          company_id: string
           created_at?: string
           id?: string
           model?: string | null
@@ -406,6 +498,7 @@ export type Database = {
           capacity?: number
           chassis?: string | null
           color?: string | null
+          company_id?: string
           created_at?: string
           id?: string
           model?: string | null
@@ -419,7 +512,15 @@ export type Database = {
           whatsapp_group_link?: string | null
           year_model?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -430,6 +531,7 @@ export type Database = {
         Args: { trip_uuid: string }
         Returns: number
       }
+      get_user_active_company: { Args: { _user_id: string }; Returns: string }
       get_user_seller_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -439,6 +541,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      user_belongs_to_company: {
+        Args: { _company_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"

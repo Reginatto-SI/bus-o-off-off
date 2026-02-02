@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Seller } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,6 +35,7 @@ import { UserCheck, Plus, Loader2, Pencil, Trash2, Percent } from 'lucide-react'
 import { toast } from 'sonner';
 
 export default function Sellers() {
+  const { activeCompanyId } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,15 +69,24 @@ export default function Sellers() {
     e.preventDefault();
     setSaving(true);
 
+    if (!activeCompanyId) {
+      toast.error('Nenhuma empresa ativa');
+      setSaving(false);
+      return;
+    }
+
     const data = {
       name: form.name,
       commission_percent: parseFloat(form.commission_percent),
       status: form.status,
+      company_id: activeCompanyId,
     };
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('sellers').update(data).eq('id', editingId));
+      // Não atualiza company_id na edição
+      const { company_id, ...updateData } = data;
+      ({ error } = await supabase.from('sellers').update(updateData).eq('id', editingId));
     } else {
       ({ error } = await supabase.from('sellers').insert([data]));
     }

@@ -1,7 +1,6 @@
-import { Bell, ChevronDown, LogOut, User } from 'lucide-react';
+import { Bell, Building2, ChevronDown, LogOut, User, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,10 +56,11 @@ const mockNotifications: Notification[] = [
 ];
 
 export function AdminHeader() {
-  const { profile, userRole, signOut } = useAuth();
+  const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const hasMultipleCompanies = userCompanies.length > 1;
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
@@ -86,7 +86,44 @@ export function AdminHeader() {
   };
 
   return (
-    <header className="hidden lg:flex h-16 items-center justify-end gap-4 border-b border-border bg-card px-6">
+    <header className="hidden lg:flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-6">
+      {/* Company Selector / Indicator */}
+      <div className="flex items-center gap-2">
+        {hasMultipleCompanies ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center gap-2 h-auto py-1.5 px-3">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-foreground">{activeCompany?.name || 'Selecionar empresa'}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel>Trocar empresa</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {userCompanies.map((company) => (
+                <DropdownMenuItem
+                  key={company.id}
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => switchCompany(company.id)}
+                >
+                  <span>{company.name}</span>
+                  {company.id === activeCompany?.id && (
+                    <Check className="h-4 w-4 text-primary" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : activeCompany ? (
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium text-foreground">{activeCompany.name}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-4">
       {/* Notifications */}
       <Popover>
         <PopoverTrigger asChild>
@@ -195,6 +232,7 @@ export function AdminHeader() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 }
