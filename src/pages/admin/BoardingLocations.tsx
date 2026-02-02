@@ -25,9 +25,10 @@ import {
 } from '@/components/ui/table';
 import { MapPin, Plus, Loader2, Pencil, Trash2, Clock, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
 export default function BoardingLocations() {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
   const [locations, setLocations] = useState<BoardingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,7 +43,18 @@ export default function BoardingLocations() {
       .order('name');
 
     if (error) {
-      toast.error('Erro ao carregar locais');
+      logSupabaseError({
+        label: 'Erro ao carregar locais (boarding_locations.select)',
+        error,
+        context: { action: 'select', table: 'boarding_locations', companyId: activeCompanyId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao carregar locais',
+          error,
+          context: { action: 'select', table: 'boarding_locations', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       setLocations(data as BoardingLocation[]);
     }
@@ -58,7 +70,15 @@ export default function BoardingLocations() {
     setSaving(true);
 
     if (!activeCompanyId) {
-      toast.error('Nenhuma empresa ativa');
+      const context = { action: editingId ? 'update' : 'insert', table: 'boarding_locations', companyId: null, userId: user?.id };
+      // Comentário: mantém toast amigável, com contexto adicional apenas no modo debug.
+      console.error('Nenhuma empresa ativa ao salvar local de embarque.', context);
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Nenhuma empresa ativa',
+          context,
+        })
+      );
       setSaving(false);
       return;
     }
@@ -81,7 +101,31 @@ export default function BoardingLocations() {
     }
 
     if (error) {
-      toast.error('Erro ao salvar local');
+      logSupabaseError({
+        label: 'Erro ao salvar local (boarding_locations.insert/update)',
+        error,
+        context: {
+          action: editingId ? 'update' : 'insert',
+          table: 'boarding_locations',
+          companyId: activeCompanyId,
+          userId: user?.id,
+          editingId,
+          payload: data,
+        },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao salvar local',
+          error,
+          context: {
+            action: editingId ? 'update' : 'insert',
+            table: 'boarding_locations',
+            companyId: activeCompanyId,
+            userId: user?.id,
+            editingId,
+          },
+        })
+      );
     } else {
       toast.success(editingId ? 'Local atualizado' : 'Local cadastrado');
       setDialogOpen(false);
@@ -105,7 +149,18 @@ export default function BoardingLocations() {
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('boarding_locations').delete().eq('id', id);
     if (error) {
-      toast.error('Erro ao excluir local');
+      logSupabaseError({
+        label: 'Erro ao excluir local (boarding_locations.delete)',
+        error,
+        context: { action: 'delete', table: 'boarding_locations', companyId: activeCompanyId, userId: user?.id, locationId: id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao excluir local',
+          error,
+          context: { action: 'delete', table: 'boarding_locations', companyId: activeCompanyId, userId: user?.id, locationId: id },
+        })
+      );
     } else {
       toast.success('Local excluído');
       fetchLocations();

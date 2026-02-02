@@ -46,9 +46,10 @@ import {
   CirclePlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
 export default function Drivers() {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -92,14 +93,18 @@ export default function Drivers() {
       .order('name');
 
     if (error) {
-      // Comentário: log detalhado para diagnosticar falhas de leitura sem expor no toast.
-      console.error('Erro ao carregar motoristas (drivers.select)', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+      logSupabaseError({
+        label: 'Erro ao carregar motoristas (drivers.select)',
+        error,
+        context: { action: 'select', table: 'drivers', companyId: activeCompanyId, userId: user?.id },
       });
-      toast.error('Erro ao carregar motoristas');
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao carregar motoristas',
+          error,
+          context: { action: 'select', table: 'drivers', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       setDrivers(data as Driver[]);
     }
@@ -115,7 +120,15 @@ export default function Drivers() {
     setSaving(true);
 
     if (!activeCompanyId) {
-      toast.error('Nenhuma empresa ativa');
+      const context = { action: editingId ? 'update' : 'insert', table: 'drivers', companyId: null, userId: user?.id };
+      // Comentário: mantém mensagem amigável; detalhes completos só em DEBUG_ERRORS.
+      console.error('Nenhuma empresa ativa ao salvar motorista.', context);
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Nenhuma empresa ativa',
+          context,
+        })
+      );
       setSaving(false);
       return;
     }
@@ -173,17 +186,33 @@ export default function Drivers() {
     }
 
     if (error) {
-      // Comentário: log detalhado para identificar RLS/constraints (ex.: CPF duplicado).
-      console.error('Erro ao salvar motorista (drivers.insert/update)', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        editingId,
-        payload: driverData,
+      logSupabaseError({
+        label: 'Erro ao salvar motorista (drivers.insert/update)',
+        error,
+        context: {
+          action: editingId ? 'update' : 'insert',
+          table: 'drivers',
+          companyId: activeCompanyId,
+          userId: user?.id,
+          editingId,
+          payload: driverData,
+        },
       });
       const isDuplicateCpf = error.message.includes('unique') || error.message.includes('duplicate key');
-      toast.error(isDuplicateCpf ? 'CPF já cadastrado' : 'Erro ao salvar motorista');
+      const fallbackMessage = isDuplicateCpf ? 'CPF já cadastrado' : 'Erro ao salvar motorista';
+      toast.error(
+        buildDebugToastMessage({
+          title: fallbackMessage,
+          error,
+          context: {
+            action: editingId ? 'update' : 'insert',
+            table: 'drivers',
+            companyId: activeCompanyId,
+            userId: user?.id,
+            editingId,
+          },
+        })
+      );
     } else {
       toast.success(editingId ? 'Motorista atualizado' : 'Motorista cadastrado');
       setDialogOpen(false);
@@ -212,7 +241,18 @@ export default function Drivers() {
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('drivers').delete().eq('id', id);
     if (error) {
-      toast.error('Erro ao excluir motorista');
+      logSupabaseError({
+        label: 'Erro ao excluir motorista (drivers.delete)',
+        error,
+        context: { action: 'delete', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao excluir motorista',
+          error,
+          context: { action: 'delete', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: id },
+        })
+      );
     } else {
       toast.success('Motorista excluído');
       fetchDrivers();
@@ -226,7 +266,18 @@ export default function Drivers() {
       .update({ status: nextStatus })
       .eq('id', driver.id);
     if (error) {
-      toast.error('Erro ao atualizar status');
+      logSupabaseError({
+        label: 'Erro ao atualizar status do motorista (drivers.update)',
+        error,
+        context: { action: 'update', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: driver.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao atualizar status',
+          error,
+          context: { action: 'update', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: driver.id },
+        })
+      );
     } else {
       toast.success(`Motorista ${nextStatus === 'ativo' ? 'ativado' : 'desativado'}`);
       fetchDrivers();

@@ -47,9 +47,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
 export default function Fleet() {
-  const { isGerente, isOperador, activeCompanyId } = useAuth();
+  const { isGerente, isOperador, activeCompanyId, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -77,14 +78,18 @@ export default function Fleet() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Comentário: log detalhado para diagnosticar falhas de leitura na frota sem expor dados sensíveis no UI.
-      console.error('Erro ao carregar frota (vehicles.select)', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+      logSupabaseError({
+        label: 'Erro ao carregar frota (vehicles.select)',
+        error,
+        context: { action: 'select', table: 'vehicles', companyId: activeCompanyId, userId: user?.id },
       });
-      toast.error('Erro ao carregar frota');
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao carregar frota',
+          error,
+          context: { action: 'select', table: 'vehicles', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       setVehicles(data as Vehicle[]);
     }
@@ -100,7 +105,15 @@ export default function Fleet() {
     setSaving(true);
 
     if (!activeCompanyId) {
-      toast.error('Nenhuma empresa ativa');
+      const context = { action: editingId ? 'update' : 'insert', table: 'vehicles', companyId: null, userId: user?.id };
+      // Comentário: feedback amigável, com detalhes apenas em modo debug.
+      console.error('Nenhuma empresa ativa ao salvar veículo.', context);
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Nenhuma empresa ativa',
+          context,
+        })
+      );
       setSaving(false);
       return;
     }
@@ -160,16 +173,19 @@ export default function Fleet() {
     }
 
     if (error) {
-      // Comentário: log detalhado para entender causa raiz (RLS, constraint, validação) sem expor no toast.
-      console.error('Erro ao salvar veículo (vehicles.insert/update)', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        editingId,
-        payload: {
-          ...vehicleData,
-          plate: normalizedPlate,
+      logSupabaseError({
+        label: 'Erro ao salvar veículo (vehicles.insert/update)',
+        error,
+        context: {
+          action: editingId ? 'update' : 'insert',
+          table: 'vehicles',
+          companyId: activeCompanyId,
+          userId: user?.id,
+          editingId,
+          payload: {
+            ...vehicleData,
+            plate: normalizedPlate,
+          },
         },
       });
       const isRlsError =
@@ -178,12 +194,23 @@ export default function Fleet() {
         error.code === '42501';
       const isDuplicatePlate = error.message.includes('unique') || error.message.includes('duplicate key');
       // Comentário: mensagens mais úteis para RLS/constraint sem expor detalhes técnicos.
+      const fallbackMessage = isRlsError
+        ? 'Sem permissão para salvar veículos'
+        : isDuplicatePlate
+          ? 'Placa já cadastrada'
+          : 'Erro ao salvar veículo';
       toast.error(
-        isRlsError
-          ? 'Sem permissão para salvar veículos'
-          : isDuplicatePlate
-            ? 'Placa já cadastrada'
-            : 'Erro ao salvar veículo'
+        buildDebugToastMessage({
+          title: fallbackMessage,
+          error,
+          context: {
+            action: editingId ? 'update' : 'insert',
+            table: 'vehicles',
+            companyId: activeCompanyId,
+            userId: user?.id,
+            editingId,
+          },
+        })
       );
     } else {
       toast.success(editingId ? 'Veículo atualizado' : 'Veículo cadastrado');
@@ -220,7 +247,18 @@ export default function Fleet() {
       .update({ status: nextStatus })
       .eq('id', vehicle.id);
     if (error) {
-      toast.error('Erro ao atualizar status');
+      logSupabaseError({
+        label: 'Erro ao atualizar status do veículo (vehicles.update)',
+        error,
+        context: { action: 'update', table: 'vehicles', companyId: activeCompanyId, userId: user?.id, vehicleId: vehicle.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao atualizar status',
+          error,
+          context: { action: 'update', table: 'vehicles', companyId: activeCompanyId, userId: user?.id, vehicleId: vehicle.id },
+        })
+      );
     } else {
       toast.success(`Veículo ${nextStatus === 'ativo' ? 'ativado' : 'desativado'}`);
       fetchVehicles();

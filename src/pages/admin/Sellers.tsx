@@ -33,9 +33,10 @@ import {
 } from '@/components/ui/table';
 import { UserCheck, Plus, Loader2, Pencil, Trash2, Percent } from 'lucide-react';
 import { toast } from 'sonner';
+import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
 export default function Sellers() {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, user } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -54,7 +55,18 @@ export default function Sellers() {
       .order('name');
 
     if (error) {
-      toast.error('Erro ao carregar vendedores');
+      logSupabaseError({
+        label: 'Erro ao carregar vendedores (sellers.select)',
+        error,
+        context: { action: 'select', table: 'sellers', companyId: activeCompanyId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao carregar vendedores',
+          error,
+          context: { action: 'select', table: 'sellers', companyId: activeCompanyId, userId: user?.id },
+        })
+      );
     } else {
       setSellers(data as Seller[]);
     }
@@ -70,7 +82,15 @@ export default function Sellers() {
     setSaving(true);
 
     if (!activeCompanyId) {
-      toast.error('Nenhuma empresa ativa');
+      const context = { action: editingId ? 'update' : 'insert', table: 'sellers', companyId: null, userId: user?.id };
+      // Comentário: mantém mensagem amigável; detalhes completos apenas em DEBUG_ERRORS.
+      console.error('Nenhuma empresa ativa ao salvar vendedor.', context);
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Nenhuma empresa ativa',
+          context,
+        })
+      );
       setSaving(false);
       return;
     }
@@ -92,7 +112,31 @@ export default function Sellers() {
     }
 
     if (error) {
-      toast.error('Erro ao salvar vendedor');
+      logSupabaseError({
+        label: 'Erro ao salvar vendedor (sellers.insert/update)',
+        error,
+        context: {
+          action: editingId ? 'update' : 'insert',
+          table: 'sellers',
+          companyId: activeCompanyId,
+          userId: user?.id,
+          editingId,
+          payload: data,
+        },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao salvar vendedor',
+          error,
+          context: {
+            action: editingId ? 'update' : 'insert',
+            table: 'sellers',
+            companyId: activeCompanyId,
+            userId: user?.id,
+            editingId,
+          },
+        })
+      );
     } else {
       toast.success(editingId ? 'Vendedor atualizado' : 'Vendedor cadastrado');
       setDialogOpen(false);
@@ -115,7 +159,18 @@ export default function Sellers() {
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('sellers').delete().eq('id', id);
     if (error) {
-      toast.error('Erro ao excluir vendedor');
+      logSupabaseError({
+        label: 'Erro ao excluir vendedor (sellers.delete)',
+        error,
+        context: { action: 'delete', table: 'sellers', companyId: activeCompanyId, userId: user?.id, sellerId: id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao excluir vendedor',
+          error,
+          context: { action: 'delete', table: 'sellers', companyId: activeCompanyId, userId: user?.id, sellerId: id },
+        })
+      );
     } else {
       toast.success('Vendedor excluído');
       fetchSellers();
