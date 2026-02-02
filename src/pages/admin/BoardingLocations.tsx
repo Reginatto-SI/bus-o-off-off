@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { BoardingLocation } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +27,7 @@ import { MapPin, Plus, Loader2, Pencil, Trash2, Clock, ExternalLink } from 'luci
 import { toast } from 'sonner';
 
 export default function BoardingLocations() {
+  const { activeCompanyId } = useAuth();
   const [locations, setLocations] = useState<BoardingLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,16 +57,25 @@ export default function BoardingLocations() {
     e.preventDefault();
     setSaving(true);
 
+    if (!activeCompanyId) {
+      toast.error('Nenhuma empresa ativa');
+      setSaving(false);
+      return;
+    }
+
     const data = {
       name: form.name,
       address: form.address,
       time: form.time,
       maps_url: form.maps_url || null,
+      company_id: activeCompanyId,
     };
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('boarding_locations').update(data).eq('id', editingId));
+      // Não atualiza company_id na edição
+      const { company_id, ...updateData } = data;
+      ({ error } = await supabase.from('boarding_locations').update(updateData).eq('id', editingId));
     } else {
       ({ error } = await supabase.from('boarding_locations').insert([data]));
     }

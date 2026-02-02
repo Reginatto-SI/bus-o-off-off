@@ -76,29 +76,29 @@ Você poderá criar uma **empresa em seu nome** para usar como ambiente de teste
 
 ## 5. Plano de Implementação
 
-### Etapa 1: Criar cadastro de empresa
-- Criar a tabela de empresas com nome e dados básicos
-- Criar tela administrativa para gerenciar empresas (apenas gerente pode criar novas)
+### ✅ Etapa 1: Criar cadastro de empresa (CONCLUÍDO)
+- Tabela `companies` criada com dados básicos
+- Empresa Padrão (Teste) criada automaticamente
+- Todos os dados existentes migrados para a empresa padrão
 
-### Etapa 2: Vincular usuários a empresas
-- Ajustar a estrutura de papéis para incluir a empresa
-- Um usuário pode ter papéis diferentes em empresas diferentes
-- Criar a lógica de "empresa ativa" na sessão do usuário
+### ✅ Etapa 2: Vincular usuários a empresas (CONCLUÍDO)
+- Campo `company_id` adicionado à tabela `user_roles`
+- Usuário pode ter papéis diferentes em empresas diferentes
+- Lógica de "empresa ativa" implementada no `AuthContext`
 
-### Etapa 3: Associar cadastros à empresa
-- Adicionar referência de empresa em: veículos, motoristas, locais de embarque, vendedores
-- Eventos passam a pertencer a uma empresa (viagens e vendas herdam do evento)
-- Migrar todos os dados existentes para a empresa padrão (sua empresa de teste)
+### ✅ Etapa 3: Associar cadastros à empresa (CONCLUÍDO)
+- Campo `company_id` adicionado em: veículos, motoristas, locais de embarque, vendedores, eventos
+- Viagens e vendas herdam empresa via evento
+- Frontend atualizado para enviar `company_id` nas operações de insert
 
-### Etapa 4: Ajustar regras de acesso
-- Atualizar as políticas de segurança do banco para filtrar por empresa
-- Ajustar o frontend para enviar automaticamente a empresa ativa nas operações
-- Garantir que nenhuma consulta retorne dados de outra empresa
+### ✅ Etapa 4: Ajustar regras de acesso (CONCLUÍDO)
+- Políticas RLS atualizadas para filtrar por empresa via `user_belongs_to_company()`
+- Usuário só vê dados das empresas às quais está vinculado
 
-### Etapa 5: Interface de seleção de empresa
-- Adicionar indicador da empresa ativa no header administrativo
-- Criar seletor para usuários com múltiplas empresas
-- Persistir a escolha durante a sessão
+### 🔄 Etapa 5: Interface de seleção de empresa (EM ANDAMENTO)
+- [ ] Adicionar indicador da empresa ativa no header administrativo
+- [ ] Criar seletor para usuários com múltiplas empresas
+- [ ] Persistir a escolha durante a sessão (localStorage)
 
 ---
 

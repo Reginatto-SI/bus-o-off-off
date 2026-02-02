@@ -6,6 +6,18 @@ export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
 
+export interface Company {
+  id: string;
+  name: string;
+  document: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -19,6 +31,7 @@ export interface UserRoleRecord {
   user_id: string;
   role: UserRole;
   seller_id: string | null;
+  company_id: string;
 }
 
 export interface Seller {
@@ -26,6 +39,7 @@ export interface Seller {
   name: string;
   commission_percent: number;
   status: SellerStatus;
+  company_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +59,7 @@ export interface Vehicle {
   whatsapp_group_link: string | null;
   notes: string | null;
   status: VehicleStatus;
+  company_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +74,7 @@ export interface Driver {
   cnh_expires_at: string | null;
   notes: string | null;
   status: DriverStatus;
+  company_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +85,7 @@ export interface BoardingLocation {
   address: string;
   time: string;
   maps_url: string | null;
+  company_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +97,7 @@ export interface Event {
   city: string;
   description: string | null;
   status: EventStatus;
+  company_id: string;
   created_at: string;
   updated_at: string;
 }

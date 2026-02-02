@@ -49,7 +49,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Fleet() {
-  const { isGerente, isOperador } = useAuth();
+  const { isGerente, isOperador, activeCompanyId } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -99,6 +99,12 @@ export default function Fleet() {
     e.preventDefault();
     setSaving(true);
 
+    if (!activeCompanyId) {
+      toast.error('Nenhuma empresa ativa');
+      setSaving(false);
+      return;
+    }
+
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
     const capacity = Number.parseInt(form.capacity, 10);
     const normalizedPlate = form.plate.trim().toUpperCase();
@@ -141,11 +147,14 @@ export default function Fleet() {
       color: form.color || null,
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
+      company_id: activeCompanyId,
     };
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('vehicles').update(vehicleData).eq('id', editingId));
+      // Não atualiza company_id na edição
+      const { company_id, ...updateData } = vehicleData;
+      ({ error } = await supabase.from('vehicles').update(updateData).eq('id', editingId));
     } else {
       ({ error } = await supabase.from('vehicles').insert([vehicleData]));
     }
