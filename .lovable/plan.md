@@ -1,86 +1,245 @@
 
-# Plano de Correção: Vínculo Usuário-Empresa Ausente
+# Plano: Tela Piloto de Cadastros - /admin/frota
 
-## Diagnóstico
+## Visao Geral
 
-O erro `active_company_id ausente` ocorre porque:
-
-1. **user_roles está vazia**: Não existe nenhum registro vinculando usuários a empresas
-2. **Usuário existe**: `27add21e-ade9-436a-9ec2-185a3d7819cc` (edimarreginato@gmail.com)
-3. **Empresa existe**: `a0000000-0000-0000-0000-000000000001` (Empresa Padrão)
-4. **Falta o vínculo**: Sem registro em `user_roles`, o AuthContext não consegue determinar a empresa ativa
-
-O fluxo do AuthContext está correto - ele busca em `user_roles`, mas como não há registros, retorna null.
+Evoluir a tela de Frota para ser o modelo oficial de cadastros administrativos, com UX aprimorada, filtros inteligentes e componentes reutilizaveis.
 
 ---
 
-## Solução
+## Estrutura de Componentes a Criar
 
-### Etapa 1: Criar vínculo do usuário existente com a empresa padrão
+### Componentes Reutilizaveis (novos)
 
-Inserir registro em `user_roles` com:
-- `user_id`: ID do usuário atual
-- `company_id`: ID da empresa padrão
-- `role`: gerente (acesso total)
-- `seller_id`: null (não é vendedor)
-
-### Etapa 2: Ajustar trigger para novos usuários
-
-Atualizar a função `handle_new_user()` para criar automaticamente um vínculo inicial quando um novo usuário se cadastrar, evitando esse problema no futuro.
+```text
+src/components/admin/
+  +-- StatsCard.tsx          # Card de indicador individual
+  +-- StatsCardsGrid.tsx     # Grid de cards de indicadores
+  +-- FilterCard.tsx         # Card de filtros com expansao
+  +-- ActionsDropdown.tsx    # Menu de acoes padrao (ellipsis)
+  +-- PageHeader.tsx         # Header padrao de paginas admin
+  +-- ExportButtons.tsx      # Botoes Excel/PDF
+```
 
 ---
 
-## Detalhes Técnicos
+## 1. Header da Pagina (PageHeader)
 
-**Migration SQL a ser criada:**
+**Estrutura:**
+- Lado esquerdo: Titulo + Descricao
+- Lado direito: Acoes globais + Botao primario
 
-```sql
--- Inserir vínculo do usuário existente
-INSERT INTO user_roles (user_id, company_id, role)
-SELECT 
-  p.id as user_id,
-  'a0000000-0000-0000-0000-000000000001' as company_id,
-  'gerente' as role
-FROM profiles p
-WHERE NOT EXISTS (
-  SELECT 1 FROM user_roles ur WHERE ur.user_id = p.id
-);
+**Acoes globais:**
+- Gerar Excel (outline)
+- Gerar PDF (outline)
+- Adicionar Veiculo (primary)
 
--- Atualizar trigger para criar vínculo automático
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_company_id UUID := 'a0000000-0000-0000-0000-000000000001';
-BEGIN
-  -- Criar perfil
-  INSERT INTO public.profiles (id, name, email, company_id)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-    NEW.email,
-    v_company_id
-  );
+**Codigo esperado:**
+```text
++----------------------------------------------------------+
+|  Frota                           [Excel] [PDF] [+ Adicionar]
+|  Gerencie os veiculos disponiveis                        |
++----------------------------------------------------------+
+```
 
-  -- Criar vínculo inicial como gerente na empresa padrão
-  INSERT INTO public.user_roles (user_id, company_id, role)
-  VALUES (NEW.id, v_company_id, 'gerente')
-  ON CONFLICT DO NOTHING;
+---
 
-  RETURN NEW;
-END;
-$$;
+## 2. Cards de Indicadores (StatsCardsGrid)
+
+**4 cards em grid responsivo:**
+
+| Card | Valor | Icone |
+|------|-------|-------|
+| Total de veiculos | count(*) | Bus |
+| Veiculos ativos | count(status=ativo) | CheckCircle |
+| Veiculos inativos | count(status=inativo) | XCircle |
+| Capacidade total | sum(capacity) | Users |
+
+**Layout:**
+- Desktop: 4 colunas
+- Tablet: 2 colunas
+- Mobile: 1 coluna
+
+---
+
+## 3. Card de Filtros (FilterCard)
+
+### Filtros Simples (sempre visiveis)
+
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| Pesquisa | Input texto | Busca por placa, proprietario, marca ou modelo |
+| Status | Select | Todos / Ativo / Inativo |
+| Tipo | Select | Todos / Onibus / Van |
+
+### Filtros Avancados (expansiveis)
+
+| Campo | Tipo |
+|-------|------|
+| Marca | Input |
+| Modelo | Input |
+| Ano modelo | Input numerico |
+| Capacidade minima | Input numerico |
+| Capacidade maxima | Input numerico |
+
+**Comportamento:**
+- Botao "Filtros avancados" expande/recolhe a secao
+- Botao "Limpar filtros" sempre visivel
+- Filtros aplicados em tempo real (debounce)
+
+---
+
+## 4. Tabela de Listagem (ajustes)
+
+### Colunas Atualizadas
+
+| Coluna | Conteudo | Observacao |
+|--------|----------|------------|
+| Tipo | Icone + "Onibus" ou "Van" | Mantido |
+| **Marca / Modelo** | "Mercedes / O-500" | **NOVA** |
+| Placa | ABC-1234 | Font mono |
+| Proprietario | Nome | - |
+| Capacidade | 46 passageiros | Com unidade |
+| Status | Badge colorido | StatusBadge |
+| Acoes | Menu ellipsis | **ALTERADO** |
+
+### Nova Coluna Marca/Modelo
+- Exibe os dois valores concatenados
+- Se vazio, exibe "-"
+- Ajuda identificacao rapida sem abrir modal
+
+---
+
+## 5. Menu de Acoes (ActionsDropdown)
+
+**Padrao oficial para todas as telas:**
+
+```text
+[ ... ]  <-- Botao ellipsis
+  +----------------+
+  | Editar         |
+  | Ativar/Desativar|
+  +----------------+
+```
+
+**Componente reutilizavel:**
+- Recebe lista de acoes
+- Cada acao: label, icone, onClick, variant (opcional)
+- Usa DropdownMenu do shadcn/ui
+
+---
+
+## 6. Logica de Filtragem
+
+### Estado dos Filtros
+```text
+filters: {
+  search: string,        // texto livre
+  status: 'all' | 'ativo' | 'inativo',
+  type: 'all' | 'onibus' | 'van',
+  brand: string,
+  model: string,
+  yearModel: string,
+  capacityMin: string,
+  capacityMax: string
+}
+```
+
+### Aplicacao
+- Filtragem client-side (dados ja carregados)
+- useMemo para lista filtrada
+- Debounce de 300ms no campo de pesquisa
+
+---
+
+## 7. Exportacao (Excel/PDF)
+
+**Comportamento:**
+- Exporta apenas os dados filtrados
+- Excel: usa biblioteca xlsx ou similar
+- PDF: usa jsPDF ou similar
+
+**Nota:** No MVP, os botoes podem estar presentes mas desabilitados com tooltip "Em breve", ou implementados basicamente.
+
+---
+
+## 8. CSS/Estilos Adicionais
+
+Adicionar ao `index.css`:
+
+```css
+/* Cards de indicadores */
+.stats-card {
+  @apply bg-card rounded-lg border p-4 shadow-sm;
+}
+
+.stats-card__value {
+  @apply text-2xl font-bold text-foreground;
+}
+
+.stats-card__label {
+  @apply text-sm text-muted-foreground;
+}
+
+/* Card de filtros */
+.filter-card {
+  @apply bg-card rounded-lg border p-4 shadow-sm;
+}
+```
+
+---
+
+## 9. Arquivos a Modificar/Criar
+
+| Arquivo | Acao |
+|---------|------|
+| `src/components/admin/StatsCard.tsx` | Criar |
+| `src/components/admin/FilterCard.tsx` | Criar |
+| `src/components/admin/ActionsDropdown.tsx` | Criar |
+| `src/components/admin/PageHeader.tsx` | Criar |
+| `src/pages/admin/Fleet.tsx` | Refatorar |
+| `src/index.css` | Adicionar estilos |
+
+---
+
+## 10. Estrutura Final da Tela
+
+```text
++----------------------------------------------------------+
+| HEADER                                                    |
+| Frota                         [Excel] [PDF] [+ Adicionar] |
+| Gerencie os veiculos disponiveis                          |
++----------------------------------------------------------+
+
++------------+ +------------+ +------------+ +------------+
+| Total      | | Ativos     | | Inativos   | | Capacidade |
+| 12         | | 10         | | 2          | | 540        |
++------------+ +------------+ +------------+ +------------+
+
++----------------------------------------------------------+
+| FILTROS                                                   |
+| [Pesquisar...        ] [Status v] [Tipo v] [Limpar]       |
+|                                                           |
+| [Filtros avancados v]                                     |
+|   Marca: [____] Modelo: [____] Ano: [____]                |
+|   Capacidade min: [____] Capacidade max: [____]           |
++----------------------------------------------------------+
+
++----------------------------------------------------------+
+| TABELA                                                    |
+| Tipo | Marca/Modelo | Placa | Proprietario | Cap | Status | Acoes |
+|------|--------------|-------|--------------|-----|--------|-------|
+| Bus  | Mercedes/500 | ABC.. | Joao Silva   | 46  | Ativo  | [...] |
++----------------------------------------------------------+
 ```
 
 ---
 
 ## Resultado Esperado
 
-Após a correção:
-1. Usuário terá vínculo com a empresa padrão
-2. AuthContext carregará corretamente o `activeCompanyId`
-3. Cadastro de veículos funcionará normalmente
-4. Novos usuários terão vínculo criado automaticamente
+1. Tela `/admin/frota` como referencia visual e funcional
+2. Componentes reutilizaveis para proximas telas
+3. UX aprimorada com filtros inteligentes
+4. Usuario localiza veiculos sem abrir modal
+5. Padrao de acoes (ellipsis menu) definido
+
