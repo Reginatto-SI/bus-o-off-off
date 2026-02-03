@@ -1,87 +1,78 @@
 
-# Plano de Correção: Empresa Ativa Não Resolvida
+# Plano de Correção: Vínculo Usuário-Empresa Ausente
 
 ## Diagnóstico
 
-Após as alterações recentes para multiempresa, o sistema não está conseguindo resolver qual é a **empresa ativa** ao salvar um veículo porque:
+O erro `active_company_id ausente` ocorre porque:
 
-1. **Arquivo de tipos desatualizado**: O `types.ts` (gerado pelo Supabase) não contém as colunas adicionadas (`company_id` em `profiles` e `is_active` em `companies`)
+1. **user_roles está vazia**: Não existe nenhum registro vinculando usuários a empresas
+2. **Usuário existe**: `27add21e-ade9-436a-9ec2-185a3d7819cc` (edimarreginato@gmail.com)
+3. **Empresa existe**: `a0000000-0000-0000-0000-000000000001` (Empresa Padrão)
+4. **Falta o vínculo**: Sem registro em `user_roles`, o AuthContext não consegue determinar a empresa ativa
 
-2. **Erros de TypeScript**: O código tenta acessar propriedades que o TypeScript não reconhece, causando erros de compilação
+O fluxo do AuthContext está correto - ele busca em `user_roles`, mas como não há registros, retorna null.
 
-3. **Fluxo interrompido**: Como há erros de tipo, o fluxo de resolução da empresa ativa não executa corretamente
+---
 
-## Solução Proposta
+## Solução
 
-### Etapa 1: Corrigir o AuthContext para funcionar com os tipos atuais
+### Etapa 1: Criar vínculo do usuário existente com a empresa padrão
 
-Ajustar o `AuthContext.tsx` para:
-- Usar type assertions onde necessário (já que sabemos que as colunas existem no banco)
-- Não depender de `profileData.company_id` para resolver a empresa (usar apenas `user_roles`)
-- Garantir que o filtro `is_active` funcione corretamente
+Inserir registro em `user_roles` com:
+- `user_id`: ID do usuário atual
+- `company_id`: ID da empresa padrão
+- `role`: gerente (acesso total)
+- `seller_id`: null (não é vendedor)
 
-**Lógica simplificada:**
-```text
-1. Buscar roles do usuário em user_roles
-2. Extrair company_ids dos roles
-3. Buscar empresas ativas na tabela companies
-4. Definir a primeira empresa encontrada como ativa
-5. Definir o role correspondente
-```
+### Etapa 2: Ajustar trigger para novos usuários
 
-### Etapa 2: Ajustar a lógica de empresa ativa
-
-O código atual tenta usar `profileData.company_id` como preferência, mas:
-- Essa coluna pode não estar preenchida
-- Os tipos não a reconhecem
-
-**Nova abordagem:**
-- Usar apenas `user_roles` para determinar empresas do usuário
-- Persistir empresa ativa em `localStorage`
-- Restaurar da `localStorage` ao recarregar a página
-- Fallback para primeira empresa vinculada
-
-### Etapa 3: Sincronizar os tipos do banco
-
-A coluna `company_id` em `profiles` e `is_active` em `companies` já existem no banco de dados. O arquivo de tipos será atualizado automaticamente na próxima sincronização.
+Atualizar a função `handle_new_user()` para criar automaticamente um vínculo inicial quando um novo usuário se cadastrar, evitando esse problema no futuro.
 
 ---
 
 ## Detalhes Técnicos
 
-### Arquivo: `src/contexts/AuthContext.tsx`
+**Migration SQL a ser criada:**
 
-**Problema na linha 79:**
-```typescript
-.eq('is_active', true)  // TypeScript não reconhece is_active
-```
+```sql
+-- Inserir vínculo do usuário existente
+INSERT INTO user_roles (user_id, company_id, role)
+SELECT 
+  p.id as user_id,
+  'a0000000-0000-0000-0000-000000000001' as company_id,
+  'gerente' as role
+FROM profiles p
+WHERE NOT EXISTS (
+  SELECT 1 FROM user_roles ur WHERE ur.user_id = p.id
+);
 
-**Problema na linha 103:**
-```typescript
-profileData?.company_id  // TypeScript não reconhece company_id
-```
+-- Atualizar trigger para criar vínculo automático
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_company_id UUID := 'a0000000-0000-0000-0000-000000000001';
+BEGIN
+  -- Criar perfil
+  INSERT INTO public.profiles (id, name, email, company_id)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.email,
+    v_company_id
+  );
 
-**Correção:**
-- Usar `any` temporariamente ou type assertions para contornar a limitação do tipo gerado
-- Remover dependência de `profileData.company_id` e usar apenas `user_roles` + `localStorage`
+  -- Criar vínculo inicial como gerente na empresa padrão
+  INSERT INTO public.user_roles (user_id, company_id, role)
+  VALUES (NEW.id, v_company_id, 'gerente')
+  ON CONFLICT DO NOTHING;
 
-### Fluxo corrigido:
-
-```text
-Login
-  │
-  ├─> Buscar user_roles do usuário
-  │
-  ├─> Extrair company_ids
-  │
-  ├─> Buscar empresas ativas (com type assertion para is_active)
-  │
-  ├─> Verificar localStorage para empresa preferida
-  │     │
-  │     ├─> Se válida: usar como empresa ativa
-  │     └─> Se inválida/ausente: usar primeira empresa
-  │
-  └─> Definir role para a empresa ativa
+  RETURN NEW;
+END;
+$$;
 ```
 
 ---
@@ -89,7 +80,7 @@ Login
 ## Resultado Esperado
 
 Após a correção:
-1. ✅ Erros de build resolvidos
-2. ✅ `activeCompanyId` preenchido corretamente ao fazer login
-3. ✅ Cadastro de veículos funcionando
-4. ✅ Todas as telas administrativas com empresa ativa definida
+1. Usuário terá vínculo com a empresa padrão
+2. AuthContext carregará corretamente o `activeCompanyId`
+3. Cadastro de veículos funcionará normalmente
+4. Novos usuários terão vínculo criado automaticamente
