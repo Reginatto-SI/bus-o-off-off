@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Vehicle } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { PageHeader } from '@/components/admin/PageHeader';
+import { StatsCard } from '@/components/admin/StatsCard';
+import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
+import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import {
   Dialog,
   DialogClose,
@@ -35,19 +39,45 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import {
   Bus,
-  CircleMinus,
-  CirclePlus,
+  CheckCircle,
+  FileSpreadsheet,
+  FileText,
   IdCard,
   Loader2,
   Pencil,
   Plus,
+  Power,
   Radio,
   Users,
   Wrench,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+
+// Types
+interface FleetFilters {
+  search: string;
+  status: 'all' | 'ativo' | 'inativo';
+  type: 'all' | 'onibus' | 'van';
+  brand: string;
+  model: string;
+  yearModel: string;
+  capacityMin: string;
+  capacityMax: string;
+}
+
+const initialFilters: FleetFilters = {
+  search: '',
+  status: 'all',
+  type: 'all',
+  brand: '',
+  model: '',
+  yearModel: '',
+  capacityMin: '',
+  capacityMax: '',
+};
 
 export default function Fleet() {
   const { isGerente, isOperador, activeCompanyId, user } = useAuth();
@@ -56,6 +86,7 @@ export default function Fleet() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FleetFilters>(initialFilters);
   const [form, setForm] = useState({
     type: 'onibus' as Vehicle['type'],
     plate: '',
@@ -70,6 +101,81 @@ export default function Fleet() {
     whatsapp_group_link: '',
     notes: '',
   });
+
+  // Stats calculations
+  const stats = useMemo(() => {
+    const total = vehicles.length;
+    const ativos = vehicles.filter((v) => v.status === 'ativo').length;
+    const inativos = vehicles.filter((v) => v.status === 'inativo').length;
+    const capacidadeTotal = vehicles.reduce((sum, v) => sum + v.capacity, 0);
+    return { total, ativos, inativos, capacidadeTotal };
+  }, [vehicles]);
+
+  // Filtered vehicles
+  const filteredVehicles = useMemo(() => {
+    return vehicles.filter((vehicle) => {
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const matchesSearch =
+          vehicle.plate.toLowerCase().includes(searchLower) ||
+          (vehicle.owner?.toLowerCase().includes(searchLower) ?? false) ||
+          (vehicle.brand?.toLowerCase().includes(searchLower) ?? false) ||
+          (vehicle.model?.toLowerCase().includes(searchLower) ?? false);
+        if (!matchesSearch) return false;
+      }
+
+      // Status filter
+      if (filters.status !== 'all' && vehicle.status !== filters.status) {
+        return false;
+      }
+
+      // Type filter
+      if (filters.type !== 'all' && vehicle.type !== filters.type) {
+        return false;
+      }
+
+      // Brand filter
+      if (filters.brand && !vehicle.brand?.toLowerCase().includes(filters.brand.toLowerCase())) {
+        return false;
+      }
+
+      // Model filter
+      if (filters.model && !vehicle.model?.toLowerCase().includes(filters.model.toLowerCase())) {
+        return false;
+      }
+
+      // Year filter
+      if (filters.yearModel && vehicle.year_model?.toString() !== filters.yearModel) {
+        return false;
+      }
+
+      // Capacity min
+      if (filters.capacityMin && vehicle.capacity < parseInt(filters.capacityMin, 10)) {
+        return false;
+      }
+
+      // Capacity max
+      if (filters.capacityMax && vehicle.capacity > parseInt(filters.capacityMax, 10)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [vehicles, filters]);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.search !== '' ||
+      filters.status !== 'all' ||
+      filters.type !== 'all' ||
+      filters.brand !== '' ||
+      filters.model !== '' ||
+      filters.yearModel !== '' ||
+      filters.capacityMin !== '' ||
+      filters.capacityMax !== ''
+    );
+  }, [filters]);
 
   const fetchVehicles = async () => {
     const { data, error } = await supabase
@@ -106,7 +212,6 @@ export default function Fleet() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'vehicles', companyId: null, userId: user?.id };
-      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
       console.error('active_company_id ausente ao salvar veículo.', context);
       toast.error(
         buildDebugToastMessage({
@@ -124,7 +229,6 @@ export default function Fleet() {
     const isAdmin = isGerente || isOperador;
 
     if (!isAdmin) {
-      // Comentário: bloqueia tentativa de escrita para usuários sem permissão (RLS exige admin).
       console.warn('Permissão insuficiente ao salvar veículo: usuário não-admin.');
       toast.error('Você não tem permissão para salvar veículos');
       setSaving(false);
@@ -132,7 +236,6 @@ export default function Fleet() {
     }
 
     if (!normalizedPlate) {
-      // Comentário: evita request inválida quando a placa obrigatória está vazia.
       console.warn('Validação de veículo: placa ausente no modal de frota.');
       toast.error('Informe a placa do veículo');
       setSaving(false);
@@ -140,7 +243,6 @@ export default function Fleet() {
     }
 
     if (Number.isNaN(capacity)) {
-      // Comentário: previne envio de NaN para o Supabase (erro de tipo em coluna integer).
       console.warn('Validação de veículo: capacidade inválida (NaN) no modal de frota.');
       toast.error('Informe uma capacidade válida');
       setSaving(false);
@@ -165,7 +267,6 @@ export default function Fleet() {
 
     let error;
     if (editingId) {
-      // Não atualiza company_id na edição
       const { company_id, ...updateData } = vehicleData;
       ({ error } = await supabase.from('vehicles').update(updateData).eq('id', editingId));
     } else {
@@ -193,7 +294,6 @@ export default function Fleet() {
         error.message.includes('permission denied') ||
         error.code === '42501';
       const isDuplicatePlate = error.message.includes('unique') || error.message.includes('duplicate key');
-      // Comentário: mensagens mais úteis para RLS/constraint sem expor detalhes técnicos.
       const fallbackMessage = isRlsError
         ? 'Sem permissão para salvar veículos'
         : isDuplicatePlate
@@ -283,221 +383,352 @@ export default function Fleet() {
     });
   };
 
+  const getVehicleActions = (vehicle: Vehicle): ActionItem[] => [
+    {
+      label: 'Editar',
+      icon: Pencil,
+      onClick: () => handleEdit(vehicle),
+    },
+    {
+      label: vehicle.status === 'ativo' ? 'Desativar' : 'Ativar',
+      icon: Power,
+      onClick: () => handleToggleStatus(vehicle),
+      variant: vehicle.status === 'ativo' ? 'destructive' : 'default',
+    },
+  ];
+
+  const handleExportExcel = () => {
+    toast.info('Exportação Excel em breve');
+  };
+
+  const handleExportPDF = () => {
+    toast.info('Exportação PDF em breve');
+  };
+
   return (
     <AdminLayout>
       <div className="page-container">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Frota</h1>
-            <p className="text-muted-foreground">Gerencie os veículos disponíveis</p>
-          </div>
-
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Veículo
+        {/* Header */}
+        <PageHeader
+          title="Frota"
+          description="Gerencie os veículos disponíveis"
+          actions={
+            <>
+              <Button variant="outline" size="sm" onClick={handleExportExcel}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
               </Button>
-            </DialogTrigger>
-            {/* Admin Modal UI: preset visual reutilizável (não altera layout/responsividade) */}
-            {/* Admin Modal UI: remove gap do container para evitar espaço entre header e tabs */}
-            <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-              {/* Admin Modal UI: header com separação sutil sem mexer no grid */}
-              <DialogHeader className="admin-modal__header px-6 py-4">
-                <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                  {/* Tabs: ícone inline + truncate para evitar overflow em telas menores */}
-                  <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                    <TabsTrigger
-                      value="identificacao"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    >
-                      <IdCard className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Identificação</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="capacidade"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    >
-                      <Users className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Capacidade</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="tecnicos"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    >
-                      <Wrench className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Dados Técnicos</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="operacao"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    >
-                      <Radio className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Operação/Comunicação</span>
-                    </TabsTrigger>
-                  </TabsList>
+              <Button variant="outline" size="sm" onClick={handleExportPDF}>
+                <FileText className="h-4 w-4 mr-2" />
+                PDF
+              </Button>
+              <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Veículo
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
+                  <DialogHeader className="admin-modal__header px-6 py-4">
+                    <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="flex h-full flex-col">
+                    <Tabs defaultValue="identificacao" className="flex h-full flex-col">
+                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                        <TabsTrigger
+                          value="identificacao"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <IdCard className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Identificação</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="capacidade"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <Users className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Capacidade</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="tecnicos"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <Wrench className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Dados Técnicos</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="operacao"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <Radio className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Operação/Comunicação</span>
+                        </TabsTrigger>
+                      </TabsList>
 
-                  {/* Admin Modal UI: body com scroll interno preservado */}
-                  <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                    <TabsContent value="identificacao" className="mt-0">
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-2">
-                          <Label>Tipo de Frota</Label>
-                          <Select
-                            value={form.type}
-                            onValueChange={(value: Vehicle['type']) => setForm({ ...form, type: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="onibus">Ônibus</SelectItem>
-                              <SelectItem value="van">Van</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="plate">Placa</Label>
-                          <Input
-                            id="plate"
-                            value={form.plate}
-                            onChange={(e) => setForm({ ...form, plate: e.target.value })}
-                            placeholder="ABC-1234"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="owner">Proprietário</Label>
-                          <Input
-                            id="owner"
-                            value={form.owner}
-                            onChange={(e) => setForm({ ...form, owner: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="brand">Marca</Label>
-                          <Input
-                            id="brand"
-                            value={form.brand}
-                            onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="model">Modelo</Label>
-                          <Input
-                            id="model"
-                            value={form.model}
-                            onChange={(e) => setForm({ ...form, model: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="year_model">Ano Modelo</Label>
-                          <Input
-                            id="year_model"
-                            type="number"
-                            value={form.year_model}
-                            onChange={(e) => setForm({ ...form, year_model: e.target.value })}
-                            placeholder="2024"
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
+                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                        <TabsContent value="identificacao" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label>Tipo de Frota</Label>
+                              <Select
+                                value={form.type}
+                                onValueChange={(value: Vehicle['type']) => setForm({ ...form, type: value })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="onibus">Ônibus</SelectItem>
+                                  <SelectItem value="van">Van</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="plate">Placa</Label>
+                              <Input
+                                id="plate"
+                                value={form.plate}
+                                onChange={(e) => setForm({ ...form, plate: e.target.value })}
+                                placeholder="ABC-1234"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="owner">Proprietário</Label>
+                              <Input
+                                id="owner"
+                                value={form.owner}
+                                onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="brand">Marca</Label>
+                              <Input
+                                id="brand"
+                                value={form.brand}
+                                onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="model">Modelo</Label>
+                              <Input
+                                id="model"
+                                value={form.model}
+                                onChange={(e) => setForm({ ...form, model: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="year_model">Ano Modelo</Label>
+                              <Input
+                                id="year_model"
+                                type="number"
+                                value={form.year_model}
+                                onChange={(e) => setForm({ ...form, year_model: e.target.value })}
+                                placeholder="2024"
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
 
-                    <TabsContent value="capacidade" className="mt-0">
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-2 sm:col-span-1 xl:col-span-1">
-                          <Label htmlFor="capacity">Capacidade máxima de passageiros</Label>
-                          <Input
-                            id="capacity"
-                            type="number"
-                            min="1"
-                            value={form.capacity}
-                            onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                            placeholder="46"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
+                        <TabsContent value="capacidade" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-2 sm:col-span-1 xl:col-span-1">
+                              <Label htmlFor="capacity">Capacidade máxima de passageiros</Label>
+                              <Input
+                                id="capacity"
+                                type="number"
+                                min="1"
+                                value={form.capacity}
+                                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                                placeholder="46"
+                                required
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
 
-                    <TabsContent value="tecnicos" className="mt-0">
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="chassis">Chassi</Label>
-                          <Input
-                            id="chassis"
-                            value={form.chassis}
-                            onChange={(e) => setForm({ ...form, chassis: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="renavam">Renavam</Label>
-                          <Input
-                            id="renavam"
-                            value={form.renavam}
-                            onChange={(e) => setForm({ ...form, renavam: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="color">Cor</Label>
-                          <Input
-                            id="color"
-                            value={form.color}
-                            onChange={(e) => setForm({ ...form, color: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </TabsContent>
+                        <TabsContent value="tecnicos" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label htmlFor="chassis">Chassi</Label>
+                              <Input
+                                id="chassis"
+                                value={form.chassis}
+                                onChange={(e) => setForm({ ...form, chassis: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="renavam">Renavam</Label>
+                              <Input
+                                id="renavam"
+                                value={form.renavam}
+                                onChange={(e) => setForm({ ...form, renavam: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="color">Cor</Label>
+                              <Input
+                                id="color"
+                                value={form.color}
+                                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
 
-                    <TabsContent value="operacao" className="mt-0">
-                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="whatsapp_group_link">Link do grupo de WhatsApp</Label>
-                          <Input
-                            id="whatsapp_group_link"
-                            type="url"
-                            value={form.whatsapp_group_link}
-                            onChange={(e) =>
-                              setForm({ ...form, whatsapp_group_link: e.target.value })
-                            }
-                            placeholder="https://chat.whatsapp.com/..."
-                          />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2 xl:col-span-3">
-                          <Label htmlFor="notes">Observações permanentes</Label>
-                          <Textarea
-                            id="notes"
-                            value={form.notes}
-                            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                            rows={4}
-                          />
-                        </div>
+                        <TabsContent value="operacao" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label htmlFor="whatsapp_group_link">Link do grupo de WhatsApp</Label>
+                              <Input
+                                id="whatsapp_group_link"
+                                type="url"
+                                value={form.whatsapp_group_link}
+                                onChange={(e) =>
+                                  setForm({ ...form, whatsapp_group_link: e.target.value })
+                                }
+                                placeholder="https://chat.whatsapp.com/..."
+                              />
+                            </div>
+                            <div className="space-y-2 sm:col-span-2 xl:col-span-3">
+                              <Label htmlFor="notes">Observações permanentes</Label>
+                              <Textarea
+                                id="notes"
+                                value={form.notes}
+                                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                                rows={4}
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
                       </div>
-                    </TabsContent>
-                  </div>
-                </Tabs>
-                {/* Admin Modal UI: footer com separador sutil e botões alinhados à direita */}
-                <div className="admin-modal__footer px-6 py-4">
-                  <div className="flex flex-wrap justify-end gap-3">
-                    <DialogClose asChild>
-                      <Button type="button" variant="outline">
-                        Cancelar
-                      </Button>
-                    </DialogClose>
-                    <Button type="submit" disabled={saving}>
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                    </Tabs>
+                    <div className="admin-modal__footer px-6 py-4">
+                      <div className="flex flex-wrap justify-end gap-3">
+                        <DialogClose asChild>
+                          <Button type="button" variant="outline">
+                            Cancelar
+                          </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={saving}>
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </>
+          }
+        />
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <StatsCard
+            label="Total de veículos"
+            value={stats.total}
+            icon={Bus}
+          />
+          <StatsCard
+            label="Veículos ativos"
+            value={stats.ativos}
+            icon={CheckCircle}
+            variant="success"
+          />
+          <StatsCard
+            label="Veículos inativos"
+            value={stats.inativos}
+            icon={XCircle}
+            variant="destructive"
+          />
+          <StatsCard
+            label="Capacidade total"
+            value={`${stats.capacidadeTotal} pass.`}
+            icon={Users}
+          />
         </div>
 
+        {/* Filters */}
+        <FilterCard
+          className="mb-6"
+          searchValue={filters.search}
+          onSearchChange={(value) => setFilters({ ...filters, search: value })}
+          searchPlaceholder="Pesquisar por placa, proprietário, marca ou modelo..."
+          selects={[
+            {
+              id: 'status',
+              label: 'Status',
+              placeholder: 'Status',
+              value: filters.status,
+              onChange: (value) => setFilters({ ...filters, status: value as FleetFilters['status'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'ativo', label: 'Ativo' },
+                { value: 'inativo', label: 'Inativo' },
+              ],
+            },
+            {
+              id: 'type',
+              label: 'Tipo',
+              placeholder: 'Tipo',
+              value: filters.type,
+              onChange: (value) => setFilters({ ...filters, type: value as FleetFilters['type'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'onibus', label: 'Ônibus' },
+                { value: 'van', label: 'Van' },
+              ],
+            },
+          ]}
+          onClearFilters={() => setFilters(initialFilters)}
+          hasActiveFilters={hasActiveFilters}
+          advancedFilters={
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <FilterInput
+                id="brand"
+                label="Marca"
+                placeholder="Ex: Mercedes"
+                value={filters.brand}
+                onChange={(value) => setFilters({ ...filters, brand: value })}
+              />
+              <FilterInput
+                id="model"
+                label="Modelo"
+                placeholder="Ex: O-500"
+                value={filters.model}
+                onChange={(value) => setFilters({ ...filters, model: value })}
+              />
+              <FilterInput
+                id="yearModel"
+                label="Ano Modelo"
+                placeholder="Ex: 2024"
+                value={filters.yearModel}
+                onChange={(value) => setFilters({ ...filters, yearModel: value })}
+                type="number"
+              />
+              <FilterInput
+                id="capacityMin"
+                label="Capacidade mín."
+                placeholder="Ex: 20"
+                value={filters.capacityMin}
+                onChange={(value) => setFilters({ ...filters, capacityMin: value })}
+                type="number"
+              />
+              <FilterInput
+                id="capacityMax"
+                label="Capacidade máx."
+                placeholder="Ex: 50"
+                value={filters.capacityMax}
+                onChange={(value) => setFilters({ ...filters, capacityMax: value })}
+                type="number"
+              />
+            </div>
+          }
+        />
+
+        {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -514,6 +745,17 @@ export default function Fleet() {
               </Button>
             }
           />
+        ) : filteredVehicles.length === 0 ? (
+          <EmptyState
+            icon={<Bus className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum veículo encontrado"
+            description="Ajuste os filtros para encontrar veículos"
+            action={
+              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                Limpar filtros
+              </Button>
+            }
+          />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -521,21 +763,27 @@ export default function Fleet() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Marca / Modelo</TableHead>
                     <TableHead>Placa</TableHead>
                     <TableHead>Proprietário</TableHead>
-                    <TableHead>Capacidade máxima</TableHead>
+                    <TableHead>Capacidade</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]">Ações</TableHead>
+                    <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {vehicles.map((vehicle) => (
+                  {filteredVehicles.map((vehicle) => (
                     <TableRow key={vehicle.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Bus className="h-4 w-4 text-muted-foreground" />
                           {vehicle.type === 'onibus' ? 'Ônibus' : 'Van'}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {vehicle.brand || vehicle.model
+                          ? `${vehicle.brand ?? ''} ${vehicle.model ? `/ ${vehicle.model}` : ''}`.trim()
+                          : '-'}
                       </TableCell>
                       <TableCell className="font-mono">{vehicle.plate}</TableCell>
                       <TableCell>{vehicle.owner ?? '-'}</TableCell>
@@ -544,22 +792,7 @@ export default function Fleet() {
                         <StatusBadge status={vehicle.status} />
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(vehicle)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleToggleStatus(vehicle)}
-                          >
-                            {vehicle.status === 'ativo' ? (
-                              <CircleMinus className="h-4 w-4 text-destructive" />
-                            ) : (
-                              <CirclePlus className="h-4 w-4 text-primary" />
-                            )}
-                          </Button>
-                        </div>
+                        <ActionsDropdown actions={getVehicleActions(vehicle)} />
                       </TableCell>
                     </TableRow>
                   ))}
