@@ -53,7 +53,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canViewFinancials } = useAuth();
+  const { canViewFinancials, activeCompanyId } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [eventLocations, setEventLocations] = useState<EventBoardingLocation[]>([]);
@@ -130,6 +130,7 @@ export default function EventDetail() {
         driver_id: tripForm.driver_id,
         departure_time: tripForm.departure_time,
         capacity: tripForm.capacity ? parseInt(tripForm.capacity) : vehicle?.capacity || 0,
+        company_id: activeCompanyId!,
       },
     ]);
 
@@ -162,6 +163,7 @@ export default function EventDetail() {
       {
         event_id: id,
         boarding_location_id: selectedLocationId,
+        company_id: activeCompanyId!,
       },
     ]);
 
