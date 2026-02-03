@@ -62,6 +62,7 @@ export type Database = {
           document: string | null
           email: string | null
           id: string
+          is_active: boolean
           name: string
           notes: string | null
           phone: string | null
@@ -73,6 +74,7 @@ export type Database = {
           document?: string | null
           email?: string | null
           id?: string
+          is_active?: boolean
           name: string
           notes?: string | null
           phone?: string | null
@@ -84,6 +86,7 @@ export type Database = {
           document?: string | null
           email?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           notes?: string | null
           phone?: string | null
@@ -147,16 +150,19 @@ export type Database = {
       event_boarding_locations: {
         Row: {
           boarding_location_id: string
+          company_id: string
           event_id: string
           id: string
         }
         Insert: {
           boarding_location_id: string
+          company_id: string
           event_id: string
           id?: string
         }
         Update: {
           boarding_location_id?: string
+          company_id?: string
           event_id?: string
           id?: string
         }
@@ -166,6 +172,13 @@ export type Database = {
             columns: ["boarding_location_id"]
             isOneToOne: false
             referencedRelation: "boarding_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_boarding_locations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -223,6 +236,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_id: string | null
           created_at: string
           email: string
           id: string
@@ -230,6 +244,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           email: string
           id: string
@@ -237,17 +252,27 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           email?: string
           id?: string
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sales: {
         Row: {
           boarding_location_id: string
+          company_id: string
           created_at: string
           customer_cpf: string
           customer_name: string
@@ -263,6 +288,7 @@ export type Database = {
         }
         Insert: {
           boarding_location_id: string
+          company_id: string
           created_at?: string
           customer_cpf: string
           customer_name: string
@@ -278,6 +304,7 @@ export type Database = {
         }
         Update: {
           boarding_location_id?: string
+          company_id?: string
           created_at?: string
           customer_cpf?: string
           customer_name?: string
@@ -297,6 +324,13 @@ export type Database = {
             columns: ["boarding_location_id"]
             isOneToOne: false
             referencedRelation: "boarding_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -363,6 +397,7 @@ export type Database = {
       trips: {
         Row: {
           capacity: number
+          company_id: string
           created_at: string
           departure_time: string
           driver_id: string
@@ -373,6 +408,7 @@ export type Database = {
         }
         Insert: {
           capacity: number
+          company_id: string
           created_at?: string
           departure_time: string
           driver_id: string
@@ -383,6 +419,7 @@ export type Database = {
         }
         Update: {
           capacity?: number
+          company_id?: string
           created_at?: string
           departure_time?: string
           driver_id?: string
@@ -392,6 +429,13 @@ export type Database = {
           vehicle_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trips_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trips_driver_id_fkey"
             columns: ["driver_id"]

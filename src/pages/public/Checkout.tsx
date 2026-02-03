@@ -130,7 +130,8 @@ export default function Checkout() {
           customer_phone: form.phone,
           quantity: quantity,
           unit_price: 0, // Price can be set by admin
-          status: 'reservado',
+          status: 'reservado' as const,
+          company_id: event?.company_id!,
         },
       ])
       .select()

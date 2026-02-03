@@ -76,14 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (rolesData && rolesData.length > 0) {
       const companyIds = rolesData.map((role: any) => role.company_id).filter(Boolean);
 
+      // Buscar empresas ativas - usando filtro direto com cast para evitar erro de tipo
       const { data: companiesData, error: companiesError } = await supabase
         .from('companies')
         .select('*')
-        .in('id', companyIds)
-        .eq('is_active', true);
+        .in('id', companyIds);
 
       if (companiesError) {
-        // Comentário: diagnóstico de falhas ao carregar empresas ativas vinculadas ao usuário.
         console.error('Erro ao carregar empresas (companies.select)', {
           code: companiesError.code,
           message: companiesError.message,
@@ -92,20 +91,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      const companies = (companiesData ?? []) as Company[];
-      const uniqueCompanies = companies.filter(
+      // Filtrar apenas empresas ativas no código (contorna limitação de tipos)
+      const activeCompanies = ((companiesData ?? []) as Company[]).filter(
+        (company) => company.is_active === true
+      );
+      
+      const uniqueCompanies = activeCompanies.filter(
         (company: Company, index: number, self: Company[]) =>
           index === self.findIndex((c) => c.id === company.id)
       );
 
       setUserCompanies(uniqueCompanies);
 
-      const profileCompanyId = profileData?.company_id ?? null;
+      // Tentar recuperar empresa preferida do localStorage
+      const savedCompanyId = localStorage.getItem(`activeCompany_${userId}`);
+      const isSavedCompanyValid = savedCompanyId && uniqueCompanies.some(c => c.id === savedCompanyId);
+      
+      // Fallback: usar company_id do profile ou primeira empresa disponível
+      const profileCompanyId = (profileData as any)?.company_id ?? null;
       const profileActiveCompanyId =
         uniqueCompanies.find((company) => company.id === profileCompanyId)?.id ?? null;
-
-      // Comentário: se o profile estiver inválido/inativo, usa a primeira empresa ativa vinculada.
-      const validCompanyId = profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null;
+      
+      // Prioridade: localStorage > profile > primeira empresa
+      const validCompanyId = isSavedCompanyValid 
+        ? savedCompanyId 
+        : (profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null);
 
       if (validCompanyId) {
         setActiveCompanyId(validCompanyId);
