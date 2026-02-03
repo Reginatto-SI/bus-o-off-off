@@ -16,9 +16,13 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Corporate Blue */
-    --primary: 217 91% 45%;
+    /* Primary - Brand Orange (Busão Off Off) */
+    --primary: 25 95% 53%;
     --primary-foreground: 0 0% 100%;
+
+    /* Secondary Blue - for links and accents */
+    --blue: 217 91% 45%;
+    --blue-foreground: 0 0% 100%;
 
     /* Secondary - Soft Blue */
     --secondary: 214 32% 91%;
@@ -46,19 +50,19 @@
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 217 91% 45%;
+    --ring: 25 95% 53%;
 
     --radius: 0.5rem;
 
-    /* Sidebar */
+    /* Sidebar - Dark theme */
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 214 32% 91%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary: 25 95% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 214 32% 91%;
     --sidebar-border: 215 28% 17%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-ring: 25 95% 53%;
 
     /* Custom tokens */
     --hero-gradient: linear-gradient(135deg, hsl(217 91% 45%) 0%, hsl(217 91% 55%) 100%);
@@ -76,8 +80,13 @@
     --popover: 222 47% 11%;
     --popover-foreground: 210 20% 98%;
 
-    --primary: 217 91% 55%;
+    /* Primary - Brand Orange (Busão Off Off) */
+    --primary: 25 95% 58%;
     --primary-foreground: 0 0% 100%;
+
+    /* Secondary Blue - for links and accents */
+    --blue: 217 91% 55%;
+    --blue-foreground: 0 0% 100%;
 
     --secondary: 217 32% 17%;
     --secondary-foreground: 210 20% 98%;
@@ -99,16 +108,16 @@
 
     --border: 217 32% 17%;
     --input: 217 32% 17%;
-    --ring: 217 91% 55%;
+    --ring: 25 95% 58%;
 
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 214 32% 91%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary: 25 95% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 214 32% 91%;
     --sidebar-border: 215 28% 17%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-ring: 25 95% 58%;
   }
 }
 
