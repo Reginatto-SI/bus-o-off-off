@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ícone do sistema Busão Off Off">
+  <rect width="512" height="512" rx="96" fill="#F97316" />
+  <g fill="#FFFFFF">
+    <rect x="98" y="124" width="214" height="264" rx="28" />
+    <rect x="126" y="152" width="158" height="26" rx="13" fill="#F97316" />
+    <rect x="126" y="188" width="158" height="134" rx="12" fill="#F97316" />
+    <circle cx="148" cy="350" r="20" />
+    <circle cx="262" cy="350" r="20" />
+    <rect x="122" y="356" width="50" height="44" rx="10" />
+    <rect x="238" y="356" width="50" height="44" rx="10" />
+    <rect x="86" y="168" width="22" height="116" rx="11" />
+    <rect x="302" y="168" width="22" height="116" rx="11" />
+    <path d="M360 154c18 0 32 14 32 32s-14 32-32 32-32-14-32-32 14-32 32-32zm0 144c18 0 32 14 32 32s-14 32-32 32-32-14-32-32 14-32 32-32zm-8-80c36 0 66 30 66 66v6c0 12-10 22-22 22h-8c-12 0-22-10-22-22v-6c0-12-10-22-22-22s-22-10-22-22 10-22 22-22h8z" />
+  </g>
+</svg>
