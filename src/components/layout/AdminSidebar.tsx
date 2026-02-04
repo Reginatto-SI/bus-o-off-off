@@ -9,7 +9,6 @@ import {
   LogOut,
   Menu,
   X,
-  Building2,
   BadgePercent,
   FileText,
   BarChart3,
@@ -21,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import busaoIcon from '@/assets/brand/busao-icon.svg';
 
 type UserRole = 'gerente' | 'operador' | 'vendedor';
 
@@ -121,8 +121,14 @@ function BrandHeader({
   compact?: boolean;
 }) {
   return <div className={cn('flex items-center', compact ? 'gap-2' : 'gap-3')}>
-      <div className={cn('flex items-center justify-center rounded-lg bg-[#1E293B] text-[#F97316]', compact ? 'h-8 w-8' : 'h-10 w-10')}>
-        <Building2 className={cn(compact ? 'h-4 w-4' : 'h-5 w-5')} />
+      {/* Ícone de branding global do sistema (não confundir com branding de empresa ativa). */}
+      {/* Para trocar no futuro, substitua o asset em src/assets/brand/busao-icon.svg. */}
+      <div className={cn('flex items-center justify-center rounded-lg', compact ? 'h-8 w-8' : 'h-10 w-10')}>
+        <img
+          src={busaoIcon}
+          alt="Ícone do sistema Busão Off Off"
+          className={cn('h-full w-full rounded-lg object-contain')}
+        />
       </div>
       <span className={cn('font-semibold tracking-tight text-sidebar-foreground', compact ? 'text-sm' : 'text-base')}>
         Busão Off Off
