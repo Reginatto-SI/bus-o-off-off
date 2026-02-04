@@ -43,6 +43,9 @@ export function ExportExcelModal({
   fileName,
   sheetName,
 }: ExportExcelModalProps) {
+  // Mantemos 8 opções por coluna para reduzir rolagem e facilitar o "bater o olho".
+  // Ajuste o número abaixo caso precise mudar o limite de itens por coluna no futuro.
+  const COLUMN_SIZE = 8;
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
 
   // Load preferences from localStorage when modal opens
@@ -117,6 +120,11 @@ export function ExportExcelModal({
     onOpenChange(false);
   };
 
+  const columnGroups = Array.from(
+    { length: Math.ceil(columns.length / COLUMN_SIZE) },
+    (_, index) => columns.slice(index * COLUMN_SIZE, (index + 1) * COLUMN_SIZE)
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -142,20 +150,24 @@ export function ExportExcelModal({
           </div>
 
           <ScrollArea className="h-[300px] rounded-md border p-4">
-            <div className="space-y-3">
-              {columns.map((column) => (
-                <div key={column.key} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`col-${column.key}`}
-                    checked={selectedColumns.includes(column.key)}
-                    onCheckedChange={() => handleToggleColumn(column.key)}
-                  />
-                  <Label
-                    htmlFor={`col-${column.key}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    {column.label}
-                  </Label>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {columnGroups.map((group, groupIndex) => (
+                <div key={`excel-col-group-${groupIndex}`} className="space-y-3">
+                  {group.map((column) => (
+                    <div key={column.key} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`col-${column.key}`}
+                        checked={selectedColumns.includes(column.key)}
+                        onCheckedChange={() => handleToggleColumn(column.key)}
+                      />
+                      <Label
+                        htmlFor={`col-${column.key}`}
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {column.label}
+                      </Label>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
