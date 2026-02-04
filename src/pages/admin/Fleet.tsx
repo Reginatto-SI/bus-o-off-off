@@ -11,6 +11,7 @@ import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
+import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
 import {
   Dialog,
   DialogClose,
@@ -86,6 +87,7 @@ export default function Fleet() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FleetFilters>(initialFilters);
@@ -421,7 +423,7 @@ export default function Fleet() {
   };
 
   const handleExportPDF = () => {
-    toast.info('Exportação PDF em breve');
+    setPdfModalOpen(true);
   };
 
   return (
@@ -830,6 +832,18 @@ export default function Fleet() {
           storageKey="frota"
           fileName="frota"
           sheetName="Frota"
+        />
+
+        {/* Export PDF Modal */}
+        <ExportPDFModal
+          open={pdfModalOpen}
+          onOpenChange={setPdfModalOpen}
+          columns={exportColumns}
+          data={filteredVehicles}
+          storageKey="frota"
+          fileName="frota"
+          title="Frota de Veículos"
+          companyName="Busão Off Off"
         />
       </div>
     </AdminLayout>
