@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
+import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
 import {
   Dialog,
   DialogClose,
@@ -84,9 +85,27 @@ export default function Fleet() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FleetFilters>(initialFilters);
+
+  // Export columns configuration
+  const exportColumns: ExportColumn[] = [
+    { key: 'type', label: 'Tipo', format: (v) => (v === 'onibus' ? 'Ônibus' : 'Van') },
+    { key: 'brand', label: 'Marca' },
+    { key: 'model', label: 'Modelo' },
+    { key: 'plate', label: 'Placa' },
+    { key: 'owner', label: 'Proprietário' },
+    { key: 'capacity', label: 'Capacidade' },
+    { key: 'status', label: 'Status', format: (v) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
+    { key: 'year_model', label: 'Ano do Modelo' },
+    { key: 'color', label: 'Cor' },
+    { key: 'renavam', label: 'Renavam' },
+    { key: 'chassis', label: 'Chassi' },
+    { key: 'whatsapp_group_link', label: 'Link WhatsApp' },
+    { key: 'notes', label: 'Observações' },
+  ];
   const [form, setForm] = useState({
     type: 'onibus' as Vehicle['type'],
     plate: '',
@@ -398,7 +417,7 @@ export default function Fleet() {
   ];
 
   const handleExportExcel = () => {
-    toast.info('Exportação Excel em breve');
+    setExportModalOpen(true);
   };
 
   const handleExportPDF = () => {
@@ -801,6 +820,17 @@ export default function Fleet() {
             </CardContent>
           </Card>
         )}
+
+        {/* Export Excel Modal */}
+        <ExportExcelModal
+          open={exportModalOpen}
+          onOpenChange={setExportModalOpen}
+          columns={exportColumns}
+          data={filteredVehicles}
+          storageKey="frota"
+          fileName="frota"
+          sheetName="Frota"
+        />
       </div>
     </AdminLayout>
   );
