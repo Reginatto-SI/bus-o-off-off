@@ -15,7 +15,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExportColumn } from './ExportExcelModal';
-import { getLogoBase64, formatDateTime, BRAND_ORANGE_RGB } from '@/lib/pdfUtils';
+import {
+  getLogoBase64,
+  formatDateTime,
+  getCompanyPrimaryColor,
+  getCompanyDisplayName,
+  getCompanyLocation,
+  formatCnpj,
+  hexToRgb,
+  loadImageAsBase64,
+} from '@/lib/pdfUtils';
+import { Company } from '@/types/database';
 
 interface ExportPDFModalProps {
   open: boolean;
@@ -25,7 +35,7 @@ interface ExportPDFModalProps {
   storageKey: string;
   fileName: string;
   title: string;
-  companyName: string;
+  company: Company | null;
 }
 
 interface StoredPreferences {
@@ -40,15 +50,12 @@ export function ExportPDFModal({
   storageKey,
   fileName,
   title,
-  companyName,
+  company,
 }: ExportPDFModalProps) {
-  // Mantemos 8 opções por coluna para reduzir rolagem e facilitar o "bater o olho".
-  // Ajuste o número abaixo caso precise mudar o limite de itens por coluna no futuro.
   const COLUMN_SIZE = 8;
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
 
-  // Load preferences from localStorage when modal opens
   useEffect(() => {
     if (open) {
       const stored = localStorage.getItem(`export_pdf_columns_${storageKey}`);
@@ -57,11 +64,9 @@ export function ExportPDFModal({
           const preferences: StoredPreferences = JSON.parse(stored);
           setSelectedColumns(preferences.selectedColumns);
         } catch {
-          // If parsing fails, use default columns
           setSelectedColumns(columns.slice(0, 7).map((c) => c.key));
         }
       } else {
-        // First time: select first 7 columns by default
         setSelectedColumns(columns.slice(0, 7).map((c) => c.key));
       }
     }
@@ -95,11 +100,9 @@ export function ExportPDFModal({
     setGenerating(true);
 
     try {
-      // Save preferences to localStorage
       const preferences: StoredPreferences = { selectedColumns };
       localStorage.setItem(`export_pdf_columns_${storageKey}`, JSON.stringify(preferences));
 
-      // Create PDF in landscape orientation for more columns
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
@@ -110,50 +113,112 @@ export function ExportPDFModal({
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 15;
 
-      // Try to load logo
+      // Cor primária da empresa (com fallback)
+      const primaryColor = getCompanyPrimaryColor(company);
+      const primaryColorRgb = hexToRgb(primaryColor);
+
+      // Carregar logo (empresa ou sistema)
       let logoBase64: string | null = null;
       try {
-        logoBase64 = await getLogoBase64();
+        if (company?.logo_url) {
+          logoBase64 = await loadImageAsBase64(company.logo_url);
+        }
+        if (!logoBase64) {
+          logoBase64 = await getLogoBase64();
+        }
       } catch (e) {
         console.warn('Logo não carregada para o PDF:', e);
       }
 
-      // Header function to be called on each page
-      const addHeader = () => {
-        let yPosition = margin;
+      // Dados da empresa para o cabeçalho
+      const companyDisplayName = getCompanyDisplayName(company);
+      const companyLegalName = company?.legal_name || null;
+      const companyCnpj = formatCnpj(company?.cnpj || null);
+      const companyLocation = getCompanyLocation(company);
 
-        // Logo and system name
+      // Função de cabeçalho institucional
+      const addHeader = () => {
+        const yPosition = margin;
+        const leftBlockX = margin;
+        const rightBlockX = pageWidth - margin;
+        let leftY = yPosition;
+
+        // === BLOCO ESQUERDO (Identidade da Empresa) ===
+        
+        // Logo
         if (logoBase64) {
-          doc.addImage(logoBase64, 'JPEG', margin, yPosition, 20, 20);
+          doc.addImage(logoBase64, 'PNG', leftBlockX, leftY, 18, 18);
         }
 
-        // System name
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Busão Off Off', margin + (logoBase64 ? 25 : 0), yPosition + 8);
+        const textStartX = leftBlockX + (logoBase64 ? 22 : 0);
 
-        // Company name
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Empresa: ${companyName}`, margin + (logoBase64 ? 25 : 0), yPosition + 14);
-
-        // Document title (centered)
+        // Nome fantasia (destaque)
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(title.toUpperCase(), pageWidth / 2, yPosition + 28, { align: 'center' });
+        doc.setTextColor(51, 51, 51);
+        doc.text(companyDisplayName, textStartX, leftY + 6);
 
-        // Generation date
-        doc.setFontSize(9);
+        // Razão social (se existir)
+        let currentY = leftY + 11;
+        if (companyLegalName) {
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(102, 102, 102);
+          doc.text(companyLegalName, textStartX, currentY);
+          currentY += 4;
+        }
+
+        // CNPJ (se existir)
+        if (companyCnpj) {
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(128, 128, 128);
+          doc.text(`CNPJ: ${companyCnpj}`, textStartX, currentY);
+          currentY += 4;
+        }
+
+        // Cidade - UF (se existir)
+        if (companyLocation) {
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(128, 128, 128);
+          doc.text(companyLocation, textStartX, currentY);
+        }
+
+        // === BLOCO DIREITO (Identidade do Documento) ===
+        
+        // Sistema
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Gerado em: ${formatDateTime(new Date())}`, pageWidth / 2, yPosition + 34, { align: 'center' });
+        doc.setTextColor(128, 128, 128);
+        doc.text('Sistema: Busão Off Off', rightBlockX, leftY + 4, { align: 'right' });
 
-        return yPosition + 42;
+        // Título do documento (cor primária)
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(primaryColorRgb.r, primaryColorRgb.g, primaryColorRgb.b);
+        doc.text(title.toUpperCase(), rightBlockX, leftY + 12, { align: 'right' });
+
+        // Data e hora de geração
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(102, 102, 102);
+        doc.text(`Gerado em: ${formatDateTime(new Date())}`, rightBlockX, leftY + 17, { align: 'right' });
+
+        // Linha separadora
+        const separatorY = yPosition + 24;
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.5);
+        doc.line(margin, separatorY, pageWidth - margin, separatorY);
+
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+
+        return separatorY + 6;
       };
 
-      // Add header on first page
       const tableStartY = addHeader();
 
-      // Prepare table data
       const selectedColumnObjects = columns.filter((c) => selectedColumns.includes(c.key));
       const tableHeaders = selectedColumnObjects.map((c) => c.label);
       const tableData = data.map((item) =>
@@ -163,14 +228,13 @@ export function ExportPDFModal({
         })
       );
 
-      // Generate table with autoTable
       autoTable(doc, {
         head: [tableHeaders],
         body: tableData,
         startY: tableStartY,
         margin: { left: margin, right: margin },
         headStyles: {
-          fillColor: [BRAND_ORANGE_RGB.r, BRAND_ORANGE_RGB.g, BRAND_ORANGE_RGB.b],
+          fillColor: [primaryColorRgb.r, primaryColorRgb.g, primaryColorRgb.b],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           fontSize: 10,
@@ -188,24 +252,20 @@ export function ExportPDFModal({
           lineWidth: 0.1,
           cellPadding: 3,
         },
-        didDrawPage: (data) => {
-          // Add header on new pages (except first)
-          if (data.pageNumber > 1) {
+        didDrawPage: (pageData) => {
+          if (pageData.pageNumber > 1) {
             addHeader();
           }
 
-          // Footer with page numbers
           const pageCount = doc.getNumberOfPages();
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(128, 128, 128);
 
-          // Left: system attribution
           doc.text('Documento gerado pelo sistema Busão Off Off', margin, pageHeight - 10);
 
-          // Right: page number
           doc.text(
-            `Página ${data.pageNumber} de ${pageCount}`,
+            `Página ${pageData.pageNumber} de ${pageCount}`,
             pageWidth - margin,
             pageHeight - 10,
             { align: 'right' }
@@ -213,7 +273,6 @@ export function ExportPDFModal({
         },
       });
 
-      // Download file
       doc.save(`${fileName}.pdf`);
 
       toast.success(`Arquivo ${fileName}.pdf gerado com sucesso`);

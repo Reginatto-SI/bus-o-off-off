@@ -9,11 +9,24 @@ export type SellerStatus = 'ativo' | 'inativo';
 export interface Company {
   id: string;
   name: string;
+  // Identidade institucional
+  trade_name: string | null;
+  legal_name: string | null;
+  cnpj: string | null;
+  city: string | null;
+  state: string | null;
+  // Identidade visual
+  logo_url: string | null;
+  primary_color: string | null;
+  // Contato institucional
   document: string | null;
   phone: string | null;
   email: string | null;
+  whatsapp: string | null;
+  website: string | null;
   address: string | null;
   notes: string | null;
+  // Sistema
   is_active: boolean;
   created_at: string;
   updated_at: string;
