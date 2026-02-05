@@ -82,7 +82,7 @@ const initialFilters: FleetFilters = {
 };
 
 export default function Fleet() {
-  const { isGerente, isOperador, activeCompanyId, user } = useAuth();
+  const { isGerente, isOperador, activeCompanyId, activeCompany, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -843,7 +843,7 @@ export default function Fleet() {
           storageKey="frota"
           fileName="frota"
           title="Frota de Veículos"
-          companyName="Busão Off Off"
+        company={activeCompany}
         />
       </div>
     </AdminLayout>
