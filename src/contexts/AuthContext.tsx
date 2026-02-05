@@ -76,63 +76,104 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (rolesData && rolesData.length > 0) {
       const companyIds = rolesData.map((role: any) => role.company_id).filter(Boolean);
 
-      // Buscar empresas ativas - usando filtro direto com cast para evitar erro de tipo
-      const { data: companiesData, error: companiesError } = await supabase
-        .from('companies')
-        .select('*')
-        .in('id', companyIds);
-
-      if (companiesError) {
-        console.error('Erro ao carregar empresas (companies.select)', {
-          code: companiesError.code,
-          message: companiesError.message,
-          details: companiesError.details,
-          hint: companiesError.hint,
-        });
-      }
-
-      // Filtrar apenas empresas ativas no código (contorna limitação de tipos)
-      const activeCompanies = ((companiesData ?? []) as Company[]).filter(
-        (company) => company.is_active === true
-      );
-      
-      const uniqueCompanies = activeCompanies.filter(
-        (company: Company, index: number, self: Company[]) =>
-          index === self.findIndex((c) => c.id === company.id)
-      );
-
-      setUserCompanies(uniqueCompanies);
-
-      // Tentar recuperar empresa preferida do localStorage
-      const savedCompanyId = localStorage.getItem(`activeCompany_${userId}`);
-      const isSavedCompanyValid = savedCompanyId && uniqueCompanies.some(c => c.id === savedCompanyId);
-      
-      // Fallback: usar company_id do profile ou primeira empresa disponível
-      const profileCompanyId = (profileData as any)?.company_id ?? null;
-      const profileActiveCompanyId =
-        uniqueCompanies.find((company) => company.id === profileCompanyId)?.id ?? null;
-      
-      // Prioridade: localStorage > profile > primeira empresa
-      const validCompanyId = isSavedCompanyValid 
-        ? savedCompanyId 
-        : (profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null);
-
-      if (validCompanyId) {
-        setActiveCompanyId(validCompanyId);
-        setActiveCompany(uniqueCompanies.find((c: Company) => c.id === validCompanyId) || null);
-        localStorage.setItem(`activeCompany_${userId}`, validCompanyId);
-
-        const roleForCompany = rolesData.find((r: any) => r.company_id === validCompanyId);
-        if (roleForCompany) {
-          setUserRole(roleForCompany.role as UserRole);
-          setSellerId(roleForCompany.seller_id);
+      // Guard: se não houver company_ids válidos, usar role/sellerId do primeiro registro
+      if (companyIds.length === 0) {
+        console.warn('[AuthContext] Nenhum company_id válido encontrado em user_roles. Usando fallback.');
+        const firstRole = rolesData[0];
+        if (firstRole) {
+          setUserRole(firstRole.role as UserRole);
+          setSellerId(firstRole.seller_id);
         }
-      } else {
-        // Comentário: garante estado limpo quando não há empresa ativa disponível.
+        setUserCompanies([]);
         setActiveCompanyId(null);
         setActiveCompany(null);
-        setUserRole(null);
-        setSellerId(null);
+        return; // Sai cedo, evita query inválida .in('id', [])
+      }
+
+      // Buscar empresas ativas - só executa se tiver IDs válidos
+      try {
+        const { data: companiesData, error: companiesError } = await supabase
+          .from('companies')
+          .select('*')
+          .in('id', companyIds);
+
+        if (companiesError) {
+          console.error('[AuthContext] Erro ao carregar empresas (companies.select)', {
+            code: companiesError.code,
+            message: companiesError.message,
+            details: companiesError.details,
+            hint: companiesError.hint,
+          });
+          // Fallback: usar role/sellerId mesmo sem empresa
+          const firstRole = rolesData[0];
+          if (firstRole) {
+            setUserRole(firstRole.role as UserRole);
+            setSellerId(firstRole.seller_id);
+          }
+          setUserCompanies([]);
+          setActiveCompanyId(null);
+          setActiveCompany(null);
+          return;
+        }
+
+        // Filtrar apenas empresas ativas no código (contorna limitação de tipos)
+        const activeCompanies = ((companiesData ?? []) as Company[]).filter(
+          (company) => company.is_active === true
+        );
+        
+        const uniqueCompanies = activeCompanies.filter(
+          (company: Company, index: number, self: Company[]) =>
+            index === self.findIndex((c) => c.id === company.id)
+        );
+
+        setUserCompanies(uniqueCompanies);
+
+        // Tentar recuperar empresa preferida do localStorage
+        const savedCompanyId = localStorage.getItem(`activeCompany_${userId}`);
+        const isSavedCompanyValid = savedCompanyId && uniqueCompanies.some(c => c.id === savedCompanyId);
+        
+        // Fallback: usar company_id do profile ou primeira empresa disponível
+        const profileCompanyId = (profileData as any)?.company_id ?? null;
+        const profileActiveCompanyId =
+          uniqueCompanies.find((company) => company.id === profileCompanyId)?.id ?? null;
+        
+        // Prioridade: localStorage > profile > primeira empresa
+        const validCompanyId = isSavedCompanyValid 
+          ? savedCompanyId 
+          : (profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null);
+
+        if (validCompanyId) {
+          setActiveCompanyId(validCompanyId);
+          setActiveCompany(uniqueCompanies.find((c: Company) => c.id === validCompanyId) || null);
+          localStorage.setItem(`activeCompany_${userId}`, validCompanyId);
+
+          const roleForCompany = rolesData.find((r: any) => r.company_id === validCompanyId);
+          if (roleForCompany) {
+            setUserRole(roleForCompany.role as UserRole);
+            setSellerId(roleForCompany.seller_id);
+          }
+        } else {
+          // Nenhuma empresa ativa disponível - usa role do primeiro registro
+          console.warn('[AuthContext] Nenhuma empresa ativa disponível. Usando role do primeiro vínculo.');
+          const firstRole = rolesData[0];
+          if (firstRole) {
+            setUserRole(firstRole.role as UserRole);
+            setSellerId(firstRole.seller_id);
+          }
+          setActiveCompanyId(null);
+          setActiveCompany(null);
+        }
+      } catch (error) {
+        console.error('[AuthContext] Erro inesperado ao resolver empresa ativa:', error);
+        // Fallback de emergência
+        const firstRole = rolesData[0];
+        if (firstRole) {
+          setUserRole(firstRole.role as UserRole);
+          setSellerId(firstRole.seller_id);
+        }
+        setUserCompanies([]);
+        setActiveCompanyId(null);
+        setActiveCompany(null);
       }
     } else {
       // Comentário: evita resíduos de estado quando o usuário não possui vínculos.
