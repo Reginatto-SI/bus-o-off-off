@@ -1,0 +1,19 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+
+ <g>
+  <title>Layer 1</title>
+  <rect stroke="#000" stroke-width="0" rx="30" id="svg_2" height="376.99999" width="369" y="88.80001" x="101.5" fill="#ffffff"/>
+  <path id="svg_3" d="m112.49998,171.80002c0,-5.43379 4.56621,-10 10,-10l327.00003,0c5.43379,0 10,4.56621 10,10l0,132c0,5.43379 -4.56621,10 -10,10l-327.00003,0c-5.43379,0 -10,-4.56621 -10,-10l0,-132z" opacity="undefined" stroke-width="0" stroke="#000" fill="#ff7f00"/>
+  <ellipse ry="30.5" rx="30.5" id="svg_4" cy="384.30001" cx="159.89999" stroke-width="0" stroke="#000" fill="#ff7f00"/>
+  <ellipse ry="30.5" rx="30.5" id="svg_6" cy="386.30001" cx="410.89999" stroke-width="0" stroke="#000" fill="#ff7f00"/>
+  <rect stroke="#000" stroke-width="0" rx="8" id="svg_7" height="61" width="57.00001" y="442.80001" x="128.5" fill="#ffffff"/>
+  <rect stroke="#000" stroke-width="0" rx="8" id="svg_8" height="61" width="57.00001" y="442.80001" x="386.5" fill="#ffffff"/>
+  <rect stroke="#000" stroke-width="0" rx="8" id="svg_9" height="134" width="26.00001" y="177.80001" x="80.5" fill="#ffffff"/>
+  <rect stroke="#000" stroke-width="0" rx="8" id="svg_10" height="134" width="26.00001" y="172.80001" x="465.5" fill="#ffffff"/>
+  <rect stroke="#000" stroke-width="0" rx="10" id="svg_11" height="14" width="229.00003" y="120.80002" x="171.49998" fill="#ff7f00"/>
+  <ellipse stroke="#000" ry="50.5" rx="51" id="svg_12" cy="148.49999" cx="688.39999" stroke-width="0" fill="#ffffff"/>
+  <ellipse stroke="#000" ry="50.5" rx="51" id="svg_14" cy="455.49999" cx="586.39999" stroke-width="0" fill="#ffffff"/>
+  <path stroke="#000" id="svg_22" d="m713.78794,373.77592c0,30.50577 -40.7421,55.23561 -91,55.23561l0,44.18849l0,0c50.2579,0 91,-24.72982 91,-55.23561l0,-44.18849c0,-25.18735 -28.07182,-47.18482 -68.25,-53.48166l0,-22.09425l-22.75,42.43453l22.75,45.94245l0,-22.09425l0,0c27.09245,4.246 49.46049,15.82131 60.65289,31.38741" stroke-width="0" fill="#ffffff"/>
+  <path stroke="#000" id="svg_25" d="m552.78799,223.76039c0,-30.8544 42.53295,-55.86687 95,-55.86687l0,-44.69349l0,0c-52.46705,0 -95,25.01244 -95,55.86687l0,44.69349c0,25.4752 29.30575,47.72407 71.25,54.09287l0,22.34675l23.75,-42.91949l-23.75,-46.4675l0,22.34675l0,0c-28.28333,-4.29452 -51.63459,-16.00213 -63.31895,-31.74611" stroke-width="0" fill="#ffffff"/>
+ </g>
+</svg>
