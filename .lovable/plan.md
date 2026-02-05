@@ -1,203 +1,173 @@
 
-
-# Plano: Exportacao PDF - Tela Piloto /admin/frota
+# Plano: Evolucao da Empresa + Cabecalho Institucional do PDF
 
 ## Visao Geral
 
-Implementar exportacao PDF com estrutura profissional e identidade visual do sistema, seguindo o mesmo padrao reutilizavel estabelecido na exportacao Excel.
+Evoluir a estrutura de dados da entidade Empresa para representar identidade institucional completa e ajustar o cabecalho do PDF para exibir esses dados de forma profissional.
 
 ---
 
-## 1. Dependencia Nova
+## Parte 1: Evolucao da Estrutura da Empresa (Banco de Dados)
 
-Instalar bibliotecas para geracao de PDF:
+### Estrutura Atual da Tabela `companies`
 
+| Campo | Tipo | Observacao |
+|-------|------|------------|
+| id | uuid | PK |
+| name | text | Nome unico |
+| document | text | Documento generico |
+| phone | text | Telefone |
+| email | text | Email |
+| address | text | Endereco |
+| notes | text | Observacoes |
+| is_active | boolean | Status |
+| created_at | timestamp | Criacao |
+| updated_at | timestamp | Atualizacao |
+
+### Novos Campos a Adicionar
+
+#### Identidade Institucional
+
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| trade_name | text | Nome fantasia (exibicao principal) |
+| legal_name | text | Razao social |
+| cnpj | text | CNPJ formatado |
+| city | text | Cidade sede |
+| state | text | UF (2 caracteres) |
+
+#### Identidade Visual
+
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| logo_url | text | URL da logo para PDFs |
+| primary_color | text | Cor primaria hex (ex: #F97316) |
+
+#### Contato Institucional
+
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| whatsapp | text | WhatsApp institucional |
+| website | text | Site da empresa |
+
+### Migracao SQL
+
+```sql
+ALTER TABLE companies
+  ADD COLUMN IF NOT EXISTS trade_name text,
+  ADD COLUMN IF NOT EXISTS legal_name text,
+  ADD COLUMN IF NOT EXISTS cnpj text,
+  ADD COLUMN IF NOT EXISTS city text,
+  ADD COLUMN IF NOT EXISTS state char(2),
+  ADD COLUMN IF NOT EXISTS logo_url text,
+  ADD COLUMN IF NOT EXISTS primary_color text DEFAULT '#F97316',
+  ADD COLUMN IF NOT EXISTS whatsapp text,
+  ADD COLUMN IF NOT EXISTS website text;
+
+COMMENT ON COLUMN companies.trade_name IS 'Nome fantasia para exibicao em documentos';
+COMMENT ON COLUMN companies.legal_name IS 'Razao social oficial';
+COMMENT ON COLUMN companies.cnpj IS 'CNPJ formatado';
+COMMENT ON COLUMN companies.primary_color IS 'Cor primaria hex para PDFs';
 ```
-jspdf (geracao de PDF)
-jspdf-autotable (tabelas automaticas)
-```
 
-Essas bibliotecas sao leves, funcionam 100% no cliente e geram PDFs nativos.
+### Estrategia de Compatibilidade
+
+- Campo `name` continua existindo como nome principal/fallback
+- Campo `trade_name` e o nome fantasia para documentos
+- Se `trade_name` estiver vazio, usar `name` como fallback
+- Se `legal_name` estiver vazio, nao exibir razao social no PDF
 
 ---
 
-## 2. Componente Reutilizavel: ExportPDFModal
+## Parte 2: Atualizacao do Tipo TypeScript
 
-**Arquivo:** `src/components/admin/ExportPDFModal.tsx`
-
-### Props do Componente
-
-| Prop | Tipo | Descricao |
-|------|------|-----------|
-| open | boolean | Controla visibilidade do modal |
-| onOpenChange | function | Callback para fechar o modal |
-| columns | ExportColumn[] | Lista de colunas disponiveis (mesmo tipo do Excel) |
-| data | any[] | Dados filtrados para exportar |
-| storageKey | string | Chave para salvar preferencia (ex: "export_pdf_frota") |
-| fileName | string | Nome do arquivo gerado (ex: "frota") |
-| title | string | Titulo do documento (ex: "Frota de Veiculos") |
-| companyName | string | Nome da empresa para o cabecalho |
-
-### Comportamento do Modal
-
-1. Ao abrir, carrega preferencias do localStorage
-2. Exibe lista de colunas com checkboxes (identico ao Excel)
-3. Botoes: "Marcar Todos", "Desmarcar Todos"
-4. Ao confirmar:
-   - Salva selecao no localStorage
-   - Gera PDF com colunas selecionadas
-   - Faz download automatico
-
----
-
-## 3. Estrutura do PDF
-
-### Cabecalho (Topo de cada pagina)
-
-```text
-+----------------------------------------------------------+
-| [LOGO]  Busao Off Off                                    |
-|         Empresa: [Nome da Empresa Ativa]                 |
-|                                                          |
-|         FROTA DE VEICULOS                                |
-|         Gerado em: 04/02/2026 as 14:30                   |
-+----------------------------------------------------------+
-```
-
-Detalhes:
-- Logo do sistema (formato base64 para incorporar no PDF)
-- Nome do sistema
-- Nome da empresa ativa
-- Titulo do documento em destaque
-- Data e hora de geracao
-
-### Tabela de Dados
-
-```text
-+----------------------------------------------------------+
-| TIPO   | MARCA/MODELO  | PLACA  | PROPRIETARIO | STATUS  |
-+----------------------------------------------------------+
-| Onibus | Mercedes/500  | ABC... | Joao Silva   | Ativo   |
-| Van    | Fiat/Ducato   | XYZ... | Maria Costa  | Inativo |
-+----------------------------------------------------------+
-```
-
-Estilo:
-- Cabecalho da tabela com fundo laranja institucional (#F97316)
-- Texto do cabecalho em branco
-- Linhas alternadas em cinza claro para leitura
-- Bordas finas e discretas
-- Fonte legivel (tamanho 10-11pt)
-
-### Rodape (Em todas as paginas)
-
-```text
-+----------------------------------------------------------+
-| Documento gerado pelo sistema Busao Off Off    Pagina 1/2|
-+----------------------------------------------------------+
-```
-
----
-
-## 4. Cor Laranja Institucional
-
-A cor primaria do sistema e:
-- CSS: `hsl(25, 95%, 53%)`
-- HEX: `#F97316`
-- RGB: `249, 115, 22`
-
-Esta cor sera usada no cabecalho da tabela do PDF.
-
----
-
-## 5. Configuracao das Colunas (Frota)
-
-Reutilizar a mesma interface `ExportColumn` do Excel:
+### Arquivo: `src/types/database.ts`
 
 ```typescript
-const pdfColumns: ExportColumn[] = [
-  { key: 'type', label: 'Tipo', format: (v) => v === 'onibus' ? 'Onibus' : 'Van' },
-  { key: 'brand', label: 'Marca' },
-  { key: 'model', label: 'Modelo' },
-  { key: 'plate', label: 'Placa' },
-  { key: 'owner', label: 'Proprietario' },
-  { key: 'capacity', label: 'Capacidade' },
-  { key: 'status', label: 'Status', format: (v) => v === 'ativo' ? 'Ativo' : 'Inativo' },
-  // ... demais colunas
-];
-```
-
----
-
-## 6. Logica de Preferencias (localStorage)
-
-### Chave de Armazenamento
-
-```
-export_pdf_columns_frota
-```
-
-### Estrutura Salva
-
-```json
-{
-  "selectedColumns": ["type", "brand", "model", "plate", "owner", "status"]
+export interface Company {
+  id: string;
+  name: string;
+  // Identidade institucional
+  trade_name: string | null;
+  legal_name: string | null;
+  cnpj: string | null;
+  city: string | null;
+  state: string | null;
+  // Identidade visual
+  logo_url: string | null;
+  primary_color: string | null;
+  // Contato institucional
+  document: string | null;
+  phone: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  website: string | null;
+  address: string | null;
+  notes: string | null;
+  // Sistema
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 ```
 
-### Comportamento
+---
 
-- Preferencias de PDF sao independentes das de Excel
-- Primeira vez: colunas principais selecionadas por padrao
-- Proximas vezes: carrega selecao salva
+## Parte 3: Evolucao do Componente ExportPDFModal
+
+### Alteracoes nas Props
+
+```typescript
+interface ExportPDFModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  columns: ExportColumn[];
+  data: any[];
+  storageKey: string;
+  fileName: string;
+  title: string;
+  company: Company | null;  // NOVO: objeto completo da empresa
+}
+```
+
+### Nova Estrutura do Cabecalho PDF
+
+```text
++------------------------------------------------------------------+
+| BLOCO ESQUERDO                      |    BLOCO DIREITO           |
++------------------------------------------------------------------+
+| [LOGO]  Nome Fantasia               |    Sistema: Busao Off Off  |
+|         Razao Social Ltda           |                            |
+|         CNPJ: 00.000.000/0001-00    |    FROTA DE VEICULOS       |
+|         Cidade - UF                 |                            |
+|                                     |    Gerado em: 04/02/2026   |
+|                                     |    as 14:30                |
++------------------------------------------------------------------+
+```
+
+### Logica de Fallback
+
+1. Logo: se `logo_url` vazio, usar logo padrao do sistema
+2. Nome fantasia: se `trade_name` vazio, usar `name`
+3. Razao social: se `legal_name` vazio, nao exibir linha
+4. CNPJ: se `cnpj` vazio, nao exibir linha
+5. Cidade/UF: se ambos vazios, nao exibir linha
+6. Cor primaria: se `primary_color` vazio, usar `#F97316`
 
 ---
 
-## 7. Geracao do PDF (Processo Tecnico)
+## Parte 4: Atualizacao do Fleet.tsx
 
-### Fluxo
+### Alteracoes Necessarias
 
-1. Criar instancia do jsPDF (orientacao paisagem para mais colunas)
-2. Converter logo para base64 e adicionar ao cabecalho
-3. Adicionar textos do cabecalho (empresa, titulo, data)
-4. Gerar tabela com jspdf-autotable
-5. Adicionar rodape com paginacao
-6. Fazer download do arquivo
-
-### Orientacao do Documento
-
-- Paisagem (landscape) para acomodar mais colunas
-- Tamanho A4
-
----
-
-## 8. Alteracoes no Fleet.tsx
-
-### Novos Imports
+1. Obter `activeCompany` do contexto de autenticacao
+2. Passar objeto empresa completo para o modal PDF
 
 ```typescript
-import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
-```
+// Importar activeCompany do contexto
+const { activeCompany } = useAuth();
 
-### Novos Estados
-
-```typescript
-const [pdfModalOpen, setPdfModalOpen] = useState(false);
-```
-
-### Botao PDF
-
-Alterar de `toast.info` para abrir o modal:
-
-```typescript
-const handleExportPDF = () => {
-  setPdfModalOpen(true);
-};
-```
-
-### Renderizacao do Modal
-
-```tsx
+// No JSX
 <ExportPDFModal
   open={pdfModalOpen}
   onOpenChange={setPdfModalOpen}
@@ -206,98 +176,100 @@ const handleExportPDF = () => {
   storageKey="frota"
   fileName="frota"
   title="Frota de Veiculos"
-  companyName="Busao Off Off" // ou nome dinamico da empresa
+  company={activeCompany}  // Passar empresa completa
 />
 ```
 
 ---
 
-## 9. Utilitario para Logo Base64
+## Parte 5: Utilidades de PDF Atualizadas
 
-Criar funcao utilitaria para converter a logo em base64:
+### Arquivo: `src/lib/pdfUtils.ts`
 
-**Arquivo:** `src/lib/pdfUtils.ts`
+Adicionar funcoes para:
+
+1. Obter cor primaria da empresa (com fallback)
+2. Formatar CNPJ para exibicao
+3. Renderizar cabecalho institucional
 
 ```typescript
-// Funcao para obter logo em base64
-export async function getLogoBase64(): Promise<string> {
-  // Converte a imagem para base64 para uso no PDF
+// Cor primaria com fallback
+export function getCompanyPrimaryColor(company: Company | null): string {
+  return company?.primary_color || BRAND_ORANGE;
 }
 
-// Cor institucional para uso no PDF
-export const BRAND_ORANGE = '#F97316';
+// Obter nome para exibicao
+export function getCompanyDisplayName(company: Company | null): string {
+  return company?.trade_name || company?.name || 'Empresa';
+}
 ```
 
 ---
 
-## 10. Arquivos a Criar/Modificar
+## Arquivos a Criar/Modificar
 
 | Arquivo | Acao |
 |---------|------|
-| `package.json` | Adicionar jspdf e jspdf-autotable |
-| `src/lib/pdfUtils.ts` | Criar utilitarios de PDF |
-| `src/components/admin/ExportPDFModal.tsx` | Criar componente |
-| `src/pages/admin/Fleet.tsx` | Integrar modal de PDF |
+| Migracao SQL | Adicionar campos na tabela companies |
+| `src/types/database.ts` | Atualizar interface Company |
+| `src/lib/pdfUtils.ts` | Adicionar funcoes utilitarias |
+| `src/components/admin/ExportPDFModal.tsx` | Cabecalho institucional |
+| `src/pages/admin/Fleet.tsx` | Passar empresa para modal |
 
 ---
 
-## 11. Reutilizacao para Outras Telas
-
-Para usar em outra tela (ex: Motoristas):
-
-```tsx
-<ExportPDFModal
-  open={pdfModalOpen}
-  onOpenChange={setPdfModalOpen}
-  columns={driverColumns}
-  data={filteredDrivers}
-  storageKey="motoristas"
-  fileName="motoristas"
-  title="Motoristas Cadastrados"
-  companyName={companyName}
-/>
-```
-
-Cada tela define suas proprias colunas e titulo, o componente gerencia todo o resto.
-
----
-
-## 12. Resultado Esperado
-
-1. Usuario clica em "PDF" e ve modal de selecao de colunas
-2. Usuario escolhe colunas desejadas
-3. Sistema salva preferencia automaticamente
-4. PDF gerado com:
-   - Cabecalho profissional com logo
-   - Tabela organizada com dados filtrados
-   - Estilo visual coerente com a marca
-   - Rodape com paginacao
-5. Proxima exportacao ja vem com colunas pre-selecionadas
-6. Componente pronto para reuso em outras telas
-
----
-
-## Resumo Visual do PDF Final
+## Hierarquia Visual do Cabecalho
 
 ```text
-+------------------------------------------------------------------+
-| [LOGO] Busao Off Off                                              |
-|        Empresa: Empresa Demo                                      |
-|                                                                   |
-|        FROTA DE VEICULOS                                          |
-|        Gerado em: 04/02/2026 as 14:30                             |
-+------------------------------------------------------------------+
-|                                                                   |
-| +--------------------------------------------------------------+ |
-| | TIPO   | MARCA  | MODELO | PLACA   | PROPRIETARIO | STATUS   | |
-| +--------------------------------------------------------------+ |
-| | Onibus | Merc.  | O-500  | ABC1234 | Joao Silva   | Ativo    | |
-| | Van    | Fiat   | Ducato | XYZ5678 | Maria Costa  | Inativo  | |
-| | Onibus | Volvo  | B10M   | DEF9012 | Pedro Santos | Ativo    | |
-| +--------------------------------------------------------------+ |
-|                                                                   |
-+------------------------------------------------------------------+
-| Documento gerado pelo sistema Busao Off Off          Pagina 1/1  |
-+------------------------------------------------------------------+
+BLOCO ESQUERDO (identidade da empresa)
+  - Logo (destaque visual)
+  - Nome fantasia (fonte maior, bold)
+  - Razao social (fonte menor, regular)
+  - CNPJ (fonte menor, cinza)
+  - Cidade - UF (fonte menor, cinza)
+
+BLOCO DIREITO (identidade do documento)
+  - "Sistema: Busao Off Off" (texto pequeno)
+  - Titulo do documento (fonte grande, cor primaria)
+  - Data e hora de geracao (fonte pequena)
 ```
 
+---
+
+## Cores e Tipografia
+
+### Cores
+
+- Cor primaria: usar `company.primary_color` ou `#F97316`
+- Textos principais: preto `#000000` ou cinza escuro `#333333`
+- Textos secundarios: cinza `#666666`
+- Cabecalho da tabela: cor primaria com texto branco
+
+### Fontes
+
+- Nome fantasia: Helvetica Bold, 14pt
+- Razao social: Helvetica, 10pt
+- CNPJ/Cidade: Helvetica, 9pt, cinza
+- Titulo do documento: Helvetica Bold, 16pt
+- Data geracao: Helvetica, 9pt
+
+---
+
+## Resultado Esperado
+
+1. Tabela `companies` com campos institucionais completos
+2. PDF com cabecalho profissional e dados reais da empresa
+3. Fallbacks para quando dados nao estiverem preenchidos
+4. Padrao reutilizavel para todos os PDFs futuros
+5. Identidade visual da empresa refletida nos documentos
+
+---
+
+## Ordem de Implementacao
+
+1. Executar migracao SQL para adicionar campos
+2. Atualizar tipo TypeScript da Company
+3. Atualizar pdfUtils com funcoes auxiliares
+4. Refatorar ExportPDFModal com novo cabecalho
+5. Atualizar Fleet.tsx para passar empresa
+6. Testar geracao de PDF com dados reais
