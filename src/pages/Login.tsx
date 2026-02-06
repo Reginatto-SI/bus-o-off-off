@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -8,14 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Logo } from '@/components/Logo';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const rememberEmailKey = 'boo.remember_email';
+  const rememberedEmailKey = 'boo.remembered_email';
+
+  useEffect(() => {
+    const shouldRememberEmail = localStorage.getItem(rememberEmailKey) === 'true';
+    const rememberedEmail = localStorage.getItem(rememberedEmailKey) ?? '';
+
+    if (shouldRememberEmail && rememberedEmail) {
+      setEmail(rememberedEmail);
+    }
+
+    setRememberEmail(shouldRememberEmail);
+  }, []);
 
   if (authLoading) {
     return (
@@ -40,6 +55,15 @@ export default function Login() {
       setError('Email ou senha inválidos');
       setLoading(false);
     } else {
+      if (rememberEmail) {
+        // Salvamos apenas o e-mail por segurança; a senha nunca deve ser armazenada.
+        localStorage.setItem(rememberEmailKey, 'true');
+        localStorage.setItem(rememberedEmailKey, email);
+      } else {
+        localStorage.removeItem(rememberEmailKey);
+        localStorage.removeItem(rememberedEmailKey);
+      }
+
       navigate('/admin/eventos');
     }
   };
@@ -85,6 +109,23 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="remember-email"
+                  checked={rememberEmail}
+                  onCheckedChange={(checked) => setRememberEmail(checked === true)}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label htmlFor="remember-email" className="text-sm font-normal cursor-pointer">
+                    Lembrar meu e-mail
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Salva apenas o e-mail neste navegador.
+                  </p>
+                </div>
+              </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
