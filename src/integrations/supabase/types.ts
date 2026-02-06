@@ -22,7 +22,8 @@ export type Database = {
           id: string
           maps_url: string | null
           name: string
-          time: string
+          notes: string | null
+          status: string
           updated_at: string
         }
         Insert: {
@@ -32,7 +33,8 @@ export type Database = {
           id?: string
           maps_url?: string | null
           name: string
-          time: string
+          notes?: string | null
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -42,7 +44,8 @@ export type Database = {
           id?: string
           maps_url?: string | null
           name?: string
-          time?: string
+          notes?: string | null
+          status?: string
           updated_at?: string
         }
         Relationships: [

@@ -121,9 +121,6 @@ export default function Confirmation() {
                 <p className="text-muted-foreground pl-6">
                   {sale.boarding_location?.address}
                 </p>
-                <p className="text-muted-foreground pl-6">
-                  Chegue às {sale.boarding_location?.time.slice(0, 5)}
-                </p>
                 {sale.boarding_location?.maps_url && (
                   <a
                     href={sale.boarding_location.maps_url}

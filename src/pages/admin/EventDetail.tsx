@@ -433,7 +433,7 @@ export default function EventDetail() {
                           <SelectContent>
                             {availableLocations.map((loc) => (
                               <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name} - {loc.time.slice(0, 5)}
+                                {loc.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -472,7 +472,7 @@ export default function EventDetail() {
                         <div>
                           <p className="font-medium">{el.boarding_location?.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {el.boarding_location?.address} - {el.boarding_location?.time.slice(0, 5)}
+                            {el.boarding_location?.address}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">

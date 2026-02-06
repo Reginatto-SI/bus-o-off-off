@@ -213,8 +213,7 @@ export default function PublicEventDetail() {
                         <SelectItem key={loc.id} value={loc.boarding_location_id}>
                           <div className="flex items-center gap-2">
                             <MapPin className="h-4 w-4" />
-                            {loc.boarding_location?.name} -{' '}
-                            {loc.boarding_location?.time.slice(0, 5)}
+                            {loc.boarding_location?.name}
                           </div>
                         </SelectItem>
                       ))}
