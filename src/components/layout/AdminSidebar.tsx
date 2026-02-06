@@ -109,9 +109,8 @@ const navigationGroups: NavigationGroup[] = [{
     roles: ['gerente']
   }, {
     name: 'Empresa',
-    icon: Settings,
-    disabled: true,
-    statusLabel: 'Em breve'
+    href: '/admin/empresa',
+    icon: Settings
   }, {
     name: 'Minha Conta',
     icon: User,
