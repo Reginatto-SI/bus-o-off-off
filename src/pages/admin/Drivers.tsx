@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Driver } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { PageHeader } from '@/components/admin/PageHeader';
+import { StatsCard } from '@/components/admin/StatsCard';
+import { FilterCard } from '@/components/admin/FilterCard';
+import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
+import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
+import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
 import {
   Dialog,
   DialogClose,
@@ -38,23 +44,41 @@ import {
   Plus,
   Loader2,
   Pencil,
-  Trash2,
   Phone,
-  CreditCard,
   IdCard,
-  CircleMinus,
-  CirclePlus,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Power,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+import { cn } from '@/lib/utils';
+
+interface DriverFilters {
+  search: string;
+  status: 'all' | 'ativo' | 'inativo';
+  cnhCategory: string;
+}
+
+const initialFilters: DriverFilters = {
+  search: '',
+  status: 'all',
+  cnhCategory: '',
+};
 
 export default function Drivers() {
-  const { activeCompanyId, user } = useAuth();
+  const { activeCompanyId, activeCompany, user } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<DriverFilters>(initialFilters);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -66,7 +90,7 @@ export default function Drivers() {
     status: 'ativo' as Driver['status'],
   });
 
-  // Comentário: máscara simples para CPF (000.000.000-00) mantendo apenas dígitos.
+  // Máscara simples para CPF (000.000.000-00)
   const formatCpfInput = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 3) return digits;
@@ -76,7 +100,7 @@ export default function Drivers() {
     return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
   };
 
-  // Comentário: máscara simples de telefone brasileiro (DD) 99999-9999.
+  // Máscara simples de telefone brasileiro (DD) 99999-9999
   const formatPhoneInput = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 2) return digits;
@@ -85,6 +109,71 @@ export default function Drivers() {
       return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
+
+  // Data de referência para cálculos de CNH
+  const today = useMemo(() => new Date(), []);
+  const thirtyDaysFromNow = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date;
+  }, []);
+
+  // KPIs memoizados
+  const stats = useMemo(() => {
+    const total = drivers.length;
+    const ativos = drivers.filter((d) => d.status === 'ativo').length;
+    const inativos = drivers.filter((d) => d.status === 'inativo').length;
+    const cnhsAtencao = drivers.filter((d) => {
+      if (!d.cnh_expires_at) return false;
+      const expiresAt = new Date(d.cnh_expires_at);
+      return expiresAt <= thirtyDaysFromNow;
+    }).length;
+    return { total, ativos, inativos, cnhsAtencao };
+  }, [drivers, thirtyDaysFromNow]);
+
+  // Filtros aplicados
+  const filteredDrivers = useMemo(() => {
+    return drivers.filter((driver) => {
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const matchesSearch =
+          driver.name.toLowerCase().includes(searchLower) ||
+          (driver.cpf?.includes(filters.search) ?? false) ||
+          driver.phone.includes(filters.search);
+        if (!matchesSearch) return false;
+      }
+      if (filters.status !== 'all' && driver.status !== filters.status) {
+        return false;
+      }
+      if (filters.cnhCategory && driver.cnh_category !== filters.cnhCategory) {
+        return false;
+      }
+      return true;
+    });
+  }, [drivers, filters]);
+
+  const hasActiveFilters = useMemo(() => {
+    return filters.search !== '' || filters.status !== 'all' || filters.cnhCategory !== '';
+  }, [filters]);
+
+  // Colunas de exportação
+  const exportColumns: ExportColumn[] = useMemo(
+    () => [
+      { key: 'name', label: 'Nome' },
+      { key: 'cpf', label: 'CPF', format: (v) => formatCpfInput(v ?? '') },
+      { key: 'phone', label: 'Telefone', format: (v) => formatPhoneInput(v) },
+      { key: 'cnh', label: 'CNH' },
+      { key: 'cnh_category', label: 'Categoria CNH' },
+      {
+        key: 'cnh_expires_at',
+        label: 'Validade CNH',
+        format: (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : ''),
+      },
+      { key: 'status', label: 'Status', format: (v) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
+      { key: 'notes', label: 'Observações' },
+    ],
+    []
+  );
 
   const fetchDrivers = async () => {
     const { data, error } = await supabase
@@ -121,7 +210,6 @@ export default function Drivers() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'drivers', companyId: null, userId: user?.id };
-      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
       console.error('active_company_id ausente ao salvar motorista.', context);
       toast.error(
         buildDebugToastMessage({
@@ -137,28 +225,24 @@ export default function Drivers() {
     const normalizedPhone = form.phone.replace(/\D/g, '');
 
     if (!form.name.trim()) {
-      // Comentário: validação obrigatória de nome no cadastro.
       toast.error('Nome é obrigatório');
       setSaving(false);
       return;
     }
 
     if (!normalizedCpf) {
-      // Comentário: validação obrigatória de CPF com feedback claro.
       toast.error('CPF é obrigatório');
       setSaving(false);
       return;
     }
 
     if (normalizedCpf.length !== 11) {
-      // Comentário: validação simples de tamanho do CPF antes de enviar ao Supabase.
       toast.error('CPF inválido');
       setSaving(false);
       return;
     }
 
     if (!normalizedPhone) {
-      // Comentário: validação obrigatória de telefone com feedback claro.
       toast.error('Telefone é obrigatório');
       setSaving(false);
       return;
@@ -178,7 +262,6 @@ export default function Drivers() {
 
     let error;
     if (editingId) {
-      // Não atualiza company_id na edição
       const { company_id, ...updateData } = driverData;
       ({ error } = await supabase.from('drivers').update(updateData).eq('id', editingId));
     } else {
@@ -224,7 +307,6 @@ export default function Drivers() {
 
   const handleEdit = (driver: Driver) => {
     setEditingId(driver.id);
-    // Comentário: mapeia campos novos para edição, mantendo máscaras visuais.
     setForm({
       name: driver.name,
       phone: formatPhoneInput(driver.phone),
@@ -236,27 +318,6 @@ export default function Drivers() {
       status: driver.status ?? 'ativo',
     });
     setDialogOpen(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('drivers').delete().eq('id', id);
-    if (error) {
-      logSupabaseError({
-        label: 'Erro ao excluir motorista (drivers.delete)',
-        error,
-        context: { action: 'delete', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: id },
-      });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao excluir motorista',
-          error,
-          context: { action: 'delete', table: 'drivers', companyId: activeCompanyId, userId: user?.id, driverId: id },
-        })
-      );
-    } else {
-      toast.success('Motorista excluído');
-      fetchDrivers();
-    }
   };
 
   const handleToggleStatus = async (driver: Driver) => {
@@ -298,140 +359,222 @@ export default function Drivers() {
     });
   };
 
+  // Menu de ações por motorista
+  const getDriverActions = (driver: Driver): ActionItem[] => [
+    {
+      label: 'Editar',
+      icon: Pencil,
+      onClick: () => handleEdit(driver),
+    },
+    {
+      label: driver.status === 'ativo' ? 'Desativar' : 'Ativar',
+      icon: Power,
+      onClick: () => handleToggleStatus(driver),
+      variant: driver.status === 'ativo' ? 'destructive' : 'default',
+    },
+  ];
+
+  // Função para verificar status de CNH
+  const getCnhStatusClass = (expiresAt: string | null) => {
+    if (!expiresAt) return '';
+    const expDate = new Date(expiresAt);
+    if (expDate < today) return 'text-destructive font-medium';
+    if (expDate <= thirtyDaysFromNow) return 'text-warning font-medium';
+    return '';
+  };
+
   return (
     <AdminLayout>
       <div className="page-container">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Motoristas</h1>
-            <p className="text-muted-foreground">Gerencie os motoristas cadastrados</p>
-          </div>
-
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open);
-              if (!open) resetForm();
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Motorista
+        {/* Cabeçalho */}
+        <PageHeader
+          title="Motoristas"
+          description="Gerencie os motoristas cadastrados"
+          actions={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
               </Button>
-            </DialogTrigger>
-            {/* Admin Modal UI: aplica shell do modal de Veículos sem alterar responsividade */}
-            <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-4xl flex-col gap-0 p-0">
-              {/* Admin Modal UI: header padronizado com separação sutil */}
-              <DialogHeader className="admin-modal__header px-6 py-4">
-                <DialogTitle>{editingId ? 'Editar' : 'Novo'} Motorista</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                {/* Admin Modal UI: body com grid 2 colunas e scroll interno */}
-                <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="name">Nome</Label>
-                      <Input
-                        id="name"
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        required
-                      />
+              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                <FileText className="h-4 w-4 mr-2" />
+                PDF
+              </Button>
+              <Dialog
+                open={dialogOpen}
+                onOpenChange={(open) => {
+                  setDialogOpen(open);
+                  if (!open) resetForm();
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Motorista
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-4xl flex-col gap-0 p-0">
+                  <DialogHeader className="admin-modal__header px-6 py-4">
+                    <DialogTitle>{editingId ? 'Editar' : 'Novo'} Motorista</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="flex h-full flex-col">
+                    <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="name">Nome</Label>
+                          <Input
+                            id="name"
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cpf">CPF</Label>
+                          <Input
+                            id="cpf"
+                            value={form.cpf}
+                            onChange={(e) => setForm({ ...form, cpf: formatCpfInput(e.target.value) })}
+                            placeholder="000.000.000-00"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">Telefone</Label>
+                          <Input
+                            id="phone"
+                            value={form.phone}
+                            onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
+                            placeholder="(11) 99999-9999"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cnh">CNH</Label>
+                          <Input
+                            id="cnh"
+                            value={form.cnh}
+                            onChange={(e) => setForm({ ...form, cnh: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cnh_category">Categoria CNH</Label>
+                          <Input
+                            id="cnh_category"
+                            value={form.cnh_category}
+                            onChange={(e) => setForm({ ...form, cnh_category: e.target.value })}
+                            placeholder="A/B/C/D/E"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cnh_expires_at">Validade CNH</Label>
+                          <Input
+                            id="cnh_expires_at"
+                            type="date"
+                            value={form.cnh_expires_at}
+                            onChange={(e) => setForm({ ...form, cnh_expires_at: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={form.status}
+                            onValueChange={(value: Driver['status']) =>
+                              setForm({ ...form, status: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ativo">Ativo</SelectItem>
+                              <SelectItem value="inativo">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="notes">Observações</Label>
+                          <Textarea
+                            id="notes"
+                            value={form.notes}
+                            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                            rows={4}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cpf">CPF</Label>
-                      <Input
-                        id="cpf"
-                        value={form.cpf}
-                        onChange={(e) => setForm({ ...form, cpf: formatCpfInput(e.target.value) })}
-                        placeholder="000.000.000-00"
-                        required
-                      />
+                    <div className="admin-modal__footer px-6 py-4">
+                      <div className="flex flex-wrap justify-end gap-3">
+                        <DialogClose asChild>
+                          <Button type="button" variant="outline">
+                            Cancelar
+                          </Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={saving}>
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Telefone</Label>
-                      <Input
-                        id="phone"
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
-                        placeholder="(11) 99999-9999"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cnh">CNH</Label>
-                      <Input
-                        id="cnh"
-                        value={form.cnh}
-                        onChange={(e) => setForm({ ...form, cnh: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cnh_category">Categoria CNH</Label>
-                      <Input
-                        id="cnh_category"
-                        value={form.cnh_category}
-                        onChange={(e) => setForm({ ...form, cnh_category: e.target.value })}
-                        placeholder="A/B/C/D/E"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cnh_expires_at">Validade CNH</Label>
-                      <Input
-                        id="cnh_expires_at"
-                        type="date"
-                        value={form.cnh_expires_at}
-                        onChange={(e) => setForm({ ...form, cnh_expires_at: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Status</Label>
-                      <Select
-                        value={form.status}
-                        onValueChange={(value: Driver['status']) =>
-                          setForm({ ...form, status: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ativo">Ativo</SelectItem>
-                          <SelectItem value="inativo">Inativo</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="notes">Observações</Label>
-                      <Textarea
-                        id="notes"
-                        value={form.notes}
-                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                        rows={4}
-                      />
-                    </div>
-                  </div>
-                </div>
-                {/* Admin Modal UI: footer com botões alinhados à direita */}
-                <div className="admin-modal__footer px-6 py-4">
-                  <div className="flex flex-wrap justify-end gap-3">
-                    <DialogClose asChild>
-                      <Button type="button" variant="outline">
-                        Cancelar
-                      </Button>
-                    </DialogClose>
-                    <Button type="submit" disabled={saving}>
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </>
+          }
+        />
+
+        {/* KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <StatsCard label="Total de motoristas" value={stats.total} icon={Users} />
+          <StatsCard label="Motoristas ativos" value={stats.ativos} icon={CheckCircle} variant="success" />
+          <StatsCard label="Motoristas inativos" value={stats.inativos} icon={XCircle} variant="destructive" />
+          <StatsCard label="CNHs atenção" value={stats.cnhsAtencao} icon={AlertTriangle} variant="warning" />
         </div>
 
+        {/* Filtros */}
+        <FilterCard
+          className="mb-6"
+          searchValue={filters.search}
+          onSearchChange={(value) => setFilters({ ...filters, search: value })}
+          searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
+          selects={[
+            {
+              id: 'status',
+              label: 'Status',
+              placeholder: 'Status',
+              value: filters.status,
+              onChange: (value) => setFilters({ ...filters, status: value as DriverFilters['status'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'ativo', label: 'Ativo' },
+                { value: 'inativo', label: 'Inativo' },
+              ],
+            },
+            {
+              id: 'cnhCategory',
+              label: 'Categoria',
+              placeholder: 'Categoria CNH',
+              value: filters.cnhCategory,
+              onChange: (value) => setFilters({ ...filters, cnhCategory: value }),
+              options: [
+                { value: '', label: 'Todas' },
+                { value: 'A', label: 'A' },
+                { value: 'B', label: 'B' },
+                { value: 'C', label: 'C' },
+                { value: 'D', label: 'D' },
+                { value: 'E', label: 'E' },
+                { value: 'AB', label: 'AB' },
+                { value: 'AC', label: 'AC' },
+                { value: 'AD', label: 'AD' },
+                { value: 'AE', label: 'AE' },
+              ],
+            },
+          ]}
+          onClearFilters={() => setFilters(initialFilters)}
+          hasActiveFilters={hasActiveFilters}
+        />
+
+        {/* Conteúdo */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -448,6 +591,17 @@ export default function Drivers() {
               </Button>
             }
           />
+        ) : filteredDrivers.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum motorista encontrado"
+            description="Ajuste os filtros para encontrar motoristas"
+            action={
+              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                Limpar filtros
+              </Button>
+            }
+          />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -457,13 +611,14 @@ export default function Drivers() {
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Telefone</TableHead>
-                    <TableHead>CNH</TableHead>
+                    <TableHead>Categoria CNH</TableHead>
+                    <TableHead>Validade CNH</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[120px]">Ações</TableHead>
+                    <TableHead className="w-[80px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {drivers.map((driver) => (
+                  {filteredDrivers.map((driver) => (
                     <TableRow key={driver.id}>
                       <TableCell className="font-medium">{driver.name}</TableCell>
                       <TableCell>
@@ -478,35 +633,21 @@ export default function Drivers() {
                           {formatPhoneInput(driver.phone)}
                         </div>
                       </TableCell>
+                      <TableCell>{driver.cnh_category ?? '-'}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="h-4 w-4 text-muted-foreground" />
-                          {driver.cnh}
-                        </div>
+                        {driver.cnh_expires_at ? (
+                          <span className={cn(getCnhStatusClass(driver.cnh_expires_at))}>
+                            {new Date(driver.cnh_expires_at).toLocaleDateString('pt-BR')}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={driver.status ?? 'ativo'} />
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(driver)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleToggleStatus(driver)}
-                          >
-                            {driver.status === 'ativo' ? (
-                              <CircleMinus className="h-4 w-4 text-destructive" />
-                            ) : (
-                              <CirclePlus className="h-4 w-4 text-primary" />
-                            )}
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(driver.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                        <ActionsDropdown actions={getDriverActions(driver)} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -516,6 +657,28 @@ export default function Drivers() {
           </Card>
         )}
       </div>
+
+      {/* Modais de Exportação */}
+      <ExportExcelModal
+        open={exportModalOpen}
+        onOpenChange={setExportModalOpen}
+        columns={exportColumns}
+        data={filteredDrivers}
+        storageKey="motoristas"
+        fileName="motoristas"
+        sheetName="Motoristas"
+      />
+
+      <ExportPDFModal
+        open={pdfModalOpen}
+        onOpenChange={setPdfModalOpen}
+        columns={exportColumns}
+        data={filteredDrivers}
+        storageKey="motoristas"
+        fileName="motoristas"
+        title="Motoristas"
+        company={activeCompany}
+      />
     </AdminLayout>
   );
 }
