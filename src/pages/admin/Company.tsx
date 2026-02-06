@@ -61,6 +61,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
 const MAX_LOGO_SIZE_BYTES = MAX_LOGO_SIZE_MB * 1024 * 1024;
 const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+// Comentário: este bucket deve existir no Supabase Storage para permitir o upload da logo.
 const COMPANY_LOGO_BUCKET = 'company-logos';
 
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
@@ -333,6 +334,29 @@ export default function CompanyPage() {
 
     if (file.size > MAX_LOGO_SIZE_BYTES) {
       toast.error(`A logo deve ter no máximo ${MAX_LOGO_SIZE_MB}MB`);
+      return;
+    }
+
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    if (bucketsError) {
+      logSupabaseError({
+        label: 'Erro ao listar buckets (storage.listBuckets)',
+        error: bucketsError,
+        context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao validar bucket de logo',
+          error: bucketsError,
+          context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
+        })
+      );
+      return;
+    }
+
+    const hasLogoBucket = buckets?.some((bucket) => bucket.name === COMPANY_LOGO_BUCKET);
+    if (!hasLogoBucket) {
+      toast.error('Bucket de logos não encontrado. Crie o bucket company-logos no Supabase Storage.');
       return;
     }
 
