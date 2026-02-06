@@ -50,6 +50,13 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
+const vehicleTypeLabels: Record<Vehicle['type'], string> = {
+  onibus: 'Ônibus',
+  micro_onibus: 'Micro-ônibus',
+  van: 'Van',
+};
+
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -297,7 +304,7 @@ export default function EventDetail() {
                           <SelectContent>
                             {vehicles.map((v) => (
                               <SelectItem key={v.id} value={v.id}>
-                                {v.type === 'onibus' ? 'Ônibus' : 'Van'} - {v.plate} ({v.capacity} lugares)
+                                {vehicleTypeLabels[v.type] ?? v.type} - {v.plate} ({v.capacity} lugares)
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -381,7 +388,7 @@ export default function EventDetail() {
                           <div className="flex items-center gap-2">
                             <Bus className="h-4 w-4 text-muted-foreground" />
                             <span>
-                              {trip.vehicle?.type === 'onibus' ? 'Ônibus' : 'Van'} -{' '}
+                              {vehicleTypeLabels[trip.vehicle?.type ?? 'van']} -{' '}
                               {trip.vehicle?.plate}
                             </span>
                           </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, EventBoardingLocation } from '@/types/database';
+import { Event, Trip, EventBoardingLocation, VehicleType } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,13 @@ import { Calendar, MapPin, Clock, Loader2, Ticket, Bus, Users, ArrowLeft } from 
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+
+// Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
+const vehicleTypeLabels: Record<VehicleType, string> = {
+  onibus: 'Ônibus',
+  micro_onibus: 'Micro-ônibus',
+  van: 'Van',
+};
 
 export default function PublicEventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -188,7 +195,7 @@ export default function PublicEventDetail() {
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4" />
                             {trip.departure_time.slice(0, 5)} -{' '}
-                            {trip.vehicle?.type === 'onibus' ? 'Ônibus' : 'Van'}
+                            {vehicleTypeLabels[trip.vehicle?.type ?? 'van']}
                           </div>
                         </SelectItem>
                       ))}

@@ -641,7 +641,7 @@ export type Database = {
       sale_status: "reservado" | "pago"
       seller_status: "ativo" | "inativo"
       user_role: "gerente" | "operador" | "vendedor" | "motorista"
-      vehicle_type: "onibus" | "van"
+      vehicle_type: "onibus" | "van" | "micro_onibus"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -773,7 +773,8 @@ export const Constants = {
       sale_status: ["reservado", "pago"],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista"],
-      vehicle_type: ["onibus", "van"],
+      // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
+      vehicle_type: ["onibus", "van", "micro_onibus"],
     },
   },
 } as const
