@@ -271,6 +271,8 @@ export type Database = {
           email: string
           id: string
           name: string
+          notes: string | null
+          status: string
           updated_at: string
         }
         Insert: {
@@ -279,6 +281,8 @@ export type Database = {
           email: string
           id: string
           name: string
+          notes?: string | null
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -287,6 +291,8 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          notes?: string | null
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -492,6 +498,7 @@ export type Database = {
       user_roles: {
         Row: {
           company_id: string
+          driver_id: string | null
           id: string
           role: Database["public"]["Enums"]["user_role"]
           seller_id: string | null
@@ -499,6 +506,7 @@ export type Database = {
         }
         Insert: {
           company_id: string
+          driver_id?: string | null
           id?: string
           role: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
@@ -506,6 +514,7 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          driver_id?: string | null
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
@@ -517,6 +526,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
           {
@@ -624,7 +640,7 @@ export type Database = {
       event_status: "rascunho" | "a_venda" | "encerrado"
       sale_status: "reservado" | "pago"
       seller_status: "ativo" | "inativo"
-      user_role: "gerente" | "operador" | "vendedor"
+      user_role: "gerente" | "operador" | "vendedor" | "motorista"
       vehicle_type: "onibus" | "van"
     }
     CompositeTypes: {
@@ -756,7 +772,7 @@ export const Constants = {
       event_status: ["rascunho", "a_venda", "encerrado"],
       sale_status: ["reservado", "pago"],
       seller_status: ["ativo", "inativo"],
-      user_role: ["gerente", "operador", "vendedor"],
+      user_role: ["gerente", "operador", "vendedor", "motorista"],
       vehicle_type: ["onibus", "van"],
     },
   },

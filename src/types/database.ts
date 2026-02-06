@@ -1,10 +1,11 @@
-export type UserRole = 'gerente' | 'operador' | 'vendedor';
+export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
+export type ProfileStatus = 'ativo' | 'inativo';
 
 export interface Company {
   id: string;
@@ -36,6 +37,8 @@ export interface Profile {
   id: string;
   name: string;
   email: string;
+  status: ProfileStatus;
+  notes: string | null;
   company_id: string | null;
   created_at: string;
   updated_at: string;
@@ -46,7 +49,18 @@ export interface UserRoleRecord {
   user_id: string;
   role: UserRole;
   seller_id: string | null;
+  driver_id: string | null;
   company_id: string;
+}
+
+// Interface auxiliar para tela de usuários com dados completos
+export interface UserWithRole extends Profile {
+  role?: UserRole;
+  seller_id?: string | null;
+  driver_id?: string | null;
+  seller?: Seller | null;
+  driver?: Driver | null;
+  user_role_id?: string;
 }
 
 export interface Seller {

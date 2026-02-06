@@ -22,7 +22,7 @@ import { useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
 
-type UserRole = 'gerente' | 'operador' | 'vendedor';
+type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
 
 type NavigationItem = {
   name: string;
@@ -103,6 +103,11 @@ const navigationGroups: NavigationGroup[] = [{
   id: 'configuracoes',
   label: 'Configurações',
   items: [{
+    name: 'Usuários',
+    href: '/admin/usuarios',
+    icon: Users,
+    roles: ['gerente']
+  }, {
     name: 'Empresa',
     icon: Settings,
     disabled: true,
