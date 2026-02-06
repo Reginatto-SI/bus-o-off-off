@@ -1,6 +1,7 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
-export type VehicleType = 'onibus' | 'van';
+// Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
+export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';

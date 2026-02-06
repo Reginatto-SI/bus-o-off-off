@@ -62,7 +62,7 @@ import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 interface FleetFilters {
   search: string;
   status: 'all' | 'ativo' | 'inativo';
-  type: 'all' | 'onibus' | 'van';
+  type: 'all' | 'onibus' | 'micro_onibus' | 'van';
   brand: string;
   model: string;
   yearModel: string;
@@ -81,6 +81,19 @@ const initialFilters: FleetFilters = {
   capacityMax: '',
 };
 
+// Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
+const vehicleTypeOptions = [
+  { value: 'onibus', label: 'Ônibus' },
+  { value: 'micro_onibus', label: 'Micro-ônibus' },
+  { value: 'van', label: 'Van' },
+] as const;
+
+const vehicleTypeLabels: Record<Vehicle['type'], string> = {
+  onibus: 'Ônibus',
+  micro_onibus: 'Micro-ônibus',
+  van: 'Van',
+};
+
 export default function Fleet() {
   const { isGerente, isOperador, activeCompanyId, activeCompany, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -94,7 +107,7 @@ export default function Fleet() {
 
   // Export columns configuration
   const exportColumns: ExportColumn[] = [
-    { key: 'type', label: 'Tipo', format: (v) => (v === 'onibus' ? 'Ônibus' : 'Van') },
+    { key: 'type', label: 'Tipo', format: (v) => vehicleTypeLabels[v as Vehicle['type']] ?? v },
     { key: 'brand', label: 'Marca' },
     { key: 'model', label: 'Modelo' },
     { key: 'plate', label: 'Placa' },
@@ -500,8 +513,11 @@ export default function Fleet() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="onibus">Ônibus</SelectItem>
-                                  <SelectItem value="van">Van</SelectItem>
+                                  {vehicleTypeOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -698,8 +714,7 @@ export default function Fleet() {
               onChange: (value) => setFilters({ ...filters, type: value as FleetFilters['type'] }),
               options: [
                 { value: 'all', label: 'Todos' },
-                { value: 'onibus', label: 'Ônibus' },
-                { value: 'van', label: 'Van' },
+                ...vehicleTypeOptions,
               ],
             },
           ]}
@@ -798,7 +813,7 @@ export default function Fleet() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Bus className="h-4 w-4 text-muted-foreground" />
-                          {vehicle.type === 'onibus' ? 'Ônibus' : 'Van'}
+                          {vehicleTypeLabels[vehicle.type] ?? vehicle.type}
                         </div>
                       </TableCell>
                       <TableCell>
