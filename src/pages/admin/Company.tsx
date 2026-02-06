@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,6 +58,11 @@ const initialFilters: CompanyFilters = {
 };
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_LOGO_SIZE_MB = 2;
+const MAX_LOGO_SIZE_BYTES = MAX_LOGO_SIZE_MB * 1024 * 1024;
+const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+// Comentário: este bucket deve existir no Supabase Storage para permitir o upload da logo.
+const COMPANY_LOGO_BUCKET = 'company-logos';
 
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
 
@@ -78,6 +83,8 @@ export default function CompanyPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<CompanyFilters>(initialFilters);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [form, setForm] = useState({
     legal_name: '',
     trade_name: '',
@@ -90,6 +97,7 @@ export default function CompanyPage() {
     city: '',
     state: '',
     notes: '',
+    logo_url: '',
   });
 
   const fetchCompanies = async () => {
@@ -182,6 +190,7 @@ export default function CompanyPage() {
       city: '',
       state: '',
       notes: '',
+      logo_url: '',
     });
   };
 
@@ -240,6 +249,7 @@ export default function CompanyPage() {
       city: form.city.trim() || null,
       state: form.state.trim().toUpperCase() || null,
       notes: form.notes.trim() || null,
+      logo_url: form.logo_url?.trim() || null,
     };
 
     let error;
@@ -298,8 +308,120 @@ export default function CompanyPage() {
       city: company.city ?? '',
       state: company.state ?? '',
       notes: company.notes ?? '',
+      logo_url: company.logo_url ?? '',
     });
     setDialogOpen(true);
+  };
+
+  const handleLogoUpload = async (file?: File) => {
+    if (!file) return;
+
+    const isAdmin = isGerente || isOperador;
+    if (!isAdmin) {
+      toast.error('Você não tem permissão para alterar a logo');
+      return;
+    }
+
+    if (!editingId) {
+      toast.error('Salve a empresa antes de enviar a logo');
+      return;
+    }
+
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      toast.error('Formato de logo inválido. Envie PNG, JPG ou SVG');
+      return;
+    }
+
+    if (file.size > MAX_LOGO_SIZE_BYTES) {
+      toast.error(`A logo deve ter no máximo ${MAX_LOGO_SIZE_MB}MB`);
+      return;
+    }
+
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    if (bucketsError) {
+      logSupabaseError({
+        label: 'Erro ao listar buckets (storage.listBuckets)',
+        error: bucketsError,
+        context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao validar bucket de logo',
+          error: bucketsError,
+          context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
+        })
+      );
+      return;
+    }
+
+    const hasLogoBucket = buckets?.some((bucket) => bucket.name === COMPANY_LOGO_BUCKET);
+    if (!hasLogoBucket) {
+      toast.error('Bucket de logos não encontrado. Crie o bucket company-logos no Supabase Storage.');
+      return;
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const fileName = `company-${editingId}.${extension}`;
+
+    setLogoUploading(true);
+
+    // Comentário: armazenamos a imagem no Storage para uso futuro em PDFs/relatórios,
+    // salvando apenas a URL pública no banco (evita base64 e mantém o payload leve).
+    const { error: uploadError } = await supabase.storage
+      .from(COMPANY_LOGO_BUCKET)
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) {
+      logSupabaseError({
+        label: 'Erro ao enviar logo (storage.upload)',
+        error: uploadError,
+        context: { action: 'upload', bucket: COMPANY_LOGO_BUCKET, companyId: editingId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao enviar logo',
+          error: uploadError,
+          context: { action: 'upload', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
+        })
+      );
+      setLogoUploading(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from(COMPANY_LOGO_BUCKET).getPublicUrl(fileName);
+    const publicUrl = data?.publicUrl;
+
+    if (!publicUrl) {
+      toast.error('Não foi possível obter a URL da logo');
+      setLogoUploading(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('companies')
+      .update({ logo_url: publicUrl })
+      .eq('id', editingId);
+
+    if (updateError) {
+      logSupabaseError({
+        label: 'Erro ao salvar logo (companies.update)',
+        error: updateError,
+        context: { action: 'update', table: 'companies', companyId: editingId, userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao salvar logo',
+          error: updateError,
+          context: { action: 'update', table: 'companies', companyId: editingId },
+        })
+      );
+    } else {
+      setForm((prev) => ({ ...prev, logo_url: publicUrl }));
+      fetchCompanies();
+      toast.success('Logo atualizada');
+    }
+
+    setLogoUploading(false);
   };
 
   const handleToggleStatus = async (company: Company) => {
@@ -406,6 +528,58 @@ export default function CompanyPage() {
 
                     <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
                       <TabsContent value="dados" className="mt-0">
+                        <div className="mb-6 grid gap-4 sm:grid-cols-[180px,1fr]">
+                          <div className="space-y-2">
+                            <Label>Logo da empresa</Label>
+                            <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-center">
+                              {form.logo_url ? (
+                                <img
+                                  src={form.logo_url}
+                                  alt="Logo da empresa"
+                                  className="h-20 w-20 rounded-md object-contain"
+                                />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  Sem logo definida
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-col justify-center gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">Upload da logo</p>
+                              <p className="text-xs text-muted-foreground">
+                                Use uma imagem PNG, JPG ou SVG (até {MAX_LOGO_SIZE_MB}MB).
+                              </p>
+                            </div>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept={ALLOWED_LOGO_TYPES.join(',')}
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                void handleLogoUpload(file);
+                                event.currentTarget.value = '';
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full sm:w-fit"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={logoUploading}
+                            >
+                              {logoUploading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : form.logo_url ? (
+                                'Alterar logo'
+                              ) : (
+                                'Enviar logo'
+                              )}
+                            </Button>
+                          </div>
+                        </div>
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                           <div className="space-y-2">
                             <Label htmlFor="legal_name">Razão Social</Label>
