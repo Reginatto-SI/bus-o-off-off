@@ -66,7 +66,7 @@ interface DriverFilters {
 const initialFilters: DriverFilters = {
   search: '',
   status: 'all',
-  cnhCategory: '',
+  cnhCategory: 'all',
 };
 
 export default function Drivers() {
@@ -145,7 +145,7 @@ export default function Drivers() {
       if (filters.status !== 'all' && driver.status !== filters.status) {
         return false;
       }
-      if (filters.cnhCategory && driver.cnh_category !== filters.cnhCategory) {
+      if (filters.cnhCategory !== 'all' && driver.cnh_category !== filters.cnhCategory) {
         return false;
       }
       return true;
@@ -153,7 +153,7 @@ export default function Drivers() {
   }, [drivers, filters]);
 
   const hasActiveFilters = useMemo(() => {
-    return filters.search !== '' || filters.status !== 'all' || filters.cnhCategory !== '';
+    return filters.search !== '' || filters.status !== 'all' || filters.cnhCategory !== 'all';
   }, [filters]);
 
   // Colunas de exportação
@@ -557,7 +557,7 @@ export default function Drivers() {
               value: filters.cnhCategory,
               onChange: (value) => setFilters({ ...filters, cnhCategory: value }),
               options: [
-                { value: '', label: 'Todas' },
+                { value: 'all', label: 'Todas' },
                 { value: 'A', label: 'A' },
                 { value: 'B', label: 'B' },
                 { value: 'C', label: 'C' },
