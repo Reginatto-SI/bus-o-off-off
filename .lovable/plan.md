@@ -1,265 +1,427 @@
 
-
-# Plano: Padronizacao da Tela /admin/locais
+# Plano: Padronizacao da Tela /admin/motoristas
 
 ## Visao Geral
 
-Ajustar a tela de Locais de Embarque para seguir exatamente o padrao visual, estrutural e comportamental da tela piloto /admin/frota, incluindo alteracoes no banco de dados para suportar status ativo/inativo e remover o campo de horario.
+Ajustar a tela de Motoristas para seguir exatamente o padrao visual, estrutural e comportamental da tela piloto /admin/frota, incluindo KPIs, filtros padronizados, menu de acoes e exportacao Excel/PDF.
 
 ---
 
-## Parte 1: Alteracoes no Banco de Dados
+## Analise Comparativa: Atual vs Esperado
 
-### Situacao Atual da Tabela `boarding_locations`
-
-| Campo | Tipo | Observacao |
-|-------|------|------------|
-| id | uuid | PK |
-| name | text | Nome do local |
-| address | text | Endereco |
-| time | time | **REMOVER** - horario nao pertence ao cadastro estrutural |
-| maps_url | text | Link Google Maps (opcional) |
-| company_id | uuid | FK empresa |
-| created_at | timestamp | Criacao |
-| updated_at | timestamp | Atualizacao |
-
-### Alteracoes Necessarias
-
-1. **Adicionar coluna `status`** com valores 'ativo'/'inativo'
-2. **Adicionar coluna `notes`** para observacoes (opcional, padrao do sistema)
-3. **Remover coluna `time`** - horario pertence a Viagem/Veiculo
-
-### Migracao SQL
-
-```sql
--- Adicionar coluna status com valor padrao 'ativo'
-ALTER TABLE boarding_locations 
-  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'ativo';
-
--- Adicionar coluna notes para observacoes
-ALTER TABLE boarding_locations 
-  ADD COLUMN IF NOT EXISTS notes text;
-
--- Remover coluna time (horario pertence a viagem, nao ao local)
-ALTER TABLE boarding_locations 
-  DROP COLUMN IF EXISTS time;
-
--- Comentarios para documentacao
-COMMENT ON COLUMN boarding_locations.status IS 'Status do local: ativo ou inativo';
-COMMENT ON COLUMN boarding_locations.notes IS 'Observacoes sobre o local de embarque';
-```
+| Aspecto | Tela Atual | Padrao Esperado |
+|---------|------------|-----------------|
+| Cabecalho | DIV manual com flex | PageHeader |
+| KPIs | Nenhum | 4 StatsCards |
+| Filtros | Nenhum | FilterCard com busca e selects |
+| Acoes de linha | 3 botoes soltos (Editar, Toggle, Delete) | ActionsDropdown (menu "...") |
+| Delete | Botao de lixeira | Removido (usar toggle status) |
+| Exportacao | Nenhuma | Excel + PDF |
+| Estado vazio | Basico | Dois estados (sem dados / sem resultados) |
 
 ---
 
-## Parte 2: Atualizacao do Tipo TypeScript
+## Parte 1: Novos Imports Necessarios
 
-### Arquivo: `src/types/database.ts`
+Adicionar imports para componentes reutilizaveis:
 
 ```typescript
-// ANTES
-export interface BoardingLocation {
-  id: string;
-  name: string;
-  address: string;
-  time: string;           // REMOVER
-  maps_url: string | null;
-  company_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// DEPOIS
-export interface BoardingLocation {
-  id: string;
-  name: string;
-  address: string;
-  maps_url: string | null;
-  notes: string | null;   // NOVO
-  status: 'ativo' | 'inativo'; // NOVO
-  company_id: string;
-  created_at: string;
-  updated_at: string;
-}
+import { PageHeader } from '@/components/admin/PageHeader';
+import { StatsCard } from '@/components/admin/StatsCard';
+import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
+import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
+import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
+import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
+import {
+  FileSpreadsheet,
+  FileText,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Power,
+} from 'lucide-react';
 ```
 
 ---
 
-## Parte 3: Estrutura da Nova Tela
+## Parte 2: Novos Estados
 
-### 3.1 Cabecalho (PageHeader)
+### Interface de Filtros
 
-Identico ao padrao da frota:
+```typescript
+interface DriverFilters {
+  search: string;
+  status: 'all' | 'ativo' | 'inativo';
+  cnhCategory: string;
+}
 
-```text
-+------------------------------------------------------------------+
-| Locais de Embarque                        [+ Adicionar Local]    |
-| Gerencie os pontos de embarque                                   |
-+------------------------------------------------------------------+
+const initialFilters: DriverFilters = {
+  search: '',
+  status: 'all',
+  cnhCategory: '',
+};
 ```
 
-### 3.2 Cards de Indicadores (StatsCard)
+### Estados Adicionais
 
-Adaptados ao contexto de locais:
+```typescript
+const [filters, setFilters] = useState<DriverFilters>(initialFilters);
+const [exportModalOpen, setExportModalOpen] = useState(false);
+const [pdfModalOpen, setPdfModalOpen] = useState(false);
+```
 
-| Card | Label | Icone | Variante |
-|------|-------|-------|----------|
-| 1 | Total de locais | MapPin | default |
-| 2 | Locais ativos | CheckCircle | success |
-| 3 | Locais inativos | XCircle | destructive |
+---
 
-### 3.3 Card de Filtros (FilterCard)
+## Parte 3: Calculos Memoizados
 
-Seguindo o padrao da frota:
+### Stats (KPIs)
 
-**Filtros Simples:**
-- Campo de busca: pesquisar por nome ou endereco
-- Select de status: Todos / Ativo / Inativo
-- Botao "Limpar"
+```typescript
+const stats = useMemo(() => {
+  const total = drivers.length;
+  const ativos = drivers.filter((d) => d.status === 'ativo').length;
+  const inativos = drivers.filter((d) => d.status === 'inativo').length;
+  
+  // CNHs vencidas ou a vencer em 30 dias
+  const today = new Date();
+  const thirtyDaysFromNow = new Date();
+  thirtyDaysFromNow.setDate(today.getDate() + 30);
+  
+  const cnhsAtencao = drivers.filter((d) => {
+    if (!d.cnh_expires_at) return false;
+    const expiresAt = new Date(d.cnh_expires_at);
+    return expiresAt <= thirtyDaysFromNow;
+  }).length;
+  
+  return { total, ativos, inativos, cnhsAtencao };
+}, [drivers]);
+```
 
-**Filtros Avancados:** (nao necessarios para esta tela simples)
+### Filtros Aplicados
 
-### 3.4 Tabela de Listagem
+```typescript
+const filteredDrivers = useMemo(() => {
+  return drivers.filter((driver) => {
+    // Busca por nome, CPF ou telefone
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch =
+        driver.name.toLowerCase().includes(searchLower) ||
+        (driver.cpf?.includes(filters.search) ?? false) ||
+        driver.phone.includes(filters.search);
+      if (!matchesSearch) return false;
+    }
 
-Colunas:
+    // Filtro de status
+    if (filters.status !== 'all' && driver.status !== filters.status) {
+      return false;
+    }
+
+    // Filtro de categoria CNH
+    if (filters.cnhCategory && driver.cnh_category !== filters.cnhCategory) {
+      return false;
+    }
+
+    return true;
+  });
+}, [drivers, filters]);
+
+const hasActiveFilters = useMemo(() => {
+  return (
+    filters.search !== '' ||
+    filters.status !== 'all' ||
+    filters.cnhCategory !== ''
+  );
+}, [filters]);
+```
+
+---
+
+## Parte 4: Configuracao de Exportacao
+
+### Colunas para Excel/PDF
+
+```typescript
+const exportColumns: ExportColumn[] = [
+  { key: 'name', label: 'Nome' },
+  { key: 'cpf', label: 'CPF', format: (v) => formatCpfInput(v ?? '') },
+  { key: 'phone', label: 'Telefone', format: (v) => formatPhoneInput(v) },
+  { key: 'cnh', label: 'CNH' },
+  { key: 'cnh_category', label: 'Categoria CNH' },
+  { 
+    key: 'cnh_expires_at', 
+    label: 'Validade CNH',
+    format: (v) => v ? new Date(v).toLocaleDateString('pt-BR') : ''
+  },
+  { key: 'status', label: 'Status', format: (v) => v === 'ativo' ? 'Ativo' : 'Inativo' },
+  { key: 'notes', label: 'Observacoes' },
+];
+```
+
+---
+
+## Parte 5: Menu de Acoes
+
+### Funcao para Gerar Acoes
+
+```typescript
+const getDriverActions = (driver: Driver): ActionItem[] => [
+  {
+    label: 'Editar',
+    icon: Pencil,
+    onClick: () => handleEdit(driver),
+  },
+  {
+    label: driver.status === 'ativo' ? 'Desativar' : 'Ativar',
+    icon: Power,
+    onClick: () => handleToggleStatus(driver),
+    variant: driver.status === 'ativo' ? 'destructive' : 'default',
+  },
+];
+```
+
+### Remocao do handleDelete
+
+A funcao `handleDelete` sera removida completamente. O sistema usara apenas toggle de status.
+
+---
+
+## Parte 6: Estrutura do JSX
+
+### 6.1 Cabecalho (PageHeader)
+
+```jsx
+<PageHeader
+  title="Motoristas"
+  description="Gerencie os motoristas cadastrados"
+  actions={
+    <>
+      <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+        <FileSpreadsheet className="h-4 w-4 mr-2" />
+        Excel
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+        <FileText className="h-4 w-4 mr-2" />
+        PDF
+      </Button>
+      <Dialog open={dialogOpen} onOpenChange={...}>
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Motorista
+          </Button>
+        </DialogTrigger>
+        {/* Modal existente */}
+      </Dialog>
+    </>
+  }
+/>
+```
+
+### 6.2 Cards de Indicadores (StatsCards)
+
+```jsx
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <StatsCard
+    label="Total de motoristas"
+    value={stats.total}
+    icon={Users}
+  />
+  <StatsCard
+    label="Motoristas ativos"
+    value={stats.ativos}
+    icon={CheckCircle}
+    variant="success"
+  />
+  <StatsCard
+    label="Motoristas inativos"
+    value={stats.inativos}
+    icon={XCircle}
+    variant="destructive"
+  />
+  <StatsCard
+    label="CNHs atenção"
+    value={stats.cnhsAtencao}
+    icon={AlertTriangle}
+    variant="warning"
+  />
+</div>
+```
+
+### 6.3 Card de Filtros (FilterCard)
+
+```jsx
+<FilterCard
+  className="mb-6"
+  searchValue={filters.search}
+  onSearchChange={(value) => setFilters({ ...filters, search: value })}
+  searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
+  selects={[
+    {
+      id: 'status',
+      label: 'Status',
+      placeholder: 'Status',
+      value: filters.status,
+      onChange: (value) => setFilters({ ...filters, status: value as DriverFilters['status'] }),
+      options: [
+        { value: 'all', label: 'Todos' },
+        { value: 'ativo', label: 'Ativo' },
+        { value: 'inativo', label: 'Inativo' },
+      ],
+    },
+    {
+      id: 'cnhCategory',
+      label: 'Categoria',
+      placeholder: 'Categoria CNH',
+      value: filters.cnhCategory,
+      onChange: (value) => setFilters({ ...filters, cnhCategory: value }),
+      options: [
+        { value: '', label: 'Todas' },
+        { value: 'A', label: 'A' },
+        { value: 'B', label: 'B' },
+        { value: 'C', label: 'C' },
+        { value: 'D', label: 'D' },
+        { value: 'E', label: 'E' },
+        { value: 'AB', label: 'AB' },
+        { value: 'AC', label: 'AC' },
+        { value: 'AD', label: 'AD' },
+        { value: 'AE', label: 'AE' },
+      ],
+    },
+  ]}
+  onClearFilters={() => setFilters(initialFilters)}
+  hasActiveFilters={hasActiveFilters}
+/>
+```
+
+### 6.4 Tabela com ActionsDropdown
+
+Colunas da tabela:
 
 | Coluna | Conteudo |
 |--------|----------|
-| Nome | Nome do local (font-medium) |
-| Endereco | Endereco + icone de link externo (se maps_url) |
-| Status | Badge ativo/inativo |
-| Acoes | Menu "..." com ActionsDropdown |
+| Nome | driver.name (font-medium) |
+| CPF | formatCpfInput + icone IdCard |
+| Telefone | formatPhoneInput + icone Phone |
+| Categoria CNH | driver.cnh_category |
+| Validade CNH | Data formatada + alerta visual se vencida |
+| Status | StatusBadge |
+| Acoes | ActionsDropdown |
 
-### 3.5 Menu de Acoes (ActionsDropdown)
+### 6.5 Estados Vazios
 
-Acoes disponiveis:
-
-| Acao | Icone | Comportamento |
-|------|-------|---------------|
-| Editar | Pencil | Abre modal de edicao |
-| Ativar/Desativar | Power | Alterna status |
-
----
-
-## Parte 4: Modal de Cadastro/Edicao
-
-### Campos do Formulario
-
-| Campo | Tipo | Obrigatorio | Placeholder |
-|-------|------|-------------|-------------|
-| Nome | text | Sim | "Terminal Rodoviario" |
-| Endereco | text | Sim | "Av. Brasil, 1000 - Centro" |
-| Link Google Maps | url | Nao | "https://maps.google.com/..." |
-| Observacoes | textarea | Nao | "Informacoes adicionais..." |
-
-**Remocoes:**
-- Campo "Horario Padrao" removido (nao pertence ao cadastro estrutural)
-
-### Botoes
-
-- Cancelar (variant="outline")
-- Salvar (variant="default")
-
----
-
-## Parte 5: Estados Especiais
-
-### Estado Vazio (sem locais)
-
-```text
-[Icone MapPin]
-Nenhum local cadastrado
-Adicione pontos de embarque para seus eventos
-[+ Adicionar Local]
+**Sem motoristas:**
+```jsx
+<EmptyState
+  icon={<Users className="h-8 w-8 text-muted-foreground" />}
+  title="Nenhum motorista cadastrado"
+  description="Adicione motoristas para atribuir às viagens"
+  action={
+    <Button onClick={() => setDialogOpen(true)}>
+      <Plus className="h-4 w-4 mr-2" />
+      Adicionar Motorista
+    </Button>
+  }
+/>
 ```
 
-### Estado Vazio (filtro sem resultados)
-
-```text
-[Icone MapPin]
-Nenhum local encontrado
-Ajuste os filtros para encontrar locais
-[Limpar filtros]
+**Filtros sem resultados:**
+```jsx
+<EmptyState
+  icon={<Users className="h-8 w-8 text-muted-foreground" />}
+  title="Nenhum motorista encontrado"
+  description="Ajuste os filtros para encontrar motoristas"
+  action={
+    <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+      Limpar filtros
+    </Button>
+  }
+/>
 ```
 
----
+### 6.6 Modais de Exportacao
 
-## Parte 6: Imports e Estrutura do Arquivo
+```jsx
+<ExportExcelModal
+  open={exportModalOpen}
+  onOpenChange={setExportModalOpen}
+  columns={exportColumns}
+  data={filteredDrivers}
+  storageKey="motoristas"
+  fileName="motoristas"
+  sheetName="Motoristas"
+/>
 
-### Imports Necessarios
-
-```typescript
-import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { BoardingLocation } from '@/types/database';
-import { useAuth } from '@/contexts/AuthContext';
-import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { PageHeader } from '@/components/admin/PageHeader';
-import { StatsCard } from '@/components/admin/StatsCard';
-import { FilterCard } from '@/components/admin/FilterCard';
-import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
-import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MapPin, Plus, Loader2, Pencil, Power, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
-import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+<ExportPDFModal
+  open={pdfModalOpen}
+  onOpenChange={setPdfModalOpen}
+  columns={exportColumns}
+  data={filteredDrivers}
+  storageKey="motoristas"
+  fileName="motoristas"
+  title="Motoristas"
+  company={activeCompany}
+/>
 ```
 
 ---
 
-## Parte 7: Atualizacao do StatusBadge
+## Parte 7: Formatacao de Validade CNH
 
-O componente StatusBadge precisa reconhecer os status 'ativo' e 'inativo' para locais. Ja esta configurado corretamente pois usa os mesmos valores da frota.
+Adicionar indicador visual para CNHs vencidas ou a vencer:
+
+```jsx
+<TableCell>
+  {driver.cnh_expires_at ? (
+    <span className={cn(
+      new Date(driver.cnh_expires_at) < new Date() && 'text-destructive font-medium',
+      new Date(driver.cnh_expires_at) <= thirtyDaysFromNow && 'text-warning font-medium'
+    )}>
+      {new Date(driver.cnh_expires_at).toLocaleDateString('pt-BR')}
+    </span>
+  ) : '-'}
+</TableCell>
+```
 
 ---
 
-## Arquivos a Criar/Modificar
+## Arquivos a Modificar
 
 | Arquivo | Acao |
 |---------|------|
-| Migracao SQL | Adicionar status, notes; remover time |
-| `src/types/database.ts` | Atualizar interface BoardingLocation |
-| `src/pages/admin/BoardingLocations.tsx` | Refatorar completamente |
+| `src/pages/admin/Drivers.tsx` | Refatorar completamente |
 
 ---
 
-## Diferencial em Relacao a Tela Atual
+## Remocoes
 
-| Aspecto | Atual | Novo |
-|---------|-------|------|
-| Cabecalho | DIV manual | PageHeader |
-| Indicadores | Nenhum | 3 StatsCards |
-| Filtros | Nenhum | FilterCard com busca e status |
-| Menu de acoes | Botoes soltos | ActionsDropdown (menu "...") |
-| Status | Nenhum | Badge ativo/inativo |
-| Campo horario | Presente | Removido |
-| Observacoes | Nenhum | Campo textarea |
-| Delete | Botao de lixeira | Removido (usar desativar) |
+1. **handleDelete** - Funcao removida (usar toggle status)
+2. **Botao de lixeira** - Removido da coluna de acoes
+3. **Botoes soltos** - Substituidos por ActionsDropdown
+4. **Cabecalho DIV manual** - Substituido por PageHeader
 
 ---
 
 ## Resultado Esperado
 
 1. Tela visualmente identica ao padrao /admin/frota
-2. Mesma UX e organizacao de componentes
-3. Local de embarque como cadastro estrutural (sem horario)
-4. Status ativo/inativo funcional
-5. Filtros e busca operacionais
-6. Menu de acoes padronizado
-4. Botões Já Funcionais de Gerar Excel e PDF
+2. KPIs exibindo metricas relevantes de motoristas
+3. Filtros funcionais para busca, status e categoria CNH
+4. Menu de acoes padronizado com "..."
+5. Exportacao Excel e PDF funcionais
+6. Indicador visual para CNHs vencidas ou a vencer
+7. Estados vazios padronizados
 
 ---
 
 ## Ordem de Implementacao
 
-1. Executar migracao SQL (adicionar status/notes, remover time)
-2. Atualizar tipo TypeScript BoardingLocation
-3. Refatorar componente BoardingLocations.tsx
-4. Testar operacoes CRUD completas
-
+1. Adicionar imports necessarios
+2. Criar interface de filtros e estados
+3. Implementar calculos memoizados (stats, filteredDrivers)
+4. Configurar colunas de exportacao
+5. Criar funcao getDriverActions
+6. Refatorar JSX seguindo estrutura da frota
+7. Remover handleDelete e botoes soltos
+8. Adicionar modais de exportacao
+9. Testar operacoes CRUD e exportacoes
