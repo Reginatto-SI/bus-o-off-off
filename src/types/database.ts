@@ -94,12 +94,15 @@ export interface Driver {
   updated_at: string;
 }
 
+export type BoardingLocationStatus = 'ativo' | 'inativo';
+
 export interface BoardingLocation {
   id: string;
   name: string;
   address: string;
-  time: string;
   maps_url: string | null;
+  notes: string | null;
+  status: BoardingLocationStatus;
   company_id: string;
   created_at: string;
   updated_at: string;
