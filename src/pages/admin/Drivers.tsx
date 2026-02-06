@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Users,
@@ -46,6 +47,7 @@ import {
   Pencil,
   Phone,
   IdCard,
+  BadgeCheck,
   FileSpreadsheet,
   FileText,
   CheckCircle,
@@ -413,97 +415,146 @@ export default function Drivers() {
                     Adicionar Motorista
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-4xl flex-col gap-0 p-0">
+                {/* Ajuste necessário: modal estava alto e com scroll/footer inconsistentes.
+                    Aplicamos o mesmo padrão do modal de Frota (/admin/frota), incluindo abas,
+                    para controlar dimensões, rolagem interna e alinhamento do footer. */}
+                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
                   <DialogHeader className="admin-modal__header px-6 py-4">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Motorista</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                    <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="name">Nome</Label>
-                          <Input
-                            id="name"
-                            value={form.name}
-                            onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cpf">CPF</Label>
-                          <Input
-                            id="cpf"
-                            value={form.cpf}
-                            onChange={(e) => setForm({ ...form, cpf: formatCpfInput(e.target.value) })}
-                            placeholder="000.000.000-00"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Telefone</Label>
-                          <Input
-                            id="phone"
-                            value={form.phone}
-                            onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
-                            placeholder="(11) 99999-9999"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cnh">CNH</Label>
-                          <Input
-                            id="cnh"
-                            value={form.cnh}
-                            onChange={(e) => setForm({ ...form, cnh: e.target.value })}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cnh_category">Categoria CNH</Label>
-                          <Input
-                            id="cnh_category"
-                            value={form.cnh_category}
-                            onChange={(e) => setForm({ ...form, cnh_category: e.target.value })}
-                            placeholder="A/B/C/D/E"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cnh_expires_at">Validade CNH</Label>
-                          <Input
-                            id="cnh_expires_at"
-                            type="date"
-                            value={form.cnh_expires_at}
-                            onChange={(e) => setForm({ ...form, cnh_expires_at: e.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Status</Label>
-                          <Select
-                            value={form.status}
-                            onValueChange={(value: Driver['status']) =>
-                              setForm({ ...form, status: value })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ativo">Ativo</SelectItem>
-                              <SelectItem value="inativo">Inativo</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="notes">Observações</Label>
-                          <Textarea
-                            id="notes"
-                            value={form.notes}
-                            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                            rows={4}
-                          />
-                        </div>
+                    <Tabs defaultValue="identificacao" className="flex h-full flex-col">
+                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                        <TabsTrigger
+                          value="identificacao"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <IdCard className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Identificação</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="cnh"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <BadgeCheck className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">CNH</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="observacoes"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <FileText className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Observações</span>
+                        </TabsTrigger>
+                      </TabsList>
+
+                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                        <TabsContent value="identificacao" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label htmlFor="name">Nome</Label>
+                              <Input
+                                id="name"
+                                value={form.name}
+                                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="cpf">CPF</Label>
+                              <Input
+                                id="cpf"
+                                value={form.cpf}
+                                onChange={(e) =>
+                                  setForm({ ...form, cpf: formatCpfInput(e.target.value) })
+                                }
+                                placeholder="000.000.000-00"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="phone">Telefone</Label>
+                              <Input
+                                id="phone"
+                                value={form.phone}
+                                onChange={(e) =>
+                                  setForm({ ...form, phone: formatPhoneInput(e.target.value) })
+                                }
+                                placeholder="(11) 99999-9999"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Status</Label>
+                              <Select
+                                value={form.status}
+                                onValueChange={(value: Driver['status']) =>
+                                  setForm({ ...form, status: value })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ativo">Ativo</SelectItem>
+                                  <SelectItem value="inativo">Inativo</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="cnh" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="cnh">CNH</Label>
+                              <Input
+                                id="cnh"
+                                value={form.cnh}
+                                onChange={(e) => setForm({ ...form, cnh: e.target.value })}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="cnh_category">Categoria CNH</Label>
+                              <Input
+                                id="cnh_category"
+                                value={form.cnh_category}
+                                onChange={(e) =>
+                                  setForm({ ...form, cnh_category: e.target.value })
+                                }
+                                placeholder="A/B/C/D/E"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="cnh_expires_at">Validade CNH</Label>
+                              <Input
+                                id="cnh_expires_at"
+                                type="date"
+                                value={form.cnh_expires_at}
+                                onChange={(e) =>
+                                  setForm({ ...form, cnh_expires_at: e.target.value })
+                                }
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="observacoes" className="mt-0">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label htmlFor="notes">Observações</Label>
+                              <Textarea
+                                id="notes"
+                                value={form.notes}
+                                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                                rows={4}
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
                       </div>
-                    </div>
+                    </Tabs>
                     <div className="admin-modal__footer px-6 py-4">
                       <div className="flex flex-wrap justify-end gap-3">
                         <DialogClose asChild>
