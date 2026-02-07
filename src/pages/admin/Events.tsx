@@ -91,18 +91,6 @@ interface EventBoardingLocationWithDetails extends EventBoardingLocation {
   trip?: TripWithDetails;
 }
 
-// Trip form state with support for ida_volta shortcut
-interface TripFormState {
-  trip_creation_type: TripCreationType;
-  vehicle_id: string;
-  driver_id: string;
-  assistant_driver_id: string;
-  ida_departure_time: string;
-  volta_departure_time: string;
-  volta_time_tbd: boolean;
-  capacity: string;
-}
-
 const initialFilters: EventFilters = {
   search: '',
   status: 'all',
@@ -144,22 +132,26 @@ export default function Events() {
   const [boardingLocations, setBoardingLocations] = useState<BoardingLocation[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   
-  // Trip form modal - expanded for ida_volta and TBD support
+  // Trip form modal - simplified (time comes from first boarding)
   const [tripDialogOpen, setTripDialogOpen] = useState(false);
+  const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [tripForm, setTripForm] = useState({
     trip_creation_type: 'ida' as TripCreationType,
     vehicle_id: '',
     driver_id: '',
     assistant_driver_id: '',
-    ida_departure_time: '',
-    volta_departure_time: '',
-    volta_time_tbd: false,
     capacity: '',
   });
   const [savingTrip, setSavingTrip] = useState(false);
+  
+  // Delete trip dialog with validation
+  const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
+  const [tripToDelete, setTripToDelete] = useState<TripWithDetails | null>(null);
+  const [tripDeleteBlockReason, setTripDeleteBlockReason] = useState<string | null>(null);
 
   // Boarding location form modal
   const [boardingDialogOpen, setBoardingDialogOpen] = useState(false);
+  const [editingBoardingId, setEditingBoardingId] = useState<string | null>(null);
   const [boardingForm, setBoardingForm] = useState({
     boarding_location_id: '',
     departure_time: '',
@@ -167,6 +159,11 @@ export default function Events() {
     stop_order: '',
   });
   const [savingBoarding, setSavingBoarding] = useState(false);
+  
+  // Delete boarding dialog with validation
+  const [deleteBoardingDialogOpen, setDeleteBoardingDialogOpen] = useState(false);
+  const [boardingToDelete, setBoardingToDelete] = useState<EventBoardingLocationWithDetails | null>(null);
+  const [boardingDeleteBlockReason, setBoardingDeleteBlockReason] = useState<string | null>(null);
 
   // Selected trip for boardings tab
   const [selectedTripIdForBoardings, setSelectedTripIdForBoardings] = useState<string | null>(null);
@@ -322,7 +319,7 @@ export default function Events() {
         trip:trips(*)
       `)
       .eq('event_id', eventId)
-      .order('departure_time', { ascending: true, nullsFirst: false });
+      .order('stop_order', { ascending: true });
 
     if (error) {
       console.error('Erro ao carregar locais de embarque:', error);
@@ -466,12 +463,24 @@ export default function Events() {
   };
 
   // Trip handlers
-  // Helper function to get complete trip label
+  // Helper function to get trip departure time from first boarding (stop_order=1)
+  const getTripDepartureTime = (tripId: string): string | null => {
+    const tripBoardings = eventBoardingLocations
+      .filter(ebl => ebl.trip_id === tripId)
+      .sort((a, b) => (a.stop_order || 1) - (b.stop_order || 1));
+    
+    if (tripBoardings.length === 0) return null;
+    return tripBoardings[0].departure_time;
+  };
+
+  // Helper function to get complete trip label with computed time
   const getTripLabel = (trip: TripWithDetails) => {
     const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
-    const time = trip.departure_time 
-      ? trip.departure_time.slice(0, 5) 
-      : 'A definir';
+    
+    // Calculate time from first boarding
+    const computedTime = getTripDepartureTime(trip.id);
+    const time = computedTime ? computedTime.slice(0, 5) : 'A definir';
+    
     const vehicleType = trip.vehicle 
       ? vehicleTypeLabels[trip.vehicle.type] 
       : 'Veículo';
@@ -481,8 +490,21 @@ export default function Events() {
     
     return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
   };
+  
+  // Edit trip handler
+  const handleEditTrip = (trip: TripWithDetails) => {
+    setEditingTripId(trip.id);
+    setTripForm({
+      trip_creation_type: trip.trip_type as TripCreationType,
+      vehicle_id: trip.vehicle_id,
+      driver_id: trip.driver_id,
+      assistant_driver_id: trip.assistant_driver_id ?? '',
+      capacity: trip.capacity.toString(),
+    });
+    setTripDialogOpen(true);
+  };
 
-  const handleAddTrip = async (e: React.FormEvent) => {
+  const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId || !activeCompanyId) return;
     
@@ -498,15 +520,32 @@ export default function Events() {
       : null;
 
     try {
-      if (tripForm.trip_creation_type === 'ida_volta') {
-        // Create both trips (ida + volta) with pairing
+      if (editingTripId) {
+        // EDITING existing trip
+        const updateData = {
+          vehicle_id: tripForm.vehicle_id,
+          driver_id: tripForm.driver_id,
+          assistant_driver_id: assistantDriverId,
+          capacity,
+        };
+
+        const { error } = await supabase
+          .from('trips')
+          .update(updateData)
+          .eq('id', editingTripId);
+
+        if (error) throw error;
+        toast.success('Viagem atualizada');
+        setEditingTripId(null);
+      } else if (tripForm.trip_creation_type === 'ida_volta') {
+        // Create both trips (ida + volta) with pairing - NO departure_time
         const idaTripData = {
           event_id: editingId,
           trip_type: 'ida' as TripType,
           vehicle_id: tripForm.vehicle_id,
           driver_id: tripForm.driver_id,
           assistant_driver_id: assistantDriverId,
-          departure_time: tripForm.ida_departure_time,
+          departure_time: null, // Will be set from first boarding
           capacity,
           company_id: activeCompanyId,
         };
@@ -525,7 +564,7 @@ export default function Events() {
           vehicle_id: tripForm.vehicle_id,
           driver_id: tripForm.driver_id,
           assistant_driver_id: assistantDriverId,
-          departure_time: tripForm.volta_time_tbd ? null : tripForm.volta_departure_time || null,
+          departure_time: null, // Will be set from first boarding
           paired_trip_id: idaTrip.id,
           capacity,
           company_id: activeCompanyId,
@@ -547,19 +586,14 @@ export default function Events() {
 
         toast.success('Viagens de Ida e Volta criadas e vinculadas');
       } else {
-        // Single trip creation
-        const isVolta = tripForm.trip_creation_type === 'volta';
-        const departureTime = isVolta && tripForm.volta_time_tbd 
-          ? null 
-          : (isVolta ? tripForm.volta_departure_time : tripForm.ida_departure_time) || null;
-
+        // Single trip creation - NO departure_time
         const tripData = {
           event_id: editingId,
           trip_type: tripForm.trip_creation_type as TripType,
           vehicle_id: tripForm.vehicle_id,
           driver_id: tripForm.driver_id,
           assistant_driver_id: assistantDriverId,
-          departure_time: departureTime,
+          departure_time: null, // Will be set from first boarding
           capacity,
           company_id: activeCompanyId,
         };
@@ -575,41 +609,104 @@ export default function Events() {
       fetchEventTrips(editingId);
       fetchEvents();
     } catch (error) {
-      toast.error('Erro ao adicionar viagem');
+      toast.error('Erro ao salvar viagem');
       console.error(error);
     }
     setSavingTrip(false);
   };
 
   const resetTripForm = () => {
+    setEditingTripId(null);
     setTripForm({ 
       trip_creation_type: 'ida', 
       vehicle_id: '', 
       driver_id: '', 
       assistant_driver_id: '',
-      ida_departure_time: '',
-      volta_departure_time: '',
-      volta_time_tbd: false,
       capacity: '' 
     });
   };
 
-  const handleDeleteTrip = async (tripId: string) => {
-    if (!editingId) return;
+  // Delete trip with validation
+  const confirmDeleteTrip = async (trip: TripWithDetails) => {
+    // Check if trip has linked boardings
+    const tripBoardings = eventBoardingLocations.filter(ebl => ebl.trip_id === trip.id);
     
-    const { error } = await supabase.from('trips').delete().eq('id', tripId);
+    if (tripBoardings.length > 0) {
+      setTripDeleteBlockReason(
+        `Esta viagem possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
+        `Remova ou realoque os embarques antes de excluir.`
+      );
+      setTripToDelete(trip);
+      setDeleteTripDialogOpen(true);
+      return;
+    }
+
+    // Check if trip has sales
+    const { data: sales } = await supabase
+      .from('sales')
+      .select('id')
+      .eq('trip_id', trip.id)
+      .limit(1);
+
+    if (sales && sales.length > 0) {
+      setTripDeleteBlockReason(
+        `Esta viagem possui passagens vendidas ou reservadas. ` +
+        `Não é possível excluir. Considere marcar o evento como encerrado.`
+      );
+      setTripToDelete(trip);
+      setDeleteTripDialogOpen(true);
+      return;
+    }
+
+    // No blocks - confirm deletion
+    setTripDeleteBlockReason(null);
+    setTripToDelete(trip);
+    setDeleteTripDialogOpen(true);
+  };
+
+  const handleDeleteTripConfirmed = async () => {
+    if (!tripToDelete || tripDeleteBlockReason || !editingId) return;
+    
+    const { error } = await supabase.from('trips').delete().eq('id', tripToDelete.id);
 
     if (error) {
-      toast.error('Erro ao remover viagem');
+      toast.error('Erro ao excluir viagem');
     } else {
-      toast.success('Viagem removida');
+      toast.success('Viagem excluída');
       fetchEventTrips(editingId);
       fetchEvents();
     }
+    setDeleteTripDialogOpen(false);
+    setTripToDelete(null);
   };
 
   // Boarding location handlers
-  const handleAddBoarding = async (e: React.FormEvent) => {
+  // Edit boarding handler
+  const handleEditBoarding = (boarding: EventBoardingLocationWithDetails) => {
+    setEditingBoardingId(boarding.id);
+    setBoardingForm({
+      boarding_location_id: boarding.boarding_location_id,
+      departure_time: boarding.departure_time ?? '',
+      trip_id: boarding.trip_id ?? '',
+      stop_order: boarding.stop_order?.toString() ?? '',
+    });
+    setBoardingDialogOpen(true);
+  };
+
+  // Open boarding dialog with pre-selected trip
+  const handleOpenBoardingDialog = () => {
+    setEditingBoardingId(null);
+    setBoardingForm({
+      boarding_location_id: '',
+      departure_time: '',
+      trip_id: selectedTripIdForBoardings || '',
+      stop_order: '',
+    });
+    setBoardingDialogOpen(true);
+  };
+
+  // Save boarding (create or edit)
+  const handleSaveBoarding = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId || !activeCompanyId) return;
     
@@ -621,33 +718,104 @@ export default function Events() {
 
     // Calculate next stop_order for this trip
     const existingBoardings = eventBoardingLocations.filter(
-      ebl => ebl.trip_id === tripId
+      ebl => ebl.trip_id === tripId && ebl.id !== editingBoardingId
     );
     const nextOrder = boardingForm.stop_order 
       ? parseInt(boardingForm.stop_order, 10)
       : existingBoardings.length + 1;
 
-    const boardingData = {
-      event_id: editingId,
-      boarding_location_id: boardingForm.boarding_location_id,
-      departure_time: boardingForm.departure_time || null,
-      trip_id: tripId,
-      stop_order: nextOrder,
-      company_id: activeCompanyId,
-    };
+    if (editingBoardingId) {
+      // EDITING existing boarding
+      const updateData = {
+        boarding_location_id: boardingForm.boarding_location_id,
+        departure_time: boardingForm.departure_time || null,
+        trip_id: tripId,
+        stop_order: nextOrder,
+      };
 
-    const { error } = await supabase.from('event_boarding_locations').insert([boardingData]);
+      const { error } = await supabase
+        .from('event_boarding_locations')
+        .update(updateData)
+        .eq('id', editingBoardingId);
 
-    if (error) {
-      toast.error('Erro ao adicionar local de embarque');
-      console.error(error);
+      if (error) {
+        toast.error('Erro ao atualizar local de embarque');
+        console.error(error);
+      } else {
+        toast.success('Local de embarque atualizado');
+        setBoardingDialogOpen(false);
+        setEditingBoardingId(null);
+        setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
+        fetchEventBoardingLocations(editingId);
+      }
     } else {
-      toast.success('Local de embarque adicionado');
-      setBoardingDialogOpen(false);
-      setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
-      fetchEventBoardingLocations(editingId);
+      // CREATING new boarding
+      const boardingData = {
+        event_id: editingId,
+        boarding_location_id: boardingForm.boarding_location_id,
+        departure_time: boardingForm.departure_time || null,
+        trip_id: tripId,
+        stop_order: nextOrder,
+        company_id: activeCompanyId,
+      };
+
+      const { error } = await supabase.from('event_boarding_locations').insert([boardingData]);
+
+      if (error) {
+        toast.error('Erro ao adicionar local de embarque');
+        console.error(error);
+      } else {
+        toast.success('Local de embarque adicionado');
+        setBoardingDialogOpen(false);
+        setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
+        fetchEventBoardingLocations(editingId);
+      }
     }
     setSavingBoarding(false);
+  };
+
+  // Confirm delete boarding with validation
+  const confirmDeleteBoarding = async (boarding: EventBoardingLocationWithDetails) => {
+    // Check if boarding has linked sales
+    const { data: sales } = await supabase
+      .from('sales')
+      .select('id')
+      .eq('boarding_location_id', boarding.boarding_location_id)
+      .eq('trip_id', boarding.trip_id)
+      .limit(1);
+
+    if (sales && sales.length > 0) {
+      setBoardingDeleteBlockReason(
+        `Este local de embarque possui passageiros vinculados. ` +
+        `Não é possível excluir.`
+      );
+      setBoardingToDelete(boarding);
+      setDeleteBoardingDialogOpen(true);
+      return;
+    }
+
+    // No blocks - confirm deletion
+    setBoardingDeleteBlockReason(null);
+    setBoardingToDelete(boarding);
+    setDeleteBoardingDialogOpen(true);
+  };
+
+  const handleDeleteBoardingConfirmed = async () => {
+    if (!boardingToDelete || boardingDeleteBlockReason || !editingId) return;
+    
+    const { error } = await supabase
+      .from('event_boarding_locations')
+      .delete()
+      .eq('id', boardingToDelete.id);
+
+    if (error) {
+      toast.error('Erro ao excluir local de embarque');
+    } else {
+      toast.success('Local de embarque excluído');
+      fetchEventBoardingLocations(editingId);
+    }
+    setDeleteBoardingDialogOpen(false);
+    setBoardingToDelete(null);
   };
 
   // Copy boardings from ida to volta
@@ -712,19 +880,6 @@ export default function Events() {
     }
     
     setCopyingBoardings(false);
-  };
-
-  const handleDeleteBoarding = async (boardingId: string) => {
-    if (!editingId) return;
-    
-    const { error } = await supabase.from('event_boarding_locations').delete().eq('id', boardingId);
-
-    if (error) {
-      toast.error('Erro ao remover local de embarque');
-    } else {
-      toast.success('Local de embarque removido');
-      fetchEventBoardingLocations(editingId);
-    }
   };
 
   const resetForm = () => {
@@ -1109,7 +1264,9 @@ export default function Events() {
                               const pairedTrip = trip.paired_trip_id 
                                 ? eventTrips.find(t => t.id === trip.paired_trip_id) 
                                 : null;
-                              const isDepartureTimeTbd = trip.departure_time === null;
+                              // Calculate time from first boarding
+                              const computedTime = getTripDepartureTime(trip.id);
+                              const isDepartureTimeTbd = !computedTime;
                               
                               return (
                                 <Card key={trip.id} className={`p-3 ${isDepartureTimeTbd ? 'bg-amber-50/50 border-amber-200' : ''}`}>
@@ -1131,7 +1288,7 @@ export default function Events() {
                                               A definir
                                             </span>
                                           ) : (
-                                            <span className="font-medium">{trip.departure_time?.slice(0, 5)}</span>
+                                            <span className="font-medium">{computedTime?.slice(0, 5)}</span>
                                           )}
                                         </div>
                                         <div className="flex items-center gap-2 text-sm">
@@ -1156,15 +1313,26 @@ export default function Events() {
                                       </div>
                                     </div>
                                     {!isReadOnly && (
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                        onClick={() => handleDeleteTrip(trip.id)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          onClick={() => handleEditTrip(trip)}
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive hover:text-destructive"
+                                          onClick={() => confirmDeleteTrip(trip)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     )}
                                   </div>
                                 </Card>
@@ -1248,7 +1416,7 @@ export default function Events() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setBoardingDialogOpen(true)}
+                                onClick={handleOpenBoardingDialog}
                               >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Adicionar Local
@@ -1287,7 +1455,7 @@ export default function Events() {
                                     variant="outline"
                                     size="sm"
                                     className="mt-4"
-                                    onClick={() => setBoardingDialogOpen(true)}
+                                    onClick={handleOpenBoardingDialog}
                                   >
                                     <Plus className="h-4 w-4 mr-2" />
                                     Adicionar Local
@@ -1331,15 +1499,26 @@ export default function Events() {
                                       </div>
                                     </div>
                                     {!isReadOnly && (
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                        onClick={() => handleDeleteBoarding(ebl.id)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          onClick={() => handleEditBoarding(ebl)}
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive hover:text-destructive"
+                                          onClick={() => confirmDeleteBoarding(ebl)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     )}
                                   </div>
                                 </Card>
@@ -1594,40 +1773,49 @@ export default function Events() {
           </DialogContent>
         </Dialog>
 
-        {/* Trip Modal - with ida_volta shortcut and TBD support */}
-        <Dialog open={tripDialogOpen} onOpenChange={setTripDialogOpen}>
+        {/* Trip Modal - Simplified without time fields */}
+        <Dialog open={tripDialogOpen} onOpenChange={(open) => { setTripDialogOpen(open); if (!open) resetTripForm(); }}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Adicionar Viagem</DialogTitle>
+              <DialogTitle>{editingTripId ? 'Editar Viagem' : 'Adicionar Viagem'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddTrip} className="space-y-4">
-              {/* Trip Type with ida_volta shortcut */}
-              <div className="space-y-2">
-                <Label>Tipo da Viagem *</Label>
-                <RadioGroup
-                  value={tripForm.trip_creation_type}
-                  onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
-                  className="flex flex-wrap gap-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="ida" id="trip_type_ida" />
-                    <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Ida</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="volta" id="trip_type_volta" />
-                    <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Volta</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
-                    <Label htmlFor="trip_type_ida_volta" className="font-normal cursor-pointer">Ida e Volta</Label>
-                  </div>
-                </RadioGroup>
-                {tripForm.trip_creation_type === 'ida_volta' && (
-                  <p className="text-xs text-muted-foreground">
-                    Serão criadas duas viagens vinculadas com os mesmos dados.
+            <form onSubmit={handleSaveTrip} className="space-y-4">
+              {/* Trip Type - only show for creation, locked for editing */}
+              {!editingTripId ? (
+                <div className="space-y-2">
+                  <Label>Tipo da Viagem *</Label>
+                  <RadioGroup
+                    value={tripForm.trip_creation_type}
+                    onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
+                    className="flex flex-wrap gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ida" id="trip_type_ida" />
+                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Ida</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="volta" id="trip_type_volta" />
+                      <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Volta</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
+                      <Label htmlFor="trip_type_ida_volta" className="font-normal cursor-pointer">Ida e Volta</Label>
+                    </div>
+                  </RadioGroup>
+                  {tripForm.trip_creation_type === 'ida_volta' && (
+                    <p className="text-xs text-muted-foreground">
+                      Serão criadas duas viagens vinculadas com os mesmos dados.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Ida' : 'Volta'}</span>
+                    <span className="ml-2 text-xs">(não pode ser alterado)</span>
                   </p>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Vehicle */}
@@ -1716,56 +1904,13 @@ export default function Events() {
                 </div>
               </div>
 
-              {/* Departure Time - Ida (shown for ida or ida_volta) */}
-              {(tripForm.trip_creation_type === 'ida' || tripForm.trip_creation_type === 'ida_volta') && (
-                <div className="space-y-2">
-                  <Label htmlFor="ida_departure_time">
-                    {tripForm.trip_creation_type === 'ida_volta' ? 'Horário da Ida *' : 'Horário Base *'}
-                  </Label>
-                  <Input
-                    id="ida_departure_time"
-                    type="time"
-                    value={tripForm.ida_departure_time}
-                    onChange={(e) => setTripForm({ ...tripForm, ida_departure_time: e.target.value })}
-                    required={tripForm.trip_creation_type === 'ida' || tripForm.trip_creation_type === 'ida_volta'}
-                  />
-                </div>
-              )}
-
-              {/* Departure Time - Volta (shown for volta or ida_volta) */}
-              {(tripForm.trip_creation_type === 'volta' || tripForm.trip_creation_type === 'ida_volta') && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="volta_departure_time">
-                      {tripForm.trip_creation_type === 'ida_volta' ? 'Horário da Volta' : 'Horário Base'}
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id="volta_time_tbd"
-                        checked={tripForm.volta_time_tbd}
-                        onCheckedChange={(checked) => setTripForm({ ...tripForm, volta_time_tbd: checked })}
-                      />
-                      <Label htmlFor="volta_time_tbd" className="text-sm font-normal text-muted-foreground cursor-pointer">
-                        A definir
-                      </Label>
-                    </div>
-                  </div>
-                  <Input
-                    id="volta_departure_time"
-                    type="time"
-                    value={tripForm.volta_departure_time}
-                    onChange={(e) => setTripForm({ ...tripForm, volta_departure_time: e.target.value })}
-                    disabled={tripForm.volta_time_tbd}
-                    required={tripForm.trip_creation_type === 'volta' && !tripForm.volta_time_tbd}
-                  />
-                  {tripForm.volta_time_tbd && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      O horário será definido posteriormente
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* Info about time */}
+              <div className="p-3 bg-muted/50 rounded-lg border border-muted">
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Info className="h-4 w-4 shrink-0" />
+                  O horário da viagem é definido automaticamente pelo primeiro embarque cadastrado.
+                </p>
+              </div>
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setTripDialogOpen(false)}>
@@ -1773,20 +1918,15 @@ export default function Events() {
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={
-                    savingTrip || 
-                    !tripForm.vehicle_id || 
-                    !tripForm.driver_id || 
-                    (tripForm.trip_creation_type === 'ida' && !tripForm.ida_departure_time) ||
-                    (tripForm.trip_creation_type === 'volta' && !tripForm.volta_time_tbd && !tripForm.volta_departure_time) ||
-                    (tripForm.trip_creation_type === 'ida_volta' && !tripForm.ida_departure_time)
-                  }
+                  disabled={savingTrip || !tripForm.vehicle_id || !tripForm.driver_id}
                 >
                   {savingTrip ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Salvando...
                     </>
+                  ) : editingTripId ? (
+                    'Salvar'
                   ) : (
                     tripForm.trip_creation_type === 'ida_volta' ? 'Criar Ida e Volta' : 'Adicionar'
                   )}
@@ -1796,13 +1936,34 @@ export default function Events() {
           </DialogContent>
         </Dialog>
 
-        {/* Boarding Location Modal */}
+        {/* Boarding Location Modal - Trip required, using getTripLabel */}
         <Dialog open={boardingDialogOpen} onOpenChange={setBoardingDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Adicionar Local de Embarque</DialogTitle>
+              <DialogTitle>{editingBoardingId ? 'Editar Local de Embarque' : 'Adicionar Local de Embarque'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddBoarding} className="space-y-4">
+            <form onSubmit={handleSaveBoarding} className="space-y-4">
+              {/* Link to Trip - Required */}
+              <div className="space-y-2">
+                <Label htmlFor="trip_link">Vincular a Viagem *</Label>
+                <Select
+                  value={boardingForm.trip_id || '__none__'}
+                  onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value === '__none__' ? '' : value })}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma viagem *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventTrips.map((trip) => (
+                      <SelectItem key={trip.id} value={trip.id}>
+                        {getTripLabel(trip)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Location */}
               <div className="space-y-2">
                 <Label htmlFor="boarding_location">Local *</Label>
@@ -1814,7 +1975,7 @@ export default function Events() {
                     <SelectValue placeholder="Selecione um local cadastrado" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableBoardingLocations.map((location) => (
+                    {boardingLocations.map((location) => (
                       <SelectItem key={location.id} value={location.id}>
                         {location.name}
                       </SelectItem>
@@ -1834,27 +1995,19 @@ export default function Events() {
                 />
               </div>
 
-              {/* Link to Trip */}
+              {/* Stop Order */}
               <div className="space-y-2">
-                <Label htmlFor="trip_link">Vincular a Viagem</Label>
-                <Select
-                  value={boardingForm.trip_id}
-                  onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as viagens" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Todas as viagens</SelectItem>
-                    {eventTrips.map((trip) => (
-                      <SelectItem key={trip.id} value={trip.id}>
-                        {trip.trip_type === 'ida' ? 'Ida' : 'Volta'} - {trip.departure_time?.slice(0, 5)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="stop_order">Ordem da Parada</Label>
+                <Input
+                  id="stop_order"
+                  type="number"
+                  min="1"
+                  value={boardingForm.stop_order}
+                  onChange={(e) => setBoardingForm({ ...boardingForm, stop_order: e.target.value })}
+                  placeholder="Automático"
+                />
                 <p className="text-xs text-muted-foreground">
-                  Opcional - deixe em branco para disponível em todas
+                  Deixe em branco para inserir na próxima posição
                 </p>
               </div>
 
@@ -1864,13 +2017,15 @@ export default function Events() {
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={savingBoarding || !boardingForm.boarding_location_id}
+                  disabled={savingBoarding || !boardingForm.boarding_location_id || !boardingForm.trip_id}
                 >
                   {savingBoarding ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Salvando...
                     </>
+                  ) : editingBoardingId ? (
+                    'Salvar'
                   ) : (
                     'Adicionar'
                   )}
@@ -1898,6 +2053,62 @@ export default function Events() {
               >
                 Excluir
               </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Trip Dialog with Validation */}
+        <AlertDialog open={deleteTripDialogOpen} onOpenChange={setDeleteTripDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {tripDeleteBlockReason ? 'Exclusão Bloqueada' : 'Excluir Viagem'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {tripDeleteBlockReason || (
+                  `Tem certeza que deseja excluir esta viagem (${tripToDelete?.trip_type === 'ida' ? 'Ida' : 'Volta'})?`
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>
+                {tripDeleteBlockReason ? 'Entendi' : 'Cancelar'}
+              </AlertDialogCancel>
+              {!tripDeleteBlockReason && (
+                <AlertDialogAction
+                  onClick={handleDeleteTripConfirmed}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Excluir
+                </AlertDialogAction>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Boarding Dialog with Validation */}
+        <AlertDialog open={deleteBoardingDialogOpen} onOpenChange={setDeleteBoardingDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {boardingDeleteBlockReason ? 'Exclusão Bloqueada' : 'Excluir Local de Embarque'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {boardingDeleteBlockReason || 'Tem certeza que deseja excluir este local de embarque?'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>
+                {boardingDeleteBlockReason ? 'Entendi' : 'Cancelar'}
+              </AlertDialogCancel>
+              {!boardingDeleteBlockReason && (
+                <AlertDialogAction
+                  onClick={handleDeleteBoardingConfirmed}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Excluir
+                </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
