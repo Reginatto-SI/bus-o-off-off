@@ -1,428 +1,399 @@
 
 
-# Plano: Tela de Gestao de Usuarios (/admin/usuarios)
+# Plano: Melhoria da Tela de Eventos (/admin/eventos)
 
 ## Visao Geral
 
-Criar uma nova tela administrativa para criacao e gerenciamento de usuarios do sistema, seguindo exatamente o padrao visual e comportamental da tela piloto /admin/frota, incluindo obrigatoriamente o modal com abas.
+Transformar a tela de Eventos em uma tela profissional seguindo o padrao piloto /admin/frota, mantendo o layout de cards para listagem mas usando o modal com abas para cadastro/edicao.
 
 ---
 
-## Parte 1: Alteracoes no Banco de Dados
+## Parte 1: Analise Comparativa
 
-### 1.1 Adicionar Role 'motorista' ao Enum
+### Atual vs Esperado
 
-```sql
-ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'motorista';
-```
-
-### 1.2 Adicionar Coluna driver_id na Tabela user_roles
-
-Para permitir vinculo de usuarios com role motorista aos cadastros de motoristas:
-
-```sql
-ALTER TABLE public.user_roles 
-  ADD COLUMN IF NOT EXISTS driver_id uuid REFERENCES public.drivers(id) ON DELETE SET NULL;
-
-COMMENT ON COLUMN public.user_roles.driver_id IS 'Vinculo com cadastro de motorista (quando role = motorista)';
-```
-
-### 1.3 Adicionar Coluna status na Tabela profiles
-
-```sql
-ALTER TABLE public.profiles 
-  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'ativo';
-
-COMMENT ON COLUMN public.profiles.status IS 'Status do usuario: ativo ou inativo';
-```
-
-### 1.4 Adicionar Coluna notes na Tabela profiles
-
-```sql
-ALTER TABLE public.profiles 
-  ADD COLUMN IF NOT EXISTS notes text;
-
-COMMENT ON COLUMN public.profiles.notes IS 'Observacoes internas sobre o usuario';
-```
-
-### 1.5 Atualizar RLS Policies para profiles
-
-Permitir que gerentes gerenciem usuarios:
-
-```sql
--- Gerentes podem visualizar todos os perfis da empresa
-CREATE POLICY "Gerentes can view company profiles"
-  ON public.profiles FOR SELECT
-  USING (
-    has_role(auth.uid(), 'gerente'::user_role) AND
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = profiles.id
-        AND ur.company_id IN (
-          SELECT company_id FROM public.user_roles WHERE user_id = auth.uid()
-        )
-    )
-  );
-
--- Gerentes podem atualizar perfis da empresa
-CREATE POLICY "Gerentes can update company profiles"
-  ON public.profiles FOR UPDATE
-  USING (has_role(auth.uid(), 'gerente'::user_role))
-  WITH CHECK (has_role(auth.uid(), 'gerente'::user_role));
-```
+| Aspecto | Atual | Esperado |
+|---------|-------|----------|
+| Cabecalho | DIV manual | PageHeader |
+| KPIs | Nenhum | 4 StatsCards |
+| Filtros | Nenhum | FilterCard |
+| Modal | Simples sem abas | Modal com 3 abas |
+| Cards de eventos | Basico | Card com resumo operacional + menu |
+| Acoes no card | Click no card todo | Menu "..." no canto |
+| Estado vazio | Basico | Melhorado visualmente |
+| Edicao de evento | Apenas criacao | CRUD completo no modal |
 
 ---
 
-## Parte 2: Atualizacao de Tipos TypeScript
+## Parte 2: Estrutura do Cabecalho
 
-### Arquivo: src/types/database.ts
-
-```typescript
-// Adicionar 'motorista' ao tipo UserRole
-export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
-
-// Atualizar interface Profile
-export interface Profile {
-  id: string;
-  name: string;
-  email: string;
-  status: 'ativo' | 'inativo'; // NOVO
-  notes: string | null;        // NOVO
-  company_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// Atualizar interface UserRoleRecord
-export interface UserRoleRecord {
-  id: string;
-  user_id: string;
-  role: UserRole;
-  seller_id: string | null;
-  driver_id: string | null;    // NOVO
-  company_id: string;
-}
-
-// Interface auxiliar para tela de usuarios
-export interface UserWithRole extends Profile {
-  role?: UserRole;
-  seller_id?: string | null;
-  driver_id?: string | null;
-  seller?: Seller | null;
-  driver?: Driver | null;
-}
-```
-
----
-
-## Parte 3: Estrutura da Nova Tela
-
-### 3.1 Cabecalho (PageHeader)
-
-Identico ao padrao da frota:
+### PageHeader
 
 ```text
 +------------------------------------------------------------------+
-| Usuarios                            [Excel] [PDF] [+ Adicionar]  |
-| Gerencie os usuarios do sistema                                  |
+| Eventos                                          [+ Criar Evento] |
+| Gerencie os eventos e viagens                                     |
 +------------------------------------------------------------------+
 ```
 
-### 3.2 Cards de Indicadores (StatsCards)
+Remover botoes Excel/PDF conforme solicitado.
+
+---
+
+## Parte 3: Cards de Indicadores (StatsCards)
 
 | Card | Label | Icone | Variante |
 |------|-------|-------|----------|
-| 1 | Total de usuarios | Users | default |
-| 2 | Usuarios ativos | CheckCircle | success |
-| 3 | Usuarios inativos | XCircle | destructive |
-| 4 | Gerentes | Shield | default |
-| 5 | Operadores | Settings | default |
-| 6 | Vendedores | UserCheck | default |
-| 7 | Motoristas | Car | default |
+| 1 | Total de eventos | Calendar | default |
+| 2 | Rascunhos | FileEdit | default |
+| 3 | A venda | ShoppingBag | success |
+| 4 | Encerrados | CheckCircle | destructive |
 
-Layout: grid de 4 colunas no desktop
+Calculos baseados nos eventos carregados da empresa.
 
-### 3.3 Card de Filtros (FilterCard)
+---
+
+## Parte 4: Card de Filtros
 
 **Filtros Simples:**
-- Campo de busca: pesquisar por nome ou email
-- Select de status: Todos / Ativo / Inativo
-- Select de role: Todos / Gerente / Operador / Vendedor / Motorista
+- Campo de busca: pesquisar por nome ou cidade
+- Select de status: Todos / Rascunho / A Venda / Encerrado
 - Botao "Limpar"
 
-### 3.4 Tabela de Listagem
+Interface de filtros:
 
-Colunas:
+```typescript
+interface EventFilters {
+  search: string;
+  status: 'all' | 'rascunho' | 'a_venda' | 'encerrado';
+}
+```
 
-| Coluna | Conteudo |
-|--------|----------|
-| Nome | user.name (font-medium) |
-| E-mail | user.email + icone Mail |
-| Role | Badge colorido por role |
-| Vinculo | Nome do vendedor/motorista ou "-" |
-| Status | StatusBadge ativo/inativo |
-| Acoes | ActionsDropdown |
+---
 
-### 3.5 Menu de Acoes (ActionsDropdown)
+## Parte 5: Listagem em Cards
+
+### Novo Layout dos Cards
+
+Cada card de evento exibira:
+
+```text
++--------------------------------------------------+
+| Nome do Evento                            [...]  |
+|                                                  |
+| [Badge Status]                                   |
+|                                                  |
+| 📅 dd de mês de yyyy                            |
+| 📍 Cidade                                        |
+|                                                  |
+| 🚌 X viagens  |  👥 Y lugares disponiveis       |
++--------------------------------------------------+
+```
+
+O menu "..." no canto substituira o click no card inteiro.
+
+### Acoes do Menu (ActionsDropdown)
 
 | Acao | Icone | Comportamento |
 |------|-------|---------------|
 | Editar | Pencil | Abre modal de edicao |
-| Ativar/Desativar | Power | Alterna status |
+| Alterar Status | RefreshCw | Abre submenu de status |
+| Ver Detalhes | ExternalLink | Navega para /admin/eventos/{id} |
+| Excluir | Trash2 | Confirmacao + exclusao (se permitido) |
+
+**Regras:**
+- Evento "encerrado" nao pode ser editado (somente visualizado)
+- Excluir disponivel apenas para eventos sem vendas
 
 ---
 
-## Parte 4: Modal de Cadastro/Edicao (OBRIGATORIO COM ABAS)
-
-Seguindo exatamente o padrao do modal da tela /admin/frota:
+## Parte 6: Modal com Abas (OBRIGATORIO)
 
 ### Estrutura do Modal
 
 ```text
 +------------------------------------------------------------------+
-| Novo Usuario / Editar Usuario                              [X]   |
+| Novo Evento / Editar Evento                                [X]   |
 +------------------------------------------------------------------+
-| [Acesso] [Vinculos] [Observacoes]                                 |
+| [Geral] [Viagens] [Publicacao]                                    |
 +------------------------------------------------------------------+
 | [Conteudo da aba ativa com scroll interno]                       |
-|                                                                  |
-|                                                                  |
 +------------------------------------------------------------------+
-| [Cancelar]                                    [Salvar]           |
+| [Cancelar]                                           [Salvar]    |
 +------------------------------------------------------------------+
 ```
 
-### Aba 1 - Acesso
-
-| Campo | Tipo | Obrigatorio | Observacao |
-|-------|------|-------------|------------|
-| Nome | text | Sim | Nome completo |
-| E-mail | email | Sim | Unico no sistema |
-| Role | select | Sim | gerente/operador/vendedor/motorista |
-| Status | select | Sim | ativo/inativo |
-
-### Aba 2 - Vinculos (Dinamica por Role)
-
-**Se role = vendedor:**
-```text
-+--------------------------------------------------+
-| Vincular Vendedor                                |
-+--------------------------------------------------+
-| [Select: Selecione um vendedor v]                |
-| Lista de vendedores ativos da empresa            |
-+--------------------------------------------------+
-| [+ Criar vendedor e vincular]                    |
-| Abre modal de vendedores em segundo plano        |
-+--------------------------------------------------+
-```
-
-**Se role = motorista:**
-```text
-+--------------------------------------------------+
-| Vincular Motorista                               |
-+--------------------------------------------------+
-| [Select: Selecione um motorista v]               |
-| Lista de motoristas ativos da empresa            |
-+--------------------------------------------------+
-| [+ Criar motorista e vincular]                   |
-| Abre modal de motoristas em segundo plano        |
-+--------------------------------------------------+
-```
-
-**Se role = gerente ou operador:**
-```text
-+--------------------------------------------------+
-| Nenhum vinculo necessario                        |
-| Este perfil nao requer vinculo com cadastros.    |
-+--------------------------------------------------+
-```
-
-### Aba 3 - Observacoes
+### Aba 1 - Geral
 
 | Campo | Tipo | Obrigatorio |
 |-------|------|-------------|
-| Observacoes | textarea | Nao |
+| Nome do evento | text | Sim |
+| Data | date | Sim |
+| Cidade | text | Sim |
+| Descricao | textarea | Nao |
+| Imagem (placeholder) | - | Nao (estrutura preparada) |
+
+### Aba 2 - Viagens
+
+**Listagem simples das viagens vinculadas:**
+
+```text
++--------------------------------------------------+
+| Viagens do Evento                                |
++--------------------------------------------------+
+| 🕐 08:00  🚌 Onibus ABC-1234  👥 46 lugares      |
+| 🕐 14:00  🚌 Van DEF-5678     👥 15 lugares      |
++--------------------------------------------------+
+| [+ Adicionar Viagem]                             |
++--------------------------------------------------+
+```
+
+Se clicar em "Adicionar Viagem" dentro do modal de evento, abre um sub-modal simples com:
+- Select de veiculo
+- Select de motorista
+- Horario de saida
+- Capacidade (opcional, herda do veiculo)
+
+**Nota:** Nao aprofundar regras complexas - foco estrutural.
+
+### Aba 3 - Publicacao
+
+```text
++--------------------------------------------------+
+| Configuracoes de Publicacao                      |
++--------------------------------------------------+
+| Status do Evento:                                |
+| [Select: Rascunho / A Venda / Encerrado]         |
+|                                                  |
+| ℹ️  Somente eventos "A Venda" ficam visiveis no  |
+|    portal publico para compra de passagens.      |
++--------------------------------------------------+
+```
 
 ---
 
-## Parte 5: Logica de Criacao de Usuario
+## Parte 7: Estados Vazios
 
-### Fluxo de Criacao (Novo Usuario)
+### Sem Eventos
 
-1. Gerente preenche modal
-2. Ao salvar:
-   - Criar usuario no Supabase Auth (email + senha temporaria)
-   - Profile e criado automaticamente pelo trigger `handle_new_user`
-   - Atualizar profile com status e notes
-   - Criar/atualizar user_roles com role, seller_id, driver_id
-3. Usuario recebe email de confirmacao
+```text
++--------------------------------------------------+
+|                                                  |
+|           [Icone Calendar grande]                |
+|                                                  |
+|        Nenhum evento cadastrado                  |
+|   Crie seu primeiro evento para comecar         |
+|       a vender passagens                         |
+|                                                  |
+|          [+ Criar Evento]                        |
+|                                                  |
++--------------------------------------------------+
+```
 
-### Consideracao Importante
+### Filtros sem Resultados
 
-Para criar usuarios via Supabase Auth, sera necessario:
-- Usar Supabase Admin API (service_role key) via Edge Function
-- OU solicitar que o proprio usuario faca signup e depois o gerente ajuste a role
-
-**Recomendacao para MVP:** Usar Edge Function para criacao controlada.
+```text
++--------------------------------------------------+
+|                                                  |
+|           [Icone Calendar grande]                |
+|                                                  |
+|        Nenhum evento encontrado                  |
+|    Ajuste os filtros para encontrar eventos      |
+|                                                  |
+|          [Limpar filtros]                        |
+|                                                  |
++--------------------------------------------------+
+```
 
 ---
 
-## Parte 6: Restricao de Acesso
+## Parte 8: Logica de Carregamento
 
-### Sidebar
+### Dados a Buscar
 
-O item "Usuarios" sera adicionado no grupo "Configuracoes" com restricao:
+1. **Eventos** - lista principal
+2. **Trips (contagem)** - para exibir resumo operacional nos cards
+3. **Veiculos ativos** - para modal de viagem
+4. **Motoristas ativos** - para modal de viagem
+
+Query otimizada:
 
 ```typescript
-{
-  name: 'Usuarios',
-  href: '/admin/usuarios',
-  icon: UsersIcon,
-  roles: ['gerente'],  // Somente gerentes
+// Eventos com contagem de viagens
+const { data: events } = await supabase
+  .from('events')
+  .select(`
+    *,
+    trips:trips(count)
+  `)
+  .order('date', { ascending: false });
+```
+
+---
+
+## Parte 9: Funcionalidades CRUD
+
+### Criar Evento
+
+1. Abrir modal vazio
+2. Preencher aba "Geral"
+3. Salvar cria evento com status "rascunho"
+4. Viagens podem ser adicionadas depois
+
+### Editar Evento
+
+1. Menu "..." > Editar
+2. Modal carrega dados do evento
+3. Navegacao entre abas
+4. Salvar atualiza evento
+
+### Alterar Status
+
+1. Menu "..." > Alterar Status
+2. Ou diretamente na aba "Publicacao"
+3. Update no campo status
+
+### Excluir Evento
+
+1. Menu "..." > Excluir
+2. Verificar se nao tem vendas
+3. Confirmacao (AlertDialog)
+4. Delete do evento
+
+**Regras de exclusao:**
+- Eventos com vendas NAO podem ser excluidos
+- Eventos encerrados podem ser excluidos se nao tiverem vendas
+
+---
+
+## Parte 10: Imports Necessarios
+
+```typescript
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Event, Trip, Vehicle, Driver } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
+import { AdminLayout } from '@/components/layout/AdminLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageHeader } from '@/components/admin/PageHeader';
+import { StatsCard } from '@/components/admin/StatsCard';
+import { FilterCard } from '@/components/admin/FilterCard';
+import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Calendar,
+  MapPin,
+  Plus,
+  Loader2,
+  Bus,
+  Users,
+  FileEdit,
+  ShoppingBag,
+  CheckCircle,
+  Pencil,
+  Trash2,
+  ExternalLink,
+  Clock,
+  Globe,
+  FileText,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+```
+
+---
+
+## Parte 11: Interface de Evento com Viagens
+
+Para exibir resumo operacional nos cards:
+
+```typescript
+interface EventWithTrips extends Event {
+  trips: { count: number }[];
+  totalCapacity?: number;
 }
 ```
 
-### Na Pagina
-
-```typescript
-// No inicio do componente
-const { isGerente } = useAuth();
-
-// Guard de acesso
-if (!isGerente) {
-  return <Navigate to="/admin/eventos" replace />;
-}
-```
-
 ---
 
-## Parte 7: Configuracao de Exportacao
-
-### Colunas para Excel/PDF
-
-```typescript
-const exportColumns: ExportColumn[] = [
-  { key: 'name', label: 'Nome' },
-  { key: 'email', label: 'E-mail' },
-  { key: 'role', label: 'Perfil', format: (v) => formatRole(v) },
-  { key: 'vinculo', label: 'Vinculo' },
-  { key: 'status', label: 'Status', format: (v) => v === 'ativo' ? 'Ativo' : 'Inativo' },
-  { key: 'notes', label: 'Observacoes' },
-];
-```
-
----
-
-## Parte 8: Arquivos a Criar/Modificar
+## Parte 12: Arquivos a Modificar
 
 | Arquivo | Acao |
 |---------|------|
-| Migracao SQL | Adicionar motorista ao enum, driver_id, status e notes |
-| `src/types/database.ts` | Atualizar tipos |
-| `src/pages/admin/Users.tsx` | Criar nova pagina |
-| `src/components/layout/AdminSidebar.tsx` | Adicionar item de menu |
-| `src/App.tsx` | Adicionar rota /admin/usuarios |
-| `supabase/functions/create-user/index.ts` | Edge function para criar usuarios (opcional MVP) |
+| `src/pages/admin/Events.tsx` | Refatorar completamente |
 
 ---
 
-## Parte 9: Estados Especiais
+## Parte 13: Nao Implementar Agora
 
-### Estado Vazio (sem usuarios)
+Conforme solicitado:
 
-```text
-[Icone Users]
-Nenhum usuario cadastrado
-Adicione usuarios para gerenciar acessos ao sistema
-[+ Adicionar Usuario]
-```
-
-### Estado Vazio (filtro sem resultados)
-
-```text
-[Icone Users]
-Nenhum usuario encontrado
-Ajuste os filtros para encontrar usuarios
-[Limpar filtros]
-```
-
----
-
-## Parte 10: Detalhes do Modal com Abas
-
-### Classes CSS do Modal (seguindo Fleet.tsx)
-
-```jsx
-<DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-  <DialogHeader className="admin-modal__header px-6 py-4">
-    ...
-  </DialogHeader>
-  <form className="flex h-full flex-col">
-    <Tabs defaultValue="acesso" className="flex h-full flex-col">
-      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-        <TabsTrigger value="acesso">
-          <Key className="h-4 w-4" /> Acesso
-        </TabsTrigger>
-        <TabsTrigger value="vinculos">
-          <Link className="h-4 w-4" /> Vinculos
-        </TabsTrigger>
-        <TabsTrigger value="observacoes">
-          <FileText className="h-4 w-4" /> Observacoes
-        </TabsTrigger>
-      </TabsList>
-      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-        <TabsContent value="acesso">...</TabsContent>
-        <TabsContent value="vinculos">...</TabsContent>
-        <TabsContent value="observacoes">...</TabsContent>
-      </div>
-    </Tabs>
-    <div className="admin-modal__footer px-6 py-4">
-      <Button variant="outline">Cancelar</Button>
-      <Button type="submit">Salvar</Button>
-    </div>
-  </form>
-</DialogContent>
-```
-
----
-
-## Parte 11: Formatacao de Role
-
-Funcao auxiliar para exibir roles com cores:
-
-```typescript
-const roleConfig: Record<UserRole, { label: string; color: string }> = {
-  gerente: { label: 'Gerente', color: 'bg-purple-100 text-purple-800' },
-  operador: { label: 'Operador', color: 'bg-blue-100 text-blue-800' },
-  vendedor: { label: 'Vendedor', color: 'bg-green-100 text-green-800' },
-  motorista: { label: 'Motorista', color: 'bg-orange-100 text-orange-800' },
-};
-```
-
----
-
-## Ordem de Implementacao
-
-1. Executar migracao SQL (enum, colunas, RLS)
-2. Atualizar tipos TypeScript
-3. Adicionar item no sidebar (restrito a gerente)
-4. Adicionar rota no App.tsx
-5. Criar pagina Users.tsx seguindo estrutura da Fleet.tsx
-6. Implementar modal com 3 abas
-7. Implementar logica de CRUD
-8. Implementar exportacao Excel/PDF
-9. Testar restricao de acesso
-10. Testar fluxo completo
+- **Exportacao PDF** - nao incluir
+- **Exportacao Excel** - nao incluir
+- **Mapa de assentos** - nao incluir
+- **Pagamentos** - nao incluir
+- **KPIs financeiros** - nao incluir
 
 ---
 
 ## Resultado Esperado
 
-1. Tela visualmente identica ao padrao /admin/frota
-2. Modal obrigatoriamente com abas (Acesso, Vinculos, Observacoes)
-3. Restricao de acesso somente para gerentes
-4. CRUD completo de usuarios
-5. Vinculacao dinamica para vendedores e motoristas
-6. Exportacao Excel e PDF funcionais
-7. KPIs e filtros padronizados
+1. Cabecalho padronizado com PageHeader
+2. 4 KPIs de eventos (Total, Rascunho, A Venda, Encerrado)
+3. Filtros por busca e status
+4. Cards de eventos com resumo operacional
+5. Menu "..." em cada card com acoes
+6. Modal com 3 abas (Geral, Viagens, Publicacao)
+7. CRUD completo no modal
+8. Estados vazios refinados
+9. Navegacao para detalhes mantida
+
+---
+
+## Ordem de Implementacao
+
+1. Adicionar imports necessarios
+2. Criar interfaces de filtros e evento com viagens
+3. Implementar estados e calculos memoizados
+4. Refatorar cabecalho com PageHeader
+5. Adicionar StatsCards
+6. Adicionar FilterCard
+7. Refatorar cards de eventos com menu
+8. Implementar modal com 3 abas
+9. Implementar CRUD completo
+10. Implementar confirmacao de exclusao
+11. Refinar estados vazios
+12. Testar fluxo completo
 
