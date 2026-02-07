@@ -140,14 +140,18 @@ export interface Event {
   updated_at: string;
 }
 
+// Tipo para criação de viagens (atalho ida+volta)
+export type TripCreationType = 'ida' | 'volta' | 'ida_volta';
+
 export interface Trip {
   id: string;
   event_id: string;
   vehicle_id: string;
   driver_id: string;
   assistant_driver_id: string | null;
+  paired_trip_id: string | null;        // Vínculo com viagem par (ida/volta)
   trip_type: TripType;
-  departure_time: string;
+  departure_time: string | null;        // NULL = "A definir" (comum na volta)
   capacity: number;
   company_id: string;
   created_at: string;
@@ -163,6 +167,7 @@ export interface EventBoardingLocation {
   boarding_location_id: string;
   trip_id: string | null;
   departure_time: string | null;
+  stop_order: number;                   // Ordem da parada na rota
   company_id: string;
   boarding_location?: BoardingLocation;
   trip?: Trip;
