@@ -468,7 +468,7 @@ export default function Sponsors() {
                             {form.banner_url ? (
                               <div className="space-y-2">
                                 <label
-                                  className={`group relative block h-24 w-64 overflow-hidden rounded-lg border bg-muted cursor-pointer`}
+                                  className={`group relative block h-[150px] w-full max-w-[600px] overflow-hidden rounded-lg border bg-muted cursor-pointer`}
                                 >
                                   {/* Comentário: blur de fundo para destacar o banner principal (mesmo padrão do evento). */}
                                   <img
@@ -541,7 +541,7 @@ export default function Sponsors() {
                               </div>
                             ) : (
                               <label
-                                className={`flex h-24 w-64 flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+                                className={`flex h-[150px] w-full max-w-[600px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
                                   !editingId
                                     ? 'border-muted-foreground/15 cursor-not-allowed'
                                     : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
@@ -566,10 +566,13 @@ export default function Sponsors() {
                                       ? 'Salve o patrocinador primeiro'
                                       : 'Adicionar banner (600×150)'}
                                 </p>
-                                <p className="text-xs text-muted-foreground/70">Proporção 4:1 (sem cortes)</p>
+                                <p className="text-xs text-muted-foreground/70">Tamanho ideal: 600×150px</p>
                               </label>
                             )}
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Tamanho ideal do arquivo: 600×150px (4:1). Mantemos o preview no tamanho real quando possível.
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             Este banner será exibido no carrossel do topo do aplicativo.
                           </p>

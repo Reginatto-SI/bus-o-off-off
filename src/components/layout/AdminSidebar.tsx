@@ -64,6 +64,11 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/motoristas',
     icon: Users
   }, {
+    name: 'Patrocinadores',
+    href: '/admin/patrocinadores',
+    icon: Image,
+    roles: ['gerente']
+  }, {
     name: 'Locais de Embarque',
     href: '/admin/locais',
     icon: MapPin
