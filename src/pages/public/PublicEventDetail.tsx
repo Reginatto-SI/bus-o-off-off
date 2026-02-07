@@ -49,7 +49,7 @@ export default function PublicEventDetail() {
 
       const [eventRes, tripsRes, locationsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).eq('status', 'a_venda').single(),
-        supabase.from('trips').select('*, vehicle:vehicles(*), driver:drivers(*)').eq('event_id', id),
+        supabase.from('trips').select('*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(*), assistant_driver:drivers!trips_assistant_driver_id_fkey(*)').eq('event_id', id),
         supabase
           .from('event_boarding_locations')
           .select('*, boarding_location:boarding_locations(*)')
