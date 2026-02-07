@@ -64,6 +64,8 @@ import {
   Image,
   AlertTriangle,
   Copy,
+  Eye,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -189,6 +191,7 @@ export default function Events() {
   
   // Image upload state
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
 
   // Computed: can publish checklist - only requires IDA with boarding
   const publishChecklist = useMemo(() => {
@@ -924,6 +927,42 @@ export default function Events() {
     });
   };
 
+  const handleImageUpload = async (file?: File) => {
+    if (!file || !editingId || !activeCompanyId) return;
+
+    setUploadingImage(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${editingId}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('event-images')
+      .upload(fileName, file);
+
+    if (uploadError) {
+      toast.error('Erro ao fazer upload da imagem');
+      setUploadingImage(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(fileName);
+
+    // Update event with URL
+    const { error: updateError } = await supabase
+      .from('events')
+      .update({ image_url: publicUrl })
+      .eq('id', editingId);
+
+    if (updateError) {
+      toast.error('Erro ao salvar URL da imagem');
+    } else {
+      setForm({ ...form, image_url: publicUrl });
+      toast.success('Imagem enviada com sucesso');
+    }
+    setUploadingImage(false);
+  };
+
   const getEventActions = (event: EventWithTrips): ActionItem[] => {
     const actions: ActionItem[] = [];
 
@@ -1064,9 +1103,9 @@ export default function Events() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredEvents.map((event) => (
               <Card key={event.id} className="card-corporate h-full overflow-hidden">
-                {/* Image or Placeholder - 3:2 ratio with no crop */}
+                {/* Image or Placeholder - 1:1 padrão oficial (1080×1080 recomendado). */}
                 {event.image_url ? (
-                  <div className="aspect-[3/2] w-full relative overflow-hidden bg-muted">
+                  <div className="aspect-square w-full relative overflow-hidden bg-muted">
                     {/* Blurred background to fill empty space */}
                     <img 
                       src={event.image_url} 
@@ -1074,7 +1113,7 @@ export default function Events() {
                       aria-hidden="true"
                       className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
                     />
-                    {/* Main image - no crop, centered */}
+                    {/* Main image - no crop, centered (contain to avoid cortar). */}
                     <img 
                       src={event.image_url} 
                       alt={event.name}
@@ -1082,7 +1121,7 @@ export default function Events() {
                     />
                   </div>
                 ) : (
-                  <div className="aspect-[3/2] w-full bg-gradient-to-br from-muted/50 to-muted flex items-center justify-center">
+                  <div className="aspect-square w-full bg-gradient-to-br from-muted/50 to-muted flex items-center justify-center">
                     <div className="text-center">
                       <Calendar className="h-10 w-10 mx-auto text-muted-foreground/30" />
                       <span className="text-xl font-bold text-muted-foreground/20 mt-1 block">
@@ -1201,165 +1240,179 @@ export default function Events() {
 
                   {/* Tab Geral */}
                   <TabsContent value="geral" className="mt-0 space-y-4">
-                    {/* Image upload */}
-                    <div className="space-y-2">
-                      <Label>Imagem/Banner do Evento</Label>
-                      {form.image_url ? (
-                        <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border bg-muted">
-                          {/* Blurred background to fill empty space */}
-                          <img 
-                            src={form.image_url} 
-                            alt=""
-                            aria-hidden="true"
-                            className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                          />
-                          {/* Main image - no crop, centered */}
-                          <img 
-                            src={form.image_url} 
-                            alt="Banner do evento" 
-                            className="relative w-full h-full object-contain"
-                          />
-                          {!isReadOnly && (
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              className="absolute top-2 right-2 z-10"
-                              onClick={async () => {
-                                // Remove image from event
-                                if (editingId) {
-                                  await supabase
-                                    .from('events')
-                                    .update({ image_url: null })
-                                    .eq('id', editingId);
-                                }
-                                setForm({ ...form, image_url: null });
-                                toast.success('Imagem removida');
-                              }}
+                    {/* Layout 2 colunas para banner + nome (UX mais profissional e evita espaço vazio ao lado do banner). */}
+                    <div className="grid gap-4 lg:grid-cols-[200px,1fr] items-start">
+                      <div className="space-y-2">
+                        <Label>Imagem/Banner do Evento</Label>
+                        {/* Padrão oficial 1:1 (1080×1080 recomendado) para manter consistência. */}
+                        {form.image_url ? (
+                          <div className="space-y-2">
+                            <label
+                              className={`group relative block h-40 w-40 lg:h-44 lg:w-44 overflow-hidden rounded-lg border bg-muted ${
+                                isReadOnly ? 'cursor-default' : 'cursor-pointer'
+                              }`}
                             >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Remover
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <label 
-                          className={`border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors aspect-[3/2] flex flex-col items-center justify-center ${
-                            isReadOnly 
-                              ? 'border-muted-foreground/15 bg-muted/10 cursor-not-allowed' 
-                              : 'border-muted-foreground/25 bg-muted/20 hover:border-primary/50 hover:bg-primary/5'
-                          }`}
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={isReadOnly || uploadingImage || !editingId}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file || !editingId || !activeCompanyId) return;
-                              
-                              setUploadingImage(true);
-                              const fileExt = file.name.split('.').pop();
-                              const fileName = `${editingId}-${Date.now()}.${fileExt}`;
-                              
-                              const { error: uploadError } = await supabase.storage
-                                .from('event-images')
-                                .upload(fileName, file);
-                                
-                              if (uploadError) {
-                                toast.error('Erro ao fazer upload da imagem');
-                                setUploadingImage(false);
-                                return;
+                              {/* Miniatura 1:1 para não dominar o modal. */}
+                              <img 
+                                src={form.image_url} 
+                                alt=""
+                                aria-hidden="true"
+                                className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
+                              />
+                              {/* Main image - no crop, centered (contain). */}
+                              <img 
+                                src={form.image_url} 
+                                alt="Banner do evento" 
+                                className="relative w-full h-full object-contain"
+                              />
+                              {!isReadOnly && (
+                                <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    aria-label="Visualizar banner"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      setImagePreviewOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    aria-label="Remover banner"
+                                    onClick={async (event) => {
+                                      event.preventDefault();
+                                      // Remove image from event
+                                      if (editingId) {
+                                        await supabase
+                                          .from('events')
+                                          .update({ image_url: null })
+                                          .eq('id', editingId);
+                                      }
+                                      setForm({ ...form, image_url: null });
+                                      toast.success('Imagem removida');
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                              {!isReadOnly && (
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={isReadOnly || uploadingImage || !editingId}
+                                  onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                                />
+                              )}
+                            </label>
+                            {!isReadOnly && (
+                              <label className="inline-flex">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={isReadOnly || uploadingImage || !editingId}
+                                  onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                                />
+                                <Button type="button" variant="outline" size="sm" disabled={uploadingImage}>
+                                  <Upload className="h-4 w-4 mr-1" />
+                                  Trocar
+                                </Button>
+                              </label>
+                            )}
+                          </div>
+                        ) : (
+                          <label 
+                            className={`flex h-40 w-40 lg:h-44 lg:w-44 flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+                              isReadOnly 
+                                ? 'border-muted-foreground/15 cursor-not-allowed' 
+                                : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
+                            }`}
+                          >
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isReadOnly || uploadingImage || !editingId}
+                              onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                            />
+                            {uploadingImage ? (
+                              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                            ) : (
+                              <Image className="h-8 w-8 text-muted-foreground/50" />
+                            )}
+                            <p className="text-sm text-muted-foreground">
+                              {uploadingImage 
+                                ? 'Enviando imagem...' 
+                                : !editingId 
+                                  ? 'Salve o evento primeiro'
+                                  : 'Adicionar banner (1080×1080)'
                               }
-                              
-                              const { data: { publicUrl } } = supabase.storage
-                                .from('event-images')
-                                .getPublicUrl(fileName);
-                                
-                              // Update event with URL
-                              const { error: updateError } = await supabase
-                                .from('events')
-                                .update({ image_url: publicUrl })
-                                .eq('id', editingId);
-                                
-                              if (updateError) {
-                                toast.error('Erro ao salvar URL da imagem');
-                              } else {
-                                setForm({ ...form, image_url: publicUrl });
-                                toast.success('Imagem enviada com sucesso');
-                              }
-                              setUploadingImage(false);
-                            }}
+                            </p>
+                            <p className="text-xs text-muted-foreground/70">
+                              1:1 com contain, sem cortes
+                            </p>
+                          </label>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="name">Nome do Evento *</Label>
+                          <Input
+                            id="name"
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            placeholder="Ex: Festa do Peão de Barretos 2026"
+                            required
+                            disabled={isReadOnly}
                           />
-                          {uploadingImage ? (
-                            <Loader2 className="h-10 w-10 mx-auto mb-2 text-primary animate-spin" />
-                          ) : (
-                            <Image className="h-10 w-10 mx-auto mb-2 text-muted-foreground/50" />
-                          )}
-                          <p className="text-sm text-muted-foreground">
-                            {uploadingImage 
-                              ? 'Enviando imagem...' 
-                              : !editingId 
-                                ? 'Salve o evento primeiro para adicionar imagem'
-                                : 'Clique ou arraste para selecionar uma imagem'
-                            }
-                          </p>
-                          <p className="text-xs text-muted-foreground/70 mt-2">
-                            Tamanho ideal: 600 × 400 pixels
-                          </p>
-                          <p className="text-xs text-muted-foreground/70">
-                            A imagem será ajustada automaticamente para o formato padrão sem cortar.
-                          </p>
-                        </label>
-                      )}
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="date">Data *</Label>
+                            <Input
+                              id="date"
+                              type="date"
+                              value={form.date}
+                              onChange={(e) => setForm({ ...form, date: e.target.value })}
+                              required
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="city">Cidade *</Label>
+                            <Input
+                              id="city"
+                              value={form.city}
+                              onChange={(e) => setForm({ ...form, city: e.target.value })}
+                              placeholder="Ex: Barretos - SP"
+                              required
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="name">Nome do Evento *</Label>
-                        <Input
-                          id="name"
-                          value={form.name}
-                          onChange={(e) => setForm({ ...form, name: e.target.value })}
-                          placeholder="Ex: Festa do Peão de Barretos 2026"
-                          required
-                          disabled={isReadOnly}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="date">Data *</Label>
-                        <Input
-                          id="date"
-                          type="date"
-                          value={form.date}
-                          onChange={(e) => setForm({ ...form, date: e.target.value })}
-                          required
-                          disabled={isReadOnly}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="city">Cidade *</Label>
-                        <Input
-                          id="city"
-                          value={form.city}
-                          onChange={(e) => setForm({ ...form, city: e.target.value })}
-                          placeholder="Ex: Barretos - SP"
-                          required
-                          disabled={isReadOnly}
-                        />
-                      </div>
-                      <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="description">Descrição</Label>
-                        <Textarea
-                          id="description"
-                          value={form.description}
-                          onChange={(e) => setForm({ ...form, description: e.target.value })}
-                          placeholder="Descrição do evento (opcional)"
-                          rows={3}
-                          disabled={isReadOnly}
-                        />
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Descrição</Label>
+                      <Textarea
+                        id="description"
+                        value={form.description}
+                        onChange={(e) => setForm({ ...form, description: e.target.value })}
+                        placeholder="Descrição do evento (opcional)"
+                        rows={3}
+                        disabled={isReadOnly}
+                      />
                     </div>
                   </TabsContent>
 
@@ -1932,6 +1985,36 @@ export default function Events() {
                 </div>
               </Tabs>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Pré-visualização do banner (1:1)</DialogTitle>
+            </DialogHeader>
+            <div className="relative mx-auto w-full max-w-md aspect-square overflow-hidden rounded-lg border bg-muted">
+              {/* Prévia 1:1 com contain para evitar distorções/cortes. */}
+              {form.image_url ? (
+                <>
+                  <img
+                    src={form.image_url}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
+                  />
+                  <img
+                    src={form.image_url}
+                    alt="Pré-visualização do banner do evento"
+                    className="relative w-full h-full object-contain"
+                  />
+                </>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                  Nenhuma imagem selecionada
+                </div>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 
