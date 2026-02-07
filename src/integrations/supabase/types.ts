@@ -304,32 +304,59 @@ export type Database = {
       profiles: {
         Row: {
           company_id: string | null
+          complement: string | null
+          cpf: string | null
+          cep: string | null
           created_at: string
+          city: string | null
           email: string
           id: string
           name: string
+          neighborhood: string | null
           notes: string | null
+          number: string | null
+          phone: string | null
           status: string
+          state: string | null
+          street: string | null
           updated_at: string
         }
         Insert: {
           company_id?: string | null
+          complement?: string | null
+          cpf?: string | null
+          cep?: string | null
           created_at?: string
+          city?: string | null
           email: string
           id: string
           name: string
+          neighborhood?: string | null
           notes?: string | null
+          number?: string | null
+          phone?: string | null
           status?: string
+          state?: string | null
+          street?: string | null
           updated_at?: string
         }
         Update: {
           company_id?: string | null
+          complement?: string | null
+          cpf?: string | null
+          cep?: string | null
           created_at?: string
+          city?: string | null
           email?: string
           id?: string
           name?: string
+          neighborhood?: string | null
           notes?: string | null
+          number?: string | null
+          phone?: string | null
           status?: string
+          state?: string | null
+          street?: string | null
           updated_at?: string
         }
         Relationships: [

@@ -19,6 +19,7 @@ import Sales from "./pages/admin/Sales";
 import MySales from "./pages/admin/MySales";
 import UsersPage from "./pages/admin/Users";
 import CompanyPage from "./pages/admin/Company";
+import MyAccount from "./pages/admin/MyAccount";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="/admin/minhas-vendas" element={<MySales />} />
             <Route path="/admin/usuarios" element={<UsersPage />} />
             <Route path="/admin/empresa" element={<CompanyPage />} />
+            <Route path="/admin/minha-conta" element={<MyAccount />} />
             
             {/* Catch all */}
             <Route path="*" element={<NotFound />} />

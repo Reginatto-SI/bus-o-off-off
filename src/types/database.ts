@@ -39,6 +39,15 @@ export interface Profile {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
+  cpf?: string | null;
+  cep?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
   status: ProfileStatus;
   notes: string | null;
   company_id: string | null;
