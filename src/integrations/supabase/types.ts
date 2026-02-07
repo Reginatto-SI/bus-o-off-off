@@ -17,34 +17,40 @@ export type Database = {
       boarding_locations: {
         Row: {
           address: string
+          city: string | null
           company_id: string
           created_at: string
           id: string
           maps_url: string | null
           name: string
           notes: string | null
+          state: string | null
           status: string
           updated_at: string
         }
         Insert: {
           address: string
+          city?: string | null
           company_id: string
           created_at?: string
           id?: string
           maps_url?: string | null
           name: string
           notes?: string | null
+          state?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
           address?: string
+          city?: string | null
           company_id?: string
           created_at?: string
           id?: string
           maps_url?: string | null
           name?: string
           notes?: string | null
+          state?: string | null
           status?: string
           updated_at?: string
         }

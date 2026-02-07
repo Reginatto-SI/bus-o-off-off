@@ -13,6 +13,8 @@ import { FilterCard } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
 import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
+import { CityAutocomplete } from '@/components/ui/city-autocomplete';
+import { formatCityLabel } from '@/data/brazilian-cities';
 import {
   Dialog,
   DialogClose,
@@ -68,9 +70,13 @@ export default function BoardingLocations() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<LocationFilters>(initialFilters);
+  // Autofill inteligente: última cidade usada
+  const [lastUsedCity, setLastUsedCity] = useState<{ city: string; state: string } | null>(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
+    city: '',
+    state: '',
     maps_url: '',
     notes: '',
   });
@@ -79,6 +85,7 @@ export default function BoardingLocations() {
   const exportColumns: ExportColumn[] = [
     { key: 'name', label: 'Nome' },
     { key: 'address', label: 'Endereço' },
+    { key: 'cityState', label: 'Cidade/UF' },
     { key: 'maps_url', label: 'Link Google Maps' },
     { key: 'notes', label: 'Observações' },
     { key: 'status', label: 'Status', format: (v) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
@@ -112,6 +119,14 @@ export default function BoardingLocations() {
       return true;
     });
   }, [locations, filters]);
+
+  // Dados para exportação com campo cityState formatado
+  const exportData = useMemo(() => {
+    return filteredLocations.map(location => ({
+      ...location,
+      cityState: formatCityLabel(location.city, location.state) || '—',
+    }));
+  }, [filteredLocations]);
 
   const hasActiveFilters = useMemo(() => {
     return filters.search !== '' || filters.status !== 'all';
@@ -174,6 +189,8 @@ export default function BoardingLocations() {
     const data = {
       name: form.name.trim(),
       address: form.address.trim(),
+      city: form.city.trim() || null,
+      state: form.state.trim().toUpperCase() || null,
       maps_url: form.maps_url.trim() || null,
       notes: form.notes.trim() || null,
       company_id: activeCompanyId,
@@ -215,6 +232,10 @@ export default function BoardingLocations() {
       );
     } else {
       toast.success(editingId ? 'Local atualizado' : 'Local cadastrado');
+      // Salva a última cidade usada para autofill
+      if (form.city || form.state) {
+        setLastUsedCity({ city: form.city, state: form.state });
+      }
       setDialogOpen(false);
       resetForm();
       fetchLocations();
@@ -227,6 +248,8 @@ export default function BoardingLocations() {
     setForm({
       name: location.name,
       address: location.address,
+      city: location.city || '',
+      state: location.state || '',
       maps_url: location.maps_url || '',
       notes: location.notes || '',
     });
@@ -261,9 +284,12 @@ export default function BoardingLocations() {
 
   const resetForm = () => {
     setEditingId(null);
+    // Autofill: mantém a última cidade usada para cadastros em sequência
     setForm({
       name: '',
       address: '',
+      city: lastUsedCity?.city || '',
+      state: lastUsedCity?.state || '',
       maps_url: '',
       notes: '',
     });
@@ -338,6 +364,14 @@ export default function BoardingLocations() {
                         onChange={(e) => setForm({ ...form, address: e.target.value })}
                         placeholder="Av. Brasil, 1000 - Centro"
                         required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cidade *</Label>
+                      <CityAutocomplete
+                        value={{ city: form.city, state: form.state }}
+                        onChange={({ city, state }) => setForm({ ...form, city, state })}
+                        placeholder="Selecione a cidade..."
                       />
                     </div>
                     <div className="space-y-2">
@@ -459,6 +493,7 @@ export default function BoardingLocations() {
                   <TableRow className="admin-table-header">
                     <TableHead>Nome</TableHead>
                     <TableHead>Endereço</TableHead>
+                    <TableHead>Cidade/UF</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]">Ações</TableHead>
                   </TableRow>
@@ -483,6 +518,13 @@ export default function BoardingLocations() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {location.city && location.state ? (
+                          <span className="text-sm">{formatCityLabel(location.city, location.state)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <StatusBadge status={location.status} />
                       </TableCell>
                       <TableCell>
@@ -500,7 +542,7 @@ export default function BoardingLocations() {
         <ExportExcelModal
           open={exportModalOpen}
           onOpenChange={setExportModalOpen}
-          data={filteredLocations}
+          data={exportData}
           columns={exportColumns}
           fileName="locais-embarque"
           storageKey="export-locations-columns"
@@ -509,7 +551,7 @@ export default function BoardingLocations() {
         <ExportPDFModal
           open={pdfModalOpen}
           onOpenChange={setPdfModalOpen}
-          data={filteredLocations}
+          data={exportData}
           columns={exportColumns}
           fileName="locais-embarque"
           title="Locais de Embarque"
