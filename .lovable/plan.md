@@ -1,183 +1,273 @@
 
 
-# Plano: Enquadramento de Imagem Sem Corte
+# Plano: Cidade do Evento vs Cidade do Embarque + Autocomplete
 
-## Problema Atual
+## Resumo da Situação Atual
 
-O sistema usa `object-cover` que **corta automaticamente** partes da imagem para preencher o frame 3:2, alterando o conteúdo visual da arte enviada pelo usuário.
+### Problema Identificado
+1. **Evento**: Campo `city` é input livre sem estrutura (ex: "Barretos - SP" digitado manualmente)
+2. **Local de Embarque**: Tabela `boarding_locations` NÃO possui campos `city` e `state` - apenas `name`, `address`, `maps_url`, `notes`
+3. **Confusão conceitual**: Cidade do evento (destino) não está separada da cidade do embarque (origem)
+4. **UX inconsistente**: Não há autocomplete de cidade/UF em nenhum ponto do sistema
 
-## Nova Regra
-
-A imagem original deve ser **preservada integralmente**, redimensionada proporcionalmente e centralizada no frame 3:2, com preenchimento de espaço vazio usando fundo neutro ou blur da própria imagem.
+### Impacto
+- Passageiros podem confundir a cidade do evento com a cidade onde vão embarcar
+- Filtros futuros na página pública não funcionarão corretamente
+- Dados inconsistentes (ex: "Barretos SP" vs "Barretos - SP" vs "barretos/SP")
 
 ---
 
-## Alterações Técnicas
+## Alterações Necessárias
 
-### 1. Criar Componente de Exibição de Imagem com Enquadramento
+### Parte 1: Migração SQL — Adicionar city e state na tabela boarding_locations
 
-Criarei um componente reutilizável que:
-- Mantém o container com proporção 3:2
-- Usa `object-contain` para manter proporção original da imagem
-- Adiciona fundo com blur da própria imagem (efeito "letterbox" elegante)
+```sql
+ALTER TABLE public.boarding_locations 
+  ADD COLUMN IF NOT EXISTS city text,
+  ADD COLUMN IF NOT EXISTS state character(2);
+
+COMMENT ON COLUMN public.boarding_locations.city IS 'Cidade do local de embarque';
+COMMENT ON COLUMN public.boarding_locations.state IS 'UF do local de embarque (2 caracteres)';
+```
+
+### Parte 2: Atualizar Types
+
+**Arquivo**: `src/types/database.ts`
 
 ```typescript
-// Estrutura do componente
-<div className="aspect-[3/2] relative overflow-hidden">
-  {/* Fundo com blur da imagem */}
-  <img 
-    src={imageUrl} 
-    className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-50"
-    aria-hidden="true"
+export interface BoardingLocation {
+  id: string;
+  name: string;
+  address: string;
+  city: string | null;      // NOVO
+  state: string | null;     // NOVO (UF - 2 chars)
+  maps_url: string | null;
+  notes: string | null;
+  status: BoardingLocationStatus;
+  company_id: string;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+### Parte 3: Criar Lista de Cidades Brasileiras
+
+**Arquivo novo**: `src/data/brazilian-cities.ts`
+
+Criar um arquivo com uma lista curada das principais cidades brasileiras para o autocomplete. A lista será organizada por estado e conterá as maiores cidades de cada UF (aproximadamente 500-1000 cidades mais relevantes).
+
+Estrutura:
+```typescript
+export interface BrazilianCity {
+  name: string;
+  state: string;
+  label: string; // "Nome — UF"
+}
+
+export const brazilianCities: BrazilianCity[] = [
+  { name: 'Sorriso', state: 'MT', label: 'Sorriso — MT' },
+  { name: 'Cuiabá', state: 'MT', label: 'Cuiabá — MT' },
+  { name: 'Barretos', state: 'SP', label: 'Barretos — SP' },
+  // ... etc
+];
+```
+
+### Parte 4: Criar Componente de Autocomplete de Cidade
+
+**Arquivo novo**: `src/components/ui/city-autocomplete.tsx`
+
+Componente reutilizável baseado no Command/Combobox do shadcn que:
+- Filtra cidades enquanto o usuário digita
+- Mostra formato "Cidade — UF"
+- Permite digitação livre caso a cidade não esteja na lista
+- Salva city e state separadamente
+
+```typescript
+interface CityAutocompleteProps {
+  value: { city: string; state: string };
+  onChange: (value: { city: string; state: string }) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}
+```
+
+### Parte 5: Atualizar Formulário do Evento (aba Geral)
+
+**Arquivo**: `src/pages/admin/Events.tsx`
+
+Alterar o campo "Cidade" para "Cidade do Evento (Destino)" com autocomplete:
+
+```typescript
+// ANTES
+<div className="space-y-2">
+  <Label htmlFor="city">Cidade *</Label>
+  <Input
+    id="city"
+    value={form.city}
+    onChange={(e) => setForm({ ...form, city: e.target.value })}
+    placeholder="Ex: Barretos - SP"
+    required
+    disabled={isReadOnly}
   />
-  {/* Imagem principal centralizada sem corte */}
-  <img 
-    src={imageUrl} 
-    className="relative w-full h-full object-contain"
+</div>
+
+// DEPOIS
+<div className="space-y-2">
+  <Label htmlFor="city">Cidade do Evento (Destino) *</Label>
+  <CityAutocomplete
+    value={{ city: getCityName(form.city), state: getStateFromCity(form.city) }}
+    onChange={({ city, state }) => setForm({ ...form, city: `${city} — ${state}` })}
+    placeholder="Ex: Barretos — SP"
+    disabled={isReadOnly}
   />
+  <p className="text-xs text-muted-foreground">
+    Local onde o evento acontece (destino final da viagem)
+  </p>
 </div>
 ```
 
-### 2. Locais de Aplicação
+### Parte 6: Atualizar Cadastro de Local de Embarque
 
-| Local | Arquivo | Descrição |
-|-------|---------|-----------|
-| Cards da listagem | `Events.tsx` linhas 1068-1075 | Grid de eventos |
-| Preview do upload | `Events.tsx` linhas 1199-1228 | Aba Geral do modal |
-| Portal público | `PublicEvents.tsx` | Listagem pública |
-| Detalhe público | `PublicEventDetail.tsx` | Se aplicável |
+**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
 
-### 3. Atualizar Card da Listagem (/admin/eventos)
+Adicionar campos Cidade e UF ao modal de criação/edição:
 
 ```typescript
-// ANTES (linhas 1068-1075)
-{event.image_url ? (
-  <div className="aspect-[3/2] w-full">
-    <img 
-      src={event.image_url} 
-      alt={event.name}
-      className="w-full h-full object-cover"
+// Novo estado do form
+const [form, setForm] = useState({
+  name: '',
+  address: '',
+  city: '',      // NOVO
+  state: '',     // NOVO
+  maps_url: '',
+  notes: '',
+});
+
+// No modal, adicionar após campo de endereço:
+<div className="grid gap-4 sm:grid-cols-2">
+  <div className="space-y-2">
+    <Label htmlFor="city">Cidade *</Label>
+    <CityAutocomplete
+      value={{ city: form.city, state: form.state }}
+      onChange={({ city, state }) => setForm({ ...form, city, state })}
+      placeholder="Selecione a cidade"
     />
   </div>
-) : (...placeholder...)}
-
-// DEPOIS - sem corte, com blur de fundo
-{event.image_url ? (
-  <div className="aspect-[3/2] w-full relative overflow-hidden bg-muted">
-    {/* Fundo blur para preencher espaço */}
-    <img 
-      src={event.image_url} 
-      alt=""
-      aria-hidden="true"
-      className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-    />
-    {/* Imagem principal sem corte */}
-    <img 
-      src={event.image_url} 
-      alt={event.name}
-      className="relative w-full h-full object-contain"
-    />
-  </div>
-) : (...placeholder...)}
-```
-
-### 4. Atualizar Preview no Modal (aba Geral)
-
-```typescript
-// ANTES (linhas 1199-1205)
-<div className="relative aspect-[3/2] w-full">
-  <img 
-    src={form.image_url} 
-    alt="Banner do evento" 
-    className="w-full h-full object-cover rounded-lg border"
-  />
-  ...
-</div>
-
-// DEPOIS - preview fiel ao resultado final
-<div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border bg-muted">
-  {/* Fundo blur */}
-  <img 
-    src={form.image_url} 
-    alt=""
-    aria-hidden="true"
-    className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-  />
-  {/* Imagem principal sem corte */}
-  <img 
-    src={form.image_url} 
-    alt="Banner do evento" 
-    className="relative w-full h-full object-contain"
-  />
-  {/* Botão remover permanece */}
-  {!isReadOnly && (
-    <Button type="button" variant="destructive" size="sm" className="absolute top-2 right-2 z-10">
-      ...
-    </Button>
-  )}
 </div>
 ```
 
-### 5. Adicionar Mensagem de Apoio ao Usuário
+### Parte 7: Exibir Cidade/UF nos Cards de Embarque (aba Embarques do Evento)
 
-No texto de orientação do upload:
+**Arquivo**: `src/pages/admin/Events.tsx` (linhas 1956-1982)
+
+Adicionar cidade/UF ao exibir o card de embarque:
 
 ```typescript
-// ANTES (linhas 1292-1297)
-<p className="text-xs text-muted-foreground/70 mt-2">
-  Imagem do Evento (600 × 400)
-</p>
-<p className="text-xs text-muted-foreground/70">
-  Formato horizontal, proporção 3:2
-</p>
+// ANTES
+<p className="font-medium">{ebl.boarding_location?.name}</p>
+<p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
 
-// DEPOIS - mensagem mais clara e tranquilizadora
-<p className="text-xs text-muted-foreground/70 mt-2">
-  Tamanho ideal: 600 × 400 pixels
-</p>
-<p className="text-xs text-muted-foreground/70">
-  A imagem será ajustada automaticamente para o formato padrão sem cortar.
-</p>
+// DEPOIS
+<p className="font-medium">{ebl.boarding_location?.name}</p>
+<p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
+{ebl.boarding_location?.city && ebl.boarding_location?.state && (
+  <p className="text-xs text-muted-foreground">
+    {ebl.boarding_location.city} — {ebl.boarding_location.state}
+  </p>
+)}
+```
+
+### Parte 8: Autofill Inteligente — Última Cidade Usada
+
+**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
+
+Implementar memória da última cidade selecionada:
+
+```typescript
+// Estado para última cidade usada
+const [lastUsedCity, setLastUsedCity] = useState<{ city: string; state: string } | null>(null);
+
+// Ao abrir modal para novo local, preencher automaticamente
+const handleOpenNewLocation = () => {
+  setForm({
+    ...initialForm,
+    city: lastUsedCity?.city ?? '',
+    state: lastUsedCity?.state ?? '',
+  });
+  setDialogOpen(true);
+};
+
+// Ao salvar, guardar a cidade usada
+const handleSubmit = async (e) => {
+  // ... save logic
+  if (!error) {
+    setLastUsedCity({ city: form.city, state: form.state });
+    // ...
+  }
+};
+```
+
+### Parte 9: Atualizar Tabela de Locais de Embarque
+
+**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
+
+Adicionar coluna Cidade/UF na listagem:
+
+```typescript
+// Na tabela
+<TableHead>Cidade/UF</TableHead>
+
+// Na linha
+<TableCell>
+  {location.city && location.state 
+    ? `${location.city} — ${location.state}` 
+    : <span className="text-muted-foreground">—</span>
+  }
+</TableCell>
 ```
 
 ---
 
-## Arquivos a Modificar
+## Resumo dos Arquivos a Modificar/Criar
 
-| Arquivo | Alterações |
-|---------|------------|
-| `src/pages/admin/Events.tsx` | Cards da listagem + Preview do upload + Texto de ajuda |
-| `src/pages/public/PublicEvents.tsx` | Se houver exibição de imagem (a verificar) |
-
----
-
-## Comportamento Visual Final
-
-### Imagem proporcional ao frame (ex: 600x400)
-- Preenche 100% do container
-- Sem blur visível (imagem cobre tudo)
-
-### Imagem mais larga que alta (ex: 1200x400)
-- Barras verticais preenchidas com blur
-- Imagem centralizada horizontalmente
-
-### Imagem mais alta que larga (ex: 400x600)
-- Barras horizontais preenchidas com blur
-- Imagem centralizada verticalmente
-
-### Imagem quadrada (ex: 500x500)
-- Barras laterais preenchidas com blur
-- Imagem centralizada
+| Arquivo | Tipo | Alteração |
+|---------|------|-----------|
+| Migração SQL | Novo | Adicionar `city` e `state` em `boarding_locations` |
+| `src/types/database.ts` | Editar | Adicionar `city` e `state` na interface BoardingLocation |
+| `src/data/brazilian-cities.ts` | Novo | Lista de cidades brasileiras para autocomplete |
+| `src/components/ui/city-autocomplete.tsx` | Novo | Componente de autocomplete de cidade/UF |
+| `src/pages/admin/Events.tsx` | Editar | Renomear label, usar autocomplete, exibir cidade no card |
+| `src/pages/admin/BoardingLocations.tsx` | Editar | Adicionar campos cidade/UF, tabela, autofill |
 
 ---
 
 ## Critérios de Sucesso
 
-1. Nenhuma imagem é cortada automaticamente
-2. Proporções originais são preservadas
-3. Imagem sempre centralizada no frame 3:2
-4. Espaços vazios preenchidos com blur elegante
-5. Preview no modal é fiel ao resultado no card
-6. Texto de apoio tranquiliza o usuário
-7. Funciona igualmente para imagens horizontais, verticais ou quadradas
+1. Campo "Cidade do Evento (Destino)" com autocomplete no cadastro de eventos
+2. Campos "Cidade" e "UF" no cadastro de locais de embarque (estruturados)
+3. Autocomplete sugere "Cidade — UF" enquanto digita
+4. Cards de embarque exibem a cidade/UF do local cadastrado
+5. Ao criar vários locais em sequência, a última cidade é pré-selecionada
+6. Tabela de locais de embarque mostra coluna Cidade/UF
+7. Dados consistentes para filtros futuros na página pública
+
+---
+
+## Considerações Técnicas
+
+### Lista de Cidades
+- Usar lista estática (não API externa) para evitar dependência e latência
+- Incluir aproximadamente 500-1000 cidades mais populosas do Brasil
+- Permitir digitação livre para cidades não listadas (evitar bloqueio)
+
+### Migração de Dados Existentes
+- Campos novos serão `null` para locais já cadastrados
+- Usuário pode editar e preencher a cidade posteriormente
+- Sistema continua funcionando mesmo sem cidade preenchida
+
+### Autocomplete
+- Usar componente Command/Combobox do shadcn (já disponível no projeto)
+- Filtro case-insensitive com debounce para performance
+- Limitar a 10-15 sugestões visíveis por vez
 
