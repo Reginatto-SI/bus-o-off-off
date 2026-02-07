@@ -13,7 +13,8 @@ import {
   FileText,
   BarChart3,
   Settings,
-  User
+  User,
+  Image
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -111,6 +112,11 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Settings
+  }, {
+    name: 'Patrocinadores',
+    href: '/admin/patrocinadores',
+    icon: Image,
+    roles: ['gerente']
   }, {
     name: 'Minha Conta',
     href: '/admin/minha-conta',

@@ -8,6 +8,8 @@ export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
 export type ProfileStatus = 'ativo' | 'inativo';
 export type TripType = 'ida' | 'volta';
+export type SponsorStatus = 'ativo' | 'inativo';
+export type SponsorLinkType = 'site' | 'whatsapp';
 
 export interface Company {
   id: string;
@@ -80,6 +82,23 @@ export interface Seller {
   commission_percent: number;
   status: SellerStatus;
   company_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  status: SponsorStatus;
+  carousel_order: number;
+  banner_url: string | null;
+  link_type: SponsorLinkType;
+  site_url: string | null;
+  whatsapp_phone: string | null;
+  whatsapp_message: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   created_at: string;
   updated_at: string;
 }

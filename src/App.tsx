@@ -20,6 +20,7 @@ import MySales from "./pages/admin/MySales";
 import UsersPage from "./pages/admin/Users";
 import CompanyPage from "./pages/admin/Company";
 import MyAccount from "./pages/admin/MyAccount";
+import Sponsors from "./pages/admin/Sponsors";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/admin/usuarios" element={<UsersPage />} />
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
+            <Route path="/admin/patrocinadores" element={<Sponsors />} />
             
             {/* Catch all */}
             <Route path="*" element={<NotFound />} />
