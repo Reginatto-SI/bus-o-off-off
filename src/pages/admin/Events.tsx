@@ -490,6 +490,19 @@ export default function Events() {
     
     return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
   };
+
+  // Helper function for boarding modal dropdown (without time)
+  const getTripLabelWithoutTime = (trip: TripWithDetails) => {
+    const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
+    const vehicleType = trip.vehicle 
+      ? vehicleTypeLabels[trip.vehicle.type] 
+      : 'Veículo';
+    const plate = trip.vehicle?.plate ?? '???';
+    const capacity = trip.capacity;
+    const driver = trip.driver?.name ?? 'Motorista não definido';
+    
+    return `${type} • ${vehicleType} ${plate} • ${capacity} lug. • Motorista: ${driver}`;
+  };
   
   // Edit trip handler
   const handleEditTrip = (trip: TripWithDetails) => {
@@ -1957,7 +1970,7 @@ export default function Events() {
                   <SelectContent>
                     {eventTrips.map((trip) => (
                       <SelectItem key={trip.id} value={trip.id}>
-                        {getTripLabel(trip)}
+                        {getTripLabelWithoutTime(trip)}
                       </SelectItem>
                     ))}
                   </SelectContent>
