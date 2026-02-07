@@ -1064,13 +1064,21 @@ export default function Events() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredEvents.map((event) => (
               <Card key={event.id} className="card-corporate h-full overflow-hidden">
-                {/* Image or Placeholder - 3:2 ratio */}
+                {/* Image or Placeholder - 3:2 ratio with no crop */}
                 {event.image_url ? (
-                  <div className="aspect-[3/2] w-full">
+                  <div className="aspect-[3/2] w-full relative overflow-hidden bg-muted">
+                    {/* Blurred background to fill empty space */}
+                    <img 
+                      src={event.image_url} 
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
+                    />
+                    {/* Main image - no crop, centered */}
                     <img 
                       src={event.image_url} 
                       alt={event.name}
-                      className="w-full h-full object-cover"
+                      className="relative w-full h-full object-contain"
                     />
                   </div>
                 ) : (
@@ -1197,18 +1205,26 @@ export default function Events() {
                     <div className="space-y-2">
                       <Label>Imagem/Banner do Evento</Label>
                       {form.image_url ? (
-                        <div className="relative aspect-[3/2] w-full">
+                        <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border bg-muted">
+                          {/* Blurred background to fill empty space */}
+                          <img 
+                            src={form.image_url} 
+                            alt=""
+                            aria-hidden="true"
+                            className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
+                          />
+                          {/* Main image - no crop, centered */}
                           <img 
                             src={form.image_url} 
                             alt="Banner do evento" 
-                            className="w-full h-full object-cover rounded-lg border"
+                            className="relative w-full h-full object-contain"
                           />
                           {!isReadOnly && (
                             <Button
                               type="button"
                               variant="destructive"
                               size="sm"
-                              className="absolute top-2 right-2"
+                              className="absolute top-2 right-2 z-10"
                               onClick={async () => {
                                 // Remove image from event
                                 if (editingId) {
@@ -1290,10 +1306,10 @@ export default function Events() {
                             }
                           </p>
                           <p className="text-xs text-muted-foreground/70 mt-2">
-                            Imagem do Evento (600 × 400)
+                            Tamanho ideal: 600 × 400 pixels
                           </p>
                           <p className="text-xs text-muted-foreground/70">
-                            Formato horizontal, proporção 3:2
+                            A imagem será ajustada automaticamente para o formato padrão sem cortar.
                           </p>
                         </label>
                       )}
