@@ -1807,7 +1807,13 @@ export default function Events() {
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            {eventTrips.map((trip) => {
+                            {/* Mantemos a ordem visual Ida → Volta para evitar confusão no operador. */}
+                            {[...eventTrips]
+                              .sort((a, b) => {
+                                const order = { ida: 0, volta: 1 } as const;
+                                return order[a.trip_type] - order[b.trip_type];
+                              })
+                              .map((trip) => {
                               const pairedTrip = trip.paired_trip_id 
                                 ? eventTrips.find(t => t.id === trip.paired_trip_id) 
                                 : null;
