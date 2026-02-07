@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/admin/PageHeader';
-import { StatsCard } from '@/components/admin/StatsCard';
-import { FilterCard } from '@/components/admin/FilterCard';
-import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import {
   Dialog,
   DialogClose,
@@ -22,40 +17,20 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Calendar,
   FileText,
   IdCard,
   Loader2,
   MapPin,
   Pencil,
   Plus,
-  Power,
   Phone,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
-import { formatCnpj, getCompanyLocation } from '@/lib/pdfUtils';
 import { Navigate } from 'react-router-dom';
-
-interface CompanyFilters {
-  search: string;
-  status: 'all' | 'ativo' | 'inativo';
-}
-
-const initialFilters: CompanyFilters = {
-  search: '',
-  status: 'all',
-};
+import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -77,12 +52,11 @@ const formatCnpjInput = (value: string) => {
 
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador } = useAuth();
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<CompanyFilters>(initialFilters);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [form, setForm] = useState({
@@ -100,11 +74,32 @@ export default function CompanyPage() {
     logo_url: '',
   });
 
-  const fetchCompanies = async () => {
-    const { data, error } = await supabase
-      .from('companies')
-      .select('*')
-      .order('created_at', { ascending: false });
+  const hydrateFormFromCompany = (data: Company | null) => {
+    // Comentário: mantém o modal consistente com o registro único da empresa ativa.
+    setEditingId(data?.id ?? null);
+    setForm({
+      legal_name: data?.legal_name ?? '',
+      trade_name: data?.trade_name ?? data?.name ?? '',
+      cnpj: data?.cnpj ?? data?.document ?? '',
+      email: data?.email ?? '',
+      phone: data?.phone ?? '',
+      whatsapp: data?.whatsapp ?? '',
+      website: data?.website ?? '',
+      address: data?.address ?? '',
+      city: data?.city ?? '',
+      state: (data?.state ?? '').toUpperCase(),
+      notes: data?.notes ?? '',
+      logo_url: data?.logo_url ?? '',
+    });
+  };
+
+  const fetchCompany = async () => {
+    setLoading(true);
+
+    const baseQuery = supabase.from('companies').select('*');
+    const { data, error } = activeCompanyId
+      ? await baseQuery.eq('id', activeCompanyId).maybeSingle()
+      : await baseQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
 
     if (error) {
       logSupabaseError({
@@ -120,61 +115,17 @@ export default function CompanyPage() {
         })
       );
     } else {
-      setCompanies((data ?? []) as Company[]);
+      setCompany((data ?? null) as Company | null);
+      if (!dialogOpen) {
+        hydrateFormFromCompany((data ?? null) as Company | null);
+      }
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchCompanies();
+    fetchCompany();
   }, [activeCompanyId]);
-
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((company) => {
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        const matchesSearch =
-          company.legal_name?.toLowerCase().includes(searchLower) ||
-          company.trade_name?.toLowerCase().includes(searchLower) ||
-          company.name.toLowerCase().includes(searchLower) ||
-          company.cnpj?.toLowerCase().includes(searchLower) ||
-          company.document?.toLowerCase().includes(searchLower);
-        if (!matchesSearch) return false;
-      }
-
-      if (filters.status !== 'all') {
-        const status = company.is_active ? 'ativo' : 'inativo';
-        if (status !== filters.status) return false;
-      }
-
-      return true;
-    });
-  }, [companies, filters]);
-
-  const hasActiveFilters = useMemo(() => {
-    return filters.search !== '' || filters.status !== 'all';
-  }, [filters]);
-
-  const kpiCompany = useMemo(() => {
-    if (companies.length === 0) return null;
-    return companies.find((company) => company.id === activeCompanyId) ?? companies[0];
-  }, [companies, activeCompanyId]);
-
-  const stats = useMemo(() => {
-    const statusLabel = kpiCompany ? (kpiCompany.is_active ? 'Ativa' : 'Inativa') : '—';
-    const hasCnpj = Boolean((kpiCompany?.cnpj ?? kpiCompany?.document)?.trim());
-    const hasLocation = Boolean(kpiCompany?.city?.trim() && kpiCompany?.state?.trim());
-    const updatedAt = kpiCompany?.updated_at
-      ? new Date(kpiCompany.updated_at).toLocaleDateString('pt-BR')
-      : '—';
-
-    return {
-      statusLabel,
-      hasCnpj,
-      hasLocation,
-      updatedAt,
-    };
-  }, [kpiCompany]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -289,27 +240,14 @@ export default function CompanyPage() {
       toast.success(editingId ? 'Empresa atualizada' : 'Empresa cadastrada');
       setDialogOpen(false);
       resetForm();
-      fetchCompanies();
+      fetchCompany();
     }
     setSaving(false);
   };
 
-  const handleEdit = (company: Company) => {
-    setEditingId(company.id);
-    setForm({
-      legal_name: company.legal_name ?? '',
-      trade_name: company.trade_name ?? company.name ?? '',
-      cnpj: company.cnpj ?? company.document ?? '',
-      email: company.email ?? '',
-      phone: company.phone ?? '',
-      whatsapp: company.whatsapp ?? '',
-      website: company.website ?? '',
-      address: company.address ?? '',
-      city: company.city ?? '',
-      state: company.state ?? '',
-      notes: company.notes ?? '',
-      logo_url: company.logo_url ?? '',
-    });
+  const handleOpenDialog = () => {
+    // Comentário: mantém o formulário sincronizado com o registro atual ao abrir o modal.
+    hydrateFormFromCompany(company);
     setDialogOpen(true);
   };
 
@@ -417,52 +355,12 @@ export default function CompanyPage() {
       );
     } else {
       setForm((prev) => ({ ...prev, logo_url: publicUrl }));
-      fetchCompanies();
+      fetchCompany();
       toast.success('Logo atualizada');
     }
 
     setLogoUploading(false);
   };
-
-  const handleToggleStatus = async (company: Company) => {
-    const nextStatus = company.is_active ? 'inativo' : 'ativo';
-    const { error } = await supabase
-      .from('companies')
-      .update({ is_active: !company.is_active })
-      .eq('id', company.id);
-
-    if (error) {
-      logSupabaseError({
-        label: 'Erro ao atualizar status da empresa (companies.update)',
-        error,
-        context: { action: 'update', table: 'companies', companyId: company.id, userId: user?.id },
-      });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao atualizar status',
-          error,
-          context: { action: 'update', table: 'companies', companyId: company.id, userId: user?.id },
-        })
-      );
-    } else {
-      toast.success(`Empresa ${nextStatus === 'ativo' ? 'ativada' : 'desativada'}`);
-      fetchCompanies();
-    }
-  };
-
-  const getCompanyActions = (company: Company): ActionItem[] => [
-    {
-      label: 'Editar',
-      icon: Pencil,
-      onClick: () => handleEdit(company),
-    },
-    {
-      label: company.is_active ? 'Inativar' : 'Ativar',
-      icon: Power,
-      onClick: () => handleToggleStatus(company),
-      variant: company.is_active ? 'destructive' : 'default',
-    },
-  ];
 
   if (!isGerente && !isOperador) {
     return <Navigate to="/admin/eventos" replace />;
@@ -484,7 +382,7 @@ export default function CompanyPage() {
               }}
             >
               <DialogTrigger asChild>
-                <Button onClick={() => (kpiCompany ? handleEdit(kpiCompany) : resetForm())}>
+                <Button onClick={handleOpenDialog}>
                   <Pencil className="h-4 w-4 mr-2" />
                   Editar empresa
                 </Button>
@@ -628,21 +526,20 @@ export default function CompanyPage() {
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="city">Cidade</Label>
-                            <Input
-                              id="city"
-                              value={form.city}
-                              onChange={(e) => setForm({ ...form, city: e.target.value })}
-                              placeholder="São Paulo"
+                            <CityAutocomplete
+                              value={{ city: form.city, state: form.state }}
+                              onChange={({ city, state }) => setForm({ ...form, city, state })}
+                              placeholder="Ex: São Paulo — SP"
                             />
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="state">UF</Label>
+                            {/* Comentário: UF é preenchida automaticamente pelo autocomplete de cidade. */}
                             <Input
                               id="state"
                               value={form.state}
-                              onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })}
+                              readOnly
                               placeholder="SP"
-                              maxLength={2}
                             />
                           </div>
                         </div>
@@ -724,54 +621,11 @@ export default function CompanyPage() {
           }
         />
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Status da empresa" value={stats.statusLabel} icon={Power} />
-          <StatsCard
-            label="CNPJ informado"
-            value={stats.hasCnpj ? 'Sim' : 'Não'}
-            icon={IdCard}
-            variant={stats.hasCnpj ? 'success' : 'default'}
-          />
-          <StatsCard
-            label="Cidade/UF informados"
-            value={stats.hasLocation ? 'Sim' : 'Não'}
-            icon={MapPin}
-            variant={stats.hasLocation ? 'success' : 'default'}
-          />
-          <StatsCard label="Última atualização" value={stats.updatedAt} icon={Calendar} />
-        </div>
-
-        {/* Filters */}
-        <FilterCard
-          className="mb-6"
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por razão social, nome fantasia ou CNPJ..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as CompanyFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativa' },
-                { value: 'inativo', label: 'Inativa' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-        />
-
-        {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : companies.length === 0 ? (
+        ) : !company ? (
           <EmptyState
             icon={<IdCard className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma empresa cadastrada"
@@ -783,53 +637,7 @@ export default function CompanyPage() {
               </Button>
             }
           />
-        ) : filteredCompanies.length === 0 ? (
-          <EmptyState
-            icon={<IdCard className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhuma empresa encontrada"
-            description="Ajuste os filtros para encontrar empresas"
-            action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
-                Limpar filtros
-              </Button>
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Razão Social</TableHead>
-                    <TableHead>Nome Fantasia</TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead>Cidade / UF</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[60px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCompanies.map((company) => (
-                    <TableRow key={company.id}>
-                      <TableCell>{company.legal_name ?? company.name}</TableCell>
-                      <TableCell>{company.trade_name ?? '-'}</TableCell>
-                      <TableCell className="font-mono">
-                        {formatCnpj(company.cnpj ?? company.document) ?? '-'}
-                      </TableCell>
-                      <TableCell>{getCompanyLocation(company) ?? '-'}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={company.is_active ? 'ativo' : 'inativo'} />
-                      </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getCompanyActions(company)} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        ) : null}
       </div>
     </AdminLayout>
   );
