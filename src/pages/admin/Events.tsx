@@ -447,7 +447,7 @@ export default function Events() {
       trip_type: tripForm.trip_type,
       vehicle_id: tripForm.vehicle_id,
       driver_id: tripForm.driver_id,
-      assistant_driver_id: tripForm.assistant_driver_id || null,
+      assistant_driver_id: tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' ? tripForm.assistant_driver_id : null,
       departure_time: tripForm.departure_time,
       capacity,
       company_id: activeCompanyId,
@@ -500,7 +500,7 @@ export default function Events() {
       event_id: editingId,
       boarding_location_id: boardingForm.boarding_location_id,
       departure_time: boardingForm.departure_time || null,
-      trip_id: boardingForm.trip_id || null,
+      trip_id: boardingForm.trip_id && boardingForm.trip_id !== '__none__' ? boardingForm.trip_id : null,
       company_id: activeCompanyId,
     };
 
@@ -1398,7 +1398,7 @@ export default function Events() {
                       <SelectValue placeholder="Opcional" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum</SelectItem>
+                      <SelectItem value="__none__">Nenhum</SelectItem>
                       {drivers
                         .filter(d => d.id !== tripForm.driver_id)
                         .map((driver) => (
@@ -1494,7 +1494,7 @@ export default function Events() {
                     <SelectValue placeholder="Todas as viagens" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todas as viagens</SelectItem>
+                    <SelectItem value="__none__">Todas as viagens</SelectItem>
                     {eventTrips.map((trip) => (
                       <SelectItem key={trip.id} value={trip.id}>
                         {trip.trip_type === 'ida' ? 'Ida' : 'Volta'} - {trip.departure_time?.slice(0, 5)}
