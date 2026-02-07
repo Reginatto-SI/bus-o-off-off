@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
-import { FilterCard } from '@/components/admin/FilterCard';
+import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import {
   Dialog,
@@ -42,6 +42,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Calendar,
+  CalendarDays,
+  CalendarRange,
   MapPin,
   Plus,
   Loader2,
@@ -66,7 +68,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
@@ -74,10 +76,17 @@ import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 interface EventFilters {
   search: string;
   status: 'all' | 'rascunho' | 'a_venda' | 'encerrado';
+  startDate: string;
+  endDate: string;
+  monthYear: 'all' | 'current' | 'next' | string;
+  vehicleId: string;
+  vehicleType: 'all' | Vehicle['type'];
+  driverId: string;
+  imageStatus: 'all' | 'with' | 'without';
 }
 
 interface EventWithTrips extends Event {
-  trips: { vehicle_id: string }[];
+  trips: { vehicle_id: string | null; driver_id: string | null; assistant_driver_id: string | null }[];
 }
 
 interface TripWithDetails extends Trip {
@@ -94,6 +103,13 @@ interface EventBoardingLocationWithDetails extends EventBoardingLocation {
 const initialFilters: EventFilters = {
   search: '',
   status: 'all',
+  startDate: '',
+  endDate: '',
+  monthYear: 'all',
+  vehicleId: 'all',
+  vehicleType: 'all',
+  driverId: 'all',
+  imageStatus: 'all',
 };
 
 const statusOptions = [
@@ -108,6 +124,19 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
   micro_onibus: 'Micro-ônibus',
   van: 'Van',
 };
+
+const vehicleTypeOptions = [
+  { value: 'all', label: 'Todos' },
+  { value: 'onibus', label: 'Ônibus' },
+  { value: 'micro_onibus', label: 'Micro-ônibus' },
+  { value: 'van', label: 'Van' },
+];
+
+const imageStatusOptions = [
+  { value: 'all', label: 'Todos' },
+  { value: 'with', label: 'Com imagem' },
+  { value: 'without', label: 'Sem imagem' },
+];
 
 export default function Events() {
   const { activeCompanyId, user } = useAuth();
@@ -234,9 +263,53 @@ export default function Events() {
     return { total, rascunhos, aVenda, encerrados };
   }, [events]);
 
+  const vehiclesById = useMemo(() => {
+    return new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+  }, [vehicles]);
+
+  // Opções rápidas de mês/ano para o filtro avançado.
+  const monthYearOptions = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 12 }, (_, index) => addMonths(now, index));
+
+    const customMonths = months.map((date) => ({
+      value: format(date, 'yyyy-MM'),
+      label: format(date, 'MMMM/yyyy', { locale: ptBR }),
+    }));
+
+    return [
+      { value: 'all', label: 'Todos' },
+      { value: 'current', label: 'Mês atual' },
+      { value: 'next', label: 'Próximo mês' },
+      ...customMonths,
+    ];
+  }, []);
+
+  const vehicleOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos' },
+      ...vehicles.map((vehicle) => ({
+        value: vehicle.id,
+        label: `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`,
+      })),
+    ];
+  }, [vehicles]);
+
+  const driverOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos' },
+      ...drivers.map((driver) => ({
+        value: driver.id,
+        label: driver.name,
+      })),
+    ];
+  }, [drivers]);
+
   // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
+      const eventDate = event.date ? parseISO(event.date) : null;
+
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         const matchesSearch =
@@ -249,12 +322,77 @@ export default function Events() {
         return false;
       }
 
+      // Regra: evento só aparece se estiver dentro do período filtrado.
+      if (filters.startDate) {
+        const startDate = parseISO(filters.startDate);
+        if (!eventDate || isBefore(eventDate, startDate)) {
+          return false;
+        }
+      }
+
+      if (filters.endDate) {
+        const endDate = parseISO(filters.endDate);
+        if (!eventDate || isAfter(eventDate, endDate)) {
+          return false;
+        }
+      }
+
+      if (filters.monthYear !== 'all') {
+        if (!eventDate) return false;
+        const targetMonth =
+          filters.monthYear === 'current'
+            ? format(new Date(), 'yyyy-MM')
+            : filters.monthYear === 'next'
+              ? format(addMonths(new Date(), 1), 'yyyy-MM')
+              : filters.monthYear;
+        if (format(eventDate, 'yyyy-MM') !== targetMonth) {
+          return false;
+        }
+      }
+
+      if (filters.vehicleId !== 'all') {
+        const hasVehicle = event.trips?.some((trip) => trip.vehicle_id === filters.vehicleId);
+        if (!hasVehicle) return false;
+      }
+
+      if (filters.vehicleType !== 'all') {
+        const hasVehicleType = event.trips?.some((trip) => {
+          if (!trip.vehicle_id) return false;
+          return vehiclesById.get(trip.vehicle_id)?.type === filters.vehicleType;
+        });
+        if (!hasVehicleType) return false;
+      }
+
+      if (filters.driverId !== 'all') {
+        const hasDriver = event.trips?.some((trip) => (
+          trip.driver_id === filters.driverId ||
+          trip.assistant_driver_id === filters.driverId
+        ));
+        if (!hasDriver) return false;
+      }
+
+      if (filters.imageStatus !== 'all') {
+        const hasImage = Boolean(event.image_url);
+        if (filters.imageStatus === 'with' && !hasImage) return false;
+        if (filters.imageStatus === 'without' && hasImage) return false;
+      }
+
       return true;
     });
-  }, [events, filters]);
+  }, [events, filters, vehiclesById]);
 
   const hasActiveFilters = useMemo(() => {
-    return filters.search !== '' || filters.status !== 'all';
+    return (
+      filters.search !== '' ||
+      filters.status !== 'all' ||
+      filters.startDate !== '' ||
+      filters.endDate !== '' ||
+      filters.monthYear !== 'all' ||
+      filters.vehicleId !== 'all' ||
+      filters.vehicleType !== 'all' ||
+      filters.driverId !== 'all' ||
+      filters.imageStatus !== 'all'
+    );
   }, [filters]);
 
   // Count unique vehicles (fleets) - not counting ida+volta as separate
@@ -280,7 +418,7 @@ export default function Events() {
       .from('events')
       .select(`
         *,
-        trips:trips(vehicle_id)
+        trips:trips(vehicle_id, driver_id, assistant_driver_id)
       `)
       .order('date', { ascending: false });
 
@@ -1016,19 +1154,160 @@ export default function Events() {
         <FilterCard
           searchValue={filters.search}
           onSearchChange={(value) => setFilters({ ...filters, search: value })}
+          searchLabel="Busca textual"
           searchPlaceholder="Pesquisar por nome ou cidade..."
           selects={[
             {
               id: 'status',
-              label: 'Status',
+              label: 'Status do evento',
               placeholder: 'Status',
               value: filters.status,
               onChange: (value) => setFilters({ ...filters, status: value as EventFilters['status'] }),
               options: statusOptions.map(opt => ({ value: opt.value, label: opt.label })),
+              icon: CheckCircle,
             },
           ]}
+          mainFilters={
+            <>
+              <FilterInput
+                id="startDate"
+                label="Data inicial"
+                placeholder="Selecionar data"
+                value={filters.startDate}
+                onChange={(value) => setFilters({ ...filters, startDate: value })}
+                type="date"
+                icon={CalendarRange}
+              />
+              <FilterInput
+                id="endDate"
+                label="Data final"
+                placeholder="Selecionar data"
+                value={filters.endDate}
+                onChange={(value) => setFilters({ ...filters, endDate: value })}
+                type="date"
+                icon={CalendarRange}
+              />
+            </>
+          }
           onClearFilters={() => setFilters(initialFilters)}
           hasActiveFilters={hasActiveFilters}
+          advancedFilters={
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <CalendarDays className="h-4 w-4" />
+                  Mês / Ano
+                </label>
+                <Select
+                  value={filters.monthYear}
+                  onValueChange={(value) => setFilters({ ...filters, monthYear: value })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o mês" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthYearOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Bus className="h-4 w-4" />
+                  Tipo de frota
+                </label>
+                <Select
+                  value={filters.vehicleType}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, vehicleType: value as EventFilters['vehicleType'] })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Tipo de frota" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicleTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Bus className="h-4 w-4" />
+                  Veículo
+                </label>
+                <Select
+                  value={filters.vehicleId}
+                  onValueChange={(value) => setFilters({ ...filters, vehicleId: value })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o veículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicleOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  Motorista
+                </label>
+                <Select
+                  value={filters.driverId}
+                  onValueChange={(value) => setFilters({ ...filters, driverId: value })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o motorista" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {driverOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Image className="h-4 w-4" />
+                  Imagem do evento
+                </label>
+                <Select
+                  value={filters.imageStatus}
+                  onValueChange={(value) =>
+                    setFilters({ ...filters, imageStatus: value as EventFilters['imageStatus'] })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Imagem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageStatusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          }
           className="mb-6"
         />
 
