@@ -302,7 +302,8 @@ export default function MyAccount() {
                 <Skeleton className="h-6 w-32" />
                 <Skeleton className="h-4 w-56" />
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
@@ -314,7 +315,8 @@ export default function MyAccount() {
                 <Skeleton className="h-6 w-32" />
                 <Skeleton className="h-4 w-56" />
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
               </CardContent>
@@ -327,7 +329,8 @@ export default function MyAccount() {
                 <CardTitle>Perfil</CardTitle>
                 <CardDescription>Atualize seus dados básicos de contato.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome completo</Label>
                   <Input
@@ -372,7 +375,8 @@ export default function MyAccount() {
                 <CardTitle>Endereço</CardTitle>
                 <CardDescription>Se preferir, mantenha seus dados de entrega atualizados.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              {/* Comentário: ordem lógica e grid compacto para reduzir rolagem no desktop. */}
+              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="cep">CEP</Label>
                   <Input
@@ -396,14 +400,6 @@ export default function MyAccount() {
                     id="number"
                     value={form.number}
                     onChange={(event) => setForm({ ...form, number: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="complement">Complemento</Label>
-                  <Input
-                    id="complement"
-                    value={form.complement}
-                    onChange={(event) => setForm({ ...form, complement: event.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -431,6 +427,14 @@ export default function MyAccount() {
                     maxLength={2}
                   />
                   {errors.state && <p className="text-sm text-destructive">{errors.state}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="complement">Complemento</Label>
+                  <Input
+                    id="complement"
+                    value={form.complement}
+                    onChange={(event) => setForm({ ...form, complement: event.target.value })}
+                  />
                 </div>
               </CardContent>
             </Card>
