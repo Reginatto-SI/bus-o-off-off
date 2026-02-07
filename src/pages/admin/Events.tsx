@@ -11,6 +11,8 @@ import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
+import { CityAutocomplete } from '@/components/ui/city-autocomplete';
+import { parseCityLabel, formatCityLabel } from '@/data/brazilian-cities';
 import {
   Dialog,
   DialogContent,
@@ -1668,15 +1670,16 @@ export default function Events() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="city">Cidade *</Label>
-                            <Input
-                              id="city"
-                              value={form.city}
-                              onChange={(e) => setForm({ ...form, city: e.target.value })}
-                              placeholder="Ex: Barretos - SP"
-                              required
+                            <Label htmlFor="city">Cidade do Evento (Destino) *</Label>
+                            <CityAutocomplete
+                              value={parseCityLabel(form.city)}
+                              onChange={({ city, state }) => setForm({ ...form, city: formatCityLabel(city, state) })}
+                              placeholder="Ex: Barretos — SP"
                               disabled={isReadOnly}
                             />
+                            <p className="text-xs text-muted-foreground">
+                              Local onde o evento acontece (destino final da viagem)
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1966,6 +1969,11 @@ export default function Events() {
                                       <div>
                                         <p className="font-medium">{ebl.boarding_location?.name}</p>
                                         <p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
+                                        {ebl.boarding_location?.city && ebl.boarding_location?.state && (
+                                          <p className="text-xs text-muted-foreground/80">
+                                            {formatCityLabel(ebl.boarding_location.city, ebl.boarding_location.state)}
+                                          </p>
+                                        )}
                                         <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                                           {ebl.departure_time && (
                                             <span className="flex items-center gap-1">

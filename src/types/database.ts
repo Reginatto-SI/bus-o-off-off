@@ -116,6 +116,8 @@ export interface BoardingLocation {
   id: string;
   name: string;
   address: string;
+  city: string | null;
+  state: string | null;
   maps_url: string | null;
   notes: string | null;
   status: BoardingLocationStatus;
