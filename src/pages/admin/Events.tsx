@@ -70,6 +70,7 @@ import {
   Copy,
   Eye,
   Upload,
+  GripVertical,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
@@ -164,6 +165,8 @@ export default function Events() {
   const [eventBoardingLocations, setEventBoardingLocations] = useState<EventBoardingLocationWithDetails[]>([]);
   const [boardingLocations, setBoardingLocations] = useState<BoardingLocation[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
+  const [draggingBoardingId, setDraggingBoardingId] = useState<string | null>(null);
+  const [reorderingBoardings, setReorderingBoardings] = useState(false);
   
   // Trip form modal - simplified (time comes from first boarding)
   const [tripDialogOpen, setTripDialogOpen] = useState(false);
@@ -633,16 +636,6 @@ export default function Events() {
   };
 
   // Trip handlers
-  // Helper function to get trip departure time from first boarding (stop_order=1)
-  const getTripDepartureTime = (tripId: string): string | null => {
-    const tripBoardings = eventBoardingLocations
-      .filter(ebl => ebl.trip_id === tripId)
-      .sort((a, b) => (a.stop_order || 1) - (b.stop_order || 1));
-    
-    if (tripBoardings.length === 0) return null;
-    return tripBoardings[0].departure_time;
-  };
-
   // Helper function for dropdown (without time)
   const getTripLabelWithoutTime = (trip: TripWithDetails) => {
     const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
@@ -654,6 +647,74 @@ export default function Events() {
     const driver = trip.driver?.name ?? 'Motorista não definido';
     
     return `${type} • ${vehicleType} ${plate} • ${capacity} lug. • Motorista: ${driver}`;
+  };
+
+  const handleBoardingDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    boardingId: string
+  ) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', boardingId);
+    setDraggingBoardingId(boardingId);
+  };
+
+  const handleBoardingDragEnd = () => {
+    setDraggingBoardingId(null);
+  };
+
+  const handleBoardingDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+    targetId: string,
+    scopedBoardings: EventBoardingLocationWithDetails[]
+  ) => {
+    event.preventDefault();
+    if (!editingId || !selectedTripIdForBoardings || reorderingBoardings) return;
+
+    const sourceId = draggingBoardingId || event.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) return;
+
+    const currentOrder = [...scopedBoardings];
+    const sourceIndex = currentOrder.findIndex((ebl) => ebl.id === sourceId);
+    const targetIndex = currentOrder.findIndex((ebl) => ebl.id === targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    const [moved] = currentOrder.splice(sourceIndex, 1);
+    currentOrder.splice(targetIndex, 0, moved);
+
+    const updatedOrder = currentOrder.map((ebl, index) => ({
+      ...ebl,
+      stop_order: index + 1,
+    }));
+
+    // Atualiza o estado local para refletir imediatamente a nova ordem.
+    setEventBoardingLocations((prev) =>
+      prev.map((ebl) => {
+        const updated = updatedOrder.find((item) => item.id === ebl.id);
+        return updated ? { ...ebl, stop_order: updated.stop_order } : ebl;
+      })
+    );
+
+    setReorderingBoardings(true);
+
+    // Persistimos a ordem da viagem selecionada (1..N) para evitar buracos.
+    const { error } = await supabase
+      .from('event_boarding_locations')
+      .upsert(
+        updatedOrder.map((ebl) => ({
+          id: ebl.id,
+          stop_order: ebl.stop_order,
+        })),
+        { onConflict: 'id' }
+      );
+
+    if (error) {
+      toast.error('Erro ao reordenar embarques');
+      console.error(error);
+      fetchEventBoardingLocations(editingId);
+    }
+
+    setReorderingBoardings(false);
   };
   
   // Edit trip handler
@@ -1750,12 +1811,9 @@ export default function Events() {
                               const pairedTrip = trip.paired_trip_id 
                                 ? eventTrips.find(t => t.id === trip.paired_trip_id) 
                                 : null;
-                              // Calculate time from first boarding
-                              const computedTime = getTripDepartureTime(trip.id);
-                              const isDepartureTimeTbd = !computedTime;
                               
                               return (
-                                <Card key={trip.id} className={`p-3 ${isDepartureTimeTbd ? 'bg-amber-50/50 border-amber-200' : ''}`}>
+                                <Card key={trip.id} className="p-3">
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="flex flex-col gap-2">
                                       <div className="flex items-center gap-4 flex-wrap">
@@ -1766,17 +1824,7 @@ export default function Events() {
                                         }`}>
                                           {trip.trip_type === 'ida' ? 'IDA' : 'VOLTA'}
                                         </span>
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Clock className="h-4 w-4 text-muted-foreground" />
-                                          {isDepartureTimeTbd ? (
-                                            <span className="font-medium text-amber-600 flex items-center gap-1">
-                                              <AlertTriangle className="h-3 w-3" />
-                                              A definir
-                                            </span>
-                                          ) : (
-                                            <span className="font-medium">{computedTime?.slice(0, 5)}</span>
-                                          )}
-                                        </div>
+                                        {/* Horários removidos: exibimos apenas dados essenciais da frota. */}
                                         <div className="flex items-center gap-2 text-sm">
                                           <Bus className="h-4 w-4 text-muted-foreground" />
                                           <span>
@@ -1923,6 +1971,7 @@ export default function Events() {
                           const sortedBoardings = [...filteredBoardings].sort(
                             (a, b) => (a.stop_order || 1) - (b.stop_order || 1)
                           );
+                          const canReorderBoardings = !isReadOnly && Boolean(selectedTripIdForBoardings);
 
                           if (sortedBoardings.length === 0) {
                             return (
@@ -1959,9 +2008,33 @@ export default function Events() {
                           return (
                             <div className="space-y-3">
                               {sortedBoardings.map((ebl) => (
-                                <Card key={ebl.id} className="p-3">
+                                <Card
+                                  key={ebl.id}
+                                  className={`p-3 ${draggingBoardingId === ebl.id ? 'opacity-70' : ''}`}
+                                  onDragOver={(event) => {
+                                    if (canReorderBoardings) {
+                                      event.preventDefault();
+                                    }
+                                  }}
+                                  onDrop={(event) => {
+                                    if (canReorderBoardings) {
+                                      void handleBoardingDrop(event, ebl.id, sortedBoardings);
+                                    }
+                                  }}
+                                >
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-start gap-3">
+                                      {canReorderBoardings && (
+                                        <div
+                                          className="mt-0.5 text-muted-foreground cursor-grab active:cursor-grabbing"
+                                          draggable={!reorderingBoardings}
+                                          onDragStart={(event) => handleBoardingDragStart(event, ebl.id)}
+                                          onDragEnd={handleBoardingDragEnd}
+                                          aria-label="Arraste para reordenar"
+                                        >
+                                          <GripVertical className="h-4 w-4" />
+                                        </div>
+                                      )}
                                       <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium shrink-0">
                                         {ebl.stop_order || '?'}
                                       </div>
