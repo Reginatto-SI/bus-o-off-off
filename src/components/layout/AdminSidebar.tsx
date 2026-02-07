@@ -118,6 +118,11 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/empresa',
     icon: Settings
   }, {
+    name: 'Patrocinadores',
+    href: '/admin/patrocinadores',
+    icon: Image,
+    roles: ['gerente']
+  }, {
     name: 'Minha Conta',
     href: '/admin/minha-conta',
     icon: User
