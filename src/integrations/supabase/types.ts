@@ -773,7 +773,6 @@ export const Constants = {
       sale_status: ["reservado", "pago"],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista"],
-      // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
       vehicle_type: ["onibus", "van", "micro_onibus"],
     },
   },
