@@ -77,7 +77,7 @@ interface EventFilters {
 }
 
 interface EventWithTrips extends Event {
-  trips: { count: number }[];
+  trips: { vehicle_id: string }[];
 }
 
 interface TripWithDetails extends Trip {
@@ -280,7 +280,7 @@ export default function Events() {
       .from('events')
       .select(`
         *,
-        trips:trips(count)
+        trips:trips(vehicle_id)
       `)
       .order('date', { ascending: false });
 
@@ -301,6 +301,17 @@ export default function Events() {
       setEvents(data as EventWithTrips[]);
     }
     setLoading(false);
+  };
+
+  // Count unique vehicles (fleets) for card display
+  const getFleetCount = (event: EventWithTrips) => {
+    if (!event.trips || !Array.isArray(event.trips)) return 0;
+    const uniqueVehicles = new Set(
+      event.trips
+        .filter((t: { vehicle_id: string }) => t.vehicle_id)
+        .map((t: { vehicle_id: string }) => t.vehicle_id)
+    );
+    return uniqueVehicles.size;
   };
 
   const fetchEventTrips = async (eventId: string) => {
@@ -938,7 +949,7 @@ export default function Events() {
       },
     });
 
-    const tripCount = event.trips?.[0]?.count ?? 0;
+    const tripCount = event.trips?.length ?? 0;
     if (tripCount === 0) {
       actions.push({
         label: 'Excluir',
@@ -952,10 +963,6 @@ export default function Events() {
     }
 
     return actions;
-  };
-
-  const getTripCount = (event: EventWithTrips) => {
-    return event.trips?.[0]?.count ?? 0;
   };
 
   // Available boarding locations (not already added)
@@ -1056,7 +1063,27 @@ export default function Events() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredEvents.map((event) => (
-              <Card key={event.id} className="card-corporate h-full">
+              <Card key={event.id} className="card-corporate h-full overflow-hidden">
+                {/* Image or Placeholder - 3:2 ratio */}
+                {event.image_url ? (
+                  <div className="aspect-[3/2] w-full">
+                    <img 
+                      src={event.image_url} 
+                      alt={event.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-[3/2] w-full bg-gradient-to-br from-muted/50 to-muted flex items-center justify-center">
+                    <div className="text-center">
+                      <Calendar className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                      <span className="text-xl font-bold text-muted-foreground/20 mt-1 block">
+                        {event.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <h3 className="font-semibold text-foreground line-clamp-2">{event.name}</h3>
@@ -1085,7 +1112,7 @@ export default function Events() {
                   <div className="mt-4 pt-3 border-t border-border flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Bus className="h-4 w-4" />
-                      <span>{getTripCount(event)} viagem(ns)</span>
+                      <span>{getFleetCount(event)} transporte(s)</span>
                     </div>
                   </div>
                 </CardContent>
@@ -1170,11 +1197,11 @@ export default function Events() {
                     <div className="space-y-2">
                       <Label>Imagem/Banner do Evento</Label>
                       {form.image_url ? (
-                        <div className="relative">
+                        <div className="relative aspect-[3/2] w-full">
                           <img 
                             src={form.image_url} 
                             alt="Banner do evento" 
-                            className="w-full max-h-64 object-cover rounded-lg border"
+                            className="w-full h-full object-cover rounded-lg border"
                           />
                           {!isReadOnly && (
                             <Button
@@ -1201,7 +1228,7 @@ export default function Events() {
                         </div>
                       ) : (
                         <label 
-                          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                          className={`border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors aspect-[3/2] flex flex-col items-center justify-center ${
                             isReadOnly 
                               ? 'border-muted-foreground/15 bg-muted/10 cursor-not-allowed' 
                               : 'border-muted-foreground/25 bg-muted/20 hover:border-primary/50 hover:bg-primary/5'
@@ -1259,17 +1286,14 @@ export default function Events() {
                               ? 'Enviando imagem...' 
                               : !editingId 
                                 ? 'Salve o evento primeiro para adicionar imagem'
-                                : 'Clique para selecionar uma imagem'
+                                : 'Clique ou arraste para selecionar uma imagem'
                             }
                           </p>
                           <p className="text-xs text-muted-foreground/70 mt-2">
-                            Imagem recomendada: formato vertical (4:5)
+                            Imagem do Evento (600 × 400)
                           </p>
                           <p className="text-xs text-muted-foreground/70">
-                            Tamanho sugerido: 1080 x 1350 pixels
-                          </p>
-                          <p className="text-xs text-muted-foreground/70">
-                            Exibida no aplicativo mobile e portal público
+                            Formato horizontal, proporção 3:2
                           </p>
                         </label>
                       )}
