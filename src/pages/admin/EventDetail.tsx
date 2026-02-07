@@ -383,7 +383,7 @@ export default function EventDetail() {
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{trip.departure_time.slice(0, 5)}</span>
+                            <span className="font-medium">{trip.departure_time?.slice(0, 5) ?? 'A definir'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Bus className="h-4 w-4 text-muted-foreground" />
