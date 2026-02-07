@@ -113,9 +113,8 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Settings
   }, {
     name: 'Minha Conta',
-    icon: User,
-    disabled: true,
-    statusLabel: 'Em breve'
+    href: '/admin/minha-conta',
+    icon: User
   }]
 }];
 
