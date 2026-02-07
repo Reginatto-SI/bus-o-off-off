@@ -1,631 +1,383 @@
 
-# Plano: Ajuste Final da Logica de Viagens, Embarques e Edicao
+# Plano: Ajustes de UX, Consistência e Regras de Negócio na Tela de Evento
 
-## Visao Geral
+## Visão Geral
 
-Refatorar a tela de Eventos para implementar a logica definitiva onde:
-- O "Horario Base" da viagem e calculado automaticamente a partir do primeiro embarque (stop_order=1)
-- Viagens e embarques podem ser editados (nao apenas excluidos)
-- Exclusoes sao protegidas por validacoes de integridade
-- Labels sao completos e inequivocos em toda a interface
+Este plano aborda 6 ajustes identificados na tela de criação/edição de Eventos, todos focados em melhorar a experiência do usuário e corrigir inconsistências de dados.
 
 ---
 
-## Parte 1: Remover Campo de Horario do Modal de Viagem
+## Parte 1: Upload de Imagem/Banner do Evento
 
-### Problema Atual
-O modal de viagem atual (linhas 1719-1768) possui campos de horario:
-- "Horario da Ida *"
-- "Horario da Volta" com switch "A definir"
+### Situação Atual
+- O banco de dados NÃO possui campo `image_url` na tabela `events`
+- Existe um placeholder visual na aba Geral mas não é funcional
+- Texto atual: "(Funcionalidade em desenvolvimento)"
 
-### Solucao
-Remover completamente esses campos. O horario sera derivado automaticamente do primeiro embarque.
+### Alterações Necessárias
 
-**Campos a manter no modal de viagem:**
-- Tipo (Ida / Volta / Ida e Volta)
-- Veiculo
-- Motorista
-- Ajudante (opcional)
+#### 1.1 Migração SQL - Adicionar coluna image_url
 
-**Campos a REMOVER:**
-- ida_departure_time
-- volta_departure_time
-- volta_time_tbd
+```sql
+ALTER TABLE public.events 
+  ADD COLUMN IF NOT EXISTS image_url text;
 
-### Alteracao no TripFormState
+COMMENT ON COLUMN public.events.image_url IS 'URL da imagem/banner do evento para exibição no mobile e portal público';
+```
+
+#### 1.2 Criar bucket no Supabase Storage
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('event-images', 'event-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS para permitir upload por admins e visualização pública
+CREATE POLICY "Public can view event images"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'event-images');
+
+CREATE POLICY "Admins can upload event images"
+ON storage.objects FOR INSERT
+WITH CHECK (
+  bucket_id = 'event-images' 
+  AND auth.role() = 'authenticated'
+);
+
+CREATE POLICY "Admins can delete event images"
+ON storage.objects FOR DELETE
+USING (
+  bucket_id = 'event-images' 
+  AND auth.role() = 'authenticated'
+);
+```
+
+#### 1.3 Atualizar Types (src/types/database.ts)
+
+```typescript
+export interface Event {
+  // ... existing fields
+  image_url: string | null;  // NOVO
+}
+```
+
+#### 1.4 Implementar componente de upload na aba Geral
+
+```typescript
+// Novo estado para upload
+const [uploadingImage, setUploadingImage] = useState(false);
+
+// Handler para upload de imagem
+const handleImageUpload = async (file: File) => {
+  if (!editingId || !file) return;
+  
+  setUploadingImage(true);
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${editingId}-${Date.now()}.${fileExt}`;
+  
+  const { error: uploadError } = await supabase.storage
+    .from('event-images')
+    .upload(fileName, file);
+    
+  if (uploadError) {
+    toast.error('Erro ao fazer upload da imagem');
+    setUploadingImage(false);
+    return;
+  }
+  
+  const { data: { publicUrl } } = supabase.storage
+    .from('event-images')
+    .getPublicUrl(fileName);
+    
+  // Atualizar evento com URL
+  await supabase
+    .from('events')
+    .update({ image_url: publicUrl })
+    .eq('id', editingId);
+    
+  setForm({ ...form, image_url: publicUrl });
+  toast.success('Imagem enviada com sucesso');
+  setUploadingImage(false);
+};
+```
+
+#### 1.5 UI do componente de upload
+
+```text
++----------------------------------------------------------+
+| [Preview da imagem se existir]                            |
+|                                                           |
+| OU                                                        |
+|                                                           |
+| +------------------------------------------------------+ |
+| |         [ícone imagem]                               | |
+| |  Arraste uma imagem ou clique para selecionar        | |
+| |                                                       | |
+| |  Imagem recomendada: formato horizontal (4:5)        | |
+| |  Tamanho sugerido: 1080 x 1350 pixels               | |
+| |  Exibida no aplicativo mobile e portal público       | |
+| +------------------------------------------------------+ |
++----------------------------------------------------------+
+```
+
+---
+
+## Parte 2: Corrigir Conceito de "Viagens" para "Frotas/Transportes"
+
+### Problema
+- Usuário vê "Viagens: 2" quando existe apenas 1 veículo fazendo ida + volta
+- Ida e Volta são trechos internos, não devem contar como viagens separadas para o usuário
+
+### Solução
+
+#### 2.1 Criar função para contar veículos únicos (frotas)
+
+```typescript
+// Conta quantos veículos únicos estão sendo usados (não ida+volta separados)
+const uniqueFleets = useMemo(() => {
+  const uniqueVehicleIds = new Set(eventTrips.map(t => t.vehicle_id));
+  return uniqueVehicleIds.size;
+}, [eventTrips]);
+
+// Capacidade correta: soma apenas uma vez por veículo
+const correctTotalCapacity = useMemo(() => {
+  const vehicleCapacities = new Map<string, number>();
+  eventTrips.forEach(trip => {
+    if (trip.vehicle_id && !vehicleCapacities.has(trip.vehicle_id)) {
+      vehicleCapacities.set(trip.vehicle_id, trip.capacity || 0);
+    }
+  });
+  return Array.from(vehicleCapacities.values()).reduce((sum, cap) => sum + cap, 0);
+}, [eventTrips]);
+```
+
+#### 2.2 Atualizar aba "Viagens" no TabsList
+
+```typescript
+// ANTES (linha 1124)
+{editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{eventTrips.length}</span>}
+
+// DEPOIS - renomear aba e mostrar frotas
+<TabsTrigger value="viagens" ...>
+  <Bus className="h-4 w-4 shrink-0" />
+  <span className="min-w-0 truncate">Frotas</span>
+  {editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{uniqueFleets}</span>}
+</TabsTrigger>
+```
+
+#### 2.3 Atualizar card "Resumo do Evento"
+
+```typescript
+// ANTES (linhas 1627-1639)
+<div>
+  <p className="text-muted-foreground">Viagens</p>
+  <p className="font-medium">{eventTrips.length}</p>
+</div>
+<div>
+  <p className="text-muted-foreground">Capacidade Total</p>
+  <p className="font-medium">{totalCapacity} lugares</p>
+</div>
+
+// DEPOIS
+<div>
+  <p className="text-muted-foreground">Transportes</p>
+  <p className="font-medium">{uniqueFleets}</p>
+</div>
+<div>
+  <p className="text-muted-foreground">Capacidade Total</p>
+  <p className="font-medium">{correctTotalCapacity} lugares</p>
+</div>
+```
+
+---
+
+## Parte 3: Padronizar TODOS os Dropdowns de Viagem (Sem Horário)
+
+### Problema
+O seletor "Viagem Selecionada" na aba Embarques ainda usa `getTripLabel(trip)` que inclui horário.
+
+### Solução
+
+#### 3.1 Atualizar seletor na aba Embarques (linhas 1378-1393)
 
 ```typescript
 // ANTES
-interface TripFormState {
-  trip_creation_type: TripCreationType;
-  vehicle_id: string;
-  driver_id: string;
-  assistant_driver_id: string;
-  ida_departure_time: string;      // REMOVER
-  volta_departure_time: string;    // REMOVER
-  volta_time_tbd: boolean;         // REMOVER
-  capacity: string;
-}
+{eventTrips.map((trip) => (
+  <SelectItem key={trip.id} value={trip.id}>
+    {getTripLabel(trip)}  // Inclui horário
+  </SelectItem>
+))}
 
 // DEPOIS
-interface TripFormState {
-  trip_creation_type: TripCreationType;
-  vehicle_id: string;
-  driver_id: string;
-  assistant_driver_id: string;
-  capacity: string;
-}
+{eventTrips.map((trip) => (
+  <SelectItem key={trip.id} value={trip.id}>
+    {getTripLabelWithoutTime(trip)}  // Sem horário
+  </SelectItem>
+))}
 ```
 
-### Alteracao no handleAddTrip
-
-Ao criar viagem, `departure_time` sera sempre `null`:
-
-```typescript
-const tripData = {
-  event_id: editingId,
-  trip_type: tripForm.trip_creation_type,
-  vehicle_id: tripForm.vehicle_id,
-  driver_id: tripForm.driver_id,
-  assistant_driver_id: assistantDriverId,
-  departure_time: null,  // Sempre null - calculado dos embarques
-  capacity,
-  company_id: activeCompanyId,
-};
-```
+#### 3.2 Verificar consistência
+Todos os locais que listam viagens devem usar `getTripLabelWithoutTime()`:
+- Seletor "Viagem Selecionada" ✓ (será corrigido)
+- Modal "Adicionar/Editar Local de Embarque" ✓ (já usa)
 
 ---
 
-## Parte 2: Calcular Horario da Viagem a Partir dos Embarques
+## Parte 4: Ajustar Campo de Preço e Limite de Passagens
 
-### Nova Funcao Helper
-
-```typescript
-// Retorna o horario do primeiro embarque (stop_order=1) da viagem
-const getTripDepartureTime = (tripId: string): string | null => {
-  const tripBoardings = eventBoardingLocations
-    .filter(ebl => ebl.trip_id === tripId)
-    .sort((a, b) => (a.stop_order || 1) - (b.stop_order || 1));
-  
-  if (tripBoardings.length === 0) return null;
-  return tripBoardings[0].departure_time;
-};
-```
-
-### Atualizar getTripLabel
+### 4.1 Formato moeda com 2 casas decimais
 
 ```typescript
-const getTripLabel = (trip: TripWithDetails) => {
-  const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
-  
-  // Calcular horario do primeiro embarque
-  const computedTime = getTripDepartureTime(trip.id);
-  const time = computedTime ? computedTime.slice(0, 5) : 'A definir';
-  
-  const vehicleType = trip.vehicle 
-    ? vehicleTypeLabels[trip.vehicle.type] 
-    : 'Veiculo';
-  const plate = trip.vehicle?.plate ?? '???';
-  const capacity = trip.capacity;
-  const driver = trip.driver?.name ?? 'Motorista nao definido';
-  
-  return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
-};
-```
-
-### Atualizar Exibicao do Card de Viagem
-
-Na aba Viagens, o card mostrara o horario calculado:
-
-```typescript
-// Calcular horario baseado nos embarques
-const computedTime = getTripDepartureTime(trip.id);
-const isDepartureTimeTbd = !computedTime;
-
-// Exibir
-{isDepartureTimeTbd ? (
-  <span className="font-medium text-amber-600 flex items-center gap-1">
-    <AlertTriangle className="h-3 w-3" />
-    A definir
-  </span>
-) : (
-  <span className="font-medium">{computedTime.slice(0, 5)}</span>
-)}
-```
-
----
-
-## Parte 3: Adicionar Funcionalidade de Edicao de Viagem
-
-### Novos Estados
-
-```typescript
-const [editingTripId, setEditingTripId] = useState<string | null>(null);
-```
-
-### Funcao para Abrir Modal de Edicao
-
-```typescript
-const handleEditTrip = (trip: TripWithDetails) => {
-  setEditingTripId(trip.id);
-  setTripForm({
-    trip_creation_type: trip.trip_type, // Travado na edicao
-    vehicle_id: trip.vehicle_id,
-    driver_id: trip.driver_id,
-    assistant_driver_id: trip.assistant_driver_id ?? '',
-    capacity: trip.capacity.toString(),
-  });
-  setTripDialogOpen(true);
-};
-```
-
-### Funcao de Salvar Edicao
-
-```typescript
-const handleSaveTrip = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!editingId || !activeCompanyId) return;
-  
-  setSavingTrip(true);
-  
-  const assistantDriverId = tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' 
-    ? tripForm.assistant_driver_id 
-    : null;
-
-  if (editingTripId) {
-    // EDICAO
-    const updateData = {
-      vehicle_id: tripForm.vehicle_id,
-      driver_id: tripForm.driver_id,
-      assistant_driver_id: assistantDriverId,
-    };
-
-    const { error } = await supabase
-      .from('trips')
-      .update(updateData)
-      .eq('id', editingTripId);
-
-    if (error) {
-      toast.error('Erro ao atualizar viagem');
-    } else {
-      toast.success('Viagem atualizada');
+// Handler para formatar preço ao perder foco
+const handlePriceBlur = () => {
+  if (form.unit_price) {
+    const value = parseFloat(form.unit_price);
+    if (!isNaN(value)) {
+      setForm({ ...form, unit_price: value.toFixed(2) });
     }
-    setEditingTripId(null);
-  } else {
-    // CRIACAO (logica existente simplificada sem horarios)
-    // ... criar viagens sem departure_time
   }
-
-  setTripDialogOpen(false);
-  resetTripForm();
-  fetchEventTrips(editingId);
-  setSavingTrip(false);
 };
+
+// Na UI do input
+<Input
+  id="unit_price"
+  type="number"
+  step="0.01"
+  min="0"
+  className="pl-10"
+  value={form.unit_price}
+  onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+  onBlur={handlePriceBlur}  // NOVO
+  placeholder="0,00"
+  disabled={isReadOnly}
+/>
 ```
 
-### UI do Card de Viagem com Botao Editar
+### 4.2 Limite de passagens com valor padrão 0
 
 ```typescript
-<div className="flex items-center gap-1">
-  {!isReadOnly && (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => handleEditTrip(trip)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-destructive hover:text-destructive"
-        onClick={() => confirmDeleteTrip(trip)}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </>
-  )}
-</div>
-```
+// ANTES (linha 184)
+max_tickets_per_purchase: '5',
 
-### Modal Adaptado para Criacao/Edicao
+// DEPOIS
+max_tickets_per_purchase: '0',
 
-```typescript
-<DialogTitle>
-  {editingTripId ? 'Editar Viagem' : 'Adicionar Viagem'}
-</DialogTitle>
+// ANTES (linha 1575)
+min="1"
 
-// Na edicao, travar o tipo da viagem
-{!editingTripId && (
-  <RadioGroup ...> // Tipo de viagem </RadioGroup>
-)}
+// DEPOIS
+min="0"
 
-{editingTripId && (
-  <div className="text-sm text-muted-foreground">
-    Tipo: {tripForm.trip_creation_type === 'ida' ? 'Ida' : 'Volta'}
-    (nao pode ser alterado)
-  </div>
-)}
-```
-
----
-
-## Parte 4: Adicionar Funcionalidade de Edicao de Embarque
-
-### Novos Estados
-
-```typescript
-const [editingBoardingId, setEditingBoardingId] = useState<string | null>(null);
-```
-
-### Funcao para Abrir Modal de Edicao
-
-```typescript
-const handleEditBoarding = (boarding: EventBoardingLocationWithDetails) => {
-  setEditingBoardingId(boarding.id);
-  setBoardingForm({
-    boarding_location_id: boarding.boarding_location_id,
-    departure_time: boarding.departure_time ?? '',
-    trip_id: boarding.trip_id ?? '__none__',
-    stop_order: boarding.stop_order?.toString() ?? '',
-  });
-  setBoardingDialogOpen(true);
-};
-```
-
-### Funcao de Salvar Edicao
-
-```typescript
-const handleSaveBoarding = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!editingId || !activeCompanyId) return;
-  
-  setSavingBoarding(true);
-
-  const tripId = boardingForm.trip_id && boardingForm.trip_id !== '__none__' 
-    ? boardingForm.trip_id 
-    : null;
-
-  if (editingBoardingId) {
-    // EDICAO
-    const updateData = {
-      boarding_location_id: boardingForm.boarding_location_id,
-      departure_time: boardingForm.departure_time || null,
-      trip_id: tripId,
-      stop_order: parseInt(boardingForm.stop_order, 10) || 1,
-    };
-
-    const { error } = await supabase
-      .from('event_boarding_locations')
-      .update(updateData)
-      .eq('id', editingBoardingId);
-
-    if (error) {
-      toast.error('Erro ao atualizar local de embarque');
-    } else {
-      toast.success('Local de embarque atualizado');
-    }
-    setEditingBoardingId(null);
-  } else {
-    // CRIACAO (logica existente)
-    // ...
-  }
-
-  setBoardingDialogOpen(false);
-  resetBoardingForm();
-  fetchEventBoardingLocations(editingId);
-  setSavingBoarding(false);
-};
-```
-
-### UI do Card de Embarque com Botao Editar
-
-```typescript
-<div className="flex items-center gap-1 shrink-0">
-  {!isReadOnly && (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => handleEditBoarding(ebl)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-destructive hover:text-destructive"
-        onClick={() => confirmDeleteBoarding(ebl)}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </>
-  )}
+// Adicionar texto auxiliar
+<div className="space-y-2">
+  <Label htmlFor="max_tickets">Limite de Passagens por Compra</Label>
+  <Input
+    id="max_tickets"
+    type="number"
+    min="0"
+    max="20"
+    value={form.max_tickets_per_purchase}
+    onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
+    disabled={isReadOnly}
+  />
+  <p className="text-xs text-muted-foreground">
+    Use 0 para permitir compras sem limite por pedido
+  </p>
 </div>
 ```
 
 ---
 
-## Parte 5: Validacoes de Exclusao
+## Parte 5: Corrigir Resumo do Evento
 
-### Exclusao de Viagem - Verificar Embarques
-
-```typescript
-const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
-const [tripToDelete, setTripToDelete] = useState<TripWithDetails | null>(null);
-const [tripDeleteBlockReason, setTripDeleteBlockReason] = useState<string | null>(null);
-
-const confirmDeleteTrip = async (trip: TripWithDetails) => {
-  // Verificar se tem embarques vinculados
-  const tripBoardings = eventBoardingLocations.filter(
-    ebl => ebl.trip_id === trip.id
-  );
-  
-  if (tripBoardings.length > 0) {
-    setTripDeleteBlockReason(
-      `Esta viagem possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
-      `Remova ou realoque os embarques antes de excluir.`
-    );
-    setTripToDelete(trip);
-    setDeleteTripDialogOpen(true);
-    return;
-  }
-
-  // Verificar se tem vendas vinculadas
-  const { data: sales } = await supabase
-    .from('sales')
-    .select('id')
-    .eq('trip_id', trip.id)
-    .limit(1);
-
-  if (sales && sales.length > 0) {
-    setTripDeleteBlockReason(
-      `Esta viagem possui passagens vendidas ou reservadas. ` +
-      `Nao e possivel excluir. Considere marcar o evento como encerrado.`
-    );
-    setTripToDelete(trip);
-    setDeleteTripDialogOpen(true);
-    return;
-  }
-
-  // Sem bloqueios - confirmar exclusao
-  setTripDeleteBlockReason(null);
-  setTripToDelete(trip);
-  setDeleteTripDialogOpen(true);
-};
-
-const handleDeleteTripConfirmed = async () => {
-  if (!tripToDelete || tripDeleteBlockReason) return;
-  
-  const { error } = await supabase
-    .from('trips')
-    .delete()
-    .eq('id', tripToDelete.id);
-
-  if (error) {
-    toast.error('Erro ao excluir viagem');
-  } else {
-    toast.success('Viagem excluida');
-    fetchEventTrips(editingId!);
-    fetchEvents();
-  }
-  setDeleteTripDialogOpen(false);
-  setTripToDelete(null);
-};
-```
-
-### Exclusao de Embarque - Verificar Passageiros
-
-```typescript
-const [deleteBoardingDialogOpen, setDeleteBoardingDialogOpen] = useState(false);
-const [boardingToDelete, setBoardingToDelete] = useState<EventBoardingLocationWithDetails | null>(null);
-const [boardingDeleteBlockReason, setBoardingDeleteBlockReason] = useState<string | null>(null);
-
-const confirmDeleteBoarding = async (boarding: EventBoardingLocationWithDetails) => {
-  // Verificar se tem vendas vinculadas a este local
-  const { data: sales } = await supabase
-    .from('sales')
-    .select('id')
-    .eq('boarding_location_id', boarding.boarding_location_id)
-    .eq('trip_id', boarding.trip_id)
-    .limit(1);
-
-  if (sales && sales.length > 0) {
-    setBoardingDeleteBlockReason(
-      `Este local de embarque possui passageiros vinculados. ` +
-      `Nao e possivel excluir.`
-    );
-    setBoardingToDelete(boarding);
-    setDeleteBoardingDialogOpen(true);
-    return;
-  }
-
-  // Sem bloqueios
-  setBoardingDeleteBlockReason(null);
-  setBoardingToDelete(boarding);
-  setDeleteBoardingDialogOpen(true);
-};
-```
-
-### Dialogs de Confirmacao com Bloqueio
-
-```typescript
-{/* Delete Trip Dialog */}
-<AlertDialog open={deleteTripDialogOpen} onOpenChange={setDeleteTripDialogOpen}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>
-        {tripDeleteBlockReason ? 'Exclusao Bloqueada' : 'Excluir Viagem'}
-      </AlertDialogTitle>
-      <AlertDialogDescription>
-        {tripDeleteBlockReason || (
-          `Tem certeza que deseja excluir esta viagem (${tripToDelete?.trip_type})?`
-        )}
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel>
-        {tripDeleteBlockReason ? 'Entendi' : 'Cancelar'}
-      </AlertDialogCancel>
-      {!tripDeleteBlockReason && (
-        <AlertDialogAction
-          onClick={handleDeleteTripConfirmed}
-          className="bg-destructive text-destructive-foreground"
-        >
-          Excluir
-        </AlertDialogAction>
-      )}
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
-```
+Já coberto na Parte 2 com os valores corretos de `uniqueFleets` e `correctTotalCapacity`.
 
 ---
 
-## Parte 6: Labels Consistentes no Modal de Embarque
+## Parte 6: Corrigir Checklist de Publicação
 
 ### Problema Atual
+O checklist atual (linhas 197-205) exige que TODAS as viagens tenham embarques:
 
-O select de viagem no modal de embarque usa label simplificado:
 ```typescript
-{trip.trip_type === 'ida' ? 'Ida' : 'Volta'} - {trip.departure_time?.slice(0, 5)}
+const allTripsHaveBoardings = tripsWithoutBoardings.length === 0;
+const hasBoardingLocations = eventBoardingLocations.length > 0 && allTripsHaveBoardings;
 ```
 
-### Solucao
-
-Usar a funcao `getTripLabel` para manter consistencia:
+### Solução - Exigir apenas IDA com embarque
 
 ```typescript
-{/* Link to Trip - usando label completo */}
-<div className="space-y-2">
-  <Label>Vincular a Viagem</Label>
-  <Select
-    value={boardingForm.trip_id || '__none__'}
-    onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value })}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Selecione uma viagem" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="__none__">Selecione uma viagem</SelectItem>
-      {eventTrips.map((trip) => (
-        <SelectItem key={trip.id} value={trip.id}>
-          {getTripLabel(trip)}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-```
+// NOVA lógica: pelo menos uma viagem de IDA deve ter embarque
+const hasIdaWithBoarding = eventTrips.some(trip => 
+  trip.trip_type === 'ida' && 
+  eventBoardingLocations.some(ebl => ebl.trip_id === trip.id)
+);
 
-### Pre-selecionar Viagem
+// Se não houver viagens de ida, aceitar qualquer embarque
+const hasBoardingForPublish = eventTrips.some(t => t.trip_type === 'ida')
+  ? hasIdaWithBoarding
+  : eventBoardingLocations.length > 0;
 
-Quando o usuario adiciona embarque com uma viagem ja selecionada na aba:
-
-```typescript
-const handleOpenBoardingDialog = () => {
-  setBoardingForm({
-    boarding_location_id: '',
-    departure_time: '',
-    trip_id: selectedTripIdForBoardings || '',
-    stop_order: '',
-  });
-  setBoardingDialogOpen(true);
-};
-
-// No botao "Adicionar Local":
-onClick={handleOpenBoardingDialog}
-```
-
----
-
-## Parte 7: Remover Opcao "Todas as Viagens" do Modal de Embarque
-
-### Problema
-A opcao "Todas as viagens" nao faz sentido no modelo operacional, pois cada embarque deve pertencer a uma viagem especifica.
-
-### Solucao
-Tornar a selecao de viagem obrigatoria:
-
-```typescript
-<Select
-  value={boardingForm.trip_id}
-  onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value })}
-  required
->
-  <SelectTrigger>
-    <SelectValue placeholder="Selecione uma viagem *" />
-  </SelectTrigger>
-  <SelectContent>
-    {eventTrips.map((trip) => (
-      <SelectItem key={trip.id} value={trip.id}>
-        {getTripLabel(trip)}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-```
-
----
-
-## Parte 8: Ordenacao de Embarques
-
-Garantir que embarques sejam ordenados por `stop_order` em todas as queries:
-
-```typescript
-const fetchEventBoardingLocations = async (eventId: string) => {
-  const { data, error } = await supabase
-    .from('event_boarding_locations')
-    .select(`...`)
-    .eq('event_id', eventId)
-    .order('stop_order', { ascending: true });  // Ordenar por ordem de parada
+return {
+  valid: hasName && hasDate && hasCity && hasTrips && hasBoardingForPublish && hasPrice,
+  checks: {
+    hasName,
+    hasDate,
+    hasCity,
+    hasTrips,
+    hasBoardingLocations: hasBoardingForPublish,  // Renomear para clareza
+    hasPrice,
+  },
 };
 ```
 
----
+### Atualizar texto do checklist
 
-## Resumo das Alteracoes
+```typescript
+// ANTES
+<span>Pelo menos 1 local de embarque</span>
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/pages/admin/Events.tsx` | Remover campos de horario do modal de viagem |
-| `src/pages/admin/Events.tsx` | Adicionar funcao getTripDepartureTime |
-| `src/pages/admin/Events.tsx` | Atualizar getTripLabel para usar horario calculado |
-| `src/pages/admin/Events.tsx` | Adicionar estados e handlers para edicao de viagem |
-| `src/pages/admin/Events.tsx` | Adicionar estados e handlers para edicao de embarque |
-| `src/pages/admin/Events.tsx` | Adicionar validacoes de exclusao (embarques/vendas) |
-| `src/pages/admin/Events.tsx` | Adicionar dialogs de confirmacao com bloqueio |
-| `src/pages/admin/Events.tsx` | Usar getTripLabel no modal de embarque |
-| `src/pages/admin/Events.tsx` | Tornar selecao de viagem obrigatoria no embarque |
-| `src/pages/admin/Events.tsx` | Pre-selecionar viagem ao abrir modal de embarque |
+// DEPOIS
+<span>Pelo menos 1 local de embarque na Ida</span>
+```
 
 ---
 
-## Criterios de Sucesso
+## Resumo das Alterações
 
-1. Usuario cria viagem SEM informar horario
-2. Horario aparece automaticamente apos cadastrar primeiro embarque (ordem 1)
-3. Usuario consegue EDITAR viagem (veiculo, motorista, ajudante)
-4. Usuario consegue EDITAR embarque (local, horario, ordem)
-5. Exclusao de viagem com embarques e BLOQUEADA com mensagem clara
-6. Exclusao de viagem com vendas e BLOQUEADA definitivamente
-7. Exclusao de embarque com passageiros e BLOQUEADA
-8. Labels de viagem sao completos e inequivocos em TODOS os dropdowns
-9. Fluxo intuitivo para eventos noturnos (shows, festas, excursoes)
+| Item | Arquivo | Tipo de Alteração |
+|------|---------|-------------------|
+| 1.1 | Migração SQL | Adicionar `image_url` na tabela `events` |
+| 1.2 | Migração SQL | Criar bucket `event-images` no Storage |
+| 1.3 | `src/types/database.ts` | Adicionar `image_url` na interface |
+| 1.4-1.5 | `src/pages/admin/Events.tsx` | Implementar upload de imagem |
+| 2.1-2.3 | `src/pages/admin/Events.tsx` | Criar `uniqueFleets`, atualizar contadores |
+| 3.1 | `src/pages/admin/Events.tsx` | Usar `getTripLabelWithoutTime` no seletor |
+| 4.1-4.2 | `src/pages/admin/Events.tsx` | Formatar preço, ajustar limite para min=0 |
+| 6 | `src/pages/admin/Events.tsx` | Corrigir checklist para exigir apenas Ida |
 
 ---
 
-## Fora do Escopo
+## Ordem de Implementação
 
-- PDF / Excel
-- Pagamento real
-- Mapa de assentos
-- Campo "status" na viagem (ativa/cancelada) - pode ser implementado futuramente
+1. Migração SQL (image_url + bucket)
+2. Atualizar tipos TypeScript
+3. Implementar upload de imagem
+4. Criar helpers `uniqueFleets` e `correctTotalCapacity`
+5. Atualizar tab "Viagens" para "Frotas"
+6. Atualizar card Resumo com valores corretos
+7. Padronizar dropdown na aba Embarques
+8. Ajustar campo de preço e limite
+9. Corrigir lógica do checklist de publicação
 
+---
+
+## Critérios de Sucesso
+
+1. Usuário consegue fazer upload de imagem com orientação clara
+2. Tab e resumo mostram "Frotas/Transportes" em vez de "Viagens"
+3. Capacidade total reflete apenas 1x por veículo (não duplica ida+volta)
+4. Todos os dropdowns de viagem usam padrão sem horário
+5. Preço sempre formatado com 2 casas decimais
+6. Limite 0 funciona como ilimitado com texto explicativo
+7. Evento pode ser publicado tendo apenas embarque na Ida
