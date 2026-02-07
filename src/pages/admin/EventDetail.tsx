@@ -93,7 +93,7 @@ export default function EventDetail() {
         supabase.from('events').select('*').eq('id', id).single(),
         supabase
           .from('trips')
-          .select('*, vehicle:vehicles(*), driver:drivers(*)')
+          .select('*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(*), assistant_driver:drivers!trips_assistant_driver_id_fkey(*)')
           .eq('event_id', id),
         supabase
           .from('event_boarding_locations')

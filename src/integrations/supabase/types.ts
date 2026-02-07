@@ -181,20 +181,26 @@ export type Database = {
         Row: {
           boarding_location_id: string
           company_id: string
+          departure_time: string | null
           event_id: string
           id: string
+          trip_id: string | null
         }
         Insert: {
           boarding_location_id: string
           company_id: string
+          departure_time?: string | null
           event_id: string
           id?: string
+          trip_id?: string | null
         }
         Update: {
           boarding_location_id?: string
           company_id?: string
+          departure_time?: string | null
           event_id?: string
           id?: string
+          trip_id?: string | null
         }
         Relationships: [
           {
@@ -218,40 +224,59 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "event_boarding_locations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
         ]
       }
       events: {
         Row: {
+          allow_online_sale: boolean
+          allow_seller_sale: boolean
           city: string
           company_id: string
           created_at: string
           date: string
           description: string | null
           id: string
+          max_tickets_per_purchase: number
           name: string
           status: Database["public"]["Enums"]["event_status"]
+          unit_price: number
           updated_at: string
         }
         Insert: {
+          allow_online_sale?: boolean
+          allow_seller_sale?: boolean
           city: string
           company_id: string
           created_at?: string
           date: string
           description?: string | null
           id?: string
+          max_tickets_per_purchase?: number
           name: string
           status?: Database["public"]["Enums"]["event_status"]
+          unit_price?: number
           updated_at?: string
         }
         Update: {
+          allow_online_sale?: boolean
+          allow_seller_sale?: boolean
           city?: string
           company_id?: string
           created_at?: string
           date?: string
           description?: string | null
           id?: string
+          max_tickets_per_purchase?: number
           name?: string
           status?: Database["public"]["Enums"]["event_status"]
+          unit_price?: number
           updated_at?: string
         }
         Relationships: [
@@ -432,6 +457,7 @@ export type Database = {
       }
       trips: {
         Row: {
+          assistant_driver_id: string | null
           capacity: number
           company_id: string
           created_at: string
@@ -439,10 +465,12 @@ export type Database = {
           driver_id: string
           event_id: string
           id: string
+          trip_type: string
           updated_at: string
           vehicle_id: string
         }
         Insert: {
+          assistant_driver_id?: string | null
           capacity: number
           company_id: string
           created_at?: string
@@ -450,10 +478,12 @@ export type Database = {
           driver_id: string
           event_id: string
           id?: string
+          trip_type?: string
           updated_at?: string
           vehicle_id: string
         }
         Update: {
+          assistant_driver_id?: string | null
           capacity?: number
           company_id?: string
           created_at?: string
@@ -461,10 +491,18 @@ export type Database = {
           driver_id?: string
           event_id?: string
           id?: string
+          trip_type?: string
           updated_at?: string
           vehicle_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trips_assistant_driver_id_fkey"
+            columns: ["assistant_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trips_company_id_fkey"
             columns: ["company_id"]

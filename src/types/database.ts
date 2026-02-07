@@ -7,6 +7,7 @@ export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago';
 export type SellerStatus = 'ativo' | 'inativo';
 export type ProfileStatus = 'ativo' | 'inativo';
+export type TripType = 'ida' | 'volta';
 
 export interface Company {
   id: string;
@@ -130,6 +131,10 @@ export interface Event {
   city: string;
   description: string | null;
   status: EventStatus;
+  unit_price: number;
+  max_tickets_per_purchase: number;
+  allow_online_sale: boolean;
+  allow_seller_sale: boolean;
   company_id: string;
   created_at: string;
   updated_at: string;
@@ -140,19 +145,27 @@ export interface Trip {
   event_id: string;
   vehicle_id: string;
   driver_id: string;
+  assistant_driver_id: string | null;
+  trip_type: TripType;
   departure_time: string;
   capacity: number;
+  company_id: string;
   created_at: string;
   updated_at: string;
   vehicle?: Vehicle;
   driver?: Driver;
+  assistant_driver?: Driver;
 }
 
 export interface EventBoardingLocation {
   id: string;
   event_id: string;
   boarding_location_id: string;
+  trip_id: string | null;
+  departure_time: string | null;
+  company_id: string;
   boarding_location?: BoardingLocation;
+  trip?: Trip;
 }
 
 export interface Sale {
