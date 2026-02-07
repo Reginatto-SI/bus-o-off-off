@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogClose,
@@ -20,6 +21,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+import { CityAutocomplete } from '@/components/ui/city-autocomplete';
+import { IdCard, MapPin, Shield } from 'lucide-react';
 
 interface ProfileFormData {
   name: string;
@@ -299,24 +302,11 @@ export default function MyAccount() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-64" />
               </CardHeader>
-              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
-              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              <CardContent className="space-y-4">
                 <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-4 w-56" />
-              </CardHeader>
-              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
-              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
               </CardContent>
@@ -326,132 +316,153 @@ export default function MyAccount() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <Card>
               <CardHeader>
-                <CardTitle>Perfil</CardTitle>
-                <CardDescription>Atualize seus dados básicos de contato.</CardDescription>
+                <CardTitle>Minha Conta</CardTitle>
+                <CardDescription>Gerencie seus dados pessoais e segurança</CardDescription>
               </CardHeader>
-              {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
-              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome completo</Label>
-                  <Input
-                    id="name"
-                    value={form.name}
-                    onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  />
-                  {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    value={form.phone}
-                    onChange={(event) =>
-                      setForm({ ...form, phone: formatPhoneInput(event.target.value) })
-                    }
-                  />
-                  {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <Input
-                    id="cpf"
-                    value={form.cpf}
-                    onChange={(event) => setForm({ ...form, cpf: formatCpfInput(event.target.value) })}
-                  />
-                  {errors.cpf && <p className="text-sm text-destructive">{errors.cpf}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" value={form.email} readOnly className="bg-muted" />
-                  <p className="text-xs text-muted-foreground">
-                    Este é seu login e não pode ser alterado aqui.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+              <CardContent className="space-y-4">
+                {/* Comentário: seguimos o padrão da tela de empresa com abas internas. */}
+                <Tabs defaultValue="dados" className="space-y-4">
+                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2">
+                    <TabsTrigger
+                      value="dados"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <IdCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Dados Gerais</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="endereco"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Endereço</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="seguranca"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Shield className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Segurança</span>
+                    </TabsTrigger>
+                  </TabsList>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Endereço</CardTitle>
-                <CardDescription>Se preferir, mantenha seus dados de entrega atualizados.</CardDescription>
-              </CardHeader>
-              {/* Comentário: ordem lógica e grid compacto para reduzir rolagem no desktop. */}
-              <CardContent className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input
-                    id="cep"
-                    value={form.cep}
-                    onChange={(event) => setForm({ ...form, cep: formatCepInput(event.target.value) })}
-                  />
-                  {errors.cep && <p className="text-sm text-destructive">{errors.cep}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="street">Rua/Logradouro</Label>
-                  <Input
-                    id="street"
-                    value={form.street}
-                    onChange={(event) => setForm({ ...form, street: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="number">Número</Label>
-                  <Input
-                    id="number"
-                    value={form.number}
-                    onChange={(event) => setForm({ ...form, number: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="neighborhood">Bairro</Label>
-                  <Input
-                    id="neighborhood"
-                    value={form.neighborhood}
-                    onChange={(event) => setForm({ ...form, neighborhood: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">Cidade</Label>
-                  <Input
-                    id="city"
-                    value={form.city}
-                    onChange={(event) => setForm({ ...form, city: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state">UF</Label>
-                  <Input
-                    id="state"
-                    value={form.state}
-                    onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase() })}
-                    maxLength={2}
-                  />
-                  {errors.state && <p className="text-sm text-destructive">{errors.state}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="complement">Complemento</Label>
-                  <Input
-                    id="complement"
-                    value={form.complement}
-                    onChange={(event) => setForm({ ...form, complement: event.target.value })}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                  <TabsContent value="dados" className="mt-0">
+                    {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Nome completo</Label>
+                        <Input
+                          id="name"
+                          value={form.name}
+                          onChange={(event) => setForm({ ...form, name: event.target.value })}
+                        />
+                        {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Telefone</Label>
+                        <Input
+                          id="phone"
+                          value={form.phone}
+                          onChange={(event) =>
+                            setForm({ ...form, phone: formatPhoneInput(event.target.value) })
+                          }
+                        />
+                        {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cpf">CPF</Label>
+                        <Input
+                          id="cpf"
+                          value={form.cpf}
+                          onChange={(event) =>
+                            setForm({ ...form, cpf: formatCpfInput(event.target.value) })
+                          }
+                        />
+                        {errors.cpf && <p className="text-sm text-destructive">{errors.cpf}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">E-mail</Label>
+                        <Input id="email" value={form.email} readOnly className="bg-muted" />
+                        <p className="text-xs text-muted-foreground">
+                          Este é seu login e não pode ser alterado aqui.
+                        </p>
+                      </div>
+                    </div>
+                  </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Segurança</CardTitle>
-                <CardDescription>Proteja seu acesso e credenciais de login.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium">Senha</p>
-                  <p className="text-sm text-muted-foreground">••••••••</p>
-                </div>
-                <Button type="button" variant="outline" onClick={() => setPasswordDialogOpen(true)}>
-                  Alterar senha
-                </Button>
+                  <TabsContent value="endereco" className="mt-0">
+                    {/* Comentário: ordem lógica e grid compacto para reduzir rolagem no desktop. */}
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="cep">CEP</Label>
+                        <Input
+                          id="cep"
+                          value={form.cep}
+                          onChange={(event) =>
+                            setForm({ ...form, cep: formatCepInput(event.target.value) })
+                          }
+                        />
+                        {errors.cep && <p className="text-sm text-destructive">{errors.cep}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="street">Rua/Logradouro</Label>
+                        <Input
+                          id="street"
+                          value={form.street}
+                          onChange={(event) => setForm({ ...form, street: event.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="number">Número</Label>
+                        <Input
+                          id="number"
+                          value={form.number}
+                          onChange={(event) => setForm({ ...form, number: event.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="neighborhood">Bairro</Label>
+                        <Input
+                          id="neighborhood"
+                          value={form.neighborhood}
+                          onChange={(event) =>
+                            setForm({ ...form, neighborhood: event.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">Cidade</Label>
+                        <CityAutocomplete
+                          value={{ city: form.city, state: form.state }}
+                          onChange={({ city, state }) => setForm({ ...form, city, state })}
+                          placeholder="Ex: São Paulo — SP"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">UF</Label>
+                        {/* Comentário: UF é preenchida automaticamente pelo autocomplete de cidade. */}
+                        <Input id="state" value={form.state} readOnly className="bg-muted" />
+                        {errors.state && <p className="text-sm text-destructive">{errors.state}</p>}
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="seguranca" className="mt-0">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Senha</p>
+                        <p className="text-sm text-muted-foreground">••••••••</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPasswordDialogOpen(true)}
+                      >
+                        Alterar senha
+                      </Button>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 
