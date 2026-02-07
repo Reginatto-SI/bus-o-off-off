@@ -4,29 +4,14 @@ import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/admin/PageHeader';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  FileText,
-  IdCard,
-  Loader2,
-  MapPin,
-  Pencil,
-  Plus,
-  Phone,
-} from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { FileText, IdCard, Loader2, MapPin, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate } from 'react-router-dom';
@@ -54,7 +39,6 @@ export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador } = useAuth();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -75,7 +59,7 @@ export default function CompanyPage() {
   });
 
   const hydrateFormFromCompany = (data: Company | null) => {
-    // Comentário: mantém o modal consistente com o registro único da empresa ativa.
+    // Comentário: mantém o formulário consistente com o registro único da empresa ativa.
     setEditingId(data?.id ?? null);
     setForm({
       legal_name: data?.legal_name ?? '',
@@ -116,9 +100,7 @@ export default function CompanyPage() {
       );
     } else {
       setCompany((data ?? null) as Company | null);
-      if (!dialogOpen) {
-        hydrateFormFromCompany((data ?? null) as Company | null);
-      }
+      hydrateFormFromCompany((data ?? null) as Company | null);
     }
     setLoading(false);
   };
@@ -128,6 +110,11 @@ export default function CompanyPage() {
   }, [activeCompanyId]);
 
   const resetForm = () => {
+    // Comentário: volta ao estado atual da empresa quando disponível.
+    if (company) {
+      hydrateFormFromCompany(company);
+      return;
+    }
     setEditingId(null);
     setForm({
       legal_name: '',
@@ -238,17 +225,10 @@ export default function CompanyPage() {
       );
     } else {
       toast.success(editingId ? 'Empresa atualizada' : 'Empresa cadastrada');
-      setDialogOpen(false);
       resetForm();
       fetchCompany();
     }
     setSaving(false);
-  };
-
-  const handleOpenDialog = () => {
-    // Comentário: mantém o formulário sincronizado com o registro atual ao abrir o modal.
-    hydrateFormFromCompany(company);
-    setDialogOpen(true);
   };
 
   const handleLogoUpload = async (file?: File) => {
@@ -368,276 +348,264 @@ export default function CompanyPage() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        {/* Header */}
+      <div className="p-4 lg:p-8 space-y-6">
         <PageHeader
           title="Empresa"
           description="Dados cadastrais e informações institucionais da empresa"
-          actions={
-            <Dialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) resetForm();
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={handleOpenDialog}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Editar empresa
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                <DialogHeader className="admin-modal__header px-6 py-4">
-                  <DialogTitle>{editingId ? 'Editar' : 'Nova'} Empresa</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                  <Tabs defaultValue="dados" className="flex h-full flex-col">
-                    <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                      <TabsTrigger
-                        value="dados"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <IdCard className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Dados Gerais</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="endereco"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <MapPin className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Endereço</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="contato"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <Phone className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Contato</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="observacoes"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <FileText className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Observações</span>
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                      <TabsContent value="dados" className="mt-0">
-                        <div className="mb-6 grid gap-4 sm:grid-cols-[180px,1fr]">
-                          <div className="space-y-2">
-                            <Label>Logo da empresa</Label>
-                            <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-center">
-                              {form.logo_url ? (
-                                <img
-                                  src={form.logo_url}
-                                  alt="Logo da empresa"
-                                  className="h-20 w-20 rounded-md object-contain"
-                                />
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  Sem logo definida
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex flex-col justify-center gap-3">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-foreground">Upload da logo</p>
-                              <p className="text-xs text-muted-foreground">
-                                Use uma imagem PNG, JPG ou SVG (até {MAX_LOGO_SIZE_MB}MB).
-                              </p>
-                            </div>
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              accept={ALLOWED_LOGO_TYPES.join(',')}
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                void handleLogoUpload(file);
-                                event.currentTarget.value = '';
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full sm:w-fit"
-                              onClick={() => fileInputRef.current?.click()}
-                              disabled={logoUploading}
-                            >
-                              {logoUploading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : form.logo_url ? (
-                                'Alterar logo'
-                              ) : (
-                                'Enviar logo'
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                          <div className="space-y-2">
-                            <Label htmlFor="legal_name">Razão Social</Label>
-                            <Input
-                              id="legal_name"
-                              value={form.legal_name}
-                              onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
-                              placeholder="Empresa Exemplo LTDA"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="trade_name">Nome Fantasia</Label>
-                            <Input
-                              id="trade_name"
-                              value={form.trade_name}
-                              onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
-                              placeholder="Empresa Exemplo"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="cnpj">CNPJ</Label>
-                            <Input
-                              id="cnpj"
-                              value={form.cnpj}
-                              onChange={(e) =>
-                                setForm({ ...form, cnpj: formatCnpjInput(e.target.value) })
-                              }
-                              placeholder="00.000.000/0000-00"
-                            />
-                          </div>
-                          {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="endereco" className="mt-0">
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                          {/* Comentário: address é um campo único no schema; mantemos granularidade mínima para não inventar colunas. */}
-                          <div className="space-y-2 sm:col-span-2 xl:col-span-3">
-                            <Label htmlFor="address">Endereço</Label>
-                            <Input
-                              id="address"
-                              value={form.address}
-                              onChange={(e) => setForm({ ...form, address: e.target.value })}
-                              placeholder="Rua Exemplo, 123"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="city">Cidade</Label>
-                            <CityAutocomplete
-                              value={{ city: form.city, state: form.state }}
-                              onChange={({ city, state }) => setForm({ ...form, city, state })}
-                              placeholder="Ex: São Paulo — SP"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="state">UF</Label>
-                            {/* Comentário: UF é preenchida automaticamente pelo autocomplete de cidade. */}
-                            <Input
-                              id="state"
-                              value={form.state}
-                              readOnly
-                              placeholder="SP"
-                            />
-                          </div>
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="contato" className="mt-0">
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                          <div className="space-y-2">
-                            <Label htmlFor="email">E-mail principal</Label>
-                            <Input
-                              id="email"
-                              type="email"
-                              value={form.email}
-                              onChange={(e) => setForm({ ...form, email: e.target.value })}
-                              placeholder="contato@empresa.com"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="phone">Telefone</Label>
-                            <Input
-                              id="phone"
-                              value={form.phone}
-                              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                              placeholder="(11) 99999-9999"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="whatsapp">WhatsApp</Label>
-                            <Input
-                              id="whatsapp"
-                              value={form.whatsapp}
-                              onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                              placeholder="(11) 99999-9999"
-                            />
-                          </div>
-                          <div className="space-y-2 sm:col-span-2 xl:col-span-3">
-                            <Label htmlFor="website">Site</Label>
-                            <Input
-                              id="website"
-                              value={form.website}
-                              onChange={(e) => setForm({ ...form, website: e.target.value })}
-                              placeholder="https://www.empresa.com"
-                            />
-                          </div>
-                          {/* Comentário: nome do responsável não existe no schema atual, então não exibimos aqui. */}
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="observacoes" className="mt-0">
-                        <div className="grid gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="notes">Observações institucionais</Label>
-                            <Textarea
-                              id="notes"
-                              value={form.notes}
-                              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                              rows={5}
-                            />
-                          </div>
-                        </div>
-                      </TabsContent>
-                    </div>
-                  </Tabs>
-                  <div className="admin-modal__footer px-6 py-4">
-                    <div className="flex flex-wrap justify-end gap-3">
-                      <DialogClose asChild>
-                        <Button type="button" variant="outline">
-                          Cancelar
-                        </Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={saving}>
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
-          }
         />
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-60" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+              </CardContent>
+            </Card>
           </div>
-        ) : !company ? (
-          <EmptyState
-            icon={<IdCard className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhuma empresa cadastrada"
-            description="Cadastre os dados da empresa ativa"
-            action={
-              <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Empresa
+        ) : (
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Dados da Empresa</CardTitle>
+                <CardDescription>
+                  {company
+                    ? 'Atualize as informações cadastrais da empresa.'
+                    : 'Cadastre os dados da empresa ativa para começar.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Tabs defaultValue="dados" className="space-y-4">
+                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2">
+                    <TabsTrigger
+                      value="dados"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <IdCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Dados Gerais</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="endereco"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Endereço</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="contato"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Phone className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Contato</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="observacoes"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Observações</span>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="dados" className="mt-0 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-[180px,1fr]">
+                      <div className="space-y-2">
+                        <Label>Logo da empresa</Label>
+                        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-center">
+                          {form.logo_url ? (
+                            <img
+                              src={form.logo_url}
+                              alt="Logo da empresa"
+                              className="h-20 w-20 rounded-md object-contain"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Sem logo definida
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col justify-center gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">Upload da logo</p>
+                          <p className="text-xs text-muted-foreground">
+                            Use uma imagem PNG, JPG ou SVG (até {MAX_LOGO_SIZE_MB}MB).
+                          </p>
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept={ALLOWED_LOGO_TYPES.join(',')}
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            void handleLogoUpload(file);
+                            event.currentTarget.value = '';
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:w-fit"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={logoUploading}
+                        >
+                          {logoUploading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : form.logo_url ? (
+                            'Alterar logo'
+                          ) : (
+                            'Enviar logo'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="legal_name">Razão Social</Label>
+                        <Input
+                          id="legal_name"
+                          value={form.legal_name}
+                          onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
+                          placeholder="Empresa Exemplo LTDA"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="trade_name">Nome Fantasia</Label>
+                        <Input
+                          id="trade_name"
+                          value={form.trade_name}
+                          onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
+                          placeholder="Empresa Exemplo"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cnpj">CNPJ</Label>
+                        <Input
+                          id="cnpj"
+                          value={form.cnpj}
+                          onChange={(e) =>
+                            setForm({ ...form, cnpj: formatCnpjInput(e.target.value) })
+                          }
+                          placeholder="00.000.000/0000-00"
+                        />
+                      </div>
+                      {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="endereco" className="mt-0">
+                    {/* Comentário: ordem lógica e grid compacto para reduzir rolagem no desktop. */}
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      {/* Comentário: address é um campo único no schema; mantemos granularidade mínima para não inventar colunas. */}
+                      <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                        <Label htmlFor="address">Endereço</Label>
+                        <Input
+                          id="address"
+                          value={form.address}
+                          onChange={(e) => setForm({ ...form, address: e.target.value })}
+                          placeholder="Rua Exemplo, 123"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="city">Cidade</Label>
+                        <CityAutocomplete
+                          value={{ city: form.city, state: form.state }}
+                          onChange={({ city, state }) => setForm({ ...form, city, state })}
+                          placeholder="Ex: São Paulo — SP"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">UF</Label>
+                        {/* Comentário: UF é preenchida automaticamente pelo autocomplete de cidade. */}
+                        <Input
+                          id="state"
+                          value={form.state}
+                          readOnly
+                          className="bg-muted"
+                          placeholder="SP"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="contato" className="mt-0">
+                    {/* Comentário: layout responsivo compacto para dados de contato. */}
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">E-mail principal</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={form.email}
+                          onChange={(e) => setForm({ ...form, email: e.target.value })}
+                          placeholder="contato@empresa.com"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Telefone</Label>
+                        <Input
+                          id="phone"
+                          value={form.phone}
+                          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="whatsapp">WhatsApp</Label>
+                        <Input
+                          id="whatsapp"
+                          value={form.whatsapp}
+                          onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                        <Label htmlFor="website">Site</Label>
+                        <Input
+                          id="website"
+                          value={form.website}
+                          onChange={(e) => setForm({ ...form, website: e.target.value })}
+                          placeholder="https://www.empresa.com"
+                        />
+                      </div>
+                      {/* Comentário: nome do responsável não existe no schema atual, então não exibimos aqui. */}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="observacoes" className="mt-0">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="notes">Observações institucionais</Label>
+                        <Textarea
+                          id="notes"
+                          value={form.notes}
+                          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                          rows={5}
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Cancelar
               </Button>
-            }
-          />
-        ) : null}
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </AdminLayout>
   );
