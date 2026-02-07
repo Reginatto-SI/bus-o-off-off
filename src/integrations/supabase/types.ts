@@ -456,6 +456,57 @@ export type Database = {
           },
         ]
       }
+      sponsors: {
+        Row: {
+          banner_url: string | null
+          carousel_order: number
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          link_type: string
+          name: string
+          site_url: string | null
+          status: string
+          updated_at: string
+          whatsapp_message: string | null
+          whatsapp_phone: string | null
+        }
+        Insert: {
+          banner_url?: string | null
+          carousel_order?: number
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          link_type?: string
+          name: string
+          site_url?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp_message?: string | null
+          whatsapp_phone?: string | null
+        }
+        Update: {
+          banner_url?: string | null
+          carousel_order?: number
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          link_type?: string
+          name?: string
+          site_url?: string | null
+          status?: string
+          updated_at?: string
+          whatsapp_message?: string | null
+          whatsapp_phone?: string | null
+        }
+        Relationships: []
+      }
       sellers: {
         Row: {
           commission_percent: number
