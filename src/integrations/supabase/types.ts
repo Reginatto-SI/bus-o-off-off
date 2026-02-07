@@ -246,6 +246,7 @@ export type Database = {
           date: string
           description: string | null
           id: string
+          image_url: string | null
           max_tickets_per_purchase: number
           name: string
           status: Database["public"]["Enums"]["event_status"]
@@ -261,6 +262,7 @@ export type Database = {
           date: string
           description?: string | null
           id?: string
+          image_url?: string | null
           max_tickets_per_purchase?: number
           name: string
           status?: Database["public"]["Enums"]["event_status"]
@@ -276,6 +278,7 @@ export type Database = {
           date?: string
           description?: string | null
           id?: string
+          image_url?: string | null
           max_tickets_per_purchase?: number
           name?: string
           status?: Database["public"]["Enums"]["event_status"]

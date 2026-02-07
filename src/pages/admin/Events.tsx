@@ -181,12 +181,16 @@ export default function Events() {
     description: '',
     status: 'rascunho' as Event['status'],
     unit_price: '',
-    max_tickets_per_purchase: '5',
+    max_tickets_per_purchase: '0',
     allow_online_sale: true,
     allow_seller_sale: true,
+    image_url: '' as string | null,
   });
+  
+  // Image upload state
+  const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Computed: can publish checklist with per-trip validation
+  // Computed: can publish checklist - only requires IDA with boarding
   const publishChecklist = useMemo(() => {
     const hasName = form.name.trim() !== '';
     const hasDate = form.date !== '';
@@ -194,27 +198,26 @@ export default function Events() {
     const hasTrips = eventTrips.length > 0;
     const hasPrice = parseFloat(form.unit_price || '0') > 0;
     
-    // NEW: Check that EACH trip has at least one boarding
-    const tripsWithoutBoardings = eventTrips.filter(trip => {
-      const tripBoardings = eventBoardingLocations.filter(
-        ebl => ebl.trip_id === trip.id
-      );
-      return tripBoardings.length === 0;
-    });
-    const allTripsHaveBoardings = tripsWithoutBoardings.length === 0;
-    const hasBoardingLocations = eventBoardingLocations.length > 0 && allTripsHaveBoardings;
+    // NEW: At least one IDA trip must have boarding (volta is optional)
+    const hasIdaWithBoarding = eventTrips.some(trip => 
+      trip.trip_type === 'ida' && 
+      eventBoardingLocations.some(ebl => ebl.trip_id === trip.id)
+    );
+    
+    // If no IDA trips exist, accept any boarding
+    const hasBoardingForPublish = eventTrips.some(t => t.trip_type === 'ida')
+      ? hasIdaWithBoarding
+      : eventBoardingLocations.length > 0;
 
     return {
-      valid: hasName && hasDate && hasCity && hasTrips && hasBoardingLocations && hasPrice,
+      valid: hasName && hasDate && hasCity && hasTrips && hasBoardingForPublish && hasPrice,
       checks: {
         hasName,
         hasDate,
         hasCity,
         hasTrips,
-        allTripsHaveBoardings,
-        hasBoardingLocations,
+        hasBoardingLocations: hasBoardingForPublish,
         hasPrice,
-        tripsWithoutBoardings,
       },
     };
   }, [form, eventTrips, eventBoardingLocations]);
@@ -254,9 +257,21 @@ export default function Events() {
     return filters.search !== '' || filters.status !== 'all';
   }, [filters]);
 
-  // Total capacity from trips
-  const totalCapacity = useMemo(() => {
-    return eventTrips.reduce((sum, trip) => sum + (trip.capacity || 0), 0);
+  // Count unique vehicles (fleets) - not counting ida+volta as separate
+  const uniqueFleets = useMemo(() => {
+    const uniqueVehicleIds = new Set(eventTrips.map(t => t.vehicle_id));
+    return uniqueVehicleIds.size;
+  }, [eventTrips]);
+
+  // Correct capacity: sum only once per vehicle (not duplicating ida+volta)
+  const correctTotalCapacity = useMemo(() => {
+    const vehicleCapacities = new Map<string, number>();
+    eventTrips.forEach(trip => {
+      if (trip.vehicle_id && !vehicleCapacities.has(trip.vehicle_id)) {
+        vehicleCapacities.set(trip.vehicle_id, trip.capacity || 0);
+      }
+    });
+    return Array.from(vehicleCapacities.values()).reduce((sum, cap) => sum + cap, 0);
   }, [eventTrips]);
 
   // Fetch functions
@@ -438,9 +453,10 @@ export default function Events() {
       description: event.description ?? '',
       status: event.status,
       unit_price: event.unit_price?.toString() ?? '0',
-      max_tickets_per_purchase: event.max_tickets_per_purchase?.toString() ?? '5',
+      max_tickets_per_purchase: event.max_tickets_per_purchase?.toString() ?? '0',
       allow_online_sale: event.allow_online_sale ?? true,
       allow_seller_sale: event.allow_seller_sale ?? true,
+      image_url: (event as any).image_url ?? null,
     });
     setActiveTab('geral');
     loadEventData(event.id);
@@ -473,25 +489,7 @@ export default function Events() {
     return tripBoardings[0].departure_time;
   };
 
-  // Helper function to get complete trip label with computed time
-  const getTripLabel = (trip: TripWithDetails) => {
-    const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
-    
-    // Calculate time from first boarding
-    const computedTime = getTripDepartureTime(trip.id);
-    const time = computedTime ? computedTime.slice(0, 5) : 'A definir';
-    
-    const vehicleType = trip.vehicle 
-      ? vehicleTypeLabels[trip.vehicle.type] 
-      : 'Veículo';
-    const plate = trip.vehicle?.plate ?? '???';
-    const capacity = trip.capacity;
-    const driver = trip.driver?.name ?? 'Motorista não definido';
-    
-    return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
-  };
-
-  // Helper function for boarding modal dropdown (without time)
+  // Helper function for dropdown (without time)
   const getTripLabelWithoutTime = (trip: TripWithDetails) => {
     const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
     const vehicleType = trip.vehicle 
@@ -900,6 +898,7 @@ export default function Events() {
     setEventTrips([]);
     setEventBoardingLocations([]);
     setActiveTab('geral');
+    setUploadingImage(false);
     setForm({
       name: '',
       date: '',
@@ -907,9 +906,10 @@ export default function Events() {
       description: '',
       status: 'rascunho',
       unit_price: '',
-      max_tickets_per_purchase: '5',
+      max_tickets_per_purchase: '0',
       allow_online_sale: true,
       allow_seller_sale: true,
+      image_url: null,
     });
   };
 
@@ -1120,8 +1120,8 @@ export default function Events() {
                     disabled={!editingId}
                   >
                     <Bus className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Viagens</span>
-                    {editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{eventTrips.length}</span>}
+                    <span className="min-w-0 truncate">Frotas</span>
+                    {editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{uniqueFleets}</span>}
                   </TabsTrigger>
                   <TabsTrigger
                     value="embarques"
@@ -1166,15 +1166,113 @@ export default function Events() {
 
                   {/* Tab Geral */}
                   <TabsContent value="geral" className="mt-0 space-y-4">
-                    {/* Image placeholder */}
-                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center bg-muted/20">
-                      <Image className="h-10 w-10 mx-auto mb-2 text-muted-foreground/50" />
-                      <p className="text-sm text-muted-foreground">
-                        Arraste uma imagem ou clique para selecionar
-                      </p>
-                      <p className="text-xs text-muted-foreground/70 mt-1">
-                        (Funcionalidade em desenvolvimento)
-                      </p>
+                    {/* Image upload */}
+                    <div className="space-y-2">
+                      <Label>Imagem/Banner do Evento</Label>
+                      {form.image_url ? (
+                        <div className="relative">
+                          <img 
+                            src={form.image_url} 
+                            alt="Banner do evento" 
+                            className="w-full max-h-64 object-cover rounded-lg border"
+                          />
+                          {!isReadOnly && (
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-2 right-2"
+                              onClick={async () => {
+                                // Remove image from event
+                                if (editingId) {
+                                  await supabase
+                                    .from('events')
+                                    .update({ image_url: null })
+                                    .eq('id', editingId);
+                                }
+                                setForm({ ...form, image_url: null });
+                                toast.success('Imagem removida');
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Remover
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <label 
+                          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                            isReadOnly 
+                              ? 'border-muted-foreground/15 bg-muted/10 cursor-not-allowed' 
+                              : 'border-muted-foreground/25 bg-muted/20 hover:border-primary/50 hover:bg-primary/5'
+                          }`}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={isReadOnly || uploadingImage || !editingId}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file || !editingId || !activeCompanyId) return;
+                              
+                              setUploadingImage(true);
+                              const fileExt = file.name.split('.').pop();
+                              const fileName = `${editingId}-${Date.now()}.${fileExt}`;
+                              
+                              const { error: uploadError } = await supabase.storage
+                                .from('event-images')
+                                .upload(fileName, file);
+                                
+                              if (uploadError) {
+                                toast.error('Erro ao fazer upload da imagem');
+                                setUploadingImage(false);
+                                return;
+                              }
+                              
+                              const { data: { publicUrl } } = supabase.storage
+                                .from('event-images')
+                                .getPublicUrl(fileName);
+                                
+                              // Update event with URL
+                              const { error: updateError } = await supabase
+                                .from('events')
+                                .update({ image_url: publicUrl })
+                                .eq('id', editingId);
+                                
+                              if (updateError) {
+                                toast.error('Erro ao salvar URL da imagem');
+                              } else {
+                                setForm({ ...form, image_url: publicUrl });
+                                toast.success('Imagem enviada com sucesso');
+                              }
+                              setUploadingImage(false);
+                            }}
+                          />
+                          {uploadingImage ? (
+                            <Loader2 className="h-10 w-10 mx-auto mb-2 text-primary animate-spin" />
+                          ) : (
+                            <Image className="h-10 w-10 mx-auto mb-2 text-muted-foreground/50" />
+                          )}
+                          <p className="text-sm text-muted-foreground">
+                            {uploadingImage 
+                              ? 'Enviando imagem...' 
+                              : !editingId 
+                                ? 'Salve o evento primeiro para adicionar imagem'
+                                : 'Clique para selecionar uma imagem'
+                            }
+                          </p>
+                          <p className="text-xs text-muted-foreground/70 mt-2">
+                            Imagem recomendada: formato vertical (4:5)
+                          </p>
+                          <p className="text-xs text-muted-foreground/70">
+                            Tamanho sugerido: 1080 x 1350 pixels
+                          </p>
+                          <p className="text-xs text-muted-foreground/70">
+                            Exibida no aplicativo mobile e portal público
+                          </p>
+                        </label>
+                      )}
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1386,7 +1484,7 @@ export default function Events() {
                               <SelectItem value="__none__">Todas as viagens</SelectItem>
                               {eventTrips.map((trip) => (
                                 <SelectItem key={trip.id} value={trip.id}>
-                                  {getTripLabel(trip)}
+                                  {getTripLabelWithoutTime(trip)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1561,6 +1659,14 @@ export default function Events() {
                               className="pl-10"
                               value={form.unit_price}
                               onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                              onBlur={() => {
+                                if (form.unit_price) {
+                                  const value = parseFloat(form.unit_price);
+                                  if (!isNaN(value)) {
+                                    setForm({ ...form, unit_price: value.toFixed(2) });
+                                  }
+                                }
+                              }}
                               placeholder="0,00"
                               disabled={isReadOnly}
                             />
@@ -1571,12 +1677,15 @@ export default function Events() {
                           <Input
                             id="max_tickets"
                             type="number"
-                            min="1"
+                            min="0"
                             max="20"
                             value={form.max_tickets_per_purchase}
                             onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
                             disabled={isReadOnly}
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Use 0 para permitir compras sem limite por pedido
+                          </p>
                         </div>
                       </div>
 
@@ -1625,12 +1734,12 @@ export default function Events() {
                         <h4 className="text-sm font-medium mb-3">Resumo do Evento</h4>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <p className="text-muted-foreground">Viagens</p>
-                            <p className="font-medium">{eventTrips.length}</p>
+                            <p className="text-muted-foreground">Transportes</p>
+                            <p className="font-medium">{uniqueFleets}</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Capacidade Total</p>
-                            <p className="font-medium">{totalCapacity} lugares</p>
+                            <p className="font-medium">{correctTotalCapacity} lugares</p>
                           </div>
                           <div>
                             <p className="text-muted-foreground">Locais de Embarque</p>
@@ -1714,7 +1823,7 @@ export default function Events() {
                                 <XCircle className="h-4 w-4 text-destructive" />
                               )}
                               <span className={publishChecklist.checks.hasBoardingLocations ? 'text-muted-foreground' : 'text-destructive'}>
-                                Pelo menos 1 local de embarque
+                                Pelo menos 1 local de embarque na Ida
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
