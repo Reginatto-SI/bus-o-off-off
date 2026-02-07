@@ -1,129 +1,156 @@
 
 
-# Plano: Melhoria da Tela de Eventos (/admin/eventos)
+# Plano: Completar Popup de Evento com Todas as Abas Operacionais
 
 ## Visao Geral
 
-Transformar a tela de Eventos em uma tela profissional seguindo o padrao piloto /admin/frota, mantendo o layout de cards para listagem mas usando o modal com abas para cadastro/edicao.
+O popup de evento sera transformado de um cadastro simples para um **HUB operacional completo**, permitindo configurar em um unico lugar: dados basicos, viagens, embarques, regras de venda e publicacao.
 
 ---
 
-## Parte 1: Analise Comparativa
+## Parte 1: Alteracoes no Banco de Dados
 
-### Atual vs Esperado
+### 1.1 Adicionar Campos na Tabela `trips`
 
-| Aspecto | Atual | Esperado |
-|---------|-------|----------|
-| Cabecalho | DIV manual | PageHeader |
-| KPIs | Nenhum | 4 StatsCards |
-| Filtros | Nenhum | FilterCard |
-| Modal | Simples sem abas | Modal com 3 abas |
-| Cards de eventos | Basico | Card com resumo operacional + menu |
-| Acoes no card | Click no card todo | Menu "..." no canto |
-| Estado vazio | Basico | Melhorado visualmente |
-| Edicao de evento | Apenas criacao | CRUD completo no modal |
+Para suportar tipo de viagem e ajudante:
 
----
+```sql
+-- Adicionar tipo de viagem (ida/volta)
+ALTER TABLE public.trips 
+  ADD COLUMN IF NOT EXISTS trip_type text NOT NULL DEFAULT 'ida';
 
-## Parte 2: Estrutura do Cabecalho
+-- Adicionar ajudante (opcional)
+ALTER TABLE public.trips 
+  ADD COLUMN IF NOT EXISTS assistant_driver_id uuid REFERENCES public.drivers(id) ON DELETE SET NULL;
 
-### PageHeader
-
-```text
-+------------------------------------------------------------------+
-| Eventos                                          [+ Criar Evento] |
-| Gerencie os eventos e viagens                                     |
-+------------------------------------------------------------------+
+COMMENT ON COLUMN public.trips.trip_type IS 'Tipo da viagem: ida ou volta';
+COMMENT ON COLUMN public.trips.assistant_driver_id IS 'Ajudante/copiloto da viagem (opcional)';
 ```
 
-Remover botoes Excel/PDF conforme solicitado.
+### 1.2 Adicionar Campos na Tabela `event_boarding_locations`
+
+Para suportar horario de embarque e vinculo com viagem:
+
+```sql
+-- Adicionar horario de embarque por local
+ALTER TABLE public.event_boarding_locations 
+  ADD COLUMN IF NOT EXISTS departure_time time;
+
+-- Adicionar vinculo com viagem especifica (opcional - local pode ser global do evento)
+ALTER TABLE public.event_boarding_locations 
+  ADD COLUMN IF NOT EXISTS trip_id uuid REFERENCES public.trips(id) ON DELETE CASCADE;
+
+COMMENT ON COLUMN public.event_boarding_locations.departure_time IS 'Horario de embarque neste local';
+COMMENT ON COLUMN public.event_boarding_locations.trip_id IS 'Viagem especifica (null = disponivel para todas)';
+```
+
+### 1.3 Adicionar Campos de Configuracao de Venda na Tabela `events`
+
+Para centralizar configuracoes de venda no evento:
+
+```sql
+-- Preco padrao da passagem
+ALTER TABLE public.events 
+  ADD COLUMN IF NOT EXISTS unit_price numeric NOT NULL DEFAULT 0.00;
+
+-- Limite de passagens por compra
+ALTER TABLE public.events 
+  ADD COLUMN IF NOT EXISTS max_tickets_per_purchase integer NOT NULL DEFAULT 5;
+
+-- Permitir venda online
+ALTER TABLE public.events 
+  ADD COLUMN IF NOT EXISTS allow_online_sale boolean NOT NULL DEFAULT true;
+
+-- Permitir venda por vendedor
+ALTER TABLE public.events 
+  ADD COLUMN IF NOT EXISTS allow_seller_sale boolean NOT NULL DEFAULT true;
+
+COMMENT ON COLUMN public.events.unit_price IS 'Preco padrao da passagem';
+COMMENT ON COLUMN public.events.max_tickets_per_purchase IS 'Limite de passagens por compra';
+COMMENT ON COLUMN public.events.allow_online_sale IS 'Permitir venda pelo portal publico';
+COMMENT ON COLUMN public.events.allow_seller_sale IS 'Permitir venda por vendedores';
+```
 
 ---
 
-## Parte 3: Cards de Indicadores (StatsCards)
+## Parte 2: Atualizacao de Tipos TypeScript
 
-| Card | Label | Icone | Variante |
-|------|-------|-------|----------|
-| 1 | Total de eventos | Calendar | default |
-| 2 | Rascunhos | FileEdit | default |
-| 3 | A venda | ShoppingBag | success |
-| 4 | Encerrados | CheckCircle | destructive |
-
-Calculos baseados nos eventos carregados da empresa.
-
----
-
-## Parte 4: Card de Filtros
-
-**Filtros Simples:**
-- Campo de busca: pesquisar por nome ou cidade
-- Select de status: Todos / Rascunho / A Venda / Encerrado
-- Botao "Limpar"
-
-Interface de filtros:
+### Arquivo: src/types/database.ts
 
 ```typescript
-interface EventFilters {
-  search: string;
-  status: 'all' | 'rascunho' | 'a_venda' | 'encerrado';
+// Adicionar tipo de viagem
+export type TripType = 'ida' | 'volta';
+
+// Atualizar interface Trip
+export interface Trip {
+  id: string;
+  event_id: string;
+  vehicle_id: string;
+  driver_id: string;
+  assistant_driver_id: string | null;  // NOVO
+  trip_type: TripType;                  // NOVO
+  departure_time: string;
+  capacity: number;
+  created_at: string;
+  updated_at: string;
+  vehicle?: Vehicle;
+  driver?: Driver;
+  assistant_driver?: Driver;           // NOVO
+}
+
+// Atualizar interface EventBoardingLocation
+export interface EventBoardingLocation {
+  id: string;
+  event_id: string;
+  boarding_location_id: string;
+  trip_id: string | null;              // NOVO
+  departure_time: string | null;       // NOVO
+  company_id: string;
+  boarding_location?: BoardingLocation;
+  trip?: Trip;                         // NOVO
+}
+
+// Atualizar interface Event
+export interface Event {
+  id: string;
+  name: string;
+  date: string;
+  city: string;
+  description: string | null;
+  status: EventStatus;
+  unit_price: number;                  // NOVO
+  max_tickets_per_purchase: number;    // NOVO
+  allow_online_sale: boolean;          // NOVO
+  allow_seller_sale: boolean;          // NOVO
+  company_id: string;
+  created_at: string;
+  updated_at: string;
 }
 ```
 
 ---
 
-## Parte 5: Listagem em Cards
+## Parte 3: Estrutura do Modal com 5 Abas
 
-### Novo Layout dos Cards
-
-Cada card de evento exibira:
-
-```text
-+--------------------------------------------------+
-| Nome do Evento                            [...]  |
-|                                                  |
-| [Badge Status]                                   |
-|                                                  |
-| 📅 dd de mês de yyyy                            |
-| 📍 Cidade                                        |
-|                                                  |
-| 🚌 X viagens  |  👥 Y lugares disponiveis       |
-+--------------------------------------------------+
-```
-
-O menu "..." no canto substituira o click no card inteiro.
-
-### Acoes do Menu (ActionsDropdown)
-
-| Acao | Icone | Comportamento |
-|------|-------|---------------|
-| Editar | Pencil | Abre modal de edicao |
-| Alterar Status | RefreshCw | Abre submenu de status |
-| Ver Detalhes | ExternalLink | Navega para /admin/eventos/{id} |
-| Excluir | Trash2 | Confirmacao + exclusao (se permitido) |
-
-**Regras:**
-- Evento "encerrado" nao pode ser editado (somente visualizado)
-- Excluir disponivel apenas para eventos sem vendas
-
----
-
-## Parte 6: Modal com Abas (OBRIGATORIO)
-
-### Estrutura do Modal
+### Visao Geral das Abas
 
 ```text
 +------------------------------------------------------------------+
 | Novo Evento / Editar Evento                                [X]   |
 +------------------------------------------------------------------+
-| [Geral] [Viagens] [Publicacao]                                    |
+| [Geral] [Viagens] [Embarques] [Passagens] [Publicacao]           |
 +------------------------------------------------------------------+
-| [Conteudo da aba ativa com scroll interno]                       |
+| [Conteudo da aba ativa]                                          |
 +------------------------------------------------------------------+
 | [Cancelar]                                           [Salvar]    |
 +------------------------------------------------------------------+
 ```
 
-### Aba 1 - Geral
+---
+
+## Parte 4: Aba 1 - Geral (MANTER/MELHORAR)
+
+### Campos Existentes (manter)
 
 | Campo | Tipo | Obrigatorio |
 |-------|------|-------------|
@@ -131,269 +158,411 @@ O menu "..." no canto substituira o click no card inteiro.
 | Data | date | Sim |
 | Cidade | text | Sim |
 | Descricao | textarea | Nao |
-| Imagem (placeholder) | - | Nao (estrutura preparada) |
 
-### Aba 2 - Viagens
+### Melhoria Visual
 
-**Listagem simples das viagens vinculadas:**
+Adicionar area para banner/imagem (estrutura preparada para futuro):
+
+```text
++--------------------------------------------------+
+| [Icone Image]                                    |
+| Arraste uma imagem ou clique para selecionar     |
+| (Funcionalidade em desenvolvimento)              |
++--------------------------------------------------+
+```
+
+---
+
+## Parte 5: Aba 2 - Viagens (MELHORAR)
+
+### Campos por Viagem (atualizados)
+
+| Campo | Tipo | Obrigatorio |
+|-------|------|-------------|
+| Tipo | select (ida/volta) | Sim |
+| Veiculo | select | Sim |
+| Motorista | select | Sim |
+| Ajudante | select | Nao |
+| Horario de Saida | time | Sim |
+| Capacidade | number | Sim (auto-preenchido) |
+
+### Interface Visual
 
 ```text
 +--------------------------------------------------+
 | Viagens do Evento                                |
 +--------------------------------------------------+
-| 🕐 08:00  🚌 Onibus ABC-1234  👥 46 lugares      |
-| 🕐 14:00  🚌 Van DEF-5678     👥 15 lugares      |
+| [ IDA ] 08:00  Onibus ABC-1234  46 lug.  [X]    |
+|         Motorista: Joao  |  Ajudante: Pedro     |
+|                                                  |
+| [VOLTA] 22:00  Onibus ABC-1234  46 lug.  [X]    |
+|         Motorista: Joao  |  Ajudante: Pedro     |
 +--------------------------------------------------+
 | [+ Adicionar Viagem]                             |
 +--------------------------------------------------+
 ```
 
-Se clicar em "Adicionar Viagem" dentro do modal de evento, abre um sub-modal simples com:
-- Select de veiculo
-- Select de motorista
-- Horario de saida
-- Capacidade (opcional, herda do veiculo)
-
-**Nota:** Nao aprofundar regras complexas - foco estrutural.
-
-### Aba 3 - Publicacao
+### Modal de Adicionar Viagem (Atualizado)
 
 ```text
 +--------------------------------------------------+
-| Configuracoes de Publicacao                      |
+| Adicionar Viagem                           [X]   |
 +--------------------------------------------------+
-| Status do Evento:                                |
-| [Select: Rascunho / A Venda / Encerrado]         |
+| Tipo da Viagem *                                 |
+| [O Ida] [O Volta]                                |
 |                                                  |
-| ℹ️  Somente eventos "A Venda" ficam visiveis no  |
-|    portal publico para compra de passagens.      |
+| Veiculo *                 Capacidade             |
+| [Select v]                [46] (auto)            |
+|                                                  |
+| Motorista *               Ajudante               |
+| [Select v]                [Select v]             |
+|                                                  |
+| Horario de Saida *                               |
+| [08:00]                                          |
++--------------------------------------------------+
+| [Cancelar]                        [Adicionar]    |
 +--------------------------------------------------+
 ```
 
 ---
 
-## Parte 7: Estados Vazios
+## Parte 6: Aba 3 - Embarques (NOVA)
 
-### Sem Eventos
+### Funcionalidades
+
+1. Listar locais de embarque vinculados ao evento
+2. Adicionar local de embarque com horario
+3. Vincular local a uma viagem especifica (opcional)
+4. Remover local de embarque
+
+### Interface Visual
 
 ```text
 +--------------------------------------------------+
+| Locais de Embarque do Evento                     |
++--------------------------------------------------+
+| [Icone MapPin] Terminal Rodoviario               |
+|    Rua das Palmeiras, 100 - Centro               |
+|    Horario: 07:30  |  Viagem: Ida                |
+|                                          [X]     |
 |                                                  |
-|           [Icone Calendar grande]                |
-|                                                  |
-|        Nenhum evento cadastrado                  |
-|   Crie seu primeiro evento para comecar         |
-|       a vender passagens                         |
-|                                                  |
-|          [+ Criar Evento]                        |
-|                                                  |
+| [Icone MapPin] Posto Shell - BR 101              |
+|    Rod. BR 101, KM 45                            |
+|    Horario: 07:45  |  Viagem: Todas              |
+|                                          [X]     |
++--------------------------------------------------+
+| [+ Adicionar Local de Embarque]                  |
 +--------------------------------------------------+
 ```
 
-### Filtros sem Resultados
+### Modal de Adicionar Local
 
 ```text
 +--------------------------------------------------+
+| Adicionar Local de Embarque                [X]   |
++--------------------------------------------------+
+| Local *                                          |
+| [Select: Selecione um local cadastrado v]        |
 |                                                  |
-|           [Icone Calendar grande]                |
+| Horario de Embarque *                            |
+| [07:30]                                          |
 |                                                  |
-|        Nenhum evento encontrado                  |
-|    Ajuste os filtros para encontrar eventos      |
-|                                                  |
-|          [Limpar filtros]                        |
-|                                                  |
+| Vincular a Viagem                                |
+| [Select: Todas as viagens v]                     |
+| (Opcional - deixe em branco para todas)          |
++--------------------------------------------------+
+| [Cancelar]                        [Adicionar]    |
++--------------------------------------------------+
+```
+
+### Estado Vazio
+
+```text
++--------------------------------------------------+
+| [Icone MapPin grande]                            |
+| Nenhum local de embarque definido                |
+| Adicione locais onde os passageiros embarcarao   |
+| [+ Adicionar Local de Embarque]                  |
 +--------------------------------------------------+
 ```
 
 ---
 
-## Parte 8: Logica de Carregamento
+## Parte 7: Aba 4 - Passagens / Venda (NOVA)
 
-### Dados a Buscar
+### Campos de Configuracao
 
-1. **Eventos** - lista principal
-2. **Trips (contagem)** - para exibir resumo operacional nos cards
-3. **Veiculos ativos** - para modal de viagem
-4. **Motoristas ativos** - para modal de viagem
+| Campo | Tipo | Obrigatorio | Padrao |
+|-------|------|-------------|--------|
+| Preco da Passagem | currency | Sim | R$ 0,00 |
+| Limite por Compra | number | Sim | 5 |
+| Venda Online | switch | Sim | Ativo |
+| Venda por Vendedor | switch | Sim | Ativo |
 
-Query otimizada:
+### Interface Visual
 
-```typescript
-// Eventos com contagem de viagens
-const { data: events } = await supabase
-  .from('events')
-  .select(`
-    *,
-    trips:trips(count)
-  `)
-  .order('date', { ascending: false });
+```text
++--------------------------------------------------+
+| Configuracoes de Venda                           |
++--------------------------------------------------+
+| Preco da Passagem *                              |
+| [R$ ___,__]                                      |
+|                                                  |
+| Limite de Passagens por Compra *                 |
+| [5] passagens                                    |
+|                                                  |
+| Canais de Venda                                  |
+| +----------------------------------------------+ |
+| | [Switch ON]  Venda Online                    | |
+| | Passagens disponiveis no portal publico      | |
+| +----------------------------------------------+ |
+| | [Switch ON]  Venda por Vendedor              | |
+| | Vendedores podem vender via link exclusivo   | |
+| +----------------------------------------------+ |
++--------------------------------------------------+
+
++--------------------------------------------------+
+| Resumo do Evento                                 |
++--------------------------------------------------+
+| Viagens cadastradas: 2                           |
+| Capacidade total: 92 lugares                     |
+| Locais de embarque: 3                            |
++--------------------------------------------------+
+```
+
+### Card Informativo
+
+```text
++--------------------------------------------------+
+| [Icone Info] Informacao                          |
++--------------------------------------------------+
+| O pagamento sera processado no momento da        |
+| compra. Neste MVP, o pagamento e simulado.       |
+| A integracao com gateway sera implementada       |
+| em versao futura.                                |
++--------------------------------------------------+
 ```
 
 ---
 
-## Parte 9: Funcionalidades CRUD
+## Parte 8: Aba 5 - Publicacao (MANTER/MELHORAR)
 
-### Criar Evento
+### Estrutura Existente (manter)
 
-1. Abrir modal vazio
-2. Preencher aba "Geral"
-3. Salvar cria evento com status "rascunho"
-4. Viagens podem ser adicionadas depois
+- Select de status (Rascunho / A Venda / Encerrado)
+- Card informativo sobre cada status
 
-### Editar Evento
+### Adicionar Validacao Visual
 
-1. Menu "..." > Editar
-2. Modal carrega dados do evento
-3. Navegacao entre abas
-4. Salvar atualiza evento
+Antes de permitir "A Venda", exibir checklist:
 
-### Alterar Status
+```text
++--------------------------------------------------+
+| Checklist para Publicacao                        |
++--------------------------------------------------+
+| [Check verde] Nome e data definidos              |
+| [Check verde] Pelo menos 1 viagem cadastrada     |
+| [X vermelho] Pelo menos 1 local de embarque      |
+| [Check verde] Preco da passagem definido         |
++--------------------------------------------------+
+| Atencao: Corrija os itens pendentes antes de     |
+| publicar o evento para venda.                    |
++--------------------------------------------------+
+```
 
-1. Menu "..." > Alterar Status
-2. Ou diretamente na aba "Publicacao"
-3. Update no campo status
+### Regra de Bloqueio
 
-### Excluir Evento
+Se evento esta "encerrado", exibir mensagem e desabilitar edicao:
 
-1. Menu "..." > Excluir
-2. Verificar se nao tem vendas
-3. Confirmacao (AlertDialog)
-4. Delete do evento
-
-**Regras de exclusao:**
-- Eventos com vendas NAO podem ser excluidos
-- Eventos encerrados podem ser excluidos se nao tiverem vendas
-
----
-
-## Parte 10: Imports Necessarios
-
-```typescript
-import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver } from '@/types/database';
-import { useAuth } from '@/contexts/AuthContext';
-import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { PageHeader } from '@/components/admin/PageHeader';
-import { StatsCard } from '@/components/admin/StatsCard';
-import { FilterCard } from '@/components/admin/FilterCard';
-import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Calendar,
-  MapPin,
-  Plus,
-  Loader2,
-  Bus,
-  Users,
-  FileEdit,
-  ShoppingBag,
-  CheckCircle,
-  Pencil,
-  Trash2,
-  ExternalLink,
-  Clock,
-  Globe,
-  FileText,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+```text
++--------------------------------------------------+
+| [Icone Lock] Evento Encerrado                    |
++--------------------------------------------------+
+| Este evento foi encerrado e nao pode mais ser    |
+| editado. Os dados estao disponiveis apenas       |
+| para consulta.                                   |
++--------------------------------------------------+
 ```
 
 ---
 
-## Parte 11: Interface de Evento com Viagens
+## Parte 9: Estrutura de Estados
 
-Para exibir resumo operacional nos cards:
+### Estados do Modal
 
 ```typescript
-interface EventWithTrips extends Event {
-  trips: { count: number }[];
-  totalCapacity?: number;
-}
+// Form principal do evento
+const [form, setForm] = useState({
+  name: '',
+  date: '',
+  city: '',
+  description: '',
+  status: 'rascunho',
+  unit_price: '',           // NOVO
+  max_tickets_per_purchase: '5', // NOVO
+  allow_online_sale: true,  // NOVO
+  allow_seller_sale: true,  // NOVO
+});
+
+// Viagens do evento (melhorado)
+const [eventTrips, setEventTrips] = useState<TripWithDetails[]>([]);
+
+// Locais de embarque do evento (NOVO)
+const [eventBoardingLocations, setEventBoardingLocations] = useState<EventBoardingLocationWithDetails[]>([]);
+const [boardingLocations, setBoardingLocations] = useState<BoardingLocation[]>([]);
+
+// Forms de modais secundarios
+const [tripForm, setTripForm] = useState({
+  trip_type: 'ida',         // NOVO
+  vehicle_id: '',
+  driver_id: '',
+  assistant_driver_id: '',  // NOVO
+  departure_time: '',
+  capacity: '',
+});
+
+const [boardingForm, setBoardingForm] = useState({
+  boarding_location_id: '',
+  departure_time: '',
+  trip_id: '',  // opcional
+});
 ```
 
 ---
 
-## Parte 12: Arquivos a Modificar
+## Parte 10: Logica de Carregamento
+
+### Dados a Buscar ao Abrir Modal
+
+```typescript
+const fetchEventData = async (eventId: string) => {
+  // 1. Viagens com detalhes
+  const { data: trips } = await supabase
+    .from('trips')
+    .select(`
+      *,
+      vehicle:vehicles(*),
+      driver:drivers!trips_driver_id_fkey(*),
+      assistant_driver:drivers!trips_assistant_driver_id_fkey(*)
+    `)
+    .eq('event_id', eventId)
+    .order('departure_time');
+
+  // 2. Locais de embarque do evento
+  const { data: boardingLocs } = await supabase
+    .from('event_boarding_locations')
+    .select(`
+      *,
+      boarding_location:boarding_locations(*),
+      trip:trips(*)
+    `)
+    .eq('event_id', eventId)
+    .order('departure_time');
+
+  // 3. Todos os locais disponiveis (para select)
+  const { data: allLocations } = await supabase
+    .from('boarding_locations')
+    .select('*')
+    .eq('status', 'ativo')
+    .order('name');
+};
+```
+
+---
+
+## Parte 11: Validacoes de UX
+
+### Validacao para Publicar (status = 'a_venda')
+
+```typescript
+const canPublish = useMemo(() => {
+  const hasName = form.name.trim() !== '';
+  const hasDate = form.date !== '';
+  const hasTrips = eventTrips.length > 0;
+  const hasBoardingLocations = eventBoardingLocations.length > 0;
+  const hasPrice = parseFloat(form.unit_price) > 0;
+
+  return {
+    valid: hasName && hasDate && hasTrips && hasBoardingLocations && hasPrice,
+    checks: {
+      hasName,
+      hasDate,
+      hasTrips,
+      hasBoardingLocations,
+      hasPrice,
+    },
+  };
+}, [form, eventTrips, eventBoardingLocations]);
+```
+
+### Bloqueio de Edicao (evento encerrado)
+
+```typescript
+const isReadOnly = form.status === 'encerrado';
+
+// Desabilitar todos os campos se encerrado
+<Input disabled={isReadOnly} ... />
+```
+
+---
+
+## Parte 12: Icones das Abas
+
+| Aba | Icone |
+|-----|-------|
+| Geral | FileText |
+| Viagens | Bus |
+| Embarques | MapPin |
+| Passagens | Ticket ou DollarSign |
+| Publicacao | Globe |
+
+---
+
+## Parte 13: Arquivos a Modificar/Criar
 
 | Arquivo | Acao |
 |---------|------|
-| `src/pages/admin/Events.tsx` | Refatorar completamente |
+| Migracao SQL | Adicionar campos em trips, event_boarding_locations, events |
+| `src/types/database.ts` | Atualizar interfaces Trip, EventBoardingLocation, Event |
+| `src/pages/admin/Events.tsx` | Refatorar modal com 5 abas completas |
 
 ---
 
-## Parte 13: Nao Implementar Agora
+## Parte 14: Fora do Escopo (Nao Implementar)
 
 Conforme solicitado:
+- Pagamento real (apenas configuracao)
+- PDF / Excel
+- Relatorios
+- Mapa detalhado de assentos
 
-- **Exportacao PDF** - nao incluir
-- **Exportacao Excel** - nao incluir
-- **Mapa de assentos** - nao incluir
-- **Pagamentos** - nao incluir
-- **KPIs financeiros** - nao incluir
-
----
-
-## Resultado Esperado
-
-1. Cabecalho padronizado com PageHeader
-2. 4 KPIs de eventos (Total, Rascunho, A Venda, Encerrado)
-3. Filtros por busca e status
-4. Cards de eventos com resumo operacional
-5. Menu "..." em cada card com acoes
-6. Modal com 3 abas (Geral, Viagens, Publicacao)
-7. CRUD completo no modal
-8. Estados vazios refinados
-9. Navegacao para detalhes mantida
+Estas funcionalidades ficam **estruturalmente preparadas** para implementacao futura.
 
 ---
 
 ## Ordem de Implementacao
 
-1. Adicionar imports necessarios
-2. Criar interfaces de filtros e evento com viagens
-3. Implementar estados e calculos memoizados
-4. Refatorar cabecalho com PageHeader
-5. Adicionar StatsCards
-6. Adicionar FilterCard
-7. Refatorar cards de eventos com menu
-8. Implementar modal com 3 abas
-9. Implementar CRUD completo
-10. Implementar confirmacao de exclusao
-11. Refinar estados vazios
-12. Testar fluxo completo
+1. Executar migracao SQL (campos novos)
+2. Atualizar tipos TypeScript
+3. Adicionar estados para boarding locations
+4. Implementar aba Embarques (nova)
+5. Implementar aba Passagens/Venda (nova)
+6. Melhorar aba Viagens (tipo, ajudante)
+7. Melhorar aba Publicacao (checklist)
+8. Implementar validacoes de UX
+9. Testar fluxo completo
 
+---
+
+## Resultado Esperado
+
+1. Modal com 5 abas funcionais
+2. Evento como HUB operacional completo
+3. Viagens com tipo (ida/volta) e ajudante
+4. Locais de embarque com horario configuravel
+5. Configuracoes de venda centralizadas
+6. Validacao visual antes de publicar
+7. Bloqueio de edicao para eventos encerrados
+8. UX profissional e coerente
+
+Caso fique alguma parte do plano sem implementar, você precisa me avisar!
