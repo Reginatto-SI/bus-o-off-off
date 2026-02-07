@@ -1,423 +1,107 @@
 
-# Plano: Logica Profissional de Viagens, Embarques e Volta "A Definir"
+# Plano: Ajuste Final da Logica de Viagens, Embarques e Edicao
 
 ## Visao Geral
 
-Refatorar a logica de viagens e embarques para refletir a operacao real de transporte, com suporte a horarios "A definir" na volta, atalho "Ida e Volta", ordem de embarques, e labels inequivocos.
+Refatorar a tela de Eventos para implementar a logica definitiva onde:
+- O "Horario Base" da viagem e calculado automaticamente a partir do primeiro embarque (stop_order=1)
+- Viagens e embarques podem ser editados (nao apenas excluidos)
+- Exclusoes sao protegidas por validacoes de integridade
+- Labels sao completos e inequivocos em toda a interface
 
 ---
 
-## Parte 1: Alteracoes no Banco de Dados
+## Parte 1: Remover Campo de Horario do Modal de Viagem
 
-### 1.1 Alterar tabela `trips` - Horario Opcional para Volta
+### Problema Atual
+O modal de viagem atual (linhas 1719-1768) possui campos de horario:
+- "Horario da Ida *"
+- "Horario da Volta" com switch "A definir"
 
-```sql
--- Tornar departure_time nullable para suportar "A definir"
-ALTER TABLE public.trips 
-  ALTER COLUMN departure_time DROP NOT NULL;
+### Solucao
+Remover completamente esses campos. O horario sera derivado automaticamente do primeiro embarque.
 
--- Adicionar campo para vinculo de par (ida/volta)
-ALTER TABLE public.trips 
-  ADD COLUMN IF NOT EXISTS paired_trip_id uuid REFERENCES public.trips(id) ON DELETE SET NULL;
+**Campos a manter no modal de viagem:**
+- Tipo (Ida / Volta / Ida e Volta)
+- Veiculo
+- Motorista
+- Ajudante (opcional)
 
-COMMENT ON COLUMN public.trips.departure_time IS 'Horario base da viagem. NULL = A definir (comum na volta)';
-COMMENT ON COLUMN public.trips.paired_trip_id IS 'ID da viagem par (ida vinculada a volta e vice-versa)';
-```
+**Campos a REMOVER:**
+- ida_departure_time
+- volta_departure_time
+- volta_time_tbd
 
-### 1.2 Adicionar ordem nos embarques
-
-```sql
--- Adicionar campo de ordem no embarque
-ALTER TABLE public.event_boarding_locations 
-  ADD COLUMN IF NOT EXISTS stop_order integer NOT NULL DEFAULT 1;
-
-COMMENT ON COLUMN public.event_boarding_locations.stop_order IS 'Ordem da parada na rota (1 = primeira)';
-```
-
----
-
-## Parte 2: Atualizacao de Tipos TypeScript
-
-### src/types/database.ts
+### Alteracao no TripFormState
 
 ```typescript
-// Adicionar tipo expandido para tipo de viagem
-export type TripType = 'ida' | 'volta';
-export type TripCreationType = 'ida' | 'volta' | 'ida_volta'; // Atalho de criacao
-
-// Atualizar interface Trip
-export interface Trip {
-  id: string;
-  event_id: string;
+// ANTES
+interface TripFormState {
+  trip_creation_type: TripCreationType;
   vehicle_id: string;
   driver_id: string;
-  assistant_driver_id: string | null;
-  paired_trip_id: string | null;        // NOVO
-  trip_type: TripType;
-  departure_time: string | null;        // ALTERADO: agora nullable
-  capacity: number;
-  company_id: string;
-  created_at: string;
-  updated_at: string;
-  vehicle?: Vehicle;
-  driver?: Driver;
-  assistant_driver?: Driver;
+  assistant_driver_id: string;
+  ida_departure_time: string;      // REMOVER
+  volta_departure_time: string;    // REMOVER
+  volta_time_tbd: boolean;         // REMOVER
+  capacity: string;
 }
 
-// Atualizar interface EventBoardingLocation
-export interface EventBoardingLocation {
-  id: string;
-  event_id: string;
-  boarding_location_id: string;
-  trip_id: string | null;
-  departure_time: string | null;
-  stop_order: number;                   // NOVO
-  company_id: string;
-  boarding_location?: BoardingLocation;
-  trip?: Trip;
+// DEPOIS
+interface TripFormState {
+  trip_creation_type: TripCreationType;
+  vehicle_id: string;
+  driver_id: string;
+  assistant_driver_id: string;
+  capacity: string;
 }
 ```
 
----
+### Alteracao no handleAddTrip
 
-## Parte 3: Novo Fluxo do Modal de Viagem
-
-### 3.1 Tipo de Viagem com Atalho
-
-```text
-+--------------------------------------------------+
-| Adicionar Viagem                           [X]   |
-+--------------------------------------------------+
-| Tipo da Viagem *                                 |
-| [O Ida]  [O Volta]  [O Ida e Volta]              |
-+--------------------------------------------------+
-```
-
-**Comportamento do atalho "Ida e Volta":**
-1. Criar duas viagens simultaneamente
-2. Mesmos dados (veiculo, motorista, ajudante)
-3. Ida: horario obrigatorio
-4. Volta: horario opcional (pode ser "A definir")
-5. Vincular as duas viagens (paired_trip_id)
-6. Apos criar, oferecer acao "Copiar embarques da Ida para a Volta"
-
-### 3.2 Campo de Horario Condicional
-
-Para viagem de IDA:
-- Campo de horario obrigatorio
-- Label: "Horario Base *"
-
-Para viagem de VOLTA:
-- Campo de horario opcional com checkbox
-- Checkbox: "Horario a definir"
-- Se marcado, campo de horario desabilitado e valor NULL
-
-```text
-+--------------------------------------------------+
-| Horario Base                                     |
-| [X] Horario a definir                            |
-| [08:00]  <-- desabilitado se checkbox marcado    |
-|                                                  |
-| Nota: O horario sera definido posteriormente     |
-+--------------------------------------------------+
-```
-
-### 3.3 Formulario Completo
-
-```text
-+--------------------------------------------------+
-| Adicionar Viagem                           [X]   |
-+--------------------------------------------------+
-| Tipo da Viagem *                                 |
-| [O Ida]  [O Volta]  [O Ida e Volta]              |
-|                                                  |
-| Veiculo *                 Capacidade             |
-| [Select v]                [49] (auto)            |
-|                                                  |
-| Motorista *               Ajudante               |
-| [Select v]                [Select v]             |
-|                                                  |
-| --- Se IDA ou IDA E VOLTA: ---                   |
-| Horario da Ida *                                 |
-| [19:00]                                          |
-|                                                  |
-| --- Se VOLTA ou IDA E VOLTA: ---                 |
-| Horario da Volta                                 |
-| [X] A definir  OU  [__:__]                       |
-+--------------------------------------------------+
-| [Cancelar]                        [Adicionar]    |
-+--------------------------------------------------+
-```
-
----
-
-## Parte 4: Aba Viagens - Exibicao Melhorada
-
-### 4.1 Card de Viagem com Informacao Completa
-
-```text
-+----------------------------------------------------------+
-| [ IDA ]  19:00  Onibus ABC-1D23  49 lug.            [X]  |
-|          Motorista: Joao  |  Ajudante: Pedro             |
-|          [Par: Volta #2]                                  |
-+----------------------------------------------------------+
-| [VOLTA]  A definir  Onibus ABC-1D23  49 lug.        [X]  |
-|          Motorista: Joao  |  Ajudante: Pedro             |
-|          [Par: Ida #1]                                    |
-+----------------------------------------------------------+
-```
-
-### 4.2 Indicador Visual de Horario "A Definir"
-
-- Fundo amarelo claro
-- Texto "A definir" em vez do horario
-- Icone de alerta sutil
-- Tooltip explicativo
-
----
-
-## Parte 5: Aba Embarques - Logica por Viagem
-
-### 5.1 Seletor de Viagem no Topo
-
-```text
-+----------------------------------------------------------+
-| Viagem Selecionada:                                       |
-| [Select: Ida - 19:00 - Onibus ABC-1D23 - 49 lug. - Joao v]|
-+----------------------------------------------------------+
-```
-
-**Label completo e inequivoco:**
-- Tipo (Ida/Volta)
-- Horario (ou "A definir")
-- Tipo + Placa do veiculo
-- Capacidade
-- Nome do motorista
-
-Exemplo: `Ida - 19:00 - Onibus ABC-1D23 - 49 lug. - Motorista: Joao`
-Exemplo: `Volta - A definir - Onibus ABC-1D23 - 49 lug. - Motorista: Joao`
-
-### 5.2 Listagem de Embarques com Ordem
-
-```text
-+----------------------------------------------------------+
-| Embarques da viagem selecionada                          |
-+----------------------------------------------------------+
-| 1. [MapPin] Terminal Rodoviario                          |
-|    Rua das Palmeiras, 100 - Centro                       |
-|    Horario: 18:30                                    [X]  |
-|                                                          |
-| 2. [MapPin] Posto Shell BR-101                           |
-|    Rod. BR-101, KM 45                                    |
-|    Horario: 18:45                                    [X]  |
-|                                                          |
-| 3. [MapPin] Shopping Center                              |
-|    Av. Central, 500                                      |
-|    Horario: 19:00                                    [X]  |
-+----------------------------------------------------------+
-| [+ Adicionar Local]    [Copiar da Ida]                   |
-+----------------------------------------------------------+
-```
-
-### 5.3 Botao "Copiar da Ida" (apenas para Volta)
-
-Disponivel apenas quando:
-- Viagem selecionada e do tipo "volta"
-- Existe viagem "ida" com embarques cadastrados
-
-Comportamento:
-1. Copia todos os embarques da ida vinculada (ou primeira ida)
-2. Abre modal de confirmacao
-3. Oferece opcao de inverter ordem
-4. Horarios ficam editaveis apos copia
-
-```text
-+--------------------------------------------------+
-| Copiar Embarques da Ida                    [X]   |
-+--------------------------------------------------+
-| Serao copiados 3 locais de embarque da Ida.      |
-|                                                  |
-| [X] Inverter ordem das paradas                   |
-|     (Recomendado para viagem de volta)           |
-|                                                  |
-| Nota: Os horarios serao mantidos e voce podera   |
-| ajusta-los depois.                               |
-+--------------------------------------------------+
-| [Cancelar]                        [Copiar]       |
-+--------------------------------------------------+
-```
-
-### 5.4 Modal de Adicionar Embarque
-
-```text
-+--------------------------------------------------+
-| Adicionar Local de Embarque                [X]   |
-+--------------------------------------------------+
-| Viagem: Ida - 19:00 - Onibus ABC-1D23            |
-| (travado - ja selecionado)                       |
-|                                                  |
-| Local *                                          |
-| [Select: Terminal Rodoviario v]                  |
-|                                                  |
-| Horario do Embarque *                            |
-| [18:30]                                          |
-|                                                  |
-| Ordem da Parada                                  |
-| [3] (proximo automatico)                         |
-+--------------------------------------------------+
-| [Cancelar]                        [Adicionar]    |
-+--------------------------------------------------+
-```
-
----
-
-## Parte 6: Regras de Validacao Atualizadas
-
-### 6.1 Publicacao (status = 'a_venda')
-
-Checklist atualizado:
-- Nome e data definidos
-- Pelo menos 1 viagem cadastrada
-- **CADA viagem deve ter pelo menos 1 embarque**
-- Preco da passagem definido
-
-A Volta pode ter horario "A definir", mas isso e visivel para o cliente.
-
-### 6.2 Nova Verificacao no Checklist
+Ao criar viagem, `departure_time` sera sempre `null`:
 
 ```typescript
-const publishChecklist = useMemo(() => {
-  const hasName = form.name.trim() !== '';
-  const hasDate = form.date !== '';
-  const hasCity = form.city.trim() !== '';
-  const hasTrips = eventTrips.length > 0;
-  const hasPrice = parseFloat(form.unit_price || '0') > 0;
-  
-  // NOVA validacao: cada viagem tem embarque
-  const tripsWithoutBoardings = eventTrips.filter(trip => {
-    const tripBoardings = eventBoardingLocations.filter(
-      ebl => ebl.trip_id === trip.id
-    );
-    return tripBoardings.length === 0;
-  });
-  const allTripsHaveBoardings = tripsWithoutBoardings.length === 0;
-
-  return {
-    valid: hasName && hasDate && hasCity && hasTrips && allTripsHaveBoardings && hasPrice,
-    checks: {
-      hasName,
-      hasDate,
-      hasCity,
-      hasTrips,
-      allTripsHaveBoardings,
-      hasPrice,
-      tripsWithoutBoardings, // Para exibir quais viagens faltam embarque
-    },
-  };
-}, [form, eventTrips, eventBoardingLocations]);
-```
-
----
-
-## Parte 7: Arquivos a Modificar
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| Migracao SQL | Tornar departure_time nullable, adicionar paired_trip_id, adicionar stop_order |
-| `src/types/database.ts` | Atualizar interfaces Trip e EventBoardingLocation |
-| `src/pages/admin/Events.tsx` | Refatorar modal de viagem, aba embarques, e validacoes |
-
----
-
-## Parte 8: Estados e Interfaces Novas
-
-```typescript
-// Form de viagem expandido
-const [tripForm, setTripForm] = useState({
-  trip_creation_type: 'ida' as 'ida' | 'volta' | 'ida_volta',
-  vehicle_id: '',
-  driver_id: '',
-  assistant_driver_id: '',
-  ida_departure_time: '',
-  volta_departure_time: '',
-  volta_time_tbd: false, // "A definir"
-  capacity: '',
-});
-
-// Viagem selecionada para embarques
-const [selectedTripIdForBoardings, setSelectedTripIdForBoardings] = useState<string | null>(null);
-
-// Dialog de copiar embarques
-const [copyBoardingsDialogOpen, setCopyBoardingsDialogOpen] = useState(false);
-const [invertBoardingsOrder, setInvertBoardingsOrder] = useState(true);
-```
-
----
-
-## Parte 9: Funcao de Copiar Embarques
-
-```typescript
-const handleCopyBoardingsFromIda = async () => {
-  if (!selectedTripIdForBoardings) return;
-  
-  // Encontrar viagem de ida (par ou primeira ida)
-  const selectedTrip = eventTrips.find(t => t.id === selectedTripIdForBoardings);
-  let idaTrip = selectedTrip?.paired_trip_id 
-    ? eventTrips.find(t => t.id === selectedTrip.paired_trip_id)
-    : eventTrips.find(t => t.trip_type === 'ida');
-  
-  if (!idaTrip) {
-    toast.error('Nenhuma viagem de ida encontrada');
-    return;
-  }
-  
-  // Buscar embarques da ida
-  const idaBoardings = eventBoardingLocations.filter(
-    ebl => ebl.trip_id === idaTrip.id
-  ).sort((a, b) => a.stop_order - b.stop_order);
-  
-  if (idaBoardings.length === 0) {
-    toast.error('A viagem de ida nao possui embarques');
-    return;
-  }
-  
-  // Preparar novos embarques (inverter ordem se solicitado)
-  const newBoardings = idaBoardings.map((ebl, index) => ({
-    event_id: editingId,
-    boarding_location_id: ebl.boarding_location_id,
-    trip_id: selectedTripIdForBoardings,
-    departure_time: ebl.departure_time, // Manter horario para edicao posterior
-    stop_order: invertBoardingsOrder 
-      ? idaBoardings.length - index 
-      : index + 1,
-    company_id: activeCompanyId,
-  }));
-  
-  // Inserir
-  const { error } = await supabase
-    .from('event_boarding_locations')
-    .insert(newBoardings);
-  
-  if (error) {
-    toast.error('Erro ao copiar embarques');
-  } else {
-    toast.success(`${newBoardings.length} embarques copiados`);
-    setCopyBoardingsDialogOpen(false);
-    fetchEventBoardingLocations(editingId!);
-  }
+const tripData = {
+  event_id: editingId,
+  trip_type: tripForm.trip_creation_type,
+  vehicle_id: tripForm.vehicle_id,
+  driver_id: tripForm.driver_id,
+  assistant_driver_id: assistantDriverId,
+  departure_time: null,  // Sempre null - calculado dos embarques
+  capacity,
+  company_id: activeCompanyId,
 };
 ```
 
 ---
 
-## Parte 10: Label Completo para Viagem
+## Parte 2: Calcular Horario da Viagem a Partir dos Embarques
+
+### Nova Funcao Helper
+
+```typescript
+// Retorna o horario do primeiro embarque (stop_order=1) da viagem
+const getTripDepartureTime = (tripId: string): string | null => {
+  const tripBoardings = eventBoardingLocations
+    .filter(ebl => ebl.trip_id === tripId)
+    .sort((a, b) => (a.stop_order || 1) - (b.stop_order || 1));
+  
+  if (tripBoardings.length === 0) return null;
+  return tripBoardings[0].departure_time;
+};
+```
+
+### Atualizar getTripLabel
 
 ```typescript
 const getTripLabel = (trip: TripWithDetails) => {
   const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
-  const time = trip.departure_time 
-    ? trip.departure_time.slice(0, 5) 
-    : 'A definir';
+  
+  // Calcular horario do primeiro embarque
+  const computedTime = getTripDepartureTime(trip.id);
+  const time = computedTime ? computedTime.slice(0, 5) : 'A definir';
+  
   const vehicleType = trip.vehicle 
     ? vehicleTypeLabels[trip.vehicle.type] 
     : 'Veiculo';
@@ -427,61 +111,521 @@ const getTripLabel = (trip: TripWithDetails) => {
   
   return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
 };
-
-// Exemplo de saida:
-// "Ida - 19:00 - Onibus ABC-1D23 - 49 lug. - Joao"
-// "Volta - A definir - Onibus ABC-1D23 - 49 lug. - Joao"
 ```
 
----
+### Atualizar Exibicao do Card de Viagem
 
-## Parte 11: Ordenacao de Queries
+Na aba Viagens, o card mostrara o horario calculado:
 
 ```typescript
-// Embarques ordenados por stop_order
-const { data, error } = await supabase
-  .from('event_boarding_locations')
-  .select(`
-    *,
-    boarding_location:boarding_locations(*),
-    trip:trips(*)
-  `)
-  .eq('event_id', eventId)
-  .order('stop_order', { ascending: true });
+// Calcular horario baseado nos embarques
+const computedTime = getTripDepartureTime(trip.id);
+const isDepartureTimeTbd = !computedTime;
+
+// Exibir
+{isDepartureTimeTbd ? (
+  <span className="font-medium text-amber-600 flex items-center gap-1">
+    <AlertTriangle className="h-3 w-3" />
+    A definir
+  </span>
+) : (
+  <span className="font-medium">{computedTime.slice(0, 5)}</span>
+)}
 ```
 
 ---
 
-## Parte 12: Fora do Escopo
+## Parte 3: Adicionar Funcionalidade de Edicao de Viagem
 
-Conforme solicitado:
-- PDF / Excel - nao implementar
-- Pagamento real - nao implementar
-- Mapa de assentos - nao implementar
+### Novos Estados
+
+```typescript
+const [editingTripId, setEditingTripId] = useState<string | null>(null);
+```
+
+### Funcao para Abrir Modal de Edicao
+
+```typescript
+const handleEditTrip = (trip: TripWithDetails) => {
+  setEditingTripId(trip.id);
+  setTripForm({
+    trip_creation_type: trip.trip_type, // Travado na edicao
+    vehicle_id: trip.vehicle_id,
+    driver_id: trip.driver_id,
+    assistant_driver_id: trip.assistant_driver_id ?? '',
+    capacity: trip.capacity.toString(),
+  });
+  setTripDialogOpen(true);
+};
+```
+
+### Funcao de Salvar Edicao
+
+```typescript
+const handleSaveTrip = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingId || !activeCompanyId) return;
+  
+  setSavingTrip(true);
+  
+  const assistantDriverId = tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' 
+    ? tripForm.assistant_driver_id 
+    : null;
+
+  if (editingTripId) {
+    // EDICAO
+    const updateData = {
+      vehicle_id: tripForm.vehicle_id,
+      driver_id: tripForm.driver_id,
+      assistant_driver_id: assistantDriverId,
+    };
+
+    const { error } = await supabase
+      .from('trips')
+      .update(updateData)
+      .eq('id', editingTripId);
+
+    if (error) {
+      toast.error('Erro ao atualizar viagem');
+    } else {
+      toast.success('Viagem atualizada');
+    }
+    setEditingTripId(null);
+  } else {
+    // CRIACAO (logica existente simplificada sem horarios)
+    // ... criar viagens sem departure_time
+  }
+
+  setTripDialogOpen(false);
+  resetTripForm();
+  fetchEventTrips(editingId);
+  setSavingTrip(false);
+};
+```
+
+### UI do Card de Viagem com Botao Editar
+
+```typescript
+<div className="flex items-center gap-1">
+  {!isReadOnly && (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => handleEditTrip(trip)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive hover:text-destructive"
+        onClick={() => confirmDeleteTrip(trip)}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </>
+  )}
+</div>
+```
+
+### Modal Adaptado para Criacao/Edicao
+
+```typescript
+<DialogTitle>
+  {editingTripId ? 'Editar Viagem' : 'Adicionar Viagem'}
+</DialogTitle>
+
+// Na edicao, travar o tipo da viagem
+{!editingTripId && (
+  <RadioGroup ...> // Tipo de viagem </RadioGroup>
+)}
+
+{editingTripId && (
+  <div className="text-sm text-muted-foreground">
+    Tipo: {tripForm.trip_creation_type === 'ida' ? 'Ida' : 'Volta'}
+    (nao pode ser alterado)
+  </div>
+)}
+```
 
 ---
 
-## Ordem de Implementacao
+## Parte 4: Adicionar Funcionalidade de Edicao de Embarque
 
-1. Executar migracao SQL (departure_time nullable, paired_trip_id, stop_order)
-2. Atualizar tipos TypeScript
-3. Refatorar modal de adicionar viagem (tipo ida/volta/ida_volta, horario opcional)
-4. Adicionar estado de viagem selecionada na aba Embarques
-5. Implementar seletor de viagem com label completo
-6. Filtrar embarques pela viagem selecionada
-7. Adicionar campo stop_order no modal de embarque
-8. Implementar funcao de copiar embarques com inversao
-9. Atualizar checklist de publicacao
-10. Testar fluxo completo
+### Novos Estados
+
+```typescript
+const [editingBoardingId, setEditingBoardingId] = useState<string | null>(null);
+```
+
+### Funcao para Abrir Modal de Edicao
+
+```typescript
+const handleEditBoarding = (boarding: EventBoardingLocationWithDetails) => {
+  setEditingBoardingId(boarding.id);
+  setBoardingForm({
+    boarding_location_id: boarding.boarding_location_id,
+    departure_time: boarding.departure_time ?? '',
+    trip_id: boarding.trip_id ?? '__none__',
+    stop_order: boarding.stop_order?.toString() ?? '',
+  });
+  setBoardingDialogOpen(true);
+};
+```
+
+### Funcao de Salvar Edicao
+
+```typescript
+const handleSaveBoarding = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingId || !activeCompanyId) return;
+  
+  setSavingBoarding(true);
+
+  const tripId = boardingForm.trip_id && boardingForm.trip_id !== '__none__' 
+    ? boardingForm.trip_id 
+    : null;
+
+  if (editingBoardingId) {
+    // EDICAO
+    const updateData = {
+      boarding_location_id: boardingForm.boarding_location_id,
+      departure_time: boardingForm.departure_time || null,
+      trip_id: tripId,
+      stop_order: parseInt(boardingForm.stop_order, 10) || 1,
+    };
+
+    const { error } = await supabase
+      .from('event_boarding_locations')
+      .update(updateData)
+      .eq('id', editingBoardingId);
+
+    if (error) {
+      toast.error('Erro ao atualizar local de embarque');
+    } else {
+      toast.success('Local de embarque atualizado');
+    }
+    setEditingBoardingId(null);
+  } else {
+    // CRIACAO (logica existente)
+    // ...
+  }
+
+  setBoardingDialogOpen(false);
+  resetBoardingForm();
+  fetchEventBoardingLocations(editingId);
+  setSavingBoarding(false);
+};
+```
+
+### UI do Card de Embarque com Botao Editar
+
+```typescript
+<div className="flex items-center gap-1 shrink-0">
+  {!isReadOnly && (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => handleEditBoarding(ebl)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive hover:text-destructive"
+        onClick={() => confirmDeleteBoarding(ebl)}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </>
+  )}
+</div>
+```
 
 ---
 
-## Resultado Esperado
+## Parte 5: Validacoes de Exclusao
 
-1. Criar evento com Ida (19:00) e Volta (A definir) em um clique
-2. Cadastrar embarques na Ida com ordem
-3. Copiar embarques para Volta com ordem invertida
-4. Labels claros mesmo com multiplas viagens/veiculos
-5. Fluxo intuitivo para eventos noturnos (shows, festas)
-6. Validacao impede publicacao de viagem sem embarques
+### Exclusao de Viagem - Verificar Embarques
+
+```typescript
+const [deleteTripDialogOpen, setDeleteTripDialogOpen] = useState(false);
+const [tripToDelete, setTripToDelete] = useState<TripWithDetails | null>(null);
+const [tripDeleteBlockReason, setTripDeleteBlockReason] = useState<string | null>(null);
+
+const confirmDeleteTrip = async (trip: TripWithDetails) => {
+  // Verificar se tem embarques vinculados
+  const tripBoardings = eventBoardingLocations.filter(
+    ebl => ebl.trip_id === trip.id
+  );
+  
+  if (tripBoardings.length > 0) {
+    setTripDeleteBlockReason(
+      `Esta viagem possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
+      `Remova ou realoque os embarques antes de excluir.`
+    );
+    setTripToDelete(trip);
+    setDeleteTripDialogOpen(true);
+    return;
+  }
+
+  // Verificar se tem vendas vinculadas
+  const { data: sales } = await supabase
+    .from('sales')
+    .select('id')
+    .eq('trip_id', trip.id)
+    .limit(1);
+
+  if (sales && sales.length > 0) {
+    setTripDeleteBlockReason(
+      `Esta viagem possui passagens vendidas ou reservadas. ` +
+      `Nao e possivel excluir. Considere marcar o evento como encerrado.`
+    );
+    setTripToDelete(trip);
+    setDeleteTripDialogOpen(true);
+    return;
+  }
+
+  // Sem bloqueios - confirmar exclusao
+  setTripDeleteBlockReason(null);
+  setTripToDelete(trip);
+  setDeleteTripDialogOpen(true);
+};
+
+const handleDeleteTripConfirmed = async () => {
+  if (!tripToDelete || tripDeleteBlockReason) return;
+  
+  const { error } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripToDelete.id);
+
+  if (error) {
+    toast.error('Erro ao excluir viagem');
+  } else {
+    toast.success('Viagem excluida');
+    fetchEventTrips(editingId!);
+    fetchEvents();
+  }
+  setDeleteTripDialogOpen(false);
+  setTripToDelete(null);
+};
+```
+
+### Exclusao de Embarque - Verificar Passageiros
+
+```typescript
+const [deleteBoardingDialogOpen, setDeleteBoardingDialogOpen] = useState(false);
+const [boardingToDelete, setBoardingToDelete] = useState<EventBoardingLocationWithDetails | null>(null);
+const [boardingDeleteBlockReason, setBoardingDeleteBlockReason] = useState<string | null>(null);
+
+const confirmDeleteBoarding = async (boarding: EventBoardingLocationWithDetails) => {
+  // Verificar se tem vendas vinculadas a este local
+  const { data: sales } = await supabase
+    .from('sales')
+    .select('id')
+    .eq('boarding_location_id', boarding.boarding_location_id)
+    .eq('trip_id', boarding.trip_id)
+    .limit(1);
+
+  if (sales && sales.length > 0) {
+    setBoardingDeleteBlockReason(
+      `Este local de embarque possui passageiros vinculados. ` +
+      `Nao e possivel excluir.`
+    );
+    setBoardingToDelete(boarding);
+    setDeleteBoardingDialogOpen(true);
+    return;
+  }
+
+  // Sem bloqueios
+  setBoardingDeleteBlockReason(null);
+  setBoardingToDelete(boarding);
+  setDeleteBoardingDialogOpen(true);
+};
+```
+
+### Dialogs de Confirmacao com Bloqueio
+
+```typescript
+{/* Delete Trip Dialog */}
+<AlertDialog open={deleteTripDialogOpen} onOpenChange={setDeleteTripDialogOpen}>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>
+        {tripDeleteBlockReason ? 'Exclusao Bloqueada' : 'Excluir Viagem'}
+      </AlertDialogTitle>
+      <AlertDialogDescription>
+        {tripDeleteBlockReason || (
+          `Tem certeza que deseja excluir esta viagem (${tripToDelete?.trip_type})?`
+        )}
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>
+        {tripDeleteBlockReason ? 'Entendi' : 'Cancelar'}
+      </AlertDialogCancel>
+      {!tripDeleteBlockReason && (
+        <AlertDialogAction
+          onClick={handleDeleteTripConfirmed}
+          className="bg-destructive text-destructive-foreground"
+        >
+          Excluir
+        </AlertDialogAction>
+      )}
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+```
+
+---
+
+## Parte 6: Labels Consistentes no Modal de Embarque
+
+### Problema Atual
+
+O select de viagem no modal de embarque usa label simplificado:
+```typescript
+{trip.trip_type === 'ida' ? 'Ida' : 'Volta'} - {trip.departure_time?.slice(0, 5)}
+```
+
+### Solucao
+
+Usar a funcao `getTripLabel` para manter consistencia:
+
+```typescript
+{/* Link to Trip - usando label completo */}
+<div className="space-y-2">
+  <Label>Vincular a Viagem</Label>
+  <Select
+    value={boardingForm.trip_id || '__none__'}
+    onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value })}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Selecione uma viagem" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="__none__">Selecione uma viagem</SelectItem>
+      {eventTrips.map((trip) => (
+        <SelectItem key={trip.id} value={trip.id}>
+          {getTripLabel(trip)}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
+```
+
+### Pre-selecionar Viagem
+
+Quando o usuario adiciona embarque com uma viagem ja selecionada na aba:
+
+```typescript
+const handleOpenBoardingDialog = () => {
+  setBoardingForm({
+    boarding_location_id: '',
+    departure_time: '',
+    trip_id: selectedTripIdForBoardings || '',
+    stop_order: '',
+  });
+  setBoardingDialogOpen(true);
+};
+
+// No botao "Adicionar Local":
+onClick={handleOpenBoardingDialog}
+```
+
+---
+
+## Parte 7: Remover Opcao "Todas as Viagens" do Modal de Embarque
+
+### Problema
+A opcao "Todas as viagens" nao faz sentido no modelo operacional, pois cada embarque deve pertencer a uma viagem especifica.
+
+### Solucao
+Tornar a selecao de viagem obrigatoria:
+
+```typescript
+<Select
+  value={boardingForm.trip_id}
+  onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value })}
+  required
+>
+  <SelectTrigger>
+    <SelectValue placeholder="Selecione uma viagem *" />
+  </SelectTrigger>
+  <SelectContent>
+    {eventTrips.map((trip) => (
+      <SelectItem key={trip.id} value={trip.id}>
+        {getTripLabel(trip)}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+```
+
+---
+
+## Parte 8: Ordenacao de Embarques
+
+Garantir que embarques sejam ordenados por `stop_order` em todas as queries:
+
+```typescript
+const fetchEventBoardingLocations = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('event_boarding_locations')
+    .select(`...`)
+    .eq('event_id', eventId)
+    .order('stop_order', { ascending: true });  // Ordenar por ordem de parada
+};
+```
+
+---
+
+## Resumo das Alteracoes
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/pages/admin/Events.tsx` | Remover campos de horario do modal de viagem |
+| `src/pages/admin/Events.tsx` | Adicionar funcao getTripDepartureTime |
+| `src/pages/admin/Events.tsx` | Atualizar getTripLabel para usar horario calculado |
+| `src/pages/admin/Events.tsx` | Adicionar estados e handlers para edicao de viagem |
+| `src/pages/admin/Events.tsx` | Adicionar estados e handlers para edicao de embarque |
+| `src/pages/admin/Events.tsx` | Adicionar validacoes de exclusao (embarques/vendas) |
+| `src/pages/admin/Events.tsx` | Adicionar dialogs de confirmacao com bloqueio |
+| `src/pages/admin/Events.tsx` | Usar getTripLabel no modal de embarque |
+| `src/pages/admin/Events.tsx` | Tornar selecao de viagem obrigatoria no embarque |
+| `src/pages/admin/Events.tsx` | Pre-selecionar viagem ao abrir modal de embarque |
+
+---
+
+## Criterios de Sucesso
+
+1. Usuario cria viagem SEM informar horario
+2. Horario aparece automaticamente apos cadastrar primeiro embarque (ordem 1)
+3. Usuario consegue EDITAR viagem (veiculo, motorista, ajudante)
+4. Usuario consegue EDITAR embarque (local, horario, ordem)
+5. Exclusao de viagem com embarques e BLOQUEADA com mensagem clara
+6. Exclusao de viagem com vendas e BLOQUEADA definitivamente
+7. Exclusao de embarque com passageiros e BLOQUEADA
+8. Labels de viagem sao completos e inequivocos em TODOS os dropdowns
+9. Fluxo intuitivo para eventos noturnos (shows, festas, excursoes)
+
+---
+
+## Fora do Escopo
+
+- PDF / Excel
+- Pagamento real
+- Mapa de assentos
+- Campo "status" na viagem (ativa/cancelada) - pode ser implementado futuramente
 
