@@ -184,6 +184,7 @@ export type Database = {
           departure_time: string | null
           event_id: string
           id: string
+          stop_order: number
           trip_id: string | null
         }
         Insert: {
@@ -192,6 +193,7 @@ export type Database = {
           departure_time?: string | null
           event_id: string
           id?: string
+          stop_order?: number
           trip_id?: string | null
         }
         Update: {
@@ -200,6 +202,7 @@ export type Database = {
           departure_time?: string | null
           event_id?: string
           id?: string
+          stop_order?: number
           trip_id?: string | null
         }
         Relationships: [
@@ -461,10 +464,11 @@ export type Database = {
           capacity: number
           company_id: string
           created_at: string
-          departure_time: string
+          departure_time: string | null
           driver_id: string
           event_id: string
           id: string
+          paired_trip_id: string | null
           trip_type: string
           updated_at: string
           vehicle_id: string
@@ -474,10 +478,11 @@ export type Database = {
           capacity: number
           company_id: string
           created_at?: string
-          departure_time: string
+          departure_time?: string | null
           driver_id: string
           event_id: string
           id?: string
+          paired_trip_id?: string | null
           trip_type?: string
           updated_at?: string
           vehicle_id: string
@@ -487,10 +492,11 @@ export type Database = {
           capacity?: number
           company_id?: string
           created_at?: string
-          departure_time?: string
+          departure_time?: string | null
           driver_id?: string
           event_id?: string
           id?: string
+          paired_trip_id?: string | null
           trip_type?: string
           updated_at?: string
           vehicle_id?: string
@@ -522,6 +528,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trips_paired_trip_id_fkey"
+            columns: ["paired_trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
           {

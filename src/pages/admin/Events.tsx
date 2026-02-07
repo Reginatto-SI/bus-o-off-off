@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType } from '@/types/database';
+import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,7 @@ import {
   Check,
   Image,
   AlertTriangle,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -87,7 +88,19 @@ interface TripWithDetails extends Trip {
 
 interface EventBoardingLocationWithDetails extends EventBoardingLocation {
   boarding_location?: BoardingLocation;
-  trip?: Trip;
+  trip?: TripWithDetails;
+}
+
+// Trip form state with support for ida_volta shortcut
+interface TripFormState {
+  trip_creation_type: TripCreationType;
+  vehicle_id: string;
+  driver_id: string;
+  assistant_driver_id: string;
+  ida_departure_time: string;
+  volta_departure_time: string;
+  volta_time_tbd: boolean;
+  capacity: string;
 }
 
 const initialFilters: EventFilters = {
@@ -131,14 +144,16 @@ export default function Events() {
   const [boardingLocations, setBoardingLocations] = useState<BoardingLocation[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   
-  // Trip form modal
+  // Trip form modal - expanded for ida_volta and TBD support
   const [tripDialogOpen, setTripDialogOpen] = useState(false);
   const [tripForm, setTripForm] = useState({
-    trip_type: 'ida' as TripType,
+    trip_creation_type: 'ida' as TripCreationType,
     vehicle_id: '',
     driver_id: '',
     assistant_driver_id: '',
-    departure_time: '',
+    ida_departure_time: '',
+    volta_departure_time: '',
+    volta_time_tbd: false,
     capacity: '',
   });
   const [savingTrip, setSavingTrip] = useState(false);
@@ -149,8 +164,17 @@ export default function Events() {
     boarding_location_id: '',
     departure_time: '',
     trip_id: '',
+    stop_order: '',
   });
   const [savingBoarding, setSavingBoarding] = useState(false);
+
+  // Selected trip for boardings tab
+  const [selectedTripIdForBoardings, setSelectedTripIdForBoardings] = useState<string | null>(null);
+
+  // Copy boardings dialog
+  const [copyBoardingsDialogOpen, setCopyBoardingsDialogOpen] = useState(false);
+  const [invertBoardingsOrder, setInvertBoardingsOrder] = useState(true);
+  const [copyingBoardings, setCopyingBoardings] = useState(false);
 
   // Main form
   const [form, setForm] = useState({
@@ -165,14 +189,23 @@ export default function Events() {
     allow_seller_sale: true,
   });
 
-  // Computed: can publish checklist
+  // Computed: can publish checklist with per-trip validation
   const publishChecklist = useMemo(() => {
     const hasName = form.name.trim() !== '';
     const hasDate = form.date !== '';
     const hasCity = form.city.trim() !== '';
     const hasTrips = eventTrips.length > 0;
-    const hasBoardingLocations = eventBoardingLocations.length > 0;
     const hasPrice = parseFloat(form.unit_price || '0') > 0;
+    
+    // NEW: Check that EACH trip has at least one boarding
+    const tripsWithoutBoardings = eventTrips.filter(trip => {
+      const tripBoardings = eventBoardingLocations.filter(
+        ebl => ebl.trip_id === trip.id
+      );
+      return tripBoardings.length === 0;
+    });
+    const allTripsHaveBoardings = tripsWithoutBoardings.length === 0;
+    const hasBoardingLocations = eventBoardingLocations.length > 0 && allTripsHaveBoardings;
 
     return {
       valid: hasName && hasDate && hasCity && hasTrips && hasBoardingLocations && hasPrice,
@@ -181,8 +214,10 @@ export default function Events() {
         hasDate,
         hasCity,
         hasTrips,
+        allTripsHaveBoardings,
         hasBoardingLocations,
         hasPrice,
+        tripsWithoutBoardings,
       },
     };
   }, [form, eventTrips, eventBoardingLocations]);
@@ -431,6 +466,22 @@ export default function Events() {
   };
 
   // Trip handlers
+  // Helper function to get complete trip label
+  const getTripLabel = (trip: TripWithDetails) => {
+    const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
+    const time = trip.departure_time 
+      ? trip.departure_time.slice(0, 5) 
+      : 'A definir';
+    const vehicleType = trip.vehicle 
+      ? vehicleTypeLabels[trip.vehicle.type] 
+      : 'Veículo';
+    const plate = trip.vehicle?.plate ?? '???';
+    const capacity = trip.capacity;
+    const driver = trip.driver?.name ?? 'Motorista não definido';
+    
+    return `${type} - ${time} - ${vehicleType} ${plate} - ${capacity} lug. - ${driver}`;
+  };
+
   const handleAddTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId || !activeCompanyId) return;
@@ -442,37 +493,105 @@ export default function Events() {
       ? parseInt(tripForm.capacity, 10) 
       : selectedVehicle?.capacity ?? 0;
 
-    const tripData = {
-      event_id: editingId,
-      trip_type: tripForm.trip_type,
-      vehicle_id: tripForm.vehicle_id,
-      driver_id: tripForm.driver_id,
-      assistant_driver_id: tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' ? tripForm.assistant_driver_id : null,
-      departure_time: tripForm.departure_time,
-      capacity,
-      company_id: activeCompanyId,
-    };
+    const assistantDriverId = tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' 
+      ? tripForm.assistant_driver_id 
+      : null;
 
-    const { error } = await supabase.from('trips').insert([tripData]);
+    try {
+      if (tripForm.trip_creation_type === 'ida_volta') {
+        // Create both trips (ida + volta) with pairing
+        const idaTripData = {
+          event_id: editingId,
+          trip_type: 'ida' as TripType,
+          vehicle_id: tripForm.vehicle_id,
+          driver_id: tripForm.driver_id,
+          assistant_driver_id: assistantDriverId,
+          departure_time: tripForm.ida_departure_time,
+          capacity,
+          company_id: activeCompanyId,
+        };
 
-    if (error) {
-      toast.error('Erro ao adicionar viagem');
-      console.error(error);
-    } else {
-      toast.success('Viagem adicionada');
+        const { data: idaTrip, error: idaError } = await supabase
+          .from('trips')
+          .insert([idaTripData])
+          .select('id')
+          .single();
+
+        if (idaError) throw idaError;
+
+        const voltaTripData = {
+          event_id: editingId,
+          trip_type: 'volta' as TripType,
+          vehicle_id: tripForm.vehicle_id,
+          driver_id: tripForm.driver_id,
+          assistant_driver_id: assistantDriverId,
+          departure_time: tripForm.volta_time_tbd ? null : tripForm.volta_departure_time || null,
+          paired_trip_id: idaTrip.id,
+          capacity,
+          company_id: activeCompanyId,
+        };
+
+        const { data: voltaTrip, error: voltaError } = await supabase
+          .from('trips')
+          .insert([voltaTripData])
+          .select('id')
+          .single();
+
+        if (voltaError) throw voltaError;
+
+        // Update ida trip with volta pair
+        await supabase
+          .from('trips')
+          .update({ paired_trip_id: voltaTrip.id })
+          .eq('id', idaTrip.id);
+
+        toast.success('Viagens de Ida e Volta criadas e vinculadas');
+      } else {
+        // Single trip creation
+        const isVolta = tripForm.trip_creation_type === 'volta';
+        const departureTime = isVolta && tripForm.volta_time_tbd 
+          ? null 
+          : (isVolta ? tripForm.volta_departure_time : tripForm.ida_departure_time) || null;
+
+        const tripData = {
+          event_id: editingId,
+          trip_type: tripForm.trip_creation_type as TripType,
+          vehicle_id: tripForm.vehicle_id,
+          driver_id: tripForm.driver_id,
+          assistant_driver_id: assistantDriverId,
+          departure_time: departureTime,
+          capacity,
+          company_id: activeCompanyId,
+        };
+
+        const { error } = await supabase.from('trips').insert([tripData]);
+        if (error) throw error;
+
+        toast.success('Viagem adicionada');
+      }
+
       setTripDialogOpen(false);
-      setTripForm({ 
-        trip_type: 'ida', 
-        vehicle_id: '', 
-        driver_id: '', 
-        assistant_driver_id: '',
-        departure_time: '', 
-        capacity: '' 
-      });
+      resetTripForm();
       fetchEventTrips(editingId);
       fetchEvents();
+    } catch (error) {
+      toast.error('Erro ao adicionar viagem');
+      console.error(error);
     }
     setSavingTrip(false);
+  };
+
+  const resetTripForm = () => {
+    setTripForm({ 
+      trip_creation_type: 'ida', 
+      vehicle_id: '', 
+      driver_id: '', 
+      assistant_driver_id: '',
+      ida_departure_time: '',
+      volta_departure_time: '',
+      volta_time_tbd: false,
+      capacity: '' 
+    });
   };
 
   const handleDeleteTrip = async (tripId: string) => {
@@ -496,11 +615,24 @@ export default function Events() {
     
     setSavingBoarding(true);
 
+    const tripId = boardingForm.trip_id && boardingForm.trip_id !== '__none__' 
+      ? boardingForm.trip_id 
+      : null;
+
+    // Calculate next stop_order for this trip
+    const existingBoardings = eventBoardingLocations.filter(
+      ebl => ebl.trip_id === tripId
+    );
+    const nextOrder = boardingForm.stop_order 
+      ? parseInt(boardingForm.stop_order, 10)
+      : existingBoardings.length + 1;
+
     const boardingData = {
       event_id: editingId,
       boarding_location_id: boardingForm.boarding_location_id,
       departure_time: boardingForm.departure_time || null,
-      trip_id: boardingForm.trip_id && boardingForm.trip_id !== '__none__' ? boardingForm.trip_id : null,
+      trip_id: tripId,
+      stop_order: nextOrder,
       company_id: activeCompanyId,
     };
 
@@ -512,10 +644,74 @@ export default function Events() {
     } else {
       toast.success('Local de embarque adicionado');
       setBoardingDialogOpen(false);
-      setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '' });
+      setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
       fetchEventBoardingLocations(editingId);
     }
     setSavingBoarding(false);
+  };
+
+  // Copy boardings from ida to volta
+  const handleCopyBoardingsFromIda = async () => {
+    if (!selectedTripIdForBoardings || !editingId || !activeCompanyId) return;
+    
+    setCopyingBoardings(true);
+    
+    // Find the selected trip (should be volta)
+    const selectedTrip = eventTrips.find(t => t.id === selectedTripIdForBoardings);
+    if (!selectedTrip || selectedTrip.trip_type !== 'volta') {
+      toast.error('Selecione uma viagem de volta para copiar embarques');
+      setCopyingBoardings(false);
+      return;
+    }
+
+    // Find ida trip (paired or first ida)
+    const idaTrip = selectedTrip.paired_trip_id 
+      ? eventTrips.find(t => t.id === selectedTrip.paired_trip_id)
+      : eventTrips.find(t => t.trip_type === 'ida');
+    
+    if (!idaTrip) {
+      toast.error('Nenhuma viagem de ida encontrada');
+      setCopyingBoardings(false);
+      return;
+    }
+    
+    // Get ida boardings
+    const idaBoardings = eventBoardingLocations
+      .filter(ebl => ebl.trip_id === idaTrip.id)
+      .sort((a, b) => (a.stop_order || 1) - (b.stop_order || 1));
+    
+    if (idaBoardings.length === 0) {
+      toast.error('A viagem de ida não possui embarques');
+      setCopyingBoardings(false);
+      return;
+    }
+    
+    // Prepare new boardings (optionally inverted)
+    const newBoardings = idaBoardings.map((ebl, index) => ({
+      event_id: editingId,
+      boarding_location_id: ebl.boarding_location_id,
+      trip_id: selectedTripIdForBoardings,
+      departure_time: ebl.departure_time,
+      stop_order: invertBoardingsOrder 
+        ? idaBoardings.length - index 
+        : index + 1,
+      company_id: activeCompanyId,
+    }));
+    
+    const { error } = await supabase
+      .from('event_boarding_locations')
+      .insert(newBoardings);
+    
+    if (error) {
+      toast.error('Erro ao copiar embarques');
+      console.error(error);
+    } else {
+      toast.success(`${newBoardings.length} embarques copiados da ida`);
+      setCopyBoardingsDialogOpen(false);
+      fetchEventBoardingLocations(editingId);
+    }
+    
+    setCopyingBoardings(false);
   };
 
   const handleDeleteBoarding = async (boardingId: string) => {
@@ -909,148 +1105,248 @@ export default function Events() {
                           </div>
                         ) : (
                           <div className="space-y-3">
-                            {eventTrips.map((trip) => (
-                              <Card key={trip.id} className="p-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex flex-col gap-2">
-                                    <div className="flex items-center gap-4 flex-wrap">
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        trip.trip_type === 'ida' 
-                                          ? 'bg-primary/10 text-primary' 
-                                          : 'bg-secondary text-secondary-foreground'
-                                      }`}>
-                                        {trip.trip_type === 'ida' ? 'IDA' : 'VOLTA'}
-                                      </span>
-                                      <div className="flex items-center gap-2 text-sm">
-                                        <Clock className="h-4 w-4 text-muted-foreground" />
-                                        <span className="font-medium">{trip.departure_time?.slice(0, 5)}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-sm">
-                                        <Bus className="h-4 w-4 text-muted-foreground" />
-                                        <span>
-                                          {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                            {eventTrips.map((trip) => {
+                              const pairedTrip = trip.paired_trip_id 
+                                ? eventTrips.find(t => t.id === trip.paired_trip_id) 
+                                : null;
+                              const isDepartureTimeTbd = trip.departure_time === null;
+                              
+                              return (
+                                <Card key={trip.id} className={`p-3 ${isDepartureTimeTbd ? 'bg-amber-50/50 border-amber-200' : ''}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex flex-col gap-2">
+                                      <div className="flex items-center gap-4 flex-wrap">
+                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                          trip.trip_type === 'ida' 
+                                            ? 'bg-primary/10 text-primary' 
+                                            : 'bg-secondary text-secondary-foreground'
+                                        }`}>
+                                          {trip.trip_type === 'ida' ? 'IDA' : 'VOLTA'}
                                         </span>
+                                        <div className="flex items-center gap-2 text-sm">
+                                          <Clock className="h-4 w-4 text-muted-foreground" />
+                                          {isDepartureTimeTbd ? (
+                                            <span className="font-medium text-amber-600 flex items-center gap-1">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              A definir
+                                            </span>
+                                          ) : (
+                                            <span className="font-medium">{trip.departure_time?.slice(0, 5)}</span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                          <Bus className="h-4 w-4 text-muted-foreground" />
+                                          <span>
+                                            {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                          <Users className="h-4 w-4 text-muted-foreground" />
+                                          <span>{trip.capacity} lugares</span>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2 text-sm">
-                                        <Users className="h-4 w-4 text-muted-foreground" />
-                                        <span>{trip.capacity} lugares</span>
+                                      <div className="text-xs text-muted-foreground">
+                                        Motorista: {trip.driver?.name ?? 'Não definido'}
+                                        {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
+                                        {pairedTrip && (
+                                          <span className="ml-2 text-primary">
+                                            [Par: {pairedTrip.trip_type === 'ida' ? 'Ida' : 'Volta'}]
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Motorista: {trip.driver?.name ?? 'Não definido'}
-                                      {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
-                                    </div>
+                                    {!isReadOnly && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={() => handleDeleteTrip(trip.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
                                   </div>
-                                  {!isReadOnly && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive"
-                                      onClick={() => handleDeleteTrip(trip.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </Card>
-                            ))}
+                                </Card>
+                              );
+                            })}
                           </div>
                         )}
                       </>
                     )}
                   </TabsContent>
 
-                  {/* Tab Embarques */}
+                  {/* Tab Embarques - with trip selector and copy feature */}
                   <TabsContent value="embarques" className="mt-0 space-y-4">
                     {!editingId ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Info className="h-8 w-8 mx-auto mb-2" />
                         <p>Salve o evento primeiro para adicionar locais de embarque.</p>
                       </div>
+                    ) : eventTrips.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                        <Bus className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>Adicione viagens primeiro</p>
+                        <p className="text-sm">Cada embarque deve estar vinculado a uma viagem específica.</p>
+                      </div>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-medium">Locais de Embarque do Evento</h3>
-                          {!isReadOnly && availableBoardingLocations.length > 0 && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setBoardingDialogOpen(true)}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Adicionar Local
-                            </Button>
-                          )}
+                        {/* Trip Selector */}
+                        <div className="space-y-2">
+                          <Label>Viagem Selecionada</Label>
+                          <Select
+                            value={selectedTripIdForBoardings ?? '__none__'}
+                            onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione uma viagem" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Todas as viagens</SelectItem>
+                              {eventTrips.map((trip) => (
+                                <SelectItem key={trip.id} value={trip.id}>
+                                  {getTripLabel(trip)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
 
-                        {loadingLocations ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                          </div>
-                        ) : eventBoardingLocations.length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground border rounded-lg">
-                            <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>Nenhum local de embarque definido</p>
-                            <p className="text-sm">Adicione locais onde os passageiros embarcarão</p>
-                            {!isReadOnly && availableBoardingLocations.length > 0 && (
+                        {/* Actions */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <h3 className="font-medium">
+                            {selectedTripIdForBoardings 
+                              ? `Embarques da viagem selecionada`
+                              : 'Todos os embarques'
+                            }
+                          </h3>
+                          <div className="flex gap-2">
+                            {/* Copy from Ida button - only for Volta trips */}
+                            {!isReadOnly && selectedTripIdForBoardings && (() => {
+                              const selectedTrip = eventTrips.find(t => t.id === selectedTripIdForBoardings);
+                              const hasIdaWithBoardings = eventTrips.some(t => 
+                                t.trip_type === 'ida' && 
+                                eventBoardingLocations.some(ebl => ebl.trip_id === t.id)
+                              );
+                              if (selectedTrip?.trip_type === 'volta' && hasIdaWithBoardings) {
+                                return (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCopyBoardingsDialogOpen(true)}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copiar da Ida
+                                  </Button>
+                                );
+                              }
+                              return null;
+                            })()}
+                            {!isReadOnly && boardingLocations.length > 0 && (
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="mt-4"
                                 onClick={() => setBoardingDialogOpen(true)}
                               >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Adicionar Local
                               </Button>
                             )}
-                            {availableBoardingLocations.length === 0 && (
-                              <p className="text-xs text-destructive mt-4">
-                                Cadastre locais de embarque em Configurações → Locais de Embarque
-                              </p>
-                            )}
                           </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {eventBoardingLocations.map((ebl) => (
-                              <Card key={ebl.id} className="p-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex items-start gap-3">
-                                    <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                                    <div>
-                                      <p className="font-medium">{ebl.boarding_location?.name}</p>
-                                      <p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
-                                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                                        {ebl.departure_time && (
-                                          <span className="flex items-center gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            Horário: {ebl.departure_time.slice(0, 5)}
-                                          </span>
-                                        )}
-                                        <span>
-                                          Viagem: {ebl.trip ? (ebl.trip.trip_type === 'ida' ? 'Ida' : 'Volta') : 'Todas'}
-                                        </span>
+                        </div>
+
+                        {loadingLocations ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        ) : (() => {
+                          const filteredBoardings = selectedTripIdForBoardings
+                            ? eventBoardingLocations.filter(ebl => ebl.trip_id === selectedTripIdForBoardings)
+                            : eventBoardingLocations;
+                          
+                          const sortedBoardings = [...filteredBoardings].sort(
+                            (a, b) => (a.stop_order || 1) - (b.stop_order || 1)
+                          );
+
+                          if (sortedBoardings.length === 0) {
+                            return (
+                              <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                                <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                <p>Nenhum local de embarque definido</p>
+                                <p className="text-sm">
+                                  {selectedTripIdForBoardings 
+                                    ? 'Adicione locais para esta viagem'
+                                    : 'Adicione locais onde os passageiros embarcarão'
+                                  }
+                                </p>
+                                {!isReadOnly && boardingLocations.length > 0 && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-4"
+                                    onClick={() => setBoardingDialogOpen(true)}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Adicionar Local
+                                  </Button>
+                                )}
+                                {boardingLocations.length === 0 && (
+                                  <p className="text-xs text-destructive mt-4">
+                                    Cadastre locais de embarque em Configurações → Locais de Embarque
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="space-y-3">
+                              {sortedBoardings.map((ebl) => (
+                                <Card key={ebl.id} className="p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium shrink-0">
+                                        {ebl.stop_order || '?'}
+                                      </div>
+                                      <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="font-medium">{ebl.boarding_location?.name}</p>
+                                        <p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
+                                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                                          {ebl.departure_time && (
+                                            <span className="flex items-center gap-1">
+                                              <Clock className="h-3 w-3" />
+                                              Horário: {ebl.departure_time.slice(0, 5)}
+                                            </span>
+                                          )}
+                                          {!selectedTripIdForBoardings && (
+                                            <span>
+                                              Viagem: {ebl.trip ? (ebl.trip.trip_type === 'ida' ? 'Ida' : 'Volta') : 'N/A'}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
+                                    {!isReadOnly && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={() => handleDeleteBoarding(ebl.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
                                   </div>
-                                  {!isReadOnly && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive"
-                                      onClick={() => handleDeleteBoarding(ebl.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
+                                </Card>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </>
                     )}
                   </TabsContent>
@@ -1298,20 +1594,20 @@ export default function Events() {
           </DialogContent>
         </Dialog>
 
-        {/* Trip Modal */}
+        {/* Trip Modal - with ida_volta shortcut and TBD support */}
         <Dialog open={tripDialogOpen} onOpenChange={setTripDialogOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Adicionar Viagem</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAddTrip} className="space-y-4">
-              {/* Trip Type */}
+              {/* Trip Type with ida_volta shortcut */}
               <div className="space-y-2">
                 <Label>Tipo da Viagem *</Label>
                 <RadioGroup
-                  value={tripForm.trip_type}
-                  onValueChange={(value: TripType) => setTripForm({ ...tripForm, trip_type: value })}
-                  className="flex gap-4"
+                  value={tripForm.trip_creation_type}
+                  onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
+                  className="flex flex-wrap gap-4"
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="ida" id="trip_type_ida" />
@@ -1321,7 +1617,16 @@ export default function Events() {
                     <RadioGroupItem value="volta" id="trip_type_volta" />
                     <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Volta</Label>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
+                    <Label htmlFor="trip_type_ida_volta" className="font-normal cursor-pointer">Ida e Volta</Label>
+                  </div>
                 </RadioGroup>
+                {tripForm.trip_creation_type === 'ida_volta' && (
+                  <p className="text-xs text-muted-foreground">
+                    Serão criadas duas viagens vinculadas com os mesmos dados.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1345,7 +1650,7 @@ export default function Events() {
                     <SelectContent>
                       {vehicles.map((vehicle) => (
                         <SelectItem key={vehicle.id} value={vehicle.id}>
-                          {vehicle.plate} ({vehicle.capacity} lug.)
+                          {vehicleTypeLabels[vehicle.type]} {vehicle.plate} ({vehicle.capacity} lug.)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1411,17 +1716,56 @@ export default function Events() {
                 </div>
               </div>
 
-              {/* Departure Time */}
-              <div className="space-y-2">
-                <Label htmlFor="departure_time">Horário de Saída *</Label>
-                <Input
-                  id="departure_time"
-                  type="time"
-                  value={tripForm.departure_time}
-                  onChange={(e) => setTripForm({ ...tripForm, departure_time: e.target.value })}
-                  required
-                />
-              </div>
+              {/* Departure Time - Ida (shown for ida or ida_volta) */}
+              {(tripForm.trip_creation_type === 'ida' || tripForm.trip_creation_type === 'ida_volta') && (
+                <div className="space-y-2">
+                  <Label htmlFor="ida_departure_time">
+                    {tripForm.trip_creation_type === 'ida_volta' ? 'Horário da Ida *' : 'Horário Base *'}
+                  </Label>
+                  <Input
+                    id="ida_departure_time"
+                    type="time"
+                    value={tripForm.ida_departure_time}
+                    onChange={(e) => setTripForm({ ...tripForm, ida_departure_time: e.target.value })}
+                    required={tripForm.trip_creation_type === 'ida' || tripForm.trip_creation_type === 'ida_volta'}
+                  />
+                </div>
+              )}
+
+              {/* Departure Time - Volta (shown for volta or ida_volta) */}
+              {(tripForm.trip_creation_type === 'volta' || tripForm.trip_creation_type === 'ida_volta') && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="volta_departure_time">
+                      {tripForm.trip_creation_type === 'ida_volta' ? 'Horário da Volta' : 'Horário Base'}
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="volta_time_tbd"
+                        checked={tripForm.volta_time_tbd}
+                        onCheckedChange={(checked) => setTripForm({ ...tripForm, volta_time_tbd: checked })}
+                      />
+                      <Label htmlFor="volta_time_tbd" className="text-sm font-normal text-muted-foreground cursor-pointer">
+                        A definir
+                      </Label>
+                    </div>
+                  </div>
+                  <Input
+                    id="volta_departure_time"
+                    type="time"
+                    value={tripForm.volta_departure_time}
+                    onChange={(e) => setTripForm({ ...tripForm, volta_departure_time: e.target.value })}
+                    disabled={tripForm.volta_time_tbd}
+                    required={tripForm.trip_creation_type === 'volta' && !tripForm.volta_time_tbd}
+                  />
+                  {tripForm.volta_time_tbd && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      O horário será definido posteriormente
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setTripDialogOpen(false)}>
@@ -1429,7 +1773,14 @@ export default function Events() {
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={savingTrip || !tripForm.vehicle_id || !tripForm.driver_id || !tripForm.departure_time}
+                  disabled={
+                    savingTrip || 
+                    !tripForm.vehicle_id || 
+                    !tripForm.driver_id || 
+                    (tripForm.trip_creation_type === 'ida' && !tripForm.ida_departure_time) ||
+                    (tripForm.trip_creation_type === 'volta' && !tripForm.volta_time_tbd && !tripForm.volta_departure_time) ||
+                    (tripForm.trip_creation_type === 'ida_volta' && !tripForm.ida_departure_time)
+                  }
                 >
                   {savingTrip ? (
                     <>
@@ -1437,7 +1788,7 @@ export default function Events() {
                       Salvando...
                     </>
                   ) : (
-                    'Adicionar'
+                    tripForm.trip_creation_type === 'ida_volta' ? 'Criar Ida e Volta' : 'Adicionar'
                   )}
                 </Button>
               </div>
@@ -1546,6 +1897,42 @@ export default function Events() {
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Copy Boardings Dialog */}
+        <AlertDialog open={copyBoardingsDialogOpen} onOpenChange={setCopyBoardingsDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Copiar Embarques da Ida</AlertDialogTitle>
+              <AlertDialogDescription>
+                Os locais de embarque da viagem de ida serão copiados para a volta selecionada.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="invert_order"
+                  checked={invertBoardingsOrder}
+                  onCheckedChange={setInvertBoardingsOrder}
+                />
+                <Label htmlFor="invert_order" className="cursor-pointer">
+                  Inverter ordem das paradas (recomendado para volta)
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Os horários serão copiados e você poderá ajustá-los depois.
+              </p>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleCopyBoardingsFromIda}
+                disabled={copyingBoardings}
+              >
+                {copyingBoardings ? 'Copiando...' : 'Copiar'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
