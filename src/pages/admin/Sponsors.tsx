@@ -44,7 +44,7 @@ import {
   Image,
   Link2,
   Loader2,
-  Megaphone,
+  Star,
   Pencil,
   Phone,
   Plus,
@@ -722,7 +722,7 @@ export default function Sponsors() {
           </div>
         ) : filteredSponsors.length === 0 ? (
           <EmptyState
-            icon={<Megaphone className="h-8 w-8 text-muted-foreground" />}
+            icon={<Star className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum patrocinador encontrado"
             description="Cadastre patrocinadores para aparecerem no carrossel do app"
             action={
