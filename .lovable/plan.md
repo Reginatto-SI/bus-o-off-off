@@ -1,273 +1,324 @@
 
+# Plano: Vitrine de Passagens /eventos (Mobile-First)
 
-# Plano: Cidade do Evento vs Cidade do Embarque + Autocomplete
+## Analise da Situacao Atual
 
-## Resumo da Situação Atual
+### O que existe hoje
+- Tela simples com grid de cards
+- Cards mostram: nome, data, cidade, descricao
+- **NAO mostra**: preco, empresa organizadora, banner do evento
+- Loading basico com spinner
+- Empty state generico
+- CTA atual: "Ver Evento" (deve ser "Comprar passagem")
+- Layout grid 1-2-3 colunas (nao otimizado para mobile)
+- Sem carrossel de destaques
+- Footer simples sem elementos de confianca
 
-### Problema Identificado
-1. **Evento**: Campo `city` é input livre sem estrutura (ex: "Barretos - SP" digitado manualmente)
-2. **Local de Embarque**: Tabela `boarding_locations` NÃO possui campos `city` e `state` - apenas `name`, `address`, `maps_url`, `notes`
-3. **Confusão conceitual**: Cidade do evento (destino) não está separada da cidade do embarque (origem)
-4. **UX inconsistente**: Não há autocomplete de cidade/UF em nenhum ponto do sistema
+### Dados disponiveis
+A tabela `events` ja possui os campos necessarios:
+- `name`, `date`, `city`, `status`
+- `unit_price` (preco disponivel mas nao exibido)
+- `image_url` (banner disponivel mas nao exibido no card)
+- `company_id` (vinculo com empresa existe)
 
-### Impacto
-- Passageiros podem confundir a cidade do evento com a cidade onde vão embarcar
-- Filtros futuros na página pública não funcionarão corretamente
-- Dados inconsistentes (ex: "Barretos SP" vs "Barretos - SP" vs "barretos/SP")
+A tabela `companies` possui:
+- `name` (nome da empresa)
+- `logo_url` (logo da empresa)
 
 ---
 
-## Alterações Necessárias
+## Arquitetura de Componentes Reutilizaveis
 
-### Parte 1: Migração SQL — Adicionar city e state na tabela boarding_locations
+Criar componentes em `src/components/public/` para reuso futuro em outras vitrines:
 
-```sql
-ALTER TABLE public.boarding_locations 
-  ADD COLUMN IF NOT EXISTS city text,
-  ADD COLUMN IF NOT EXISTS state character(2);
+| Componente | Descricao |
+|------------|-----------|
+| `EventCard.tsx` | Card padrao de evento (lista vertical) |
+| `EventCardFeatured.tsx` | Card de destaque (carrossel) |
+| `EventsCarousel.tsx` | Carrossel de eventos em destaque |
+| `TrustFooter.tsx` | Rodape com elementos de confianca |
+| `EventCardSkeleton.tsx` | Skeleton loading para cards |
 
-COMMENT ON COLUMN public.boarding_locations.city IS 'Cidade do local de embarque';
-COMMENT ON COLUMN public.boarding_locations.state IS 'UF do local de embarque (2 caracteres)';
-```
+---
 
-### Parte 2: Atualizar Types
+## Detalhamento Tecnico
 
-**Arquivo**: `src/types/database.ts`
+### 1. Atualizar Query para Incluir Empresa
 
 ```typescript
-export interface BoardingLocation {
-  id: string;
-  name: string;
-  address: string;
-  city: string | null;      // NOVO
-  state: string | null;     // NOVO (UF - 2 chars)
-  maps_url: string | null;
-  notes: string | null;
-  status: BoardingLocationStatus;
-  company_id: string;
-  created_at: string;
-  updated_at: string;
+// Buscar eventos com dados da empresa organizadora
+const { data } = await supabase
+  .from('events')
+  .select(`
+    *,
+    company:companies!events_company_id_fkey(
+      id,
+      name,
+      logo_url
+    )
+  `)
+  .eq('status', 'a_venda')
+  .order('date', { ascending: true });
+```
+
+### 2. Criar Componente EventCard (Reutilizavel)
+
+Arquivo: `src/components/public/EventCard.tsx`
+
+Props:
+```typescript
+interface EventCardProps {
+  event: Event & { company?: { id: string; name: string; logo_url: string | null } };
+  sellerRef?: string | null;
+  isSoldOut?: boolean;
 }
 ```
 
-### Parte 3: Criar Lista de Cidades Brasileiras
+Estrutura visual:
+```text
++---------------------------------------+
+| [Banner 3:2 com blur letterbox]       |
+|                                       |
++---------------------------------------+
+| Nome do Evento                        |
+| R$ 60,00                              |
+| --------------------------------------|
+| [Calendario] Sabado, 20 de fevereiro  |
+| [MapPin] Sorriso - MT                 |
+| --------------------------------------|
+| [Logo] Empresa Organizadora           |
++---------------------------------------+
+| [    Comprar passagem    ]            |
++---------------------------------------+
+```
 
-**Arquivo novo**: `src/data/brazilian-cities.ts`
+Elementos:
+- Banner com enquadramento sem corte (blur letterbox ja implementado)
+- Nome do evento em destaque (fonte maior, bold)
+- Preco visivel logo abaixo do nome
+- Data formatada com icone
+- Cidade com icone
+- Empresa organizadora (logo pequena + nome)
+- Badge "Esgotado" quando aplicavel
+- CTA "Comprar passagem" (desabilitado se esgotado)
+- Card inteiro clicavel no mobile
 
-Criar um arquivo com uma lista curada das principais cidades brasileiras para o autocomplete. A lista será organizada por estado e conterá as maiores cidades de cada UF (aproximadamente 500-1000 cidades mais relevantes).
+### 3. Criar Componente EventCardFeatured (Destaque)
+
+Arquivo: `src/components/public/EventCardFeatured.tsx`
+
+Semelhante ao EventCard, porem:
+- Banner ocupa mais espaco vertical
+- Overlay escuro sobre o banner
+- Informacoes sobre o banner (nome, data, cidade, preco)
+- CTA visivel sobre o overlay
+
+### 4. Criar Componente EventsCarousel
+
+Arquivo: `src/components/public/EventsCarousel.tsx`
+
+Usar o componente Carousel ja existente (`embla-carousel-react`):
+
+```typescript
+interface EventsCarouselProps {
+  events: EventWithCompany[];
+  sellerRef?: string | null;
+}
+```
+
+Comportamento:
+- Exibido SOMENTE se houver eventos (sem logica de destaque por ora)
+- 1 card por vez no mobile
+- Swipe horizontal
+- Indicadores (bolinhas) de posicao
+- Opcional: autoplay com pausa ao toque
+
+### 5. Criar Componente TrustFooter
+
+Arquivo: `src/components/public/TrustFooter.tsx`
 
 Estrutura:
-```typescript
-export interface BrazilianCity {
-  name: string;
-  state: string;
-  label: string; // "Nome — UF"
-}
-
-export const brazilianCities: BrazilianCity[] = [
-  { name: 'Sorriso', state: 'MT', label: 'Sorriso — MT' },
-  { name: 'Cuiabá', state: 'MT', label: 'Cuiabá — MT' },
-  { name: 'Barretos', state: 'SP', label: 'Barretos — SP' },
-  // ... etc
-];
+```text
++---------------------------------------+
+| [Cadeado] Pagamento 100% online       |
+|          e seguro                     |
+| [Pix] [Cartao]                        |
++---------------------------------------+
+| (c) 2026 Busao Off Off                |
++---------------------------------------+
 ```
 
-### Parte 4: Criar Componente de Autocomplete de Cidade
+Icones: `Lock`, `CreditCard`, `Smartphone` (para Pix)
 
-**Arquivo novo**: `src/components/ui/city-autocomplete.tsx`
+### 6. Criar Skeleton de Loading
 
-Componente reutilizável baseado no Command/Combobox do shadcn que:
-- Filtra cidades enquanto o usuário digita
-- Mostra formato "Cidade — UF"
-- Permite digitação livre caso a cidade não esteja na lista
-- Salva city e state separadamente
+Arquivo: `src/components/public/EventCardSkeleton.tsx`
 
-```typescript
-interface CityAutocompleteProps {
-  value: { city: string; state: string };
-  onChange: (value: { city: string; state: string }) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  className?: string;
-}
-```
+Usar o componente Skeleton existente:
+- Placeholder para banner
+- Placeholder para textos
+- Placeholder para botao
 
-### Parte 5: Atualizar Formulário do Evento (aba Geral)
+### 7. Atualizar PublicLayout
 
-**Arquivo**: `src/pages/admin/Events.tsx`
+Arquivo: `src/components/layout/PublicLayout.tsx`
 
-Alterar o campo "Cidade" para "Cidade do Evento (Destino)" com autocomplete:
+Substituir footer simples pelo TrustFooter
+
+### 8. Atualizar PublicEvents
+
+Arquivo: `src/pages/public/PublicEvents.tsx`
+
+Estrutura final:
 
 ```typescript
-// ANTES
-<div className="space-y-2">
-  <Label htmlFor="city">Cidade *</Label>
-  <Input
-    id="city"
-    value={form.city}
-    onChange={(e) => setForm({ ...form, city: e.target.value })}
-    placeholder="Ex: Barretos - SP"
-    required
-    disabled={isReadOnly}
-  />
-</div>
+<PublicLayout>
+  {/* Titulo e Microcopy */}
+  <section>
+    <h1>Passagens disponiveis</h1>
+    <p>Compra segura com confirmacao imediata apos o pagamento</p>
+    <p className="subtle">Eventos organizados por empresas parceiras</p>
+  </section>
 
-// DEPOIS
-<div className="space-y-2">
-  <Label htmlFor="city">Cidade do Evento (Destino) *</Label>
-  <CityAutocomplete
-    value={{ city: getCityName(form.city), state: getStateFromCity(form.city) }}
-    onChange={({ city, state }) => setForm({ ...form, city: `${city} — ${state}` })}
-    placeholder="Ex: Barretos — SP"
-    disabled={isReadOnly}
-  />
-  <p className="text-xs text-muted-foreground">
-    Local onde o evento acontece (destino final da viagem)
-  </p>
-</div>
-```
+  {/* Carrossel de Destaques (se houver eventos) */}
+  {events.length > 0 && (
+    <EventsCarousel events={events.slice(0, 5)} sellerRef={sellerRef} />
+  )}
 
-### Parte 6: Atualizar Cadastro de Local de Embarque
-
-**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
-
-Adicionar campos Cidade e UF ao modal de criação/edição:
-
-```typescript
-// Novo estado do form
-const [form, setForm] = useState({
-  name: '',
-  address: '',
-  city: '',      // NOVO
-  state: '',     // NOVO
-  maps_url: '',
-  notes: '',
-});
-
-// No modal, adicionar após campo de endereço:
-<div className="grid gap-4 sm:grid-cols-2">
-  <div className="space-y-2">
-    <Label htmlFor="city">Cidade *</Label>
-    <CityAutocomplete
-      value={{ city: form.city, state: form.state }}
-      onChange={({ city, state }) => setForm({ ...form, city, state })}
-      placeholder="Selecione a cidade"
-    />
-  </div>
-</div>
-```
-
-### Parte 7: Exibir Cidade/UF nos Cards de Embarque (aba Embarques do Evento)
-
-**Arquivo**: `src/pages/admin/Events.tsx` (linhas 1956-1982)
-
-Adicionar cidade/UF ao exibir o card de embarque:
-
-```typescript
-// ANTES
-<p className="font-medium">{ebl.boarding_location?.name}</p>
-<p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
-
-// DEPOIS
-<p className="font-medium">{ebl.boarding_location?.name}</p>
-<p className="text-sm text-muted-foreground">{ebl.boarding_location?.address}</p>
-{ebl.boarding_location?.city && ebl.boarding_location?.state && (
-  <p className="text-xs text-muted-foreground">
-    {ebl.boarding_location.city} — {ebl.boarding_location.state}
-  </p>
-)}
-```
-
-### Parte 8: Autofill Inteligente — Última Cidade Usada
-
-**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
-
-Implementar memória da última cidade selecionada:
-
-```typescript
-// Estado para última cidade usada
-const [lastUsedCity, setLastUsedCity] = useState<{ city: string; state: string } | null>(null);
-
-// Ao abrir modal para novo local, preencher automaticamente
-const handleOpenNewLocation = () => {
-  setForm({
-    ...initialForm,
-    city: lastUsedCity?.city ?? '',
-    state: lastUsedCity?.state ?? '',
-  });
-  setDialogOpen(true);
-};
-
-// Ao salvar, guardar a cidade usada
-const handleSubmit = async (e) => {
-  // ... save logic
-  if (!error) {
-    setLastUsedCity({ city: form.city, state: form.state });
-    // ...
-  }
-};
-```
-
-### Parte 9: Atualizar Tabela de Locais de Embarque
-
-**Arquivo**: `src/pages/admin/BoardingLocations.tsx`
-
-Adicionar coluna Cidade/UF na listagem:
-
-```typescript
-// Na tabela
-<TableHead>Cidade/UF</TableHead>
-
-// Na linha
-<TableCell>
-  {location.city && location.state 
-    ? `${location.city} — ${location.state}` 
-    : <span className="text-muted-foreground">—</span>
-  }
-</TableCell>
+  {/* Lista Todos os Eventos */}
+  <section>
+    <h2>Todos os eventos</h2>
+    {loading ? (
+      <SkeletonGrid />
+    ) : events.length === 0 ? (
+      <EmptyState />
+    ) : (
+      <EventCardList events={events} sellerRef={sellerRef} />
+    )}
+  </section>
+</PublicLayout>
 ```
 
 ---
 
-## Resumo dos Arquivos a Modificar/Criar
+## Estilos Mobile-First
 
-| Arquivo | Tipo | Alteração |
+### Layout
+- Padding horizontal: `px-4` (16px) no mobile
+- Cards em coluna unica no mobile
+- Espacamento entre cards: `gap-4` (16px)
+- Breakpoints: 
+  - Mobile: 1 coluna
+  - Tablet (sm): 2 colunas
+  - Desktop (lg): 3 colunas
+
+### Cards
+- Arredondamento: `rounded-xl` (16px)
+- Sombra suave: `shadow-sm`
+- Hover: `hover:shadow-md` (apenas desktop)
+- Card clicavel: `cursor-pointer`
+
+### Botoes
+- Altura: `h-12` (48px) para melhor toque
+- Texto: "Comprar passagem"
+- Cor: Primary (laranja institucional)
+- Largura total: `w-full`
+
+### Tipografia
+- Titulo H1: `text-2xl font-bold` mobile, `text-3xl` desktop
+- Nome do evento: `text-lg font-semibold`
+- Preco: `text-xl font-bold text-primary`
+- Data/Cidade: `text-sm text-muted-foreground`
+- Empresa: `text-xs text-muted-foreground`
+
+---
+
+## Arquivos a Criar/Modificar
+
+| Arquivo | Tipo | Descricao |
 |---------|------|-----------|
-| Migração SQL | Novo | Adicionar `city` e `state` em `boarding_locations` |
-| `src/types/database.ts` | Editar | Adicionar `city` e `state` na interface BoardingLocation |
-| `src/data/brazilian-cities.ts` | Novo | Lista de cidades brasileiras para autocomplete |
-| `src/components/ui/city-autocomplete.tsx` | Novo | Componente de autocomplete de cidade/UF |
-| `src/pages/admin/Events.tsx` | Editar | Renomear label, usar autocomplete, exibir cidade no card |
-| `src/pages/admin/BoardingLocations.tsx` | Editar | Adicionar campos cidade/UF, tabela, autofill |
+| `src/components/public/EventCard.tsx` | Novo | Card padrao de evento |
+| `src/components/public/EventCardFeatured.tsx` | Novo | Card de destaque |
+| `src/components/public/EventsCarousel.tsx` | Novo | Carrossel de destaques |
+| `src/components/public/EventCardSkeleton.tsx` | Novo | Skeleton loading |
+| `src/components/public/TrustFooter.tsx` | Novo | Rodape de confianca |
+| `src/components/public/index.ts` | Novo | Barrel exports |
+| `src/components/layout/PublicLayout.tsx` | Editar | Usar TrustFooter |
+| `src/pages/public/PublicEvents.tsx` | Editar | Nova estrutura completa |
+| `src/types/database.ts` | Editar | Adicionar EventWithCompany type |
 
 ---
 
-## Critérios de Sucesso
+## Formato de Preco
 
-1. Campo "Cidade do Evento (Destino)" com autocomplete no cadastro de eventos
-2. Campos "Cidade" e "UF" no cadastro de locais de embarque (estruturados)
-3. Autocomplete sugere "Cidade — UF" enquanto digita
-4. Cards de embarque exibem a cidade/UF do local cadastrado
-5. Ao criar vários locais em sequência, a última cidade é pré-selecionada
-6. Tabela de locais de embarque mostra coluna Cidade/UF
-7. Dados consistentes para filtros futuros na página pública
+Usar `Intl.NumberFormat` para formatar precos:
+
+```typescript
+const formatPrice = (price: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(price);
+};
+
+// Exemplo: formatPrice(60) => "R$ 60,00"
+```
 
 ---
 
-## Considerações Técnicas
+## Estados da Interface
 
-### Lista de Cidades
-- Usar lista estática (não API externa) para evitar dependência e latência
-- Incluir aproximadamente 500-1000 cidades mais populosas do Brasil
-- Permitir digitação livre para cidades não listadas (evitar bloqueio)
+### Loading
+- Exibir 3 skeletons (ou 6 em desktop)
+- Nunca tela branca
 
-### Migração de Dados Existentes
-- Campos novos serão `null` para locais já cadastrados
-- Usuário pode editar e preencher a cidade posteriormente
-- Sistema continua funcionando mesmo sem cidade preenchida
+### Sem Eventos
+```typescript
+<EmptyState
+  icon={<Ticket />}
+  title="Nenhuma passagem disponivel"
+  description="No momento nao ha passagens disponiveis. Volte em breve!"
+/>
+```
 
-### Autocomplete
-- Usar componente Command/Combobox do shadcn (já disponível no projeto)
-- Filtro case-insensitive com debounce para performance
-- Limitar a 10-15 sugestões visíveis por vez
+### Evento Esgotado
+- Badge "Esgotado" no canto superior do card
+- Botao desabilitado com opacity
+- Card continua visivel
 
+---
+
+## Indicadores do Carrossel
+
+Usar bolinhas de navegacao abaixo do carrossel:
+
+```typescript
+// Indicadores
+<div className="flex justify-center gap-2 mt-4">
+  {events.slice(0, 5).map((_, index) => (
+    <button
+      key={index}
+      onClick={() => api?.scrollTo(index)}
+      className={cn(
+        "w-2 h-2 rounded-full transition-colors",
+        index === current ? "bg-primary" : "bg-muted"
+      )}
+    />
+  ))}
+</div>
+```
+
+---
+
+## Criterios de Sucesso
+
+1. Tela parece um marketplace profissional de passagens
+2. Mobile-first: layout em coluna unica, botoes grandes
+3. Preco visivel em todos os cards
+4. Empresa organizadora exibida
+5. CTA "Comprar passagem" (nao "Ver evento")
+6. Carrossel funcional com swipe
+7. Skeleton loading (nunca tela branca)
+8. Footer com elementos de confianca
+9. Card inteiro clicavel no mobile
+10. Componentes reutilizaveis para futuras vitrines
