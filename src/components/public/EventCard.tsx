@@ -1,0 +1,127 @@
+import { Link } from 'react-router-dom';
+import { Calendar, MapPin, Building2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
+import { EventWithCompany } from '@/types/database';
+
+interface EventCardProps {
+  event: EventWithCompany;
+  sellerRef?: string | null;
+  isSoldOut?: boolean;
+}
+
+const formatPrice = (price: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(price);
+};
+
+export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProps) {
+  const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+
+  return (
+    <Card className="overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
+      <Link to={linkTo} className="block">
+        {/* Banner com blur letterbox */}
+        <div className="relative">
+          <AspectRatio ratio={3 / 2}>
+            {event.image_url ? (
+              <div className="relative w-full h-full">
+                {/* Background blur */}
+                <div 
+                  className="absolute inset-0 bg-cover bg-center blur-xl scale-110 opacity-60"
+                  style={{ backgroundImage: `url(${event.image_url})` }}
+                />
+                {/* Imagem principal */}
+                <img
+                  src={event.image_url}
+                  alt={event.name}
+                  className="relative w-full h-full object-contain z-10"
+                />
+              </div>
+            ) : (
+              <div className="w-full h-full bg-muted flex items-center justify-center">
+                <Calendar className="h-12 w-12 text-muted-foreground/50" />
+              </div>
+            )}
+          </AspectRatio>
+          
+          {/* Badge Esgotado */}
+          {isSoldOut && (
+            <Badge 
+              variant="destructive" 
+              className="absolute top-3 right-3 z-20"
+            >
+              Esgotado
+            </Badge>
+          )}
+        </div>
+      </Link>
+
+      <CardContent className="p-4 space-y-3">
+        {/* Nome e Preço */}
+        <div>
+          <Link to={linkTo}>
+            <h3 className="text-lg font-semibold text-foreground line-clamp-2 hover:text-primary transition-colors">
+              {event.name}
+            </h3>
+          </Link>
+          <p className="text-xl font-bold text-primary mt-1">
+            {formatPrice(event.unit_price)}
+          </p>
+        </div>
+
+        {/* Data e Local */}
+        <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 flex-shrink-0" />
+            <span>
+              {format(new Date(event.date), "EEEE, dd 'de' MMMM", {
+                locale: ptBR,
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 flex-shrink-0" />
+            <span>{event.city}</span>
+          </div>
+        </div>
+
+        {/* Empresa Organizadora */}
+        {event.company && (
+          <div className="flex items-center gap-2 pt-2 border-t">
+            <Avatar className="h-6 w-6">
+              <AvatarImage src={event.company.logo_url || undefined} />
+              <AvatarFallback className="text-xs bg-muted">
+                <Building2 className="h-3 w-3" />
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-xs text-muted-foreground truncate">
+              {event.company.name}
+            </span>
+          </div>
+        )}
+
+        {/* CTA */}
+        <Button 
+          className={cn("w-full h-12 text-base font-medium")}
+          disabled={isSoldOut}
+          asChild={!isSoldOut}
+        >
+          {isSoldOut ? (
+            <span>Esgotado</span>
+          ) : (
+            <Link to={linkTo}>Comprar passagem</Link>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

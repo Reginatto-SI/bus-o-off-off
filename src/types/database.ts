@@ -223,3 +223,12 @@ export interface Sale {
   boarding_location?: BoardingLocation;
   seller?: Seller;
 }
+
+// Tipo para eventos com dados da empresa (usado na vitrine pública)
+export interface EventWithCompany extends Event {
+  company?: {
+    id: string;
+    name: string;
+    logo_url: string | null;
+  };
+}
