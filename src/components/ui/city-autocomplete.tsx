@@ -37,7 +37,10 @@ export function CityAutocomplete({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   
-  const displayValue = formatCityLabel(value.city, value.state);
+  // Garante que value.city e value.state nunca sejam null
+  const safeCity = value?.city ?? '';
+  const safeState = value?.state ?? '';
+  const displayValue = formatCityLabel(safeCity, safeState);
   
   // Filtra cidades baseado na busca
   const filteredCities = React.useMemo(() => {
@@ -60,7 +63,9 @@ export function CityAutocomplete({
       const separators = [' — ', ' - ', ' – '];
       for (const sep of separators) {
         if (newSearch.includes(sep)) {
-          const [city, state] = newSearch.split(sep);
+          const parts = newSearch.split(sep);
+          const city = parts[0];
+          const state = parts[1];
           if (city && state && state.length >= 2) {
             onChange({ 
               city: city.trim(), 
@@ -71,7 +76,7 @@ export function CityAutocomplete({
         }
       }
       // Se não está no formato padrão, apenas atualiza a cidade
-      onChange({ city: newSearch, state: value.state });
+      onChange({ city: newSearch, state: safeState });
     }
   };
 
@@ -130,7 +135,7 @@ export function CityAutocomplete({
                     <Check
                       className={cn(
                         'mr-2 h-4 w-4',
-                        value.city === city.name && value.state === city.state
+                        safeCity === city.name && safeState === city.state
                           ? 'opacity-100'
                           : 'opacity-0'
                       )}

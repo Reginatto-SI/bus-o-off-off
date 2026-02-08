@@ -303,12 +303,12 @@ export type Database = {
       }
       profiles: {
         Row: {
+          cep: string | null
+          city: string | null
           company_id: string | null
           complement: string | null
           cpf: string | null
-          cep: string | null
           created_at: string
-          city: string | null
           email: string
           id: string
           name: string
@@ -316,18 +316,18 @@ export type Database = {
           notes: string | null
           number: string | null
           phone: string | null
-          status: string
           state: string | null
+          status: string
           street: string | null
           updated_at: string
         }
         Insert: {
+          cep?: string | null
+          city?: string | null
           company_id?: string | null
           complement?: string | null
           cpf?: string | null
-          cep?: string | null
           created_at?: string
-          city?: string | null
           email: string
           id: string
           name: string
@@ -335,18 +335,18 @@ export type Database = {
           notes?: string | null
           number?: string | null
           phone?: string | null
-          status?: string
           state?: string | null
+          status?: string
           street?: string | null
           updated_at?: string
         }
         Update: {
+          cep?: string | null
+          city?: string | null
           company_id?: string | null
           complement?: string | null
           cpf?: string | null
-          cep?: string | null
           created_at?: string
-          city?: string | null
           email?: string
           id?: string
           name?: string
@@ -354,8 +354,8 @@ export type Database = {
           notes?: string | null
           number?: string | null
           phone?: string | null
-          status?: string
           state?: string | null
+          status?: string
           street?: string | null
           updated_at?: string
         }
@@ -456,6 +456,44 @@ export type Database = {
           },
         ]
       }
+      sellers: {
+        Row: {
+          commission_percent: number
+          company_id: string
+          created_at: string
+          id: string
+          name: string
+          status: Database["public"]["Enums"]["seller_status"]
+          updated_at: string
+        }
+        Insert: {
+          commission_percent?: number
+          company_id: string
+          created_at?: string
+          id?: string
+          name: string
+          status?: Database["public"]["Enums"]["seller_status"]
+          updated_at?: string
+        }
+        Update: {
+          commission_percent?: number
+          company_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          status?: Database["public"]["Enums"]["seller_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sellers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sponsors: {
         Row: {
           banner_url: string | null
@@ -506,44 +544,6 @@ export type Database = {
           whatsapp_phone?: string | null
         }
         Relationships: []
-      }
-      sellers: {
-        Row: {
-          commission_percent: number
-          company_id: string
-          created_at: string
-          id: string
-          name: string
-          status: Database["public"]["Enums"]["seller_status"]
-          updated_at: string
-        }
-        Insert: {
-          commission_percent?: number
-          company_id: string
-          created_at?: string
-          id?: string
-          name: string
-          status?: Database["public"]["Enums"]["seller_status"]
-          updated_at?: string
-        }
-        Update: {
-          commission_percent?: number
-          company_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          status?: Database["public"]["Enums"]["seller_status"]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sellers_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       trips: {
         Row: {
