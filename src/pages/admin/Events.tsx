@@ -698,15 +698,16 @@ export default function Events() {
     setReorderingBoardings(true);
 
     // Persistimos a ordem da viagem selecionada (1..N) para evitar buracos.
-    const { error } = await supabase
-      .from('event_boarding_locations')
-      .upsert(
-        updatedOrder.map((ebl) => ({
-          id: ebl.id,
-          stop_order: ebl.stop_order,
-        })),
-        { onConflict: 'id' }
-      );
+    // Usamos update individual pois upsert requer todos os campos obrigatórios
+    const updatePromises = updatedOrder.map((ebl) =>
+      supabase
+        .from('event_boarding_locations')
+        .update({ stop_order: ebl.stop_order })
+        .eq('id', ebl.id)
+    );
+
+    const results = await Promise.all(updatePromises);
+    const error = results.find((r) => r.error)?.error;
 
     if (error) {
       toast.error('Erro ao reordenar embarques');
