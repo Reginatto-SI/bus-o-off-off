@@ -1,267 +1,302 @@
 
-# Plano: Vitrine de Passagens /eventos (Mobile-First)
+# Plano: Refatoracao do Fluxo de Compra - Etapa 1 (Escolha de Transporte e Embarque)
 
 ## Analise da Situacao Atual
 
-### O que existe hoje
-- Tela simples com grid de cards
-- Cards mostram: nome, data, cidade, descricao
-- **NAO mostra**: preco, empresa organizadora, banner do evento
-- Loading basico com spinner
-- Empty state generico
-- CTA atual: "Ver Evento" (deve ser "Comprar passagem")
-- Layout grid 1-2-3 colunas (nao otimizado para mobile)
-- Sem carrossel de destaques
-- Footer simples sem elementos de confianca
+### Problemas Identificados (conforme imagem de referencia)
 
-### Dados disponiveis
-A tabela `events` ja possui os campos necessarios:
-- `name`, `date`, `city`, `status`
-- `unit_price` (preco disponivel mas nao exibido)
-- `image_url` (banner disponivel mas nao exibido no card)
-- `company_id` (vinculo com empresa existe)
+1. **Terminologia confusa**: "Horario da Viagem" nao faz sentido para o passageiro
+2. **Dropdowns genericos**: Uso de Select padrao em vez de cards clicaveis
+3. **Hierarquia invertida**: O usuario escolhe primeiro o horario, nao o veiculo
+4. **Quantidade basica**: Apenas input numerico sem botoes +/-
+5. **CTA generico**: "Continuar" em vez de "Escolher assentos"
+6. **Informacoes ausentes**: Nao mostra capacidade total do veiculo
+7. **Descricao desnecessaria**: Exibe descricao longa do evento nesta etapa
 
-A tabela `companies` possui:
-- `name` (nome da empresa)
-- `logo_url` (logo da empresa)
+### Estrutura de Dados Atual
+
+```text
+Event
+  └── Trip (veiculo + motorista + horario base)
+        └── EventBoardingLocation (local + horario especifico)
+```
+
+- Um evento pode ter multiplos veiculos (trips)
+- Cada trip esta vinculada a um veiculo com tipo e capacidade
+- Os locais de embarque estao vinculados a trip_id (por veiculo)
+- Cada local de embarque tem seu proprio horario de saida
 
 ---
 
 ## Arquitetura de Componentes Reutilizaveis
 
-Criar componentes em `src/components/public/` para reuso futuro em outras vitrines:
+Criar componentes em `src/components/public/` para reuso:
 
 | Componente | Descricao |
 |------------|-----------|
-| `EventCard.tsx` | Card padrao de evento (lista vertical) |
-| `EventCardFeatured.tsx` | Card de destaque (carrossel) |
-| `EventsCarousel.tsx` | Carrossel de eventos em destaque |
-| `TrustFooter.tsx` | Rodape com elementos de confianca |
-| `EventCardSkeleton.tsx` | Skeleton loading para cards |
+| `VehicleCard.tsx` | Card de selecao de veiculo |
+| `BoardingLocationCard.tsx` | Card de selecao de embarque |
+| `QuantitySelector.tsx` | Seletor de quantidade com +/- |
+| `EventSummaryCard.tsx` | Card resumo do evento (topo) |
+
+---
+
+## Novo Fluxo de Selecao
+
+```text
+1. Exibir card de contexto do evento (nome, data, cidade)
+   ↓
+2. Escolher veiculo (cards clicaveis)
+   - Tipo (Onibus, Van, Micro-onibus)
+   - Vagas disponiveis / Capacidade total
+   - Auto-selecionar se houver apenas 1 veiculo
+   ↓
+3. Escolher local de embarque (aparece apos selecionar veiculo)
+   - Nome do local
+   - Endereco/referencia
+   - Horario de saida
+   - Cidade/UF do embarque
+   ↓
+4. Escolher quantidade (aparece apos selecionar embarque)
+   - Botoes +/- grandes
+   - Limite automatico por vagas disponiveis
+   ↓
+5. CTA: "Escolher assentos" (habilitado quando tudo selecionado)
+```
 
 ---
 
 ## Detalhamento Tecnico
 
-### 1. Atualizar Query para Incluir Empresa
+### 1. Criar Componente VehicleCard
+
+Arquivo: `src/components/public/VehicleCard.tsx`
 
 ```typescript
-// Buscar eventos com dados da empresa organizadora
-const { data } = await supabase
-  .from('events')
-  .select(`
-    *,
-    company:companies!events_company_id_fkey(
-      id,
-      name,
-      logo_url
-    )
-  `)
-  .eq('status', 'a_venda')
-  .order('date', { ascending: true });
-```
-
-### 2. Criar Componente EventCard (Reutilizavel)
-
-Arquivo: `src/components/public/EventCard.tsx`
-
-Props:
-```typescript
-interface EventCardProps {
-  event: Event & { company?: { id: string; name: string; logo_url: string | null } };
-  sellerRef?: string | null;
-  isSoldOut?: boolean;
+interface VehicleCardProps {
+  trip: Trip;
+  availableSeats: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
 }
 ```
 
-Estrutura visual:
+Visual:
 ```text
-+---------------------------------------+
-| [Banner 3:2 com blur letterbox]       |
-|                                       |
-+---------------------------------------+
-| Nome do Evento                        |
-| R$ 60,00                              |
-| --------------------------------------|
-| [Calendario] Sabado, 20 de fevereiro  |
-| [MapPin] Sorriso - MT                 |
-| --------------------------------------|
-| [Logo] Empresa Organizadora           |
-+---------------------------------------+
-| [    Comprar passagem    ]            |
-+---------------------------------------+
++--------------------------------------------+
+| [Icone Onibus]                             |
+|                                            |
+| Onibus                                     |
+| 45 lugares                                 |
+|                                            |
+| [Badge] 32 vagas disponiveis               |
++--------------------------------------------+
 ```
 
-Elementos:
-- Banner com enquadramento sem corte (blur letterbox ja implementado)
-- Nome do evento em destaque (fonte maior, bold)
-- Preco visivel logo abaixo do nome
-- Data formatada com icone
-- Cidade com icone
-- Empresa organizadora (logo pequena + nome)
-- Badge "Esgotado" quando aplicavel
-- CTA "Comprar passagem" (desabilitado se esgotado)
-- Card inteiro clicavel no mobile
+Regras:
+- Borda destacada quando selecionado (`ring-2 ring-primary`)
+- Desabilitado se 0 vagas disponiveis
+- Icone diferente por tipo (Bus, Car, Truck)
+- Card inteiro clicavel
 
-### 3. Criar Componente EventCardFeatured (Destaque)
+### 2. Criar Componente BoardingLocationCard
 
-Arquivo: `src/components/public/EventCardFeatured.tsx`
-
-Semelhante ao EventCard, porem:
-- Banner ocupa mais espaco vertical
-- Overlay escuro sobre o banner
-- Informacoes sobre o banner (nome, data, cidade, preco)
-- CTA visivel sobre o overlay
-
-### 4. Criar Componente EventsCarousel
-
-Arquivo: `src/components/public/EventsCarousel.tsx`
-
-Usar o componente Carousel ja existente (`embla-carousel-react`):
+Arquivo: `src/components/public/BoardingLocationCard.tsx`
 
 ```typescript
-interface EventsCarouselProps {
-  events: EventWithCompany[];
-  sellerRef?: string | null;
+interface BoardingLocationCardProps {
+  location: EventBoardingLocation;
+  isSelected: boolean;
+  onSelect: () => void;
 }
 ```
 
-Comportamento:
-- Exibido SOMENTE se houver eventos (sem logica de destaque por ora)
-- 1 card por vez no mobile
-- Swipe horizontal
-- Indicadores (bolinhas) de posicao
-- Opcional: autoplay com pausa ao toque
-
-### 5. Criar Componente TrustFooter
-
-Arquivo: `src/components/public/TrustFooter.tsx`
-
-Estrutura:
+Visual:
 ```text
-+---------------------------------------+
-| [Cadeado] Pagamento 100% online       |
-|          e seguro                     |
-| [Pix] [Cartao]                        |
-+---------------------------------------+
-| (c) 2026 Busao Off Off                |
-+---------------------------------------+
++--------------------------------------------+
+| [Radio] Shoping China                      |
+|         Av. Minas Gerais, 316              |
+|         Patos de Minas - MG                |
+|                                            |
+|         [Relogio] Saida as 19:50           |
++--------------------------------------------+
 ```
 
-Icones: `Lock`, `CreditCard`, `Smartphone` (para Pix)
+Regras:
+- Radio grande e visivel
+- Horario em destaque
+- Endereco como texto secundario
+- Cidade/UF do local de embarque
 
-### 6. Criar Skeleton de Loading
+### 3. Criar Componente QuantitySelector
 
-Arquivo: `src/components/public/EventCardSkeleton.tsx`
+Arquivo: `src/components/public/QuantitySelector.tsx`
 
-Usar o componente Skeleton existente:
-- Placeholder para banner
-- Placeholder para textos
-- Placeholder para botao
+```typescript
+interface QuantitySelectorProps {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max: number;
+  disabled?: boolean;
+}
+```
 
-### 7. Atualizar PublicLayout
+Visual:
+```text
++--------------------------------------------+
+| [ - ]       2 passagens       [ + ]        |
++--------------------------------------------+
+| Maximo de 15 passagens disponiveis         |
++--------------------------------------------+
+```
 
-Arquivo: `src/components/layout/PublicLayout.tsx`
+Regras:
+- Botoes grandes (min 44px) para touch
+- Texto centralizado com quantidade
+- Desabilitar - se min, desabilitar + se max
+- Nunca permitir valor acima de vagas disponiveis
+- Nunca permitir valor acima de max_tickets_per_purchase do evento
 
-Substituir footer simples pelo TrustFooter
+### 4. Criar Componente EventSummaryCard
 
-### 8. Atualizar PublicEvents
+Arquivo: `src/components/public/EventSummaryCard.tsx`
 
-Arquivo: `src/pages/public/PublicEvents.tsx`
+```typescript
+interface EventSummaryCardProps {
+  event: Event;
+  compact?: boolean;
+}
+```
+
+Visual:
+```text
++--------------------------------------------+
+| [Faixa laranja]                            |
+| Evento de Teste 001                        |
+| [Calendario] quinta-feira, 19 de fevereiro |
+| [MapPin] Sorriso - MT                      |
++--------------------------------------------+
+```
+
+Regras:
+- SEM descricao nesta tela
+- Compacto e focado
+- Faixa colorida no topo (primary)
+
+### 5. Refatorar PublicEventDetail.tsx
 
 Estrutura final:
 
 ```typescript
 <PublicLayout>
-  {/* Titulo e Microcopy */}
-  <section>
-    <h1>Passagens disponiveis</h1>
-    <p>Compra segura com confirmacao imediata apos o pagamento</p>
-    <p className="subtle">Eventos organizados por empresas parceiras</p>
-  </section>
+  <div className="max-w-lg mx-auto px-4 py-6">
+    {/* Botao Voltar */}
+    <Button variant="ghost" onClick={() => navigate(-1)}>
+      <ArrowLeft /> Voltar
+    </Button>
 
-  {/* Carrossel de Destaques (se houver eventos) */}
-  {events.length > 0 && (
-    <EventsCarousel events={events.slice(0, 5)} sellerRef={sellerRef} />
-  )}
+    {/* Card de Contexto */}
+    <EventSummaryCard event={event} compact />
 
-  {/* Lista Todos os Eventos */}
-  <section>
-    <h2>Todos os eventos</h2>
-    {loading ? (
-      <SkeletonGrid />
-    ) : events.length === 0 ? (
-      <EmptyState />
-    ) : (
-      <EventCardList events={events} sellerRef={sellerRef} />
+    {/* Secao: Escolha do Veiculo */}
+    <section className="mt-6 space-y-3">
+      <h2 className="text-lg font-semibold">Escolha o veiculo disponivel</h2>
+      <div className="space-y-3">
+        {trips.map(trip => (
+          <VehicleCard
+            key={trip.id}
+            trip={trip}
+            availableSeats={availableSeatsMap[trip.id]}
+            isSelected={selectedTrip === trip.id}
+            onSelect={() => handleSelectTrip(trip.id)}
+          />
+        ))}
+      </div>
+    </section>
+
+    {/* Secao: Local de Embarque (condicional) */}
+    {selectedTrip && (
+      <section className="mt-6 space-y-3">
+        <h2 className="text-lg font-semibold">Escolha onde e quando embarcar</h2>
+        <div className="space-y-3">
+          {filteredLocations.map(loc => (
+            <BoardingLocationCard
+              key={loc.id}
+              location={loc}
+              isSelected={selectedLocation === loc.boarding_location_id}
+              onSelect={() => setSelectedLocation(loc.boarding_location_id)}
+            />
+          ))}
+        </div>
+      </section>
     )}
-  </section>
+
+    {/* Secao: Quantidade (condicional) */}
+    {selectedTrip && selectedLocation && (
+      <section className="mt-6 space-y-3">
+        <h2 className="text-lg font-semibold">Quantas passagens?</h2>
+        <QuantitySelector
+          value={quantity}
+          onChange={setQuantity}
+          min={1}
+          max={Math.min(availableSeats, event.max_tickets_per_purchase)}
+        />
+      </section>
+    )}
+
+    {/* CTA Principal */}
+    <div className="mt-8">
+      <Button
+        className="w-full h-14 text-lg font-medium"
+        disabled={!selectedTrip || !selectedLocation || quantity < 1}
+        onClick={handleContinue}
+      >
+        Escolher assentos
+      </Button>
+    </div>
+  </div>
 </PublicLayout>
 ```
 
 ---
 
-## Estilos Mobile-First
+## Query Atualizada
 
-### Layout
-- Padding horizontal: `px-4` (16px) no mobile
-- Cards em coluna unica no mobile
-- Espacamento entre cards: `gap-4` (16px)
-- Breakpoints: 
-  - Mobile: 1 coluna
-  - Tablet (sm): 2 colunas
-  - Desktop (lg): 3 colunas
+A query atual ja carrega trips com veiculo. Precisamos:
 
-### Cards
-- Arredondamento: `rounded-xl` (16px)
-- Sombra suave: `shadow-sm`
-- Hover: `hover:shadow-md` (apenas desktop)
-- Card clicavel: `cursor-pointer`
-
-### Botoes
-- Altura: `h-12` (48px) para melhor toque
-- Texto: "Comprar passagem"
-- Cor: Primary (laranja institucional)
-- Largura total: `w-full`
-
-### Tipografia
-- Titulo H1: `text-2xl font-bold` mobile, `text-3xl` desktop
-- Nome do evento: `text-lg font-semibold`
-- Preco: `text-xl font-bold text-primary`
-- Data/Cidade: `text-sm text-muted-foreground`
-- Empresa: `text-xs text-muted-foreground`
-
----
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Tipo | Descricao |
-|---------|------|-----------|
-| `src/components/public/EventCard.tsx` | Novo | Card padrao de evento |
-| `src/components/public/EventCardFeatured.tsx` | Novo | Card de destaque |
-| `src/components/public/EventsCarousel.tsx` | Novo | Carrossel de destaques |
-| `src/components/public/EventCardSkeleton.tsx` | Novo | Skeleton loading |
-| `src/components/public/TrustFooter.tsx` | Novo | Rodape de confianca |
-| `src/components/public/index.ts` | Novo | Barrel exports |
-| `src/components/layout/PublicLayout.tsx` | Editar | Usar TrustFooter |
-| `src/pages/public/PublicEvents.tsx` | Editar | Nova estrutura completa |
-| `src/types/database.ts` | Editar | Adicionar EventWithCompany type |
-
----
-
-## Formato de Preco
-
-Usar `Intl.NumberFormat` para formatar precos:
+1. Buscar vagas disponiveis para TODOS os veiculos de uma vez
+2. Filtrar locais de embarque pelo trip_id selecionado
 
 ```typescript
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(price);
+// Buscar vagas disponiveis para todas as trips
+const fetchAvailableSeats = async (tripIds: string[]) => {
+  const results: Record<string, number> = {};
+  
+  await Promise.all(
+    tripIds.map(async (tripId) => {
+      const { data } = await supabase.rpc('get_trip_available_capacity', {
+        trip_uuid: tripId,
+      });
+      results[tripId] = data ?? 0;
+    })
+  );
+  
+  return results;
 };
+```
 
-// Exemplo: formatPrice(60) => "R$ 60,00"
+---
+
+## Icones por Tipo de Veiculo
+
+```typescript
+const vehicleIcons: Record<VehicleType, LucideIcon> = {
+  onibus: Bus,
+  micro_onibus: Bus, // ou Truck
+  van: Car,
+};
 ```
 
 ---
@@ -269,56 +304,85 @@ const formatPrice = (price: number) => {
 ## Estados da Interface
 
 ### Loading
-- Exibir 3 skeletons (ou 6 em desktop)
-- Nunca tela branca
+- Skeleton para cards de veiculo
+- Spinner para busca de vagas
 
-### Sem Eventos
+### Sem Veiculos/Embarques
 ```typescript
 <EmptyState
-  icon={<Ticket />}
-  title="Nenhuma passagem disponivel"
-  description="No momento nao ha passagens disponiveis. Volte em breve!"
+  icon={<Bus />}
+  title="Transporte nao disponivel"
+  description="Os transportes para este evento ainda nao foram configurados"
 />
 ```
 
-### Evento Esgotado
-- Badge "Esgotado" no canto superior do card
-- Botao desabilitado com opacity
-- Card continua visivel
+### Veiculo Esgotado
+- Card visivel mas desabilitado
+- Badge "Esgotado" no canto
 
 ---
 
-## Indicadores do Carrossel
+## Arquivos a Criar/Modificar
 
-Usar bolinhas de navegacao abaixo do carrossel:
+| Arquivo | Tipo | Descricao |
+|---------|------|-----------|
+| `src/components/public/VehicleCard.tsx` | Novo | Card de selecao de veiculo |
+| `src/components/public/BoardingLocationCard.tsx` | Novo | Card de selecao de embarque |
+| `src/components/public/QuantitySelector.tsx` | Novo | Seletor de quantidade +/- |
+| `src/components/public/EventSummaryCard.tsx` | Novo | Card resumo do evento |
+| `src/components/public/index.ts` | Editar | Adicionar exports |
+| `src/pages/public/PublicEventDetail.tsx` | Editar | Refatorar completamente |
 
-```typescript
-// Indicadores
-<div className="flex justify-center gap-2 mt-4">
-  {events.slice(0, 5).map((_, index) => (
-    <button
-      key={index}
-      onClick={() => api?.scrollTo(index)}
-      className={cn(
-        "w-2 h-2 rounded-full transition-colors",
-        index === current ? "bg-primary" : "bg-muted"
-      )}
-    />
-  ))}
-</div>
-```
+---
+
+## Estilos Mobile-First
+
+### Layout
+- `max-w-lg` (512px max) para foco
+- `px-4` padding horizontal
+- `py-6` padding vertical
+- `space-y-3` entre cards
+
+### Cards de Selecao
+- Padding: `p-4`
+- Arredondamento: `rounded-xl`
+- Sombra: `shadow-sm`
+- Selecionado: `ring-2 ring-primary bg-primary/5`
+- Hover: `hover:bg-muted/50`
+- Area clicavel: card inteiro
+- Cursor: `cursor-pointer`
+
+### Botao CTA
+- Altura: `h-14` (56px)
+- Fonte: `text-lg font-medium`
+- Largura: `w-full`
+- Fixo no final da tela? (opcional, mobile)
+
+### Tipografia
+- Titulo de secao: `text-lg font-semibold`
+- Nome do veiculo: `font-medium`
+- Vagas: `text-sm text-muted-foreground`
+- Horario: `font-semibold text-primary`
+
+---
+
+## Validacoes
+
+1. Quantidade nao pode exceder vagas disponiveis
+2. Quantidade nao pode exceder `max_tickets_per_purchase` do evento
+3. Nao permitir avancar sem veiculo selecionado
+4. Nao permitir avancar sem local de embarque
+5. Revalidar vagas ao clicar em "Escolher assentos"
 
 ---
 
 ## Criterios de Sucesso
 
-1. Tela parece um marketplace profissional de passagens
-2. Mobile-first: layout em coluna unica, botoes grandes
-3. Preco visivel em todos os cards
-4. Empresa organizadora exibida
-5. CTA "Comprar passagem" (nao "Ver evento")
-6. Carrossel funcional com swipe
-7. Skeleton loading (nunca tela branca)
-8. Footer com elementos de confianca
-9. Card inteiro clicavel no mobile
-10. Componentes reutilizaveis para futuras vitrines
+1. Usuario entende que esta escolhendo um veiculo (nao uma "viagem")
+2. Locais de embarque aparecem APOS selecionar veiculo
+3. Horario de saida esta vinculado ao local, nao ao veiculo
+4. Quantidade limitada automaticamente por vagas
+5. CTA claro: "Escolher assentos"
+6. Layout mobile-first com cards grandes e clicaveis
+7. Componentes reutilizaveis para outras telas
+8. Nao parece formulario administrativo
