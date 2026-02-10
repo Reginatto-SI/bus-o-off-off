@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, BoardingLocation } from '@/types/database';
+import { Event, Trip, BoardingLocation, Seat, VehicleType } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
+import { EventSummaryCard } from '@/components/public/EventSummaryCard';
+import { SeatMap } from '@/components/public/SeatMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,20 +17,85 @@ import {
   Loader2,
   ArrowLeft,
   User,
-  Phone,
   CreditCard,
+  Phone,
   Ticket,
+  ChevronRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { z } from 'zod';
 
-const checkoutSchema = z.object({
-  name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100),
-  cpf: z.string().regex(/^\d{11}$/, 'CPF deve ter 11 dígitos'),
-  phone: z.string().min(10, 'Telefone inválido').max(15),
-});
+// ---- CPF validation helpers ----
+function isValidCpf(cpf: string): boolean {
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i);
+  let rest = (sum * 10) % 11;
+  if (rest === 10) rest = 0;
+  if (rest !== parseInt(digits[9])) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i);
+  rest = (sum * 10) % 11;
+  if (rest === 10) rest = 0;
+  return rest === parseInt(digits[10]);
+}
+
+function formatCpfMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function formatPhoneMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+// ---- Auto-generate seats for a vehicle ----
+function generateSeatLayout(capacity: number, vehicleType: VehicleType, floors: number): Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] {
+  const seats: Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] = [];
+  const isSmall = vehicleType === 'van' || vehicleType === 'micro_onibus' || capacity <= 20;
+  const cols = isSmall ? 3 : 4;
+
+  const seatsPerFloor = floors > 1 ? Math.ceil(capacity / floors) : capacity;
+
+  for (let floor = 1; floor <= floors; floor++) {
+    const floorCapacity = floor === floors ? capacity - seats.length : seatsPerFloor;
+    let seatCount = 0;
+    let row = 1;
+
+    while (seatCount < floorCapacity) {
+      for (let col = 1; col <= cols && seatCount < floorCapacity; col++) {
+        seatCount++;
+        const label = String(seats.length + 1);
+        seats.push({
+          label,
+          floor,
+          row_number: row,
+          column_number: col,
+          status: 'disponivel',
+        });
+      }
+      row++;
+    }
+  }
+
+  return seats;
+}
+
+// ---- Passenger data type ----
+interface PassengerData {
+  name: string;
+  cpf: string;
+  phone: string;
+}
 
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
@@ -43,16 +110,19 @@ export default function Checkout() {
   const [event, setEvent] = useState<Event | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [location, setLocation] = useState<BoardingLocation | null>(null);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [occupiedSeatIds, setOccupiedSeatIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingSeats, setGeneratingSeats] = useState(false);
+
+  // Step management: 1 = seat selection, 2 = passenger data
+  const [step, setStep] = useState(1);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [passengers, setPassengers] = useState<PassengerData[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const [form, setForm] = useState({
-    name: '',
-    cpf: '',
-    phone: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
+  // ---- Load data ----
   useEffect(() => {
     const fetchData = async () => {
       if (!id || !tripId || !locationId) {
@@ -69,76 +139,202 @@ export default function Checkout() {
       if (eventRes.data) setEvent(eventRes.data as Event);
       if (tripRes.data) setTrip(tripRes.data as Trip);
       if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
+
+      // Fetch seats for this vehicle
+      if (tripRes.data) {
+        const vehicleId = (tripRes.data as Trip).vehicle_id;
+        const { data: existingSeats } = await supabase
+          .from('seats')
+          .select('*')
+          .eq('vehicle_id', vehicleId)
+          .order('floor', { ascending: true })
+          .order('row_number', { ascending: true })
+          .order('column_number', { ascending: true });
+
+        if (existingSeats && existingSeats.length > 0) {
+          setSeats(existingSeats as Seat[]);
+        } else {
+          // Auto-generate seats
+          setGeneratingSeats(true);
+          const vehicle = (tripRes.data as Trip).vehicle!;
+          const layout = generateSeatLayout(
+            vehicle.capacity,
+            vehicle.type,
+            vehicle.floors ?? 1,
+          );
+
+          const seatInserts = layout.map((s) => ({
+            vehicle_id: vehicleId,
+            label: s.label,
+            floor: s.floor,
+            row_number: s.row_number,
+            column_number: s.column_number,
+            status: s.status,
+            company_id: (tripRes.data as Trip).company_id,
+          }));
+
+          const { data: created } = await supabase
+            .from('seats')
+            .insert(seatInserts)
+            .select();
+
+          if (created) setSeats(created as Seat[]);
+          setGeneratingSeats(false);
+        }
+
+        // Fetch occupied seats (tickets for this trip)
+        const { data: tickets } = await supabase
+          .from('tickets')
+          .select('seat_id')
+          .eq('trip_id', tripId);
+
+        if (tickets) {
+          setOccupiedSeatIds(tickets.map((t: any) => t.seat_id).filter(Boolean));
+        }
+      }
+
       setLoading(false);
     };
 
     fetchData();
   }, [id, tripId, locationId, navigate]);
 
-  const formatCpf = (value: string) => {
-    return value.replace(/\D/g, '').slice(0, 11);
-  };
-
-  const formatPhone = (value: string) => {
-    return value.replace(/\D/g, '').slice(0, 11);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-
-    const validation = checkoutSchema.safeParse({
-      name: form.name.trim(),
-      cpf: form.cpf,
-      phone: form.phone,
-    });
-
-    if (!validation.success) {
-      const newErrors: Record<string, string> = {};
-      validation.error.errors.forEach((err) => {
-        if (err.path[0]) {
-          newErrors[err.path[0] as string] = err.message;
-        }
-      });
-      setErrors(newErrors);
+  // Init passengers array when advancing to step 2
+  const handleAdvanceToPassengers = () => {
+    if (selectedSeats.length !== quantity) {
+      toast.error(`Selecione exatamente ${quantity} assento${quantity > 1 ? 's' : ''}`);
       return;
     }
+    // Build passenger forms with seat labels
+    setPassengers(
+      selectedSeats.map(() => ({ name: '', cpf: '', phone: '' }))
+    );
+    setErrors({});
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Get seat label by id
+  const seatLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    seats.forEach((s) => { map[s.id] = s.label; });
+    return map;
+  }, [seats]);
+
+  // Update passenger field
+  const updatePassenger = (index: number, field: keyof PassengerData, value: string) => {
+    setPassengers((prev) => {
+      const copy = [...prev];
+      if (field === 'cpf') {
+        copy[index] = { ...copy[index], cpf: formatCpfMask(value) };
+      } else if (field === 'phone') {
+        copy[index] = { ...copy[index], phone: formatPhoneMask(value) };
+      } else {
+        copy[index] = { ...copy[index], [field]: value };
+      }
+      return copy;
+    });
+    // Clear error for this field
+    setErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[`${index}_${field}`];
+      return copy;
+    });
+  };
+
+  // Validate passengers
+  const validatePassengers = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    const cpfs = new Set<string>();
+
+    passengers.forEach((p, i) => {
+      if (!p.name.trim() || p.name.trim().length < 3) {
+        newErrors[`${i}_name`] = 'Nome deve ter pelo menos 3 caracteres';
+      }
+      const rawCpf = p.cpf.replace(/\D/g, '');
+      if (!rawCpf || rawCpf.length !== 11) {
+        newErrors[`${i}_cpf`] = 'CPF deve ter 11 dígitos';
+      } else if (!isValidCpf(rawCpf)) {
+        newErrors[`${i}_cpf`] = 'CPF inválido';
+      } else if (cpfs.has(rawCpf)) {
+        newErrors[`${i}_cpf`] = 'CPF já utilizado nesta compra';
+      } else {
+        cpfs.add(rawCpf);
+      }
+    });
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Submit purchase
+  const handleSubmit = async () => {
+    if (!validatePassengers()) return;
+    if (!event || !trip || !location) return;
 
     setSubmitting(true);
 
-    // Check availability again
+    // Re-check availability
     const { data: availableSeats } = await supabase.rpc('get_trip_available_capacity', {
-      trip_uuid: tripId,
+      trip_uuid: tripId!,
     });
 
     if (availableSeats !== null && quantity > availableSeats) {
-      toast.error(`Apenas ${availableSeats} lugares disponíveis`);
+      toast.error(`Apenas ${availableSeats} vaga${availableSeats !== 1 ? 's' : ''} disponível`);
       setSubmitting(false);
       return;
     }
 
-    const { data: sale, error } = await supabase
+    // Create sale
+    const { data: sale, error: saleError } = await supabase
       .from('sales')
-      .insert([
-        {
-          event_id: id,
-          trip_id: tripId,
-          boarding_location_id: locationId,
-          seller_id: sellerRef || null,
-          customer_name: form.name.trim(),
-          customer_cpf: form.cpf,
-          customer_phone: form.phone,
-          quantity: quantity,
-          unit_price: 0, // Price can be set by admin
-          status: 'reservado' as const,
-          company_id: event?.company_id!,
-        },
-      ])
+      .insert({
+        event_id: id!,
+        trip_id: tripId!,
+        boarding_location_id: locationId!,
+        seller_id: sellerRef || null,
+        customer_name: passengers[0].name.trim(),
+        customer_cpf: passengers[0].cpf.replace(/\D/g, ''),
+        customer_phone: passengers[0].phone.replace(/\D/g, ''),
+        quantity,
+        unit_price: event.unit_price ?? 0,
+        status: 'reservado' as const,
+        company_id: event.company_id,
+      })
       .select()
       .single();
 
-    if (error) {
-      toast.error('Erro ao finalizar compra');
+    if (saleError || !sale) {
+      console.error('Sale error:', saleError);
+      toast.error('Erro ao finalizar compra. Tente novamente.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Create tickets
+    const ticketInserts = selectedSeats.map((seatId, i) => ({
+      sale_id: sale.id,
+      trip_id: tripId!,
+      seat_id: seatId,
+      seat_label: seatLabelMap[seatId] || String(i + 1),
+      passenger_name: passengers[i].name.trim(),
+      passenger_cpf: passengers[i].cpf.replace(/\D/g, ''),
+      passenger_phone: passengers[i].phone.replace(/\D/g, '') || null,
+      company_id: event.company_id,
+    }));
+
+    const { error: ticketError } = await supabase.from('tickets').insert(ticketInserts);
+
+    if (ticketError) {
+      console.error('Ticket error:', ticketError);
+      // If duplicate seat, show friendly message
+      if (ticketError.code === '23505') {
+        toast.error('Um ou mais assentos já foram reservados. Escolha outros assentos.');
+      } else {
+        toast.error('Erro ao reservar assentos. Tente novamente.');
+      }
+      // Rollback sale
+      await supabase.from('sales').delete().eq('id', sale.id);
       setSubmitting(false);
       return;
     }
@@ -146,11 +342,16 @@ export default function Checkout() {
     navigate(`/confirmacao/${sale.id}`);
   };
 
-  if (loading) {
+  // ---- Render ----
+
+  if (loading || generatingSeats) {
     return (
       <PublicLayout>
-        <div className="flex items-center justify-center py-12">
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">
+            {generatingSeats ? 'Preparando mapa de assentos...' : 'Carregando...'}
+          </p>
         </div>
       </PublicLayout>
     );
@@ -159,8 +360,9 @@ export default function Checkout() {
   if (!event || !trip || !location) {
     return (
       <PublicLayout>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <p className="text-center text-muted-foreground">Dados inválidos</p>
+        <div className="max-w-lg mx-auto px-4 py-8 text-center">
+          <p className="text-muted-foreground mb-4">Dados inválidos para esta compra.</p>
+          <Button onClick={() => navigate('/eventos')}>Ver eventos</Button>
         </div>
       </PublicLayout>
     );
@@ -168,135 +370,169 @@ export default function Checkout() {
 
   return (
     <PublicLayout>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Button
-          variant="ghost"
-          className="mb-4"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
-
-        <h1 className="text-2xl font-bold mb-6">Finalizar Compra</h1>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Resumo da Compra</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="font-semibold">{event.name}</p>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                  <Calendar className="h-4 w-4" />
-                  {format(new Date(event.date), "dd/MM/yyyy", { locale: ptBR })}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  {event.city}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>Saída: {trip.departure_time?.slice(0, 5) ?? 'A definir'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>Embarque: {location.name}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">{location.address}</p>
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between font-semibold">
-                <div className="flex items-center gap-2">
-                  <Ticket className="h-4 w-4" />
-                  <span>Passagens</span>
-                </div>
-                <span>{quantity}x</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Dados do Passageiro</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Nome Completo
-                  </Label>
-                  <Input
-                    id="name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="João da Silva"
-                    required
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-destructive">{errors.name}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cpf" className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    CPF
-                  </Label>
-                  <Input
-                    id="cpf"
-                    value={form.cpf}
-                    onChange={(e) => setForm({ ...form, cpf: formatCpf(e.target.value) })}
-                    placeholder="00000000000"
-                    maxLength={11}
-                    required
-                  />
-                  {errors.cpf && (
-                    <p className="text-sm text-destructive">{errors.cpf}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone" className="flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    Telefone
-                  </Label>
-                  <Input
-                    id="phone"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })}
-                    placeholder="11999999999"
-                    maxLength={11}
-                    required
-                  />
-                  {errors.phone && (
-                    <p className="text-sm text-destructive">{errors.phone}</p>
-                  )}
-                </div>
-
-                <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                  {submitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Finalizando...
-                    </>
-                  ) : (
-                    'Finalizar Compra'
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        {/* Header with back & step indicator */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={() => {
+              if (step === 2) {
+                setStep(1);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                navigate(-1);
+              }
+            }}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold">
+              {step === 1 ? 'Escolha seus assentos' : 'Dados dos passageiros'}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Etapa {step} de 2
+            </p>
+          </div>
         </div>
+
+        {/* Event summary */}
+        <EventSummaryCard event={event} compact />
+
+        {/* Purchase info strip */}
+        <div className="flex items-center gap-3 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="truncate">{location.name}</span>
+          </div>
+          <Separator orientation="vertical" className="h-4" />
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            <span>{trip.departure_time?.slice(0, 5) ?? 'A definir'}</span>
+          </div>
+          <Separator orientation="vertical" className="h-4" />
+          <div className="flex items-center gap-1.5">
+            <Ticket className="h-3.5 w-3.5" />
+            <span>{quantity}x</span>
+          </div>
+        </div>
+
+        {/* ============ STEP 1: Seat Selection ============ */}
+        {step === 1 && (
+          <>
+            <SeatMap
+              seats={seats}
+              occupiedSeatIds={occupiedSeatIds}
+              maxSelection={quantity}
+              selectedSeats={selectedSeats}
+              onSelectionChange={setSelectedSeats}
+              floors={trip.vehicle?.floors ?? 1}
+            />
+
+            <Button
+              className="w-full h-14 text-lg font-medium"
+              disabled={selectedSeats.length !== quantity}
+              onClick={handleAdvanceToPassengers}
+            >
+              Continuar para dados dos passageiros
+              <ChevronRight className="h-5 w-5 ml-1" />
+            </Button>
+          </>
+        )}
+
+        {/* ============ STEP 2: Passenger Data ============ */}
+        {step === 2 && (
+          <>
+            {/* Selected seats summary */}
+            <div className="flex flex-wrap gap-1.5">
+              {selectedSeats.map((seatId) => (
+                <span
+                  key={seatId}
+                  className="inline-flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-md"
+                >
+                  Assento {seatLabelMap[seatId]}
+                </span>
+              ))}
+            </div>
+
+            {/* Passenger forms */}
+            <div className="space-y-4">
+              {passengers.map((passenger, idx) => (
+                <Card key={selectedSeats[idx]}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <User className="h-4 w-4 text-primary" />
+                      Passageiro — Assento {seatLabelMap[selectedSeats[idx]]}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`name-${idx}`} className="text-sm">
+                        Nome completo
+                      </Label>
+                      <Input
+                        id={`name-${idx}`}
+                        value={passenger.name}
+                        onChange={(e) => updatePassenger(idx, 'name', e.target.value)}
+                        placeholder="Nome do passageiro"
+                        maxLength={100}
+                      />
+                      {errors[`${idx}_name`] && (
+                        <p className="text-xs text-destructive">{errors[`${idx}_name`]}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`cpf-${idx}`} className="text-sm">
+                        CPF
+                      </Label>
+                      <Input
+                        id={`cpf-${idx}`}
+                        value={passenger.cpf}
+                        onChange={(e) => updatePassenger(idx, 'cpf', e.target.value)}
+                        placeholder="000.000.000-00"
+                        maxLength={14}
+                      />
+                      {errors[`${idx}_cpf`] && (
+                        <p className="text-xs text-destructive">{errors[`${idx}_cpf`]}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`phone-${idx}`} className="text-sm">
+                        Telefone (opcional)
+                      </Label>
+                      <Input
+                        id={`phone-${idx}`}
+                        value={passenger.phone}
+                        onChange={(e) => updatePassenger(idx, 'phone', e.target.value)}
+                        placeholder="(00) 00000-0000"
+                        maxLength={15}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Button
+              className="w-full h-14 text-lg font-medium"
+              disabled={submitting}
+              onClick={handleSubmit}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Finalizando...
+                </>
+              ) : (
+                'Finalizar compra'
+              )}
+            </Button>
+          </>
+        )}
       </div>
     </PublicLayout>
   );
