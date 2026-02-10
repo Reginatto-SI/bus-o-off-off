@@ -7,3 +7,6 @@ export { VehicleCard } from './VehicleCard';
 export { BoardingLocationCard } from './BoardingLocationCard';
 export { QuantitySelector } from './QuantitySelector';
 export { EventSummaryCard } from './EventSummaryCard';
+export { SeatMap } from './SeatMap';
+export { SeatButton } from './SeatButton';
+export { SeatLegend } from './SeatLegend';

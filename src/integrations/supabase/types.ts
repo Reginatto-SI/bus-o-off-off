@@ -456,6 +456,57 @@ export type Database = {
           },
         ]
       }
+      seats: {
+        Row: {
+          column_number: number
+          company_id: string
+          created_at: string
+          floor: number
+          id: string
+          label: string
+          row_number: number
+          status: string
+          vehicle_id: string
+        }
+        Insert: {
+          column_number: number
+          company_id: string
+          created_at?: string
+          floor?: number
+          id?: string
+          label: string
+          row_number: number
+          status?: string
+          vehicle_id: string
+        }
+        Update: {
+          column_number?: number
+          company_id?: string
+          created_at?: string
+          floor?: number
+          id?: string
+          label?: string
+          row_number?: number
+          status?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seats_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seats_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sellers: {
         Row: {
           commission_percent: number
@@ -544,6 +595,80 @@ export type Database = {
           whatsapp_phone?: string | null
         }
         Relationships: []
+      }
+      tickets: {
+        Row: {
+          boarding_status: string
+          company_id: string
+          created_at: string
+          id: string
+          passenger_cpf: string
+          passenger_name: string
+          passenger_phone: string | null
+          sale_id: string
+          seat_id: string | null
+          seat_label: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          boarding_status?: string
+          company_id: string
+          created_at?: string
+          id?: string
+          passenger_cpf: string
+          passenger_name: string
+          passenger_phone?: string | null
+          sale_id: string
+          seat_id?: string | null
+          seat_label: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          boarding_status?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          passenger_cpf?: string
+          passenger_name?: string
+          passenger_phone?: string | null
+          sale_id?: string
+          seat_id?: string | null
+          seat_label?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_seat_id_fkey"
+            columns: ["seat_id"]
+            isOneToOne: false
+            referencedRelation: "seats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trips: {
         Row: {
@@ -690,6 +815,7 @@ export type Database = {
           color: string | null
           company_id: string
           created_at: string
+          floors: number
           id: string
           model: string | null
           notes: string | null
@@ -709,6 +835,7 @@ export type Database = {
           color?: string | null
           company_id: string
           created_at?: string
+          floors?: number
           id?: string
           model?: string | null
           notes?: string | null
@@ -728,6 +855,7 @@ export type Database = {
           color?: string | null
           company_id?: string
           created_at?: string
+          floors?: number
           id?: string
           model?: string | null
           notes?: string | null

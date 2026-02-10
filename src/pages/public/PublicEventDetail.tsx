@@ -44,7 +44,8 @@ export default function PublicEventDetail() {
       ]);
 
       if (eventRes.data) setEvent(eventRes.data as Event);
-      const tripsData = (tripsRes.data ?? []) as Trip[];
+      const allTrips = (tripsRes.data ?? []) as Trip[];
+      const tripsData = allTrips.filter(t => t.trip_type === 'ida');
       setTrips(tripsData);
       if (locationsRes.data) setLocations(locationsRes.data as EventBoardingLocation[]);
 

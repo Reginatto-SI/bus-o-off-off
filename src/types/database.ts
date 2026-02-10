@@ -118,6 +118,36 @@ export interface Vehicle {
   whatsapp_group_link: string | null;
   notes: string | null;
   status: VehicleStatus;
+  floors: number;
+  company_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SeatStatus = 'disponivel' | 'bloqueado';
+
+export interface Seat {
+  id: string;
+  vehicle_id: string;
+  label: string;
+  floor: number;
+  row_number: number;
+  column_number: number;
+  status: SeatStatus;
+  company_id: string;
+  created_at: string;
+}
+
+export interface TicketRecord {
+  id: string;
+  sale_id: string;
+  trip_id: string;
+  seat_id: string | null;
+  seat_label: string;
+  passenger_name: string;
+  passenger_cpf: string;
+  passenger_phone: string | null;
+  boarding_status: string;
   company_id: string;
   created_at: string;
   updated_at: string;

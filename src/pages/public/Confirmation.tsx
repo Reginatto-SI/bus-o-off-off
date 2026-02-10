@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Sale } from '@/types/database';
+import { Sale, TicketRecord } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
   User,
   Phone,
   ExternalLink,
+  Armchair,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,21 +25,30 @@ import { ptBR } from 'date-fns/locale';
 export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
   const [sale, setSale] = useState<Sale | null>(null);
+  const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchSale = async () => {
       if (!id) return;
 
-      const { data } = await supabase
-        .from('sales')
-        .select(
-          '*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)'
-        )
-        .eq('id', id)
-        .single();
+      const [saleRes, ticketsRes] = await Promise.all([
+        supabase
+          .from('sales')
+          .select(
+            '*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)'
+          )
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('tickets')
+          .select('*')
+          .eq('sale_id', id)
+          .order('seat_label', { ascending: true }),
+      ]);
 
-      if (data) setSale(data as Sale);
+      if (saleRes.data) setSale(saleRes.data as Sale);
+      if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
       setLoading(false);
     };
 
@@ -112,7 +122,7 @@ export default function Confirmation() {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>Horário de saída: {sale.trip?.departure_time.slice(0, 5)}</span>
+                  <span>Horário de saída: {sale.trip?.departure_time?.slice(0, 5) ?? 'A definir'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -137,23 +147,50 @@ export default function Confirmation() {
 
             <Separator />
 
-            <div>
-              <h4 className="font-medium mb-2">Passageiro</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span>{sale.customer_name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span>{sale.customer_phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Ticket className="h-4 w-4 text-muted-foreground" />
-                  <span>{sale.quantity} passagem(ns)</span>
+            {/* Tickets / passengers */}
+            {tickets.length > 0 ? (
+              <div>
+                <h4 className="font-medium mb-3">Passageiros</h4>
+                <div className="space-y-3">
+                  {tickets.map((ticket) => (
+                    <div key={ticket.id} className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                      <Armchair className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div className="text-sm space-y-0.5">
+                        <p className="font-medium">
+                          Assento {ticket.seat_label} — {ticket.passenger_name}
+                        </p>
+                        <p className="text-muted-foreground">
+                          CPF: {ticket.passenger_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
+                        </p>
+                        {ticket.passenger_phone && (
+                          <p className="text-muted-foreground">
+                            Tel: {ticket.passenger_phone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <h4 className="font-medium mb-2">Passageiro</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span>{sale.customer_name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span>{sale.customer_phone}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Ticket className="h-4 w-4 text-muted-foreground" />
+                    <span>{sale.quantity} passagem(ns)</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
