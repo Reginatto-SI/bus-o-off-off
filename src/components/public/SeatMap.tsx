@@ -4,7 +4,6 @@ import { SeatButton, SeatState } from './SeatButton';
 import { SeatLegend } from './SeatLegend';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { UserRound } from 'lucide-react';
 
 interface SeatMapProps {
   seats: Seat[];
@@ -32,10 +31,8 @@ export function SeatMap({
       return a.column_number - b.column_number;
     });
 
-  // Determine max columns for this floor
   const maxCol = Math.max(...floorSeats.map((s) => s.column_number), 0);
-  const totalCols = maxCol; // 4 for bus (2+corridor+2), 3 for van (2+corridor+1)
-  const corridorAfter = totalCols <= 3 ? 2 : 2; // corridor is always after column 2
+  const totalCols = maxCol;
 
   // Group seats by row
   const rows = new Map<number, Seat[]>();
@@ -64,8 +61,8 @@ export function SeatMap({
     }
   };
 
-  // Render grid columns: col1, col2, corridor, col3, (col4 if bus)
-  const gridCols = totalCols <= 3 ? 'grid-cols-[1fr_1fr_1.2fr_1fr]' : 'grid-cols-[1fr_1fr_1.2fr_1fr_1fr]';
+  // Build row rendering: left seats | corridor | right seats
+  const corridorAfterCol = 2; // corridor after column 2
 
   return (
     <div className="space-y-4">
@@ -81,51 +78,81 @@ export function SeatMap({
 
       {/* Selection counter */}
       <div className="text-center text-sm font-medium text-foreground">
-        Selecionados: <span className="text-primary">{selectedSeats.length}</span> de {maxSelection}
+        Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
       </div>
 
-      {/* Bus body */}
-      <div className="bg-card border-2 border-border rounded-2xl p-4 max-w-[280px] mx-auto">
-        {/* Driver row */}
-        <div className="flex items-center justify-end mb-4 pr-1">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <div className="w-10 h-10 rounded-lg border border-border bg-muted/40 flex items-center justify-center">
-              <UserRound className="h-5 w-5" />
+      {/* Vehicle body */}
+      <div className="relative max-w-[320px] mx-auto">
+        {/* Windshield shape */}
+        <div className="bg-muted/30 border-2 border-border rounded-t-[2.5rem] rounded-b-2xl overflow-hidden">
+          {/* Driver row */}
+          <div className="flex items-center px-4 py-3 border-b border-border/50 bg-muted/40">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+                <circle cx="12" cy="12" r="9" />
+                <circle cx="12" cy="12" r="3" />
+                <line x1="12" y1="3" x2="12" y2="6" />
+                <line x1="12" y1="18" x2="12" y2="21" />
+                <line x1="3" y1="12" x2="6" y2="12" />
+              </svg>
+              <span className="text-xs font-medium">Motorista</span>
             </div>
           </div>
-        </div>
 
-        {/* Seat grid */}
-        <div className="space-y-2">
-          {Array.from(rows.entries()).map(([rowNum, rowSeats]) => (
-            <div key={rowNum} className={`grid ${gridCols} gap-1 items-center`}>
-              {Array.from({ length: totalCols }, (_, colIdx) => {
-                const colNum = colIdx + 1;
-                const seat = rowSeats.find((s) => s.column_number === colNum);
+          {/* Seat grid */}
+          <div className="px-3 py-3 space-y-1.5">
+            {Array.from(rows.entries()).map(([rowNum, rowSeats]) => {
+              const leftSeats = rowSeats.filter(s => s.column_number <= corridorAfterCol);
+              const rightSeats = rowSeats.filter(s => s.column_number > corridorAfterCol);
 
-                // Insert corridor gap after column 2
-                const elements = [];
-                if (colNum === corridorAfter + 1) {
-                  elements.push(<div key={`corridor-${rowNum}`} className="w-full" />);
-                }
+              return (
+                <div key={rowNum} className="flex items-center justify-center gap-1">
+                  {/* Left side */}
+                  <div className="flex gap-1" style={{ minWidth: `${corridorAfterCol * 48}px` }}>
+                    {Array.from({ length: corridorAfterCol }, (_, i) => {
+                      const colNum = i + 1;
+                      const seat = leftSeats.find(s => s.column_number === colNum);
+                      if (seat) {
+                        return (
+                          <SeatButton
+                            key={seat.id}
+                            label={seat.label}
+                            state={getSeatState(seat)}
+                            onClick={() => handleSeatClick(seat.id)}
+                          />
+                        );
+                      }
+                      return <div key={`empty-l-${rowNum}-${colNum}`} className="w-11 h-11" />;
+                    })}
+                  </div>
 
-                if (seat) {
-                  elements.push(
-                    <SeatButton
-                      key={seat.id}
-                      label={seat.label}
-                      state={getSeatState(seat)}
-                      onClick={() => handleSeatClick(seat.id)}
-                    />
-                  );
-                } else {
-                  elements.push(<div key={`empty-${rowNum}-${colNum}`} />);
-                }
+                  {/* Corridor */}
+                  <div className="w-6 flex items-center justify-center">
+                    <div className="w-px h-8 bg-border/30" />
+                  </div>
 
-                return elements;
-              }).flat()}
-            </div>
-          ))}
+                  {/* Right side */}
+                  <div className="flex gap-1" style={{ minWidth: `${Math.max(totalCols - corridorAfterCol, 1) * 48}px` }}>
+                    {Array.from({ length: Math.max(totalCols - corridorAfterCol, 1) }, (_, i) => {
+                      const colNum = corridorAfterCol + 1 + i;
+                      const seat = rightSeats.find(s => s.column_number === colNum);
+                      if (seat) {
+                        return (
+                          <SeatButton
+                            key={seat.id}
+                            label={seat.label}
+                            state={getSeatState(seat)}
+                            onClick={() => handleSeatClick(seat.id)}
+                          />
+                        );
+                      }
+                      return <div key={`empty-r-${rowNum}-${colNum}`} className="w-11 h-11" />;
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 

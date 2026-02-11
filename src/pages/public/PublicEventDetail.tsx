@@ -110,10 +110,13 @@ export default function PublicEventDetail() {
       return;
     }
 
+    // Find departure_time from selected event boarding location
+    const selectedEBL = filteredLocations.find(l => l.boarding_location_id === selectedLocation);
     const params = new URLSearchParams({
       trip: selectedTrip,
       location: selectedLocation,
       quantity: String(quantity),
+      ...(selectedEBL?.departure_time && { time: selectedEBL.departure_time }),
       ...(sellerRef && { ref: sellerRef }),
     });
 
