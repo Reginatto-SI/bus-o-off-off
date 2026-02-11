@@ -5,25 +5,30 @@ import { Event, Trip, BoardingLocation, Seat, VehicleType } from '@/types/databa
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { SeatMap } from '@/components/public/SeatMap';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Calendar,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
   MapPin,
   Clock,
   Loader2,
   ArrowLeft,
   User,
-  CreditCard,
-  Phone,
   Ticket,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 // ---- CPF validation helpers ----
@@ -97,6 +102,11 @@ interface PassengerData {
   phone: string;
 }
 
+function isPassengerComplete(p: PassengerData): boolean {
+  const rawCpf = p.cpf.replace(/\D/g, '');
+  return p.name.trim().length >= 3 && rawCpf.length === 11 && isValidCpf(rawCpf);
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -106,6 +116,7 @@ export default function Checkout() {
   const locationId = searchParams.get('location');
   const quantity = parseInt(searchParams.get('quantity') || '1');
   const sellerRef = searchParams.get('ref');
+  const departureTime = searchParams.get('time');
 
   const [event, setEvent] = useState<Event | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -121,6 +132,8 @@ export default function Checkout() {
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [payerIndex, setPayerIndex] = useState(0);
+  const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
 
   // ---- Load data ----
   useEffect(() => {
@@ -205,11 +218,12 @@ export default function Checkout() {
       toast.error(`Selecione exatamente ${quantity} assento${quantity > 1 ? 's' : ''}`);
       return;
     }
-    // Build passenger forms with seat labels
     setPassengers(
       selectedSeats.map(() => ({ name: '', cpf: '', phone: '' }))
     );
     setErrors({});
+    setPayerIndex(0);
+    setOpenPassengerIdx(0);
     setStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -234,7 +248,6 @@ export default function Checkout() {
       }
       return copy;
     });
-    // Clear error for this field
     setErrors((prev) => {
       const copy = { ...prev };
       delete copy[`${index}_${field}`];
@@ -263,13 +276,27 @@ export default function Checkout() {
       }
     });
 
+    // Validate payer has valid CPF
+    const payerCpf = passengers[payerIndex]?.cpf.replace(/\D/g, '');
+    if (!payerCpf || !isValidCpf(payerCpf)) {
+      newErrors[`${payerIndex}_cpf`] = 'O responsável pelo pagamento precisa ter CPF válido';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   // Submit purchase
   const handleSubmit = async () => {
-    if (!validatePassengers()) return;
+    if (!validatePassengers()) {
+      // Open the first passenger with error
+      const firstErrorKey = Object.keys(errors)[0];
+      if (firstErrorKey) {
+        const idx = parseInt(firstErrorKey.split('_')[0]);
+        setOpenPassengerIdx(idx);
+      }
+      return;
+    }
     if (!event || !trip || !location) return;
 
     setSubmitting(true);
@@ -285,6 +312,8 @@ export default function Checkout() {
       return;
     }
 
+    const payer = passengers[payerIndex];
+
     // Create sale
     const { data: sale, error: saleError } = await supabase
       .from('sales')
@@ -293,9 +322,9 @@ export default function Checkout() {
         trip_id: tripId!,
         boarding_location_id: locationId!,
         seller_id: sellerRef || null,
-        customer_name: passengers[0].name.trim(),
-        customer_cpf: passengers[0].cpf.replace(/\D/g, ''),
-        customer_phone: passengers[0].phone.replace(/\D/g, ''),
+        customer_name: payer.name.trim(),
+        customer_cpf: payer.cpf.replace(/\D/g, ''),
+        customer_phone: payer.phone.replace(/\D/g, ''),
         quantity,
         unit_price: event.unit_price ?? 0,
         status: 'reservado' as const,
@@ -327,13 +356,11 @@ export default function Checkout() {
 
     if (ticketError) {
       console.error('Ticket error:', ticketError);
-      // If duplicate seat, show friendly message
       if (ticketError.code === '23505') {
         toast.error('Um ou mais assentos já foram reservados. Escolha outros assentos.');
       } else {
         toast.error('Erro ao reservar assentos. Tente novamente.');
       }
-      // Rollback sale
       await supabase.from('sales').delete().eq('id', sale.id);
       setSubmitting(false);
       return;
@@ -341,6 +368,9 @@ export default function Checkout() {
 
     navigate(`/confirmacao/${sale.id}`);
   };
+
+  // Format the departure time for display
+  const displayTime = departureTime ? departureTime.slice(0, 5) : null;
 
   // ---- Render ----
 
@@ -407,11 +437,15 @@ export default function Checkout() {
             <MapPin className="h-3.5 w-3.5" />
             <span className="truncate">{location.name}</span>
           </div>
-          <Separator orientation="vertical" className="h-4" />
-          <div className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
-            <span>{trip.departure_time?.slice(0, 5) ?? 'A definir'}</span>
-          </div>
+          {displayTime && (
+            <>
+              <Separator orientation="vertical" className="h-4" />
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{displayTime}</span>
+              </div>
+            </>
+          )}
           <Separator orientation="vertical" className="h-4" />
           <div className="flex items-center gap-1.5">
             <Ticket className="h-3.5 w-3.5" />
@@ -442,7 +476,7 @@ export default function Checkout() {
           </>
         )}
 
-        {/* ============ STEP 2: Passenger Data ============ */}
+        {/* ============ STEP 2: Passenger Data (Accordion) ============ */}
         {step === 2 && (
           <>
             {/* Selected seats summary */}
@@ -457,65 +491,130 @@ export default function Checkout() {
               ))}
             </div>
 
-            {/* Passenger forms */}
-            <div className="space-y-4">
-              {passengers.map((passenger, idx) => (
-                <Card key={selectedSeats[idx]}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <User className="h-4 w-4 text-primary" />
-                      Passageiro — Assento {seatLabelMap[selectedSeats[idx]]}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`name-${idx}`} className="text-sm">
-                        Nome completo
-                      </Label>
-                      <Input
-                        id={`name-${idx}`}
-                        value={passenger.name}
-                        onChange={(e) => updatePassenger(idx, 'name', e.target.value)}
-                        placeholder="Nome do passageiro"
-                        maxLength={100}
-                      />
-                      {errors[`${idx}_name`] && (
-                        <p className="text-xs text-destructive">{errors[`${idx}_name`]}</p>
-                      )}
-                    </div>
+            {/* Passenger accordion */}
+            <div className="space-y-2">
+              {passengers.map((passenger, idx) => {
+                const isComplete = isPassengerComplete(passenger);
+                const seatLabel = seatLabelMap[selectedSeats[idx]];
+                const isOpen = openPassengerIdx === idx;
+                const hasError = Object.keys(errors).some(k => k.startsWith(`${idx}_`));
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`cpf-${idx}`} className="text-sm">
-                        CPF
-                      </Label>
-                      <Input
-                        id={`cpf-${idx}`}
-                        value={passenger.cpf}
-                        onChange={(e) => updatePassenger(idx, 'cpf', e.target.value)}
-                        placeholder="000.000.000-00"
-                        maxLength={14}
-                      />
-                      {errors[`${idx}_cpf`] && (
-                        <p className="text-xs text-destructive">{errors[`${idx}_cpf`]}</p>
-                      )}
-                    </div>
+                return (
+                  <Collapsible
+                    key={selectedSeats[idx]}
+                    open={isOpen}
+                    onOpenChange={(open) => setOpenPassengerIdx(open ? idx : null)}
+                  >
+                    <CollapsibleTrigger className="flex items-center justify-between w-full px-4 py-3 bg-card border rounded-lg hover:bg-muted/30 transition-colors text-left">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <User className="h-4 w-4 text-primary shrink-0" />
+                        <span className="text-sm font-medium truncate">
+                          Assento {seatLabel} — {passenger.name.trim() || 'Pendente'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {hasError ? (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                            <AlertCircle className="h-3 w-3 mr-0.5" />
+                            Erro
+                          </Badge>
+                        ) : isComplete ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
+                            <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                            OK
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">
+                            Pendente
+                          </Badge>
+                        )}
+                        {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                    </CollapsibleTrigger>
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`phone-${idx}`} className="text-sm">
-                        Telefone (opcional)
-                      </Label>
-                      <Input
-                        id={`phone-${idx}`}
-                        value={passenger.phone}
-                        onChange={(e) => updatePassenger(idx, 'phone', e.target.value)}
-                        placeholder="(00) 00000-0000"
-                        maxLength={15}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    <CollapsibleContent className="px-4 pb-4 pt-2 border border-t-0 rounded-b-lg bg-card space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`name-${idx}`} className="text-sm">
+                          Nome completo
+                        </Label>
+                        <Input
+                          id={`name-${idx}`}
+                          value={passenger.name}
+                          onChange={(e) => updatePassenger(idx, 'name', e.target.value)}
+                          placeholder="Nome do passageiro"
+                          maxLength={100}
+                        />
+                        {errors[`${idx}_name`] && (
+                          <p className="text-xs text-destructive">{errors[`${idx}_name`]}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`cpf-${idx}`} className="text-sm">
+                          CPF
+                        </Label>
+                        <Input
+                          id={`cpf-${idx}`}
+                          value={passenger.cpf}
+                          onChange={(e) => updatePassenger(idx, 'cpf', e.target.value)}
+                          placeholder="000.000.000-00"
+                          maxLength={14}
+                        />
+                        {errors[`${idx}_cpf`] && (
+                          <p className="text-xs text-destructive">{errors[`${idx}_cpf`]}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`phone-${idx}`} className="text-sm">
+                          Telefone (opcional)
+                        </Label>
+                        <Input
+                          id={`phone-${idx}`}
+                          value={passenger.phone}
+                          onChange={(e) => updatePassenger(idx, 'phone', e.target.value)}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                        />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
             </div>
+
+            {/* Payer selection */}
+            {passengers.length > 1 && (
+              <div className="space-y-3 bg-muted/30 rounded-lg p-4 border">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <User className="h-4 w-4 text-primary" />
+                  Responsável pelo pagamento
+                </h3>
+                <RadioGroup
+                  value={String(payerIndex)}
+                  onValueChange={(v) => setPayerIndex(Number(v))}
+                  className="space-y-2"
+                >
+                  {passengers.map((p, idx) => {
+                    const seatLabel = seatLabelMap[selectedSeats[idx]];
+                    const displayName = p.name.trim() || 'Não preenchido';
+                    const displayCpf = p.cpf || '—';
+                    return (
+                      <label
+                        key={idx}
+                        className="flex items-center gap-3 p-3 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors"
+                      >
+                        <RadioGroupItem value={String(idx)} />
+                        <div className="text-sm min-w-0">
+                          <div className="font-medium truncate">Assento {seatLabel} — {displayName}</div>
+                          <div className="text-xs text-muted-foreground">CPF: {displayCpf}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </RadioGroup>
+              </div>
+            )}
 
             <Button
               className="w-full h-14 text-lg font-medium"
