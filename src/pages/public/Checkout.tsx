@@ -66,7 +66,7 @@ function formatPhoneMask(value: string): string {
 // ---- Auto-generate seats for a vehicle ----
 function generateSeatLayout(capacity: number, vehicleType: VehicleType, floors: number): Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] {
   const seats: Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] = [];
-  const isSmall = vehicleType === 'van' || vehicleType === 'micro_onibus' || capacity <= 20;
+  const isSmall = vehicleType === 'van';
   const cols = isSmall ? 3 : 4;
 
   const seatsPerFloor = floors > 1 ? Math.ceil(capacity / floors) : capacity;
