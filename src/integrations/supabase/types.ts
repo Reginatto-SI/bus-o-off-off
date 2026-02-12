@@ -875,6 +875,8 @@ export type Database = {
           owner: string | null
           plate: string
           renavam: string | null
+          seats_left_side: number
+          seats_right_side: number
           status: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at: string
@@ -895,6 +897,8 @@ export type Database = {
           owner?: string | null
           plate: string
           renavam?: string | null
+          seats_left_side?: number
+          seats_right_side?: number
           status?: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
@@ -915,6 +919,8 @@ export type Database = {
           owner?: string | null
           plate?: string
           renavam?: string | null
+          seats_left_side?: number
+          seats_right_side?: number
           status?: Database["public"]["Enums"]["seller_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string

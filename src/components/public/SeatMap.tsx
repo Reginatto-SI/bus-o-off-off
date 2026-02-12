@@ -12,6 +12,8 @@ interface SeatMapProps {
   selectedSeats: string[];
   onSelectionChange: (seatIds: string[]) => void;
   floors: number;
+  seatsLeftSide: number;
+  seatsRightSide: number;
 }
 
 export function SeatMap({
@@ -21,6 +23,8 @@ export function SeatMap({
   selectedSeats,
   onSelectionChange,
   floors,
+  seatsLeftSide,
+  seatsRightSide,
 }: SeatMapProps) {
   const [activeFloor, setActiveFloor] = useState(1);
 
@@ -62,7 +66,9 @@ export function SeatMap({
   };
 
   // Build row rendering: left seats | corridor | right seats
-  const corridorAfterCol = 2; // corridor after column 2
+  // Comentário: corredor central respeita configuração do veículo (2x2, 2x1, 3x1 etc.).
+  const corridorAfterCol = Math.max(1, seatsLeftSide);
+  const rightSideColumnCount = Math.max(1, seatsRightSide);
 
   return (
     <div className="space-y-4">
@@ -132,8 +138,8 @@ export function SeatMap({
                   </div>
 
                   {/* Right side */}
-                  <div className="flex gap-1" style={{ minWidth: `${Math.max(totalCols - corridorAfterCol, 1) * 48}px` }}>
-                    {Array.from({ length: Math.max(totalCols - corridorAfterCol, 1) }, (_, i) => {
+                  <div className="flex gap-1" style={{ minWidth: `${Math.max(Math.max(totalCols - corridorAfterCol, rightSideColumnCount), 1) * 48}px` }}>
+                    {Array.from({ length: Math.max(Math.max(totalCols - corridorAfterCol, rightSideColumnCount), 1) }, (_, i) => {
                       const colNum = corridorAfterCol + 1 + i;
                       const seat = rightSeats.find(s => s.column_number === colNum);
                       if (seat) {
