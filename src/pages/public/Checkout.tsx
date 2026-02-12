@@ -165,7 +165,50 @@ export default function Checkout() {
           .order('column_number', { ascending: true });
 
         if (existingSeats && existingSeats.length > 0) {
-          setSeats(existingSeats as Seat[]);
+          // Validate layout compatibility with vehicle type
+          const vehicle = (tripRes.data as Trip).vehicle!;
+          const expectedCols = vehicle.type === 'van' ? 3 : 4;
+          const maxCol = Math.max(...existingSeats.map((s: any) => s.column_number));
+
+          if (maxCol !== expectedCols) {
+            // Check if any tickets exist for this trip before regenerating
+            const { count: ticketCount } = await supabase
+              .from('tickets')
+              .select('id', { count: 'exact', head: true })
+              .eq('trip_id', tripId!);
+
+            if (!ticketCount || ticketCount === 0) {
+              // Safe to delete and regenerate
+              await supabase.from('seats').delete().eq('vehicle_id', vehicleId);
+
+              setGeneratingSeats(true);
+              const layout = generateSeatLayout(
+                vehicle.capacity,
+                vehicle.type,
+                vehicle.floors ?? 1,
+              );
+              const seatInserts = layout.map((s) => ({
+                vehicle_id: vehicleId,
+                label: s.label,
+                floor: s.floor,
+                row_number: s.row_number,
+                column_number: s.column_number,
+                status: s.status,
+                company_id: (tripRes.data as Trip).company_id,
+              }));
+              const { data: created } = await supabase
+                .from('seats')
+                .insert(seatInserts)
+                .select();
+              if (created) setSeats(created as Seat[]);
+              setGeneratingSeats(false);
+            } else {
+              // Tickets exist — use existing seats even if mismatched
+              setSeats(existingSeats as Seat[]);
+            }
+          } else {
+            setSeats(existingSeats as Seat[]);
+          }
         } else {
           // Auto-generate seats
           setGeneratingSeats(true);
