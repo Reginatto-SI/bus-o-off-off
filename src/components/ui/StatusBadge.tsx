@@ -14,6 +14,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   encerrado: { label: 'Encerrado', className: 'status-badge-closed' },
   reservado: { label: 'Reservado', className: 'status-badge-reserved' },
   pago: { label: 'Pago', className: 'status-badge-paid' },
+  cancelado: { label: 'Cancelado', className: 'status-badge-cancelled' },
   ativo: { label: 'Ativo', className: 'status-badge-available' },
   inativo: { label: 'Inativo', className: 'status-badge-closed' },
 };
