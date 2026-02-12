@@ -64,10 +64,19 @@ function formatPhoneMask(value: string): string {
 }
 
 // ---- Auto-generate seats for a vehicle ----
-function generateSeatLayout(capacity: number, vehicleType: VehicleType, floors: number): Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] {
+function generateSeatLayout(
+  capacity: number,
+  vehicleType: VehicleType,
+  floors: number,
+  seatsLeftSide?: number,
+  seatsRightSide?: number,
+): Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] {
   const seats: Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] = [];
-  const isSmall = vehicleType === 'van';
-  const cols = isSmall ? 3 : 4;
+  const fallbackLeft = vehicleType === 'van' ? 2 : 2;
+  const fallbackRight = vehicleType === 'van' ? 1 : 2;
+  const leftCols = Math.max(1, seatsLeftSide ?? fallbackLeft);
+  const rightCols = Math.max(1, seatsRightSide ?? fallbackRight);
+  const cols = leftCols + rightCols;
 
   const seatsPerFloor = floors > 1 ? Math.ceil(capacity / floors) : capacity;
 
@@ -167,7 +176,7 @@ export default function Checkout() {
         if (existingSeats && existingSeats.length > 0) {
           // Validate layout compatibility with vehicle type
           const vehicle = (tripRes.data as Trip).vehicle!;
-          const expectedCols = vehicle.type === 'van' ? 3 : 4;
+          const expectedCols = (vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2)) + (vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2));
           const maxCol = Math.max(...existingSeats.map((s: any) => s.column_number));
 
           if (maxCol !== expectedCols) {
@@ -186,6 +195,8 @@ export default function Checkout() {
                 vehicle.capacity,
                 vehicle.type,
                 vehicle.floors ?? 1,
+                vehicle.seats_left_side,
+                vehicle.seats_right_side,
               );
               const seatInserts = layout.map((s) => ({
                 vehicle_id: vehicleId,
@@ -217,6 +228,8 @@ export default function Checkout() {
             vehicle.capacity,
             vehicle.type,
             vehicle.floors ?? 1,
+            vehicle.seats_left_side,
+            vehicle.seats_right_side,
           );
 
           const seatInserts = layout.map((s) => ({
@@ -506,6 +519,8 @@ export default function Checkout() {
               selectedSeats={selectedSeats}
               onSelectionChange={setSelectedSeats}
               floors={trip.vehicle?.floors ?? 1}
+              seatsLeftSide={trip.vehicle?.seats_left_side ?? (trip.vehicle?.type === 'van' ? 2 : 2)}
+              seatsRightSide={trip.vehicle?.seats_right_side ?? (trip.vehicle?.type === 'van' ? 1 : 2)}
             />
 
             <Button

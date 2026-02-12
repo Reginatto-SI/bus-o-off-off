@@ -119,6 +119,9 @@ export interface Vehicle {
   notes: string | null;
   status: VehicleStatus;
   floors: number;
+  // Configuração visual do corredor (ex.: 2x2, 2x1, 3x1)
+  seats_left_side: number;
+  seats_right_side: number;
   company_id: string;
   created_at: string;
   updated_at: string;

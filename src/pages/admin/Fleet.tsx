@@ -94,6 +94,13 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
   van: 'Van',
 };
 
+
+const getSeatSidesByType = (type: Vehicle['type']) => {
+  // Comentário: usamos presets brasileiros para acelerar cadastro e manter edição manual quando necessário.
+  if (type === 'van') return { seatsLeftSide: '2', seatsRightSide: '1' };
+  return { seatsLeftSide: '2', seatsRightSide: '2' };
+};
+
 export default function Fleet() {
   const { isGerente, isOperador, activeCompanyId, activeCompany, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -121,6 +128,7 @@ export default function Fleet() {
     { key: 'whatsapp_group_link', label: 'Link WhatsApp' },
     { key: 'notes', label: 'Observações' },
   ];
+  const defaultSeatSides = getSeatSidesByType('onibus');
   const [form, setForm] = useState({
     type: 'onibus' as Vehicle['type'],
     plate: '',
@@ -129,6 +137,8 @@ export default function Fleet() {
     model: '',
     year_model: '',
     capacity: '',
+    seats_left_side: defaultSeatSides.seatsLeftSide,
+    seats_right_side: defaultSeatSides.seatsRightSide,
     chassis: '',
     renavam: '',
     color: '',
@@ -211,6 +221,45 @@ export default function Fleet() {
     );
   }, [filters]);
 
+
+  const seatLayoutPreview = useMemo(() => {
+    const capacity = Number.parseInt(form.capacity, 10);
+    const leftSide = Number.parseInt(form.seats_left_side, 10);
+    const rightSide = Number.parseInt(form.seats_right_side, 10);
+
+    if (Number.isNaN(capacity) || Number.isNaN(leftSide) || Number.isNaN(rightSide)) return null;
+    if (capacity <= 0 || leftSide <= 0 || rightSide <= 0) return null;
+
+    const rows: Array<{ rowNumber: number; left: Array<number | null>; right: Array<number | null> }> = [];
+    let seatLabel = 1;
+    let rowNumber = 1;
+
+    while (seatLabel <= capacity) {
+      const left: Array<number | null> = [];
+      const right: Array<number | null> = [];
+
+      for (let index = 0; index < leftSide; index++) {
+        left.push(seatLabel <= capacity ? seatLabel++ : null);
+      }
+
+      for (let index = 0; index < rightSide; index++) {
+        right.push(seatLabel <= capacity ? seatLabel++ : null);
+      }
+
+      rows.push({ rowNumber, left, right });
+      rowNumber++;
+    }
+
+    // Comentário: limitamos a visualização para manter o modal compacto sem perder noção do layout.
+    const maxRowsVisible = 10;
+    const visibleRows = rows.slice(0, maxRowsVisible);
+
+    return {
+      visibleRows,
+      hiddenRowsCount: Math.max(rows.length - maxRowsVisible, 0),
+    };
+  }, [form.capacity, form.seats_left_side, form.seats_right_side]);
+
   const fetchVehicles = async () => {
     const { data, error } = await supabase
       .from('vehicles')
@@ -259,6 +308,8 @@ export default function Fleet() {
 
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
     const capacity = Number.parseInt(form.capacity, 10);
+    const seatsLeftSide = Number.parseInt(form.seats_left_side, 10);
+    const seatsRightSide = Number.parseInt(form.seats_right_side, 10);
     const normalizedPlate = form.plate.trim().toUpperCase();
     const isAdmin = isGerente || isOperador;
 
@@ -283,6 +334,14 @@ export default function Fleet() {
       return;
     }
 
+    if (Number.isNaN(seatsLeftSide) || Number.isNaN(seatsRightSide) || seatsLeftSide < 1 || seatsRightSide < 1) {
+      // Comentário: evitamos configuração inválida que quebraria a renderização do mapa de assentos no checkout.
+      console.warn('Validação de veículo: fileiras laterais inválidas no modal de frota.');
+      toast.error('Informe uma configuração válida de fileiras (mínimo 1 de cada lado)');
+      setSaving(false);
+      return;
+    }
+
     const vehicleData = {
       type: form.type,
       plate: normalizedPlate,
@@ -291,6 +350,8 @@ export default function Fleet() {
       model: form.model || null,
       year_model: Number.isNaN(yearModel) ? null : yearModel,
       capacity,
+      seats_left_side: seatsLeftSide,
+      seats_right_side: seatsRightSide,
       chassis: form.chassis || null,
       renavam: form.renavam || null,
       color: form.color || null,
@@ -365,6 +426,8 @@ export default function Fleet() {
       model: vehicle.model ?? '',
       year_model: vehicle.year_model?.toString() ?? '',
       capacity: vehicle.capacity.toString(),
+      seats_left_side: vehicle.seats_left_side?.toString() ?? '2',
+      seats_right_side: vehicle.seats_right_side?.toString() ?? '2',
       chassis: vehicle.chassis ?? '',
       renavam: vehicle.renavam ?? '',
       color: vehicle.color ?? '',
@@ -400,6 +463,7 @@ export default function Fleet() {
   };
 
   const resetForm = () => {
+    const defaults = getSeatSidesByType('onibus');
     setEditingId(null);
     setForm({
       type: 'onibus',
@@ -409,6 +473,8 @@ export default function Fleet() {
       model: '',
       year_model: '',
       capacity: '',
+      seats_left_side: defaults.seatsLeftSide,
+      seats_right_side: defaults.seatsRightSide,
       chassis: '',
       renavam: '',
       color: '',
@@ -507,7 +573,16 @@ export default function Fleet() {
                               <Label>Tipo de Frota</Label>
                               <Select
                                 value={form.type}
-                                onValueChange={(value: Vehicle['type']) => setForm({ ...form, type: value })}
+                                onValueChange={(value: Vehicle['type']) => {
+                                  const seatDefaults = getSeatSidesByType(value);
+                                  // Comentário: ao trocar tipo, aplicamos preset inicial, mantendo possibilidade de ajuste manual.
+                                  setForm({
+                                    ...form,
+                                    type: value,
+                                    seats_left_side: seatDefaults.seatsLeftSide,
+                                    seats_right_side: seatDefaults.seatsRightSide,
+                                  });
+                                }}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -582,6 +657,80 @@ export default function Fleet() {
                                 placeholder="46"
                                 required
                               />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="seats_left_side">Fileiras lado esquerdo</Label>
+                              <Input
+                                id="seats_left_side"
+                                type="number"
+                                min="1"
+                                max="4"
+                                value={form.seats_left_side}
+                                onChange={(e) => setForm({ ...form, seats_left_side: e.target.value })}
+                                placeholder="2"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="seats_right_side">Fileiras lado direito</Label>
+                              <Input
+                                id="seats_right_side"
+                                type="number"
+                                min="1"
+                                max="4"
+                                value={form.seats_right_side}
+                                onChange={(e) => setForm({ ...form, seats_right_side: e.target.value })}
+                                placeholder="2"
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-5 space-y-2">
+                            <Label>Prévia do layout (visão superior)</Label>
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                              {seatLayoutPreview ? (
+                                <div className="mx-auto w-full max-w-[420px]">
+                                  <div className="rounded-xl border bg-background/80 p-3">
+                                    <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                                      <span>Motorista</span>
+                                      <span>Layout {form.seats_left_side}x{form.seats_right_side}</span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      {seatLayoutPreview.visibleRows.map((row) => (
+                                        <div key={row.rowNumber} className="flex items-center justify-center gap-1">
+                                          <div className="flex gap-1">
+                                            {row.left.map((seatNumber, index) => (
+                                              <div key={`left-${row.rowNumber}-${index}`} className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-[10px] font-semibold">
+                                                {seatNumber ?? ''}
+                                              </div>
+                                            ))}
+                                          </div>
+                                          <div className="mx-1 h-6 w-5 border-x border-dashed border-border/80" />
+                                          <div className="flex gap-1">
+                                            {row.right.map((seatNumber, index) => (
+                                              <div key={`right-${row.rowNumber}-${index}`} className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-[10px] font-semibold">
+                                                {seatNumber ?? ''}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {seatLayoutPreview.hiddenRowsCount > 0 && (
+                                      <p className="mt-2 text-center text-xs text-muted-foreground">
+                                        +{seatLayoutPreview.hiddenRowsCount} fileira(s) não exibida(s) na prévia
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  Informe capacidade e fileiras válidas para visualizar a simulação.
+                                </p>
+                              )}
                             </div>
                           </div>
                         </TabsContent>
