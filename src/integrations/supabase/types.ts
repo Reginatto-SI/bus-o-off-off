@@ -369,9 +369,56 @@ export type Database = {
           },
         ]
       }
+      sale_logs: {
+        Row: {
+          action: string
+          company_id: string
+          created_at: string
+          description: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          performed_by: string | null
+          sale_id: string
+        }
+        Insert: {
+          action: string
+          company_id: string
+          created_at?: string
+          description: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          sale_id: string
+        }
+        Update: {
+          action?: string
+          company_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          sale_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_logs_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales: {
         Row: {
           boarding_location_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           company_id: string
           created_at: string
           customer_cpf: string
@@ -388,6 +435,9 @@ export type Database = {
         }
         Insert: {
           boarding_location_id: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           company_id: string
           created_at?: string
           customer_cpf: string
@@ -404,6 +454,9 @@ export type Database = {
         }
         Update: {
           boarding_location_id?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           company_id?: string
           created_at?: string
           customer_cpf?: string
@@ -904,7 +957,7 @@ export type Database = {
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"
-      sale_status: "reservado" | "pago"
+      sale_status: "reservado" | "pago" | "cancelado"
       seller_status: "ativo" | "inativo"
       user_role: "gerente" | "operador" | "vendedor" | "motorista"
       vehicle_type: "onibus" | "van" | "micro_onibus"
@@ -1036,7 +1089,7 @@ export const Constants = {
   public: {
     Enums: {
       event_status: ["rascunho", "a_venda", "encerrado"],
-      sale_status: ["reservado", "pago"],
+      sale_status: ["reservado", "pago", "cancelado"],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista"],
       vehicle_type: ["onibus", "van", "micro_onibus"],

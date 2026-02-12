@@ -4,7 +4,7 @@ export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
-export type SaleStatus = 'reservado' | 'pago';
+export type SaleStatus = 'reservado' | 'pago' | 'cancelado';
 export type SellerStatus = 'ativo' | 'inativo';
 export type ProfileStatus = 'ativo' | 'inativo';
 export type TripType = 'ida' | 'volta';
@@ -246,12 +246,27 @@ export interface Sale {
   quantity: number;
   unit_price: number;
   status: SaleStatus;
+  cancel_reason: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
   created_at: string;
   updated_at: string;
   event?: Event;
   trip?: Trip;
   boarding_location?: BoardingLocation;
   seller?: Seller;
+}
+
+export interface SaleLog {
+  id: string;
+  sale_id: string;
+  action: string;
+  description: string;
+  old_value: string | null;
+  new_value: string | null;
+  performed_by: string | null;
+  company_id: string;
+  created_at: string;
 }
 
 // Tipo para eventos com dados da empresa (usado na vitrine pública)
