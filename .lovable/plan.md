@@ -1,36 +1,85 @@
 
-
-# Correcao: Layout de assentos por tipo de veiculo
+# Correcao: Regenerar assentos incompativeis com tipo do veiculo
 
 ## Problema
 
-Na funcao `generateSeatLayout` (linha 69 de `Checkout.tsx`), micro-onibus esta agrupado com van como veiculo "pequeno" (3 colunas = 2+1). O correto e:
+Os assentos persistidos no banco para o veiculo atual foram gerados com 3 colunas (layout de van). Mesmo apos corrigir a funcao `generateSeatLayout`, o checkout encontra assentos existentes na linha 167 e os reutiliza sem verificar se o layout e compativel com o tipo atual do veiculo.
 
-- **Onibus e Micro-onibus**: 4 colunas (2 + corredor + 2)
-- **Van**: 3 colunas (2 + corredor + 1)
+## Solucao
 
-## Alteracao
+Adicionar validacao no carregamento do checkout (entre linhas 167-196 de `Checkout.tsx`) que compara o `max(column_number)` dos assentos existentes com o esperado pelo tipo do veiculo. Se incompativel E nao houver tickets vinculados, apaga os assentos antigos e regenera.
+
+## Alteracao unica
 
 ### Arquivo: `src/pages/public/Checkout.tsx`
 
-Linha 69, mudar a logica de `isSmall`:
+Na secao de carregamento de assentos (linhas 167-196), substituir o bloco por:
 
 ```typescript
-// Antes:
-const isSmall = vehicleType === 'van' || vehicleType === 'micro_onibus' || capacity <= 20;
+if (existingSeats && existingSeats.length > 0) {
+  // Validate layout compatibility
+  const vehicle = (tripRes.data as Trip).vehicle!;
+  const expectedCols = vehicle.type === 'van' ? 3 : 4;
+  const maxCol = Math.max(...existingSeats.map((s: any) => s.column_number));
 
-// Depois:
-const isSmall = vehicleType === 'van';
+  if (maxCol !== expectedCols) {
+    // Check if any tickets exist for this trip before regenerating
+    const { count: ticketCount } = await supabase
+      .from('tickets')
+      .select('id', { count: 'exact', head: true })
+      .eq('trip_id', tripId!);
+
+    if (!ticketCount || ticketCount === 0) {
+      // Safe to delete and regenerate
+      await supabase.from('seats').delete().eq('vehicle_id', vehicleId);
+
+      setGeneratingSeats(true);
+      const layout = generateSeatLayout(
+        vehicle.capacity,
+        vehicle.type,
+        vehicle.floors ?? 1,
+      );
+      const seatInserts = layout.map((s) => ({
+        vehicle_id: vehicleId,
+        label: s.label,
+        floor: s.floor,
+        row_number: s.row_number,
+        column_number: s.column_number,
+        status: s.status,
+        company_id: (tripRes.data as Trip).company_id,
+      }));
+      const { data: created } = await supabase
+        .from('seats')
+        .insert(seatInserts)
+        .select();
+      if (created) setSeats(created as Seat[]);
+      setGeneratingSeats(false);
+    } else {
+      // Tickets exist — use existing seats even if mismatched
+      setSeats(existingSeats as Seat[]);
+    }
+  } else {
+    setSeats(existingSeats as Seat[]);
+  }
+} else {
+  // Auto-generate (existing logic unchanged)
+  ...
+}
 ```
 
-Isso faz com que apenas vans usem layout 2+1. Onibus e micro-onibus usarao 2+2.
+## Logica resumida
 
-### Arquivo: `src/components/public/SeatMap.tsx`
-
-A variavel `corridorAfterCol` ja esta fixa em 2, o que funciona corretamente para o layout 2+2 (corredor entre colunas 2 e 3). Nenhuma alteracao necessaria neste arquivo — o grid ja renderiza corretamente com 4 colunas.
+1. Busca assentos existentes
+2. Calcula `expectedCols` com base no tipo do veiculo (van=3, demais=4)
+3. Compara com `max(column_number)` dos assentos existentes
+4. Se incompativel:
+   - Verifica se existem tickets para essa viagem
+   - Se nao ha tickets: apaga assentos antigos e regenera com layout correto
+   - Se ha tickets: mantem assentos existentes (seguranca)
+5. Se compativel: usa normalmente
 
 ## Resultado esperado
 
-- **Onibus / Micro-onibus**: fileiras de 4 assentos (2 a esquerda, corredor, 2 a direita)
-- **Van**: fileiras de 3 assentos (2 a esquerda, corredor, 1 a direita)
-
+- Onibus/micro-onibus com assentos antigos de 3 colunas serao automaticamente regenerados como 4 colunas (2+2)
+- Nenhum dado de ticket e perdido
+- Correcao transparente para o usuario
