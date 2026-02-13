@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
@@ -228,6 +228,16 @@ export default function Events() {
   // Image upload state
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const pendingImagePreviewUrlRef = useRef<string | null>(null);
+
+  const clearPendingImage = () => {
+    if (pendingImagePreviewUrlRef.current) {
+      URL.revokeObjectURL(pendingImagePreviewUrlRef.current);
+      pendingImagePreviewUrlRef.current = null;
+    }
+    setPendingImageFile(null);
+  };
 
   // Computed: can publish checklist - only requires IDA with boarding
   const publishChecklist = useMemo(() => {
@@ -520,6 +530,14 @@ export default function Events() {
     fetchVehiclesAndDrivers();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (pendingImagePreviewUrlRef.current) {
+        URL.revokeObjectURL(pendingImagePreviewUrlRef.current);
+      }
+    };
+  }, []);
+
   // Load event data when editing
   const loadEventData = async (eventId: string) => {
     await Promise.all([
@@ -572,6 +590,39 @@ export default function Events() {
       const { data, error: insertError } = await supabase.from('events').insert([eventData]).select('id').single();
       error = insertError;
       if (data) newEventId = data.id;
+    }
+
+    if (!error && pendingImageFile && newEventId) {
+      setUploadingImage(true);
+      const fileExt = pendingImageFile.name.split('.').pop();
+      const fileName = `${newEventId}-${Date.now()}.${fileExt}`;
+
+      // Upload adiado: evita exigir rascunho prévio e impede lixo em storage ao cancelar modal.
+      const { error: uploadError } = await supabase.storage
+        .from('event-images')
+        .upload(fileName, pendingImageFile, { upsert: false });
+
+      if (uploadError) {
+        error = uploadError;
+      } else {
+        const { data: { publicUrl } } = supabase.storage
+          .from('event-images')
+          .getPublicUrl(fileName);
+
+        const { error: imageUpdateError } = await supabase
+          .from('events')
+          .update({ image_url: publicUrl })
+          .eq('id', newEventId);
+
+        if (imageUpdateError) {
+          error = imageUpdateError;
+          await supabase.storage.from('event-images').remove([fileName]);
+        } else {
+          clearPendingImage();
+          setForm((prev) => ({ ...prev, image_url: publicUrl }));
+        }
+      }
+      setUploadingImage(false);
     }
 
     if (error) {
@@ -1115,6 +1166,9 @@ export default function Events() {
   };
 
   const resetForm = () => {
+    // Antes, o upload dependia do editingId e só existia depois de criar rascunho.
+    // Limpamos o preview local pendente ao fechar para evitar manter arquivo órfão em memória.
+    clearPendingImage();
     setEditingId(null);
     setEventTrips([]);
     setEventBoardingLocations([]);
@@ -1136,7 +1190,22 @@ export default function Events() {
   };
 
   const handleImageUpload = async (file?: File) => {
-    if (!file || !editingId || !activeCompanyId) return;
+    if (!file) return;
+
+    // Agora permitimos selecionar banner antes do evento existir.
+    // O arquivo fica pendente em memória e só vai para o storage após salvar.
+    if (!editingId) {
+      if (pendingImagePreviewUrlRef.current) {
+        URL.revokeObjectURL(pendingImagePreviewUrlRef.current);
+      }
+      const previewUrl = URL.createObjectURL(file);
+      pendingImagePreviewUrlRef.current = previewUrl;
+      setPendingImageFile(file);
+      setForm((prev) => ({ ...prev, image_url: previewUrl }));
+      return;
+    }
+
+    if (!activeCompanyId) return;
 
     setUploadingImage(true);
     const fileExt = file.name.split('.').pop();
@@ -1144,7 +1213,7 @@ export default function Events() {
 
     const { error: uploadError } = await supabase.storage
       .from('event-images')
-      .upload(fileName, file);
+      .upload(fileName, file, { upsert: false });
 
     if (uploadError) {
       toast.error('Erro ao fazer upload da imagem');
@@ -1156,7 +1225,7 @@ export default function Events() {
       .from('event-images')
       .getPublicUrl(fileName);
 
-    // Update event with URL
+    // Mantém o padrão atual: com ID existente o banner já é persistido direto no evento.
     const { error: updateError } = await supabase
       .from('events')
       .update({ image_url: publicUrl })
@@ -1165,7 +1234,7 @@ export default function Events() {
     if (updateError) {
       toast.error('Erro ao salvar URL da imagem');
     } else {
-      setForm({ ...form, image_url: publicUrl });
+      setForm((prev) => ({ ...prev, image_url: publicUrl }));
       toast.success('Imagem enviada com sucesso');
     }
     setUploadingImage(false);
@@ -1637,14 +1706,16 @@ export default function Events() {
                                     aria-label="Remover banner"
                                     onClick={async (event) => {
                                       event.preventDefault();
-                                      // Remove image from event
+                                      // Se estiver criando (sem ID), removemos somente o pendente local.
                                       if (editingId) {
                                         await supabase
                                           .from('events')
                                           .update({ image_url: null })
                                           .eq('id', editingId);
+                                      } else {
+                                        clearPendingImage();
                                       }
-                                      setForm({ ...form, image_url: null });
+                                      setForm((prev) => ({ ...prev, image_url: null }));
                                       toast.success('Imagem removida');
                                     }}
                                   >
@@ -1657,7 +1728,7 @@ export default function Events() {
                                   type="file"
                                   accept="image/*"
                                   className="hidden"
-                                  disabled={isReadOnly || uploadingImage || !editingId}
+                                  disabled={isReadOnly || uploadingImage}
                                   onChange={(e) => handleImageUpload(e.target.files?.[0])}
                                 />
                               )}
@@ -1668,10 +1739,10 @@ export default function Events() {
                                   type="file"
                                   accept="image/*"
                                   className="hidden"
-                                  disabled={isReadOnly || uploadingImage || !editingId}
+                                  disabled={isReadOnly || uploadingImage}
                                   onChange={(e) => handleImageUpload(e.target.files?.[0])}
                                 />
-                                <Button type="button" variant="outline" size="sm" disabled={uploadingImage}>
+                                <Button type="button" variant="outline" size="sm" disabled={uploadingImage || isReadOnly}>
                                   <Upload className="h-4 w-4 mr-1" />
                                   Trocar
                                 </Button>
@@ -1690,7 +1761,7 @@ export default function Events() {
                               type="file"
                               accept="image/*"
                               className="hidden"
-                              disabled={isReadOnly || uploadingImage || !editingId}
+                              disabled={isReadOnly || uploadingImage}
                               onChange={(e) => handleImageUpload(e.target.files?.[0])}
                             />
                             {uploadingImage ? (
@@ -1701,8 +1772,8 @@ export default function Events() {
                             <p className="text-sm text-muted-foreground">
                               {uploadingImage 
                                 ? 'Enviando imagem...' 
-                                : !editingId 
-                                  ? 'Salve o evento primeiro'
+                                : pendingImageFile
+                                  ? 'Banner pendente (salve para persistir)'
                                   : 'Adicionar banner (1080×1080)'
                               }
                             </p>
