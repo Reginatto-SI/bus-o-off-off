@@ -11,6 +11,7 @@ import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { VehicleCard } from '@/components/public/VehicleCard';
 import { BoardingLocationCard } from '@/components/public/BoardingLocationCard';
 import { QuantitySelector } from '@/components/public/QuantitySelector';
+import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 
 export default function PublicEventDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ export default function PublicEventDetail() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [availableSeatsMap, setAvailableSeatsMap] = useState<Record<string, number>>({});
+  const [isInfoDrawerOpen, setIsInfoDrawerOpen] = useState(false);
 
   // Fetch event, trips, and locations
   useEffect(() => {
@@ -168,6 +170,17 @@ export default function PublicEventDetail() {
         {/* Event summary */}
         <EventSummaryCard event={event} compact />
 
+        {/* Conteúdo cadastrado no Admin (aba Geral) para informar regras públicas do evento. */}
+        {event.public_info && (
+          <button
+            type="button"
+            onClick={() => setIsInfoDrawerOpen(true)}
+            className="-mt-2 text-sm text-muted-foreground underline underline-offset-4"
+          >
+            Informações e regras
+          </button>
+        )}
+
         {!hasTrips ? (
           <EmptyState
             icon={<Bus className="h-6 w-6 text-muted-foreground" />}
@@ -245,6 +258,22 @@ export default function PublicEventDetail() {
           </>
         )}
       </div>
+
+      <Drawer open={isInfoDrawerOpen} onOpenChange={setIsInfoDrawerOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Informações do Evento</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-2">
+            <p className="whitespace-pre-wrap text-sm text-foreground">{event.public_info}</p>
+          </div>
+          <DrawerFooter>
+            <Button type="button" onClick={() => setIsInfoDrawerOpen(false)}>
+              Entendi
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </PublicLayout>
   );
 }
