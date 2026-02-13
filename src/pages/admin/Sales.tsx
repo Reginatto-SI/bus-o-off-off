@@ -114,6 +114,7 @@ export default function Sales() {
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
   const [detailTickets, setDetailTickets] = useState<TicketRecord[]>([]);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
+  const [detailBoardingDepartureTime, setDetailBoardingDepartureTime] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   // Edit passenger modal
@@ -250,12 +251,21 @@ export default function Sales() {
   const openDetail = async (sale: Sale) => {
     setDetailSale(sale);
     setDetailLoading(true);
-    const [ticketsRes, logsRes] = await Promise.all([
+    const [ticketsRes, logsRes, boardingRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase.from('sale_logs').select('*').eq('sale_id', sale.id).order('created_at', { ascending: false }),
+      supabase
+        .from('event_boarding_locations')
+        .select('departure_time')
+        .eq('event_id', sale.event_id)
+        .eq('trip_id', sale.trip_id)
+        // Fonte de verdade: usa o local escolhido na venda (sales.boarding_location_id).
+        .eq('boarding_location_id', sale.boarding_location_id)
+        .maybeSingle(),
     ]);
     setDetailTickets((ticketsRes.data ?? []) as TicketRecord[]);
     setDetailLogs((logsRes.data ?? []) as SaleLog[]);
+    setDetailBoardingDepartureTime(boardingRes.data?.departure_time ?? null);
     setDetailLoading(false);
   };
 
@@ -650,7 +660,12 @@ export default function Sales() {
         />
 
         {/* ── Detail Modal ── */}
-        <Dialog open={!!detailSale} onOpenChange={(open) => { if (!open) setDetailSale(null); }}>
+        <Dialog open={!!detailSale} onOpenChange={(open) => {
+          if (!open) {
+            setDetailSale(null);
+            setDetailBoardingDepartureTime(null);
+          }
+        }}>
           <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
             <DialogHeader className="admin-modal__header px-6 py-4">
               <DialogTitle>Detalhes da Venda</DialogTitle>
@@ -695,6 +710,10 @@ export default function Sales() {
                             }
                           />
                           <InfoRow label="Local Embarque" value={detailSale.boarding_location?.name ?? '-'} />
+                          <InfoRow
+                            label="Horário de Embarque"
+                            value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
+                          />
                           <InfoRow label="Quantidade" value={String(detailSale.quantity)} />
                           {canViewFinancials && (
                             <>
