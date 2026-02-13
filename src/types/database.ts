@@ -193,6 +193,7 @@ export interface Event {
   date: string;
   city: string;
   description: string | null;
+  public_info: string | null;
   status: EventStatus;
   unit_price: number;
   max_tickets_per_purchase: number;

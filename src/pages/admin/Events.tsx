@@ -215,6 +215,8 @@ export default function Events() {
     date: '',
     city: '',
     description: '',
+    // Campo público exibido no app mobile em 'Informações e regras'.
+    public_info: '',
     status: 'rascunho' as Event['status'],
     unit_price: '',
     max_tickets_per_purchase: '0',
@@ -550,6 +552,8 @@ export default function Events() {
       date: form.date,
       city: form.city.trim(),
       description: form.description || null,
+      // Salva o conteúdo que será mostrado no bottom sheet do app público.
+      public_info: form.public_info || null,
       status: form.status,
       unit_price: parseFloat(form.unit_price || '0'),
       max_tickets_per_purchase: parseInt(form.max_tickets_per_purchase || '5', 10),
@@ -608,6 +612,7 @@ export default function Events() {
       date: event.date,
       city: event.city,
       description: event.description ?? '',
+      public_info: event.public_info ?? '',
       status: event.status,
       unit_price: event.unit_price?.toString() ?? '0',
       max_tickets_per_purchase: event.max_tickets_per_purchase?.toString() ?? '0',
@@ -1120,6 +1125,7 @@ export default function Events() {
       date: '',
       city: '',
       description: '',
+      public_info: '',
       status: 'rascunho',
       unit_price: '',
       max_tickets_per_purchase: '0',
@@ -1757,6 +1763,21 @@ export default function Events() {
                         rows={3}
                         disabled={isReadOnly}
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="public_info">Informações e Regras Importantes (exibidas ao público)</Label>
+                      <Textarea
+                        id="public_info"
+                        value={form.public_info}
+                        onChange={(e) => setForm({ ...form, public_info: e.target.value })}
+                        placeholder="Ex: regras de embarque, documentos obrigatórios e orientações gerais"
+                        rows={4}
+                        disabled={isReadOnly}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Esse conteúdo será exibido no aplicativo público ao clicar em ‘Informações e regras’.
+                      </p>
                     </div>
                   </TabsContent>
 
