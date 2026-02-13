@@ -26,6 +26,7 @@ export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +50,20 @@ export default function Confirmation() {
 
       if (saleRes.data) setSale(saleRes.data as Sale);
       if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
+
+      if (saleRes.data) {
+        // Usa o horário do embarque vinculado à venda para refletir exatamente a escolha do checkout.
+        const { data: selectedBoarding } = await supabase
+          .from('event_boarding_locations')
+          .select('departure_time')
+          .eq('event_id', saleRes.data.event_id)
+          .eq('trip_id', saleRes.data.trip_id)
+          .eq('boarding_location_id', saleRes.data.boarding_location_id)
+          .maybeSingle();
+
+        setBoardingDepartureTime(selectedBoarding?.departure_time ?? null);
+      }
+
       setLoading(false);
     };
 
@@ -120,10 +135,12 @@ export default function Confirmation() {
             <div>
               <h4 className="font-medium mb-2">Informações de Embarque</h4>
               <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>Horário de saída: {sale.trip?.departure_time?.slice(0, 5) ?? 'A definir'}</span>
-                </div>
+                {boardingDepartureTime && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>Horário de saída: {boardingDepartureTime.slice(0, 5)}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                   <span>{sale.boarding_location?.name}</span>
