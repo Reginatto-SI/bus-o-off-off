@@ -251,11 +251,11 @@ export type Database = {
           created_at: string
           date: string
           description: string | null
-          public_info: string | null
           id: string
           image_url: string | null
           max_tickets_per_purchase: number
           name: string
+          public_info: string | null
           status: Database["public"]["Enums"]["event_status"]
           unit_price: number
           updated_at: string
@@ -268,11 +268,11 @@ export type Database = {
           created_at?: string
           date: string
           description?: string | null
-          public_info?: string | null
           id?: string
           image_url?: string | null
           max_tickets_per_purchase?: number
           name: string
+          public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           unit_price?: number
           updated_at?: string
@@ -285,11 +285,11 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string | null
-          public_info?: string | null
           id?: string
           image_url?: string | null
           max_tickets_per_purchase?: number
           name?: string
+          public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           unit_price?: number
           updated_at?: string

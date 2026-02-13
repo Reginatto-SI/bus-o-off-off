@@ -212,3 +212,13 @@
     @apply bg-card rounded-lg border p-4 shadow-sm;
   }
 }
+
+/* Event card glow animation for active (a_venda) events */
+@keyframes card-glow-pulse {
+  0%, 100% { box-shadow: 0 0 15px -3px hsl(var(--success) / 0.1); }
+  50% { box-shadow: 0 0 20px -3px hsl(var(--success) / 0.2); }
+}
+
+.card-active-glow {
+  animation: card-glow-pulse 3s ease-in-out infinite;
+}

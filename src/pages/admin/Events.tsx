@@ -76,6 +76,8 @@ import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
 // Types
 interface EventFilters {
@@ -91,7 +93,7 @@ interface EventFilters {
 }
 
 interface EventWithTrips extends Event {
-  trips: { vehicle_id: string | null; driver_id: string | null; assistant_driver_id: string | null }[];
+  trips: { vehicle_id: string | null; driver_id: string | null; assistant_driver_id: string | null; capacity?: number }[];
 }
 
 interface TripWithDetails extends Trip {
@@ -154,6 +156,17 @@ export default function Events() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<EventWithTrips | null>(null);
   const [activeTab, setActiveTab] = useState('geral');
+
+  // Post-create dialog
+  const [postCreateDialogOpen, setPostCreateDialogOpen] = useState(false);
+  const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+
+  // Quick status change
+  const [closeEventDialogOpen, setCloseEventDialogOpen] = useState(false);
+  const [eventToClose, setEventToClose] = useState<EventWithTrips | null>(null);
+
+  // Sales data for performance indicators
+  const [salesByEvent, setSalesByEvent] = useState<Map<string, number>>(new Map());
   
   // Data for trips tab
   const [eventTrips, setEventTrips] = useState<TripWithDetails[]>([]);
@@ -439,7 +452,7 @@ export default function Events() {
       .from('events')
       .select(`
         *,
-        trips:trips(vehicle_id, driver_id, assistant_driver_id)
+        trips:trips(vehicle_id, driver_id, assistant_driver_id, capacity)
       `)
       .order('date', { ascending: false });
 
@@ -460,6 +473,20 @@ export default function Events() {
       setEvents(data as EventWithTrips[]);
     }
     setLoading(false);
+  };
+
+  const fetchSalesData = async () => {
+    const { data: salesData } = await supabase
+      .from('sales')
+      .select('event_id, quantity')
+      .in('status', ['reservado', 'pago']);
+
+    const map = new Map<string, number>();
+    salesData?.forEach(sale => {
+      const current = map.get(sale.event_id) || 0;
+      map.set(sale.event_id, current + sale.quantity);
+    });
+    setSalesByEvent(map);
   };
 
   // Count unique vehicles (fleets) for card display
@@ -529,6 +556,7 @@ export default function Events() {
   useEffect(() => {
     fetchEvents();
     fetchVehiclesAndDrivers();
+    fetchSalesData();
   }, []);
 
   useEffect(() => {
@@ -642,17 +670,19 @@ export default function Events() {
     } else {
       toast.success(editingId ? 'Evento atualizado com sucesso' : 'Evento criado com sucesso');
       
-      // If new event, switch to edit mode to allow adding trips/locations
+      // If new event, switch to edit mode and show post-create dialog
       if (!editingId && newEventId) {
         setEditingId(newEventId);
         loadEventData(newEventId);
         setActiveTab('viagens');
-        toast.info('Agora você pode adicionar viagens e locais de embarque');
+        setNewlyCreatedEventId(newEventId);
+        setPostCreateDialogOpen(true);
       } else {
         setDialogOpen(false);
         resetForm();
       }
       fetchEvents();
+      fetchSalesData();
     }
     setSaving(false);
   };
@@ -1267,6 +1297,87 @@ export default function Events() {
     setUploadingImage(false);
   };
 
+  // Quick status change from card
+  const handleQuickStatusChange = async (event: EventWithTrips, newStatus: Event['status']) => {
+    if (newStatus === 'a_venda') {
+      // Validate publish requirements
+      const hasTrips = event.trips && event.trips.length > 0;
+      const hasPrice = event.unit_price > 0;
+      
+      // Check for ida boardings
+      const { data: boardings } = await supabase
+        .from('event_boarding_locations')
+        .select('id, trip_id')
+        .eq('event_id', event.id);
+
+      // Simpler check: just verify boardings exist
+      const hasBoardings = boardings && boardings.length > 0;
+      
+      const pendencias: string[] = [];
+      if (!hasTrips) pendencias.push('frota/transporte');
+      if (!hasBoardings) pendencias.push('locais de embarque');
+      if (!hasPrice) pendencias.push('preço da passagem');
+
+      if (pendencias.length > 0) {
+        toast.error(`Não é possível publicar. Faltam: ${pendencias.join(', ')}`, { duration: 5000 });
+        return;
+      }
+    }
+
+    if (newStatus === 'encerrado') {
+      setEventToClose(event);
+      setCloseEventDialogOpen(true);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('events')
+      .update({ status: newStatus })
+      .eq('id', event.id);
+
+    if (error) {
+      toast.error('Erro ao alterar status do evento');
+    } else {
+      if (newStatus === 'a_venda') {
+        toast.success('Evento publicado com sucesso! O evento já está visível no portal.', {
+          duration: 4000,
+          icon: '🚀',
+        });
+      } else {
+        toast.success('Status do evento atualizado');
+      }
+      fetchEvents();
+      fetchSalesData();
+    }
+  };
+
+  const handleCloseEventConfirmed = async () => {
+    if (!eventToClose) return;
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'encerrado' })
+      .eq('id', eventToClose.id);
+
+    if (error) {
+      toast.error('Erro ao encerrar evento');
+    } else {
+      toast.success('Evento encerrado com sucesso');
+      fetchEvents();
+    }
+    setCloseEventDialogOpen(false);
+    setEventToClose(null);
+  };
+
+  // Post-create: activate for sale
+  const handlePostCreateActivate = async () => {
+    if (!newlyCreatedEventId) return;
+    
+    // Since event was just created, it won't have trips/boardings yet
+    // So we just inform and keep as draft
+    toast.info('Complete as frotas e embarques para poder publicar o evento', { duration: 4000 });
+    setPostCreateDialogOpen(false);
+  };
+
   const getEventActions = (event: EventWithTrips): ActionItem[] => {
     const actions: ActionItem[] = [];
 
@@ -1291,6 +1402,27 @@ export default function Events() {
         window.location.href = `/admin/eventos/${event.id}`;
       },
     });
+
+    // Quick status transitions
+    if (event.status === 'rascunho') {
+      actions.push({
+        label: 'Colocar à Venda',
+        icon: ShoppingBag,
+        onClick: () => handleQuickStatusChange(event, 'a_venda'),
+      });
+    }
+    if (event.status === 'a_venda') {
+      actions.push({
+        label: 'Voltar para Rascunho',
+        icon: FileEdit,
+        onClick: () => handleQuickStatusChange(event, 'rascunho'),
+      });
+      actions.push({
+        label: 'Encerrar Evento',
+        icon: CheckCircle,
+        onClick: () => handleQuickStatusChange(event, 'encerrado'),
+      });
+    }
 
     const tripCount = event.trips?.length ?? 0;
     if (tripCount === 0) {
@@ -1559,18 +1691,24 @@ export default function Events() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredEvents.map((event) => (
-              <Card key={event.id} className="card-corporate h-full overflow-hidden">
+              <Card 
+                key={event.id} 
+                className={cn(
+                  'card-corporate h-full overflow-hidden transition-all duration-300',
+                  event.status === 'a_venda' && 'ring-1 ring-success/30 card-active-glow',
+                  event.status === 'encerrado' && 'opacity-70',
+                  event.status === 'rascunho' && 'border-dashed',
+                )}
+              >
                 {/* Image or Placeholder - 1:1 padrão oficial (1080×1080 recomendado). */}
                 {event.image_url ? (
                   <div className="aspect-square w-full relative overflow-hidden bg-muted">
-                    {/* Blurred background to fill empty space */}
                     <img 
                       src={event.image_url} 
                       alt=""
                       aria-hidden="true"
                       className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
                     />
-                    {/* Main image - no crop, centered (contain to avoid cortar). */}
                     <img 
                       src={event.image_url} 
                       alt={event.name}
@@ -1594,8 +1732,14 @@ export default function Events() {
                     <ActionsDropdown actions={getEventActions(event)} />
                   </div>
                   
-                  <div className="mb-3">
+                  <div className="mb-3 flex items-center gap-1.5">
                     <StatusBadge status={event.status} />
+                    {event.status === 'a_venda' && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+                      </span>
+                    )}
                   </div>
                   
                   <div className="space-y-2 text-sm text-muted-foreground">
@@ -1619,6 +1763,45 @@ export default function Events() {
                       <span>{getFleetCount(event)} transporte(s)</span>
                     </div>
                   </div>
+
+                  {/* Performance indicator for a_venda */}
+                  {event.status === 'a_venda' && (() => {
+                    const totalSold = salesByEvent.get(event.id) || 0;
+                    // Calculate capacity from unique vehicles in trips
+                    const vehicleCapacities = new Map<string, number>();
+                    event.trips?.forEach(t => {
+                      if (t.vehicle_id && !vehicleCapacities.has(t.vehicle_id)) {
+                        vehicleCapacities.set(t.vehicle_id, t.capacity || 0);
+                      }
+                    });
+                    const totalCapacity = Array.from(vehicleCapacities.values()).reduce((sum, c) => sum + c, 0);
+                    const percentSold = totalCapacity > 0 ? Math.round((totalSold / totalCapacity) * 100) : 0;
+                    
+                    if (totalCapacity === 0) return null;
+                    return (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                          <span>{totalSold} vendido(s)</span>
+                          <span>{percentSold}%</span>
+                        </div>
+                        <Progress value={percentSold} className="h-1.5" />
+                      </div>
+                    );
+                  })()}
+
+                  {/* Pendencies indicator for rascunho */}
+                  {event.status === 'rascunho' && (() => {
+                    const pendencias: string[] = [];
+                    if (!event.trips?.length) pendencias.push('frota');
+                    if (event.unit_price <= 0) pendencias.push('preço');
+                    if (pendencias.length === 0) return null;
+                    return (
+                      <div className="mt-3 flex items-center gap-1.5 text-xs text-warning">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span>Faltam: {pendencias.join(', ')}</span>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             ))}
@@ -2889,6 +3072,50 @@ export default function Events() {
                 disabled={copyingBoardings}
               >
                 {copyingBoardings ? 'Copiando...' : 'Copiar'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {/* Close Event Confirmation Dialog */}
+        <AlertDialog open={closeEventDialogOpen} onOpenChange={setCloseEventDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Encerrar Evento</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja encerrar o evento "{eventToClose?.name}"?
+                Após encerrado, o evento não poderá mais ser reaberto ou editado.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleCloseEventConfirmed}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Encerrar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Post-Create Decision Dialog */}
+        <AlertDialog open={postCreateDialogOpen} onOpenChange={setPostCreateDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Evento criado com sucesso! 🎉</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deseja já colocar este evento à venda? Você precisará primeiro adicionar frotas e locais de embarque.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setPostCreateDialogOpen(false);
+                toast.info('Continue configurando o evento nas abas de Frotas e Embarques');
+              }}>
+                Manter como Rascunho
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handlePostCreateActivate}>
+                Configurar para Venda
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
