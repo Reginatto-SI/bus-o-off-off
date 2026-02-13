@@ -121,12 +121,14 @@ function generateSeatLayout(
 }
 
 function hasRightSideNumberingMismatch(seats: Seat[], seatsLeftSide: number): boolean {
-  const rows = new Map<number, Seat[]>();
+  const rows = new Map<string, Seat[]>();
 
   seats.forEach((seat) => {
-    const rowSeats = rows.get(seat.row_number) ?? [];
+    // Comentário: row_number pode se repetir entre andares, por isso usamos floor + row como chave.
+    const rowKey = `${seat.floor}-${seat.row_number}`;
+    const rowSeats = rows.get(rowKey) ?? [];
     rowSeats.push(seat);
-    rows.set(seat.row_number, rowSeats);
+    rows.set(rowKey, rowSeats);
   });
 
   for (const rowSeats of rows.values()) {
@@ -149,6 +151,40 @@ function hasRightSideNumberingMismatch(seats: Seat[], seatsLeftSide: number): bo
   }
 
   return false;
+}
+
+function buildRightSideNumberingFixes(seats: Seat[], seatsLeftSide: number): Array<{ id: string; label: string }> {
+  const rows = new Map<string, Seat[]>();
+
+  seats.forEach((seat) => {
+    const rowKey = `${seat.floor}-${seat.row_number}`;
+    const rowSeats = rows.get(rowKey) ?? [];
+    rowSeats.push(seat);
+    rows.set(rowKey, rowSeats);
+  });
+
+  const fixes: Array<{ id: string; label: string }> = [];
+
+  for (const rowSeats of rows.values()) {
+    const rightSideSeats = rowSeats
+      .filter((seat) => seat.column_number > seatsLeftSide)
+      .sort((a, b) => a.column_number - b.column_number);
+
+    if (rightSideSeats.length <= 1) continue;
+
+    const parsed = rightSideSeats.map((seat) => Number.parseInt(seat.label, 10));
+    if (parsed.some(Number.isNaN)) continue;
+
+    const isAscending = parsed.every((value, index) => index === 0 || value > parsed[index - 1]);
+    if (!isAscending) continue;
+
+    const correctedLabels = [...parsed].sort((a, b) => b - a);
+    rightSideSeats.forEach((seat, index) => {
+      fixes.push({ id: seat.id, label: String(correctedLabels[index]) });
+    });
+  }
+
+  return fixes;
 }
 
 // ---- Passenger data type ----
@@ -263,8 +299,32 @@ export default function Checkout() {
                 .select();
               if (created) setSeats(created as Seat[]);
               setGeneratingSeats(false);
+            } else if (numberingMismatch) {
+              // Comentário: com bilhetes emitidos, não podemos recriar assentos; corrigimos somente os labels do lado direito.
+              const labelFixes = buildRightSideNumberingFixes(existingSeats as Seat[], seatsLeftSide);
+
+              if (labelFixes.length > 0) {
+                const updatePromises = labelFixes.map((fix) =>
+                  supabase
+                    .from('seats')
+                    .update({ label: fix.label })
+                    .eq('id', fix.id)
+                );
+
+                await Promise.all(updatePromises);
+
+                const fixesBySeatId = new Map(labelFixes.map((fix) => [fix.id, fix.label]));
+                const patchedSeats = (existingSeats as Seat[]).map((seat) => ({
+                  ...seat,
+                  label: fixesBySeatId.get(seat.id) ?? seat.label,
+                }));
+
+                setSeats(patchedSeats);
+              } else {
+                setSeats(existingSeats as Seat[]);
+              }
             } else {
-              // Tickets exist — use existing seats even if mismatched
+              // Tickets exist e layout de colunas divergente — mantemos assentos atuais para não impactar vendas existentes.
               setSeats(existingSeats as Seat[]);
             }
           } else {
