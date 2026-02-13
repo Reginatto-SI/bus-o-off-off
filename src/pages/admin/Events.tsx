@@ -172,7 +172,8 @@ export default function Events() {
   const [tripDialogOpen, setTripDialogOpen] = useState(false);
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [tripForm, setTripForm] = useState({
-    trip_creation_type: 'ida' as TripCreationType,
+    // UX: padrão operacional mais comum no cadastro de evento é criar Ida + Volta juntos.
+    trip_creation_type: 'ida_volta' as TripCreationType,
     vehicle_id: '',
     driver_id: '',
     assistant_driver_id: '',
@@ -901,7 +902,7 @@ export default function Events() {
   const resetTripForm = () => {
     setEditingTripId(null);
     setTripForm({ 
-      trip_creation_type: 'ida', 
+      trip_creation_type: 'ida_volta', 
       vehicle_id: '', 
       driver_id: '', 
       assistant_driver_id: '',
@@ -1142,7 +1143,8 @@ export default function Events() {
       event_id: editingId,
       boarding_location_id: ebl.boarding_location_id,
       trip_id: selectedTripIdForBoardings,
-      departure_time: ebl.departure_time,
+      // Regra de UX: copiamos apenas os locais; horário da volta fica para ajuste manual.
+      departure_time: null,
       stop_order: invertBoardingsOrder 
         ? idaBoardings.length - index 
         : index + 1,
@@ -1151,13 +1153,38 @@ export default function Events() {
     
     const { error } = await supabase
       .from('event_boarding_locations')
-      .insert(newBoardings);
+      // Se o usuário repetir a ação, atualizamos ordem/horário da mesma viagem em vez de falhar.
+      .upsert(newBoardings, { onConflict: 'event_id,trip_id,boarding_location_id' });
     
     if (error) {
-      toast.error('Erro ao copiar embarques');
-      console.error(error);
+      logSupabaseError({
+        label: 'Erro ao copiar embarques da ida para volta (event_boarding_locations.upsert)',
+        error,
+        context: {
+          action: 'upsert',
+          table: 'event_boarding_locations',
+          eventId: editingId,
+          fromTripId: idaTrip.id,
+          toTripId: selectedTripIdForBoardings,
+          companyId: activeCompanyId,
+          userId: user?.id,
+        },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao copiar embarques',
+          error,
+          context: {
+            action: 'upsert',
+            table: 'event_boarding_locations',
+            eventId: editingId,
+            fromTripId: idaTrip.id,
+            toTripId: selectedTripIdForBoardings,
+          },
+        })
+      );
     } else {
-      toast.success(`${newBoardings.length} embarques copiados da ida`);
+      toast.success(`${newBoardings.length} locais copiados da ida`);
       setCopyBoardingsDialogOpen(false);
       fetchEventBoardingLocations(editingId);
     }
@@ -1282,6 +1309,18 @@ export default function Events() {
   };
 
   // Available boarding locations (not already added)
+
+  // Mantém uma única regra de ordenação para exibir viagens sempre como Ida -> Volta.
+  const sortedEventTrips = useMemo(() => {
+    const tripTypeOrder: Record<TripType, number> = { ida: 0, volta: 1 };
+    return [...eventTrips].sort((a, b) => {
+      const typeDiff = tripTypeOrder[a.trip_type] - tripTypeOrder[b.trip_type];
+      if (typeDiff !== 0) return typeDiff;
+      // Empate: preserva previsibilidade por horário e, por último, id.
+      return (a.departure_time ?? '').localeCompare(b.departure_time ?? '') || a.id.localeCompare(b.id);
+    });
+  }, [eventTrips]);
+
   const availableBoardingLocations = useMemo(() => {
     const addedIds = eventBoardingLocations.map(ebl => ebl.boarding_location_id);
     return boardingLocations.filter(bl => !addedIds.includes(bl.id));
@@ -1901,12 +1940,7 @@ export default function Events() {
                         ) : (
                           <div className="space-y-3">
                             {/* Mantemos a ordem visual Ida → Volta para evitar confusão no operador. */}
-                            {[...eventTrips]
-                              .sort((a, b) => {
-                                const order = { ida: 0, volta: 1 } as const;
-                                return order[a.trip_type] - order[b.trip_type];
-                              })
-                              .map((trip) => {
+                            {sortedEventTrips.map((trip) => {
                               const pairedTrip = trip.paired_trip_id 
                                 ? eventTrips.find(t => t.id === trip.paired_trip_id) 
                                 : null;
@@ -2004,7 +2038,7 @@ export default function Events() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__none__">Todas as viagens</SelectItem>
-                              {eventTrips.map((trip) => (
+                              {sortedEventTrips.map((trip) => (
                                 <SelectItem key={trip.id} value={trip.id}>
                                   {getTripLabelWithoutTime(trip)}
                                 </SelectItem>
@@ -2038,7 +2072,7 @@ export default function Events() {
                                     onClick={() => setCopyBoardingsDialogOpen(true)}
                                   >
                                     <Copy className="h-4 w-4 mr-2" />
-                                    Copiar da Ida
+                                    Copiar locais da Ida
                                   </Button>
                                 );
                               }
@@ -2067,9 +2101,16 @@ export default function Events() {
                             ? eventBoardingLocations.filter(ebl => ebl.trip_id === selectedTripIdForBoardings)
                             : eventBoardingLocations;
                           
-                          const sortedBoardings = [...filteredBoardings].sort(
-                            (a, b) => (a.stop_order || 1) - (b.stop_order || 1)
-                          );
+                          const sortedBoardings = [...filteredBoardings].sort((a, b) => {
+                            if (!selectedTripIdForBoardings) {
+                              const tripOrderA = a.trip?.trip_type === 'ida' ? 0 : 1;
+                              const tripOrderB = b.trip?.trip_type === 'ida' ? 0 : 1;
+                              if (tripOrderA !== tripOrderB) {
+                                return tripOrderA - tripOrderB;
+                              }
+                            }
+                            return (a.stop_order || 1) - (b.stop_order || 1);
+                          });
                           const canReorderBoardings = !isReadOnly && Boolean(selectedTripIdForBoardings);
 
                           if (sortedBoardings.length === 0) {
@@ -2659,7 +2700,7 @@ export default function Events() {
                     <SelectValue placeholder="Selecione uma viagem *" />
                   </SelectTrigger>
                   <SelectContent>
-                    {eventTrips.map((trip) => (
+                    {sortedEventTrips.map((trip) => (
                       <SelectItem key={trip.id} value={trip.id}>
                         {getTripLabelWithoutTime(trip)}
                       </SelectItem>
@@ -2821,7 +2862,7 @@ export default function Events() {
         <AlertDialog open={copyBoardingsDialogOpen} onOpenChange={setCopyBoardingsDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Copiar Embarques da Ida</AlertDialogTitle>
+              <AlertDialogTitle>Copiar Locais da Ida</AlertDialogTitle>
               <AlertDialogDescription>
                 Os locais de embarque da viagem de ida serão copiados para a volta selecionada.
               </AlertDialogDescription>
@@ -2838,7 +2879,7 @@ export default function Events() {
                 </Label>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Os horários serão copiados e você poderá ajustá-los depois.
+                Os horários não serão copiados; ajuste o horário da volta manualmente se necessário.
               </p>
             </div>
             <AlertDialogFooter>
