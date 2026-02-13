@@ -86,7 +86,8 @@ function generateSeatLayout(
     let row = 1;
 
     while (seatCount < floorCapacity) {
-      for (let col = 1; col <= cols && seatCount < floorCapacity; col++) {
+      // Lado esquerdo: ordem natural (janela -> corredor)
+      for (let col = 1; col <= leftCols && seatCount < floorCapacity; col++) {
         seatCount++;
         const label = String(seats.length + 1);
         seats.push({
@@ -97,11 +98,57 @@ function generateSeatLayout(
           status: 'disponivel',
         });
       }
+
+      // Lado direito: numeramos da janela para o corredor para que, ao renderizar, corredor tenha número maior.
+      for (let offset = 0; offset < rightCols && seatCount < floorCapacity; offset++) {
+        seatCount++;
+        const label = String(seats.length + 1);
+        const col = cols - offset;
+        seats.push({
+          label,
+          floor,
+          row_number: row,
+          column_number: col,
+          status: 'disponivel',
+        });
+      }
+
       row++;
     }
   }
 
   return seats;
+}
+
+function hasRightSideNumberingMismatch(seats: Seat[], seatsLeftSide: number): boolean {
+  const rows = new Map<number, Seat[]>();
+
+  seats.forEach((seat) => {
+    const rowSeats = rows.get(seat.row_number) ?? [];
+    rowSeats.push(seat);
+    rows.set(seat.row_number, rowSeats);
+  });
+
+  for (const rowSeats of rows.values()) {
+    const rightSideSeats = rowSeats
+      .filter((seat) => seat.column_number > seatsLeftSide)
+      .sort((a, b) => a.column_number - b.column_number);
+
+    if (rightSideSeats.length <= 1) continue;
+
+    const labels = rightSideSeats.map((seat) => Number.parseInt(seat.label, 10));
+
+    // Se houver rótulo não numérico, mantemos como válido para não forçar regeneração indevida.
+    if (labels.some(Number.isNaN)) continue;
+
+    for (let index = 1; index < labels.length; index++) {
+      if (labels[index] > labels[index - 1]) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // ---- Passenger data type ----
@@ -176,10 +223,13 @@ export default function Checkout() {
         if (existingSeats && existingSeats.length > 0) {
           // Validate layout compatibility with vehicle type
           const vehicle = (tripRes.data as Trip).vehicle!;
-          const expectedCols = (vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2)) + (vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2));
+          const seatsLeftSide = vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2);
+          const seatsRightSide = vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2);
+          const expectedCols = seatsLeftSide + seatsRightSide;
           const maxCol = Math.max(...existingSeats.map((s: any) => s.column_number));
+          const numberingMismatch = hasRightSideNumberingMismatch(existingSeats as Seat[], seatsLeftSide);
 
-          if (maxCol !== expectedCols) {
+          if (maxCol !== expectedCols || numberingMismatch) {
             // Check if any tickets exist for this trip before regenerating
             const { count: ticketCount } = await supabase
               .from('tickets')

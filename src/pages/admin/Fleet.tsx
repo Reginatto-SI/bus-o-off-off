@@ -246,7 +246,8 @@ export default function Fleet() {
         right.push(seatLabel <= capacity ? seatLabel++ : null);
       }
 
-      rows.push({ rowNumber, left, right });
+      // Comentário: no lado direito, exibimos menor número na janela e maior no corredor (padrão operacional).
+      rows.push({ rowNumber, left, right: right.reverse() });
       rowNumber++;
     }
 
