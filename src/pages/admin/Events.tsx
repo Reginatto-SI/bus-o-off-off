@@ -1153,13 +1153,38 @@ export default function Events() {
     
     const { error } = await supabase
       .from('event_boarding_locations')
-      .insert(newBoardings);
+      // Se o usuário repetir a ação, atualizamos ordem/horário da mesma viagem em vez de falhar.
+      .upsert(newBoardings, { onConflict: 'event_id,trip_id,boarding_location_id' });
     
     if (error) {
-      toast.error('Erro ao copiar embarques');
-      console.error(error);
+      logSupabaseError({
+        label: 'Erro ao copiar embarques da ida para volta (event_boarding_locations.upsert)',
+        error,
+        context: {
+          action: 'upsert',
+          table: 'event_boarding_locations',
+          eventId: editingId,
+          fromTripId: idaTrip.id,
+          toTripId: selectedTripIdForBoardings,
+          companyId: activeCompanyId,
+          userId: user?.id,
+        },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao copiar embarques',
+          error,
+          context: {
+            action: 'upsert',
+            table: 'event_boarding_locations',
+            eventId: editingId,
+            fromTripId: idaTrip.id,
+            toTripId: selectedTripIdForBoardings,
+          },
+        })
+      );
     } else {
-      toast.success(`${newBoardings.length} embarques copiados da ida`);
+      toast.success(`${newBoardings.length} locais copiados da ida`);
       setCopyBoardingsDialogOpen(false);
       fetchEventBoardingLocations(editingId);
     }
