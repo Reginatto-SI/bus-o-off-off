@@ -1,282 +1,255 @@
 
 
-# Evolucao da Tela /admin/vendas — Central de Gerenciamento
+# Evolucao de Status e Energia Visual dos Eventos
 
 ## Visao Geral
 
-Transformar a tela de vendas em uma central operacional completa, seguindo o padrao visual da tela piloto (/admin/frota). Inclui mudancas no banco de dados, novos componentes e reescrita completa da pagina.
+Quatro grandes melhorias na tela `/admin/eventos`:
+1. Modal de decisao estrategica apos primeiro salvamento
+2. Alteracao rapida de status no menu "..." do card
+3. Visual diferenciado por status (dopamina para "A Venda")
+4. Indicadores de performance e pendencias nos cards
 
 ---
 
-## Parte 1: Alteracoes no Banco de Dados
+## Parte 1: Confirmacao Inteligente no Primeiro Salvamento
 
-### 1.1 Adicionar status "cancelado" ao enum sale_status
+### Arquivo: `src/pages/admin/Events.tsx`
 
-```sql
-ALTER TYPE sale_status ADD VALUE 'cancelado';
-```
+Adicionar estado para controlar o modal pos-criacao:
 
-### 1.2 Criar tabela sale_logs (historico/auditoria)
-
-```sql
-CREATE TABLE public.sale_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sale_id uuid NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
-  action text NOT NULL,  -- 'criacao', 'status_alterado', 'passageiro_editado', 'assento_trocado', 'cancelamento'
-  description text NOT NULL,
-  old_value text,
-  new_value text,
-  performed_by uuid,  -- user id de quem fez a acao
-  company_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.sale_logs ENABLE ROW LEVEL SECURITY;
-
--- RLS: admins da empresa podem ver e criar logs
-CREATE POLICY "Admins can manage sale_logs"
-  ON public.sale_logs FOR ALL
-  USING (is_admin(auth.uid()) AND user_belongs_to_company(auth.uid(), company_id))
-  WITH CHECK (is_admin(auth.uid()) AND user_belongs_to_company(auth.uid(), company_id));
-```
-
-### 1.3 Adicionar coluna cancel_reason na tabela sales
-
-```sql
-ALTER TABLE public.sales ADD COLUMN cancel_reason text;
-ALTER TABLE public.sales ADD COLUMN cancelled_at timestamptz;
-ALTER TABLE public.sales ADD COLUMN cancelled_by uuid;
-```
-
----
-
-## Parte 2: Atualizar Tipos TypeScript
-
-### Arquivo: `src/types/database.ts`
-
-- Adicionar `'cancelado'` ao tipo `SaleStatus`
-- Adicionar campos `cancel_reason`, `cancelled_at`, `cancelled_by` ao interface `Sale`
-- Criar interface `SaleLog`
-
----
-
-## Parte 3: Atualizar StatusBadge
-
-### Arquivo: `src/components/ui/StatusBadge.tsx`
-
-Adicionar mapeamento para `cancelado`:
-```
-cancelado: { label: 'Cancelado', className: 'status-badge-cancelled' }
-```
-
-Adicionar estilo CSS correspondente (vermelho) no index.css.
-
----
-
-## Parte 4: Reescrita Completa da Pagina Sales.tsx
-
-### Estrutura (seguindo padrao Fleet.tsx)
-
-```text
-+------------------------------------------------------+
-| PageHeader: "Vendas" + botoes Excel/PDF/Atualizar    |
-+------------------------------------------------------+
-| StatsCards: Total | Arrecadado | Pagas | Reservadas  |
-|            | Canceladas                               |
-+------------------------------------------------------+
-| FilterCard: Busca + Selects + Filtros Avancados      |
-+------------------------------------------------------+
-| Tabela com ActionsDropdown por linha                  |
-+------------------------------------------------------+
-| ExportExcelModal + ExportPDFModal                    |
-+------------------------------------------------------+
-```
-
-### 4.1 KPIs (StatsCards)
-
-Calculos sobre `filteredSales`:
-- **Total de vendas**: contagem
-- **Total arrecadado**: soma (quantity * unit_price) — visivel apenas para Gerente (canViewFinancials)
-- **Vendas pagas**: contagem onde status = 'pago'
-- **Vendas reservadas**: contagem onde status = 'reservado'
-- **Canceladas**: contagem onde status = 'cancelado'
-
-### 4.2 Filtros
-
-Interface `SalesFilters`:
 ```typescript
-interface SalesFilters {
-  search: string;         // busca por nome ou CPF do cliente
-  status: 'all' | SaleStatus;
-  eventId: string;        // 'all' ou UUID do evento
-  sellerId: string;       // 'all' ou UUID do vendedor
-  dateFrom: string;       // data inicial
-  dateTo: string;         // data final
+const [postCreateDialogOpen, setPostCreateDialogOpen] = useState(false);
+const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+```
+
+No `handleSubmit`, apos criar evento com sucesso (bloco `if (!editingId && newEventId)`), ao inves de apenas redirecionar para aba "viagens", tambem abrir o modal de decisao:
+
+```typescript
+if (!editingId && newEventId) {
+  setEditingId(newEventId);
+  loadEventData(newEventId);
+  setActiveTab('viagens');
+  setNewlyCreatedEventId(newEventId);
+  setPostCreateDialogOpen(true);
 }
 ```
 
-Filtros simples (grid principal):
-- Busca (nome/CPF)
-- Status
-- Evento (select carregado do banco)
+Novo AlertDialog com duas opcoes:
+- **"Ativar para Venda"**: verifica `publishChecklist.valid`. Se valido, atualiza status para `a_venda` e exibe toast animado. Se invalido, exibe aviso com itens pendentes e permite apenas Rascunho.
+- **"Manter como Rascunho"**: fecha o dialog e mantem status atual.
 
-Filtros avancados (collapsible):
-- Vendedor
-- Data inicial
-- Data final
+---
 
-### 4.3 Colunas da Tabela
+## Parte 2: Alteracao Rapida de Status no Card
 
-| Coluna | Dados |
-|--------|-------|
-| Data | created_at formatado dd/MM/yy HH:mm |
-| Evento | event.name |
-| Cliente | customer_name + customer_cpf (sublinhado) |
-| Veiculo | trip.vehicle (tipo + placa) |
-| Local Embarque | boarding_location.name |
-| Qtd | quantity |
-| Valor | quantity * unit_price (apenas Gerente) |
-| Vendedor | seller.name ou "-" |
-| Status | StatusBadge |
-| Acoes | ActionsDropdown |
+### Arquivo: `src/pages/admin/Events.tsx`
 
-### 4.4 Query de Dados
+Modificar a funcao `getEventActions` (linha 1270) para adicionar opcoes de troca de status:
+
+**Regras de transicao:**
+- Rascunho -> "Colocar a Venda" (verifica publicChecklist antes; se falhar, exibe toast com pendencias)
+- A Venda -> "Voltar para Rascunho" e "Encerrar Evento"
+- Encerrado -> nenhuma opcao de status (apenas visualizar)
+
+Para validar publicacao diretamente do card (sem abrir modal), sera necessario fazer uma query rapida para verificar os requisitos minimos do evento: viagens existentes, embarques de ida existentes, e preco > 0. Isso porque o `publishChecklist` atual depende de dados carregados apenas dentro do modal de edicao.
+
+Implementacao:
+```typescript
+// No getEventActions, apos as acoes existentes:
+if (event.status === 'rascunho') {
+  actions.push({
+    label: 'Colocar a Venda',
+    icon: ShoppingBag,
+    onClick: () => handleQuickStatusChange(event, 'a_venda'),
+  });
+}
+if (event.status === 'a_venda') {
+  actions.push({
+    label: 'Voltar para Rascunho',
+    icon: FileEdit,
+    onClick: () => handleQuickStatusChange(event, 'rascunho'),
+  });
+  actions.push({
+    label: 'Encerrar Evento',
+    icon: CheckCircle,
+    onClick: () => handleQuickStatusChange(event, 'encerrado'),
+  });
+}
+```
+
+Nova funcao `handleQuickStatusChange`:
+- Para `a_venda`: query para validar requisitos (nome, data, cidade ja estao no objeto; precisa verificar trips, boardings, preco). Se invalido, toast com lista do que falta. Se valido, update + toast de sucesso animado.
+- Para `rascunho`: update direto.
+- Para `encerrado`: AlertDialog de confirmacao antes de encerrar.
+
+---
+
+## Parte 3: Visual Diferenciado por Status nos Cards
+
+### Arquivo: `src/pages/admin/Events.tsx`
+
+No card de evento (linha 1562), adicionar classes condicionais baseadas no status:
 
 ```typescript
-supabase
+<Card 
+  key={event.id} 
+  className={cn(
+    'card-corporate h-full overflow-hidden transition-all duration-300',
+    event.status === 'a_venda' && 'ring-1 ring-success/30 shadow-[0_0_15px_-3px_hsl(var(--success)/0.15)]',
+    event.status === 'encerrado' && 'opacity-70',
+    event.status === 'rascunho' && 'border-dashed',
+  )}
+>
+```
+
+### Arquivo: `src/index.css`
+
+Adicionar animacao sutil de entrada para cards ativos:
+
+```css
+@keyframes card-glow-pulse {
+  0%, 100% { box-shadow: 0 0 15px -3px hsl(var(--success) / 0.1); }
+  50% { box-shadow: 0 0 20px -3px hsl(var(--success) / 0.2); }
+}
+
+.card-active-glow {
+  animation: card-glow-pulse 3s ease-in-out infinite;
+}
+```
+
+### StatusBadge Visual Upgrade
+
+Para o status `a_venda`, adicionar um pequeno indicador pulsante (dot) ao lado do badge para reforcar que esta "ao vivo":
+
+```typescript
+// Dentro do card, ao lado do StatusBadge quando a_venda:
+{event.status === 'a_venda' && (
+  <span className="relative flex h-2 w-2 ml-1">
+    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+    <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+  </span>
+)}
+```
+
+---
+
+## Parte 4: Indicadores de Performance e Pendencias
+
+### 4.1 Indicador de % Vendido
+
+Para exibir "X% vendido" no card, precisamos consultar vendas por evento. Duas abordagens:
+
+**Abordagem escolhida**: Fazer uma query agregada ao carregar eventos para obter contagem de tickets vendidos por evento. Isso evita N+1 queries.
+
+```typescript
+// Apos fetchEvents, buscar contagem de tickets por evento:
+const { data: salesData } = await supabase
   .from('sales')
-  .select(`
-    *,
-    event:events(*),
-    trip:trips(*, vehicle:vehicles(*)),
-    boarding_location:boarding_locations(*),
-    seller:sellers(*)
-  `)
-  .order('created_at', { ascending: false });
+  .select('event_id, quantity')
+  .in('status', ['reservado', 'pago']);
+
+// Agrupar por event_id
+const salesByEvent = new Map<string, number>();
+salesData?.forEach(sale => {
+  const current = salesByEvent.get(sale.event_id) || 0;
+  salesByEvent.set(sale.event_id, current + sale.quantity);
+});
 ```
 
-Nota: a query atual nao busca `trip` com `vehicle`. Precisamos adicionar para mostrar veiculo na tabela.
+No card, exibir barra de progresso discreta:
 
-### 4.5 Exportacao
-
-Colunas de exportacao:
 ```typescript
-const exportColumns: ExportColumn[] = [
-  { key: 'created_at', label: 'Data', format: (v) => format(...) },
-  { key: 'event_name', label: 'Evento' },
-  { key: 'customer_name', label: 'Cliente' },
-  { key: 'customer_cpf', label: 'CPF' },
-  { key: 'customer_phone', label: 'Telefone' },
-  { key: 'vehicle_info', label: 'Veiculo' },
-  { key: 'boarding_location_name', label: 'Local Embarque' },
-  { key: 'quantity', label: 'Quantidade' },
-  { key: 'total_value', label: 'Valor Total' },
-  { key: 'seller_name', label: 'Vendedor' },
-  { key: 'status', label: 'Status' },
-];
+// Calcular capacidade total do evento (soma de veiculos unicos)
+const totalSold = salesByEvent.get(event.id) || 0;
+const totalCapacity = /* soma capacidades dos veiculos */;
+const percentSold = totalCapacity > 0 ? Math.round((totalSold / totalCapacity) * 100) : 0;
+
+// No card footer:
+{event.status === 'a_venda' && totalCapacity > 0 && (
+  <div className="mt-2">
+    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+      <span>{totalSold} vendido(s)</span>
+      <span>{percentSold}%</span>
+    </div>
+    <Progress value={percentSold} className="h-1.5" />
+  </div>
+)}
 ```
 
-Os dados para export precisam ser "achatados" (flat) a partir dos objetos aninhados.
+Para obter capacidade por evento, usamos os dados de `trips` ja presentes em `EventWithTrips`. Precisamos adicionar `capacity` ao select dos trips:
+
+```typescript
+// Alterar fetchEvents para incluir capacity:
+.select(`*, trips:trips(vehicle_id, driver_id, assistant_driver_id, capacity)`)
+```
+
+### 4.2 Indicador de Pendencias (Rascunho)
+
+Para rascunhos, verificar se faltam itens para publicar. Os dados basicos (nome, data, cidade, preco) ja estao no evento. Faltam verificar trips e boardings.
+
+Usando os dados ja carregados:
+- `event.trips.length === 0` -> falta frota
+- `event.unit_price <= 0` -> falta preco
+
+No card, exibir alerta sutil:
+
+```typescript
+{event.status === 'rascunho' && (
+  (() => {
+    const pendencias: string[] = [];
+    if (!event.trips?.length) pendencias.push('frota');
+    if (event.unit_price <= 0) pendencias.push('preco');
+    if (pendencias.length === 0) return null;
+    return (
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-warning">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        <span>Faltam: {pendencias.join(', ')}</span>
+      </div>
+    );
+  })()
+)}
+```
+
+### 4.3 Microfeedback ao Ativar Evento
+
+Ao mudar status para `a_venda` com sucesso (tanto pelo modal de primeiro salvamento quanto pela troca rapida):
+
+```typescript
+toast.success('Evento publicado com sucesso! O evento ja esta visivel no portal.', {
+  duration: 4000,
+  icon: '🚀',
+});
+```
 
 ---
 
-## Parte 5: Menu de Acoes (ActionsDropdown)
-
-Para cada venda, o menu tera as seguintes opcoes:
-
-### 5.1 Ver Detalhes
-
-Abre modal com abas (padrao piloto):
-
-**Aba "Dados da Venda":**
-- Cliente (nome, CPF, telefone)
-- Evento
-- Veiculo
-- Local de embarque
-- Quantidade / Valor unitario / Valor total
-- Status atual
-- Data da compra
-- Vendedor (se houver)
-
-**Aba "Passageiros":**
-- Lista de tickets vinculados (query `tickets` WHERE `sale_id`)
-- Cada passageiro: Nome, CPF, Assento, Status de embarque
-- Botao "Editar" em cada passageiro (abre sub-modal)
-
-**Aba "Historico":**
-- Lista de `sale_logs` ordenados por data
-- Cada entrada: data, acao, descricao, usuario responsavel
-
-### 5.2 Editar Passageiro
-
-Sub-modal com:
-- Nome completo (editavel)
-- CPF (editavel, com validacao)
-- Ao salvar: atualiza registro em `tickets`, cria log em `sale_logs`
-
-Nota: troca de assento NAO sera implementada neste momento (complexidade alta, requer verificacao de disponibilidade em tempo real). Fica como evolucao futura.
-
-### 5.3 Cancelar Venda
-
-Fluxo:
-1. Confirmar via AlertDialog
-2. Campo obrigatorio: motivo do cancelamento
-3. Ao confirmar:
-   - Atualizar `sales.status` para `cancelado`, preencher `cancel_reason`, `cancelled_at`, `cancelled_by`
-   - Deletar tickets vinculados (libera assentos)
-   - Criar log em `sale_logs`
-   - Toast de sucesso
-4. Regra: nao permitir cancelar se algum ticket tiver `boarding_status` diferente de `pendente`
-
-### 5.4 Alterar Status (somente Gerente)
-
-Opcoes:
-- Marcar como Pago (se status atual = 'reservado')
-- Reverter para Reservado (se status atual = 'pago')
-
-Ao alterar: cria log em `sale_logs` com old_value/new_value.
-
-Visibilidade: este item so aparece no menu se `isGerente === true`.
-
-### 5.5 Copiar Link da Passagem
-
-- Gera URL `/confirmacao/{sale_id}` e copia para clipboard
-- Toast "Link copiado!"
-
----
-
-## Parte 6: Arquivos Envolvidos
+## Parte 5: Resumo dos Arquivos Alterados
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| Migracao SQL | Criar | Enum cancelado, tabela sale_logs, colunas em sales |
-| `src/types/database.ts` | Editar | SaleStatus + Sale + SaleLog |
-| `src/components/ui/StatusBadge.tsx` | Editar | Adicionar cancelado |
-| `src/index.css` | Editar | Adicionar status-badge-cancelled |
-| `src/pages/admin/Sales.tsx` | Reescrever | Pagina completa seguindo padrao Fleet |
+| `src/pages/admin/Events.tsx` | Editar | Modal pos-criacao, acoes rapidas de status no card, visual condicional, indicadores |
+| `src/index.css` | Editar | Animacao glow sutil para cards ativos |
 
-Tudo em um unico arquivo `Sales.tsx` (modais inline como no Fleet.tsx), sem criar componentes separados para manter o padrao do projeto.
+Nenhuma alteracao de banco de dados necessaria. Todas as mudancas sao no frontend.
 
 ---
 
 ## Regras de Seguranca
 
-- Todas as queries respeitam RLS (empresa ativa via user_belongs_to_company)
-- sale_logs protegido por RLS (admins da empresa)
-- Operador nao visualiza valores financeiros (canViewFinancials = false)
-- Apenas Gerente pode alterar status manualmente
-- Cancelamento protegido contra vendas ja embarcadas
+- Alteracao de status usa mesma query `supabase.from('events').update(...)` ja protegida por RLS
+- Validacao de publicacao (checklist) mantida identica
+- Encerramento protegido por confirmacao via AlertDialog
+- Nenhum dado financeiro exposto adicionalmente
 
 ---
 
-## Resumo das Entregas
+## Resultado Esperado
 
-1. Status "cancelado" no banco + campos de cancelamento
-2. Tabela sale_logs com RLS
-3. PageHeader + StatsCards + FilterCard padrao piloto
-4. Tabela reestruturada com todas as colunas solicitadas
-5. ActionsDropdown funcional com: Ver Detalhes, Editar Passageiro, Cancelar, Alterar Status, Copiar Link
-6. Modal de detalhes com 3 abas (Dados, Passageiros, Historico)
-7. Exportacao Excel/PDF padrao
-8. StatusBadge com "Cancelado" (vermelho)
+- Primeiro salvamento: decisao imediata sobre publicacao
+- Menu "...": troca de status sem abrir modal de edicao
+- Cards "A Venda": glow sutil verde, dot pulsante, barra de progresso de vendas
+- Cards "Rascunho": borda tracejada, alerta de pendencias
+- Cards "Encerrado": opacidade reduzida, sem animacoes
+- Toast animado ao publicar evento
 
