@@ -1,134 +1,115 @@
 
 
-# Ajuste Visual -- Foco na Empresa Organizadora
+# Reestruturacao Profissional White-Label -- Passagens com Identidade Total da Empresa
 
-## Resumo
+## Diagnostico dos dados
 
-Todas as telas publicas de passagem (Confirmacao, Consulta, PDF e imagem QR) passarao a exibir a identidade da empresa organizadora do evento em vez do aplicativo. O evento ja esta vinculado a uma empresa via `company_id`, entao basta carregar esses dados e propaga-los.
-
----
-
-## 1. Dados da empresa -- como obter
-
-O evento possui `company_id`. Nas telas publicas, ao carregar o evento, faremos um join com `companies` para obter:
+**Campos ja existentes na tabela `companies`:**
+- `name`, `trade_name` (razao social / nome fantasia)
+- `cnpj`
+- `phone`, `whatsapp`
+- `address`, `city`, `state`
 - `logo_url`
-- `trade_name` (ou `name` como fallback)
-- `city`, `state`
 - `primary_color`
 
-A tabela `companies` nao tem politica SELECT publica. Sera necessario adicionar uma politica RLS que permita leitura publica limitada (somente campos de identidade visual) para empresas ativas com eventos publicos.
+**Campo inexistente:** `slogan` (nao existe). Sera adicionado como campo opcional via migracao.
+
+Nenhuma alteracao em logica de pagamento, QR Code ou webhook.
 
 ---
 
-## 2. Migracao de banco
+## 1. Migracao de banco
 
-Adicionar politica RLS na tabela `companies`:
+Adicionar coluna `slogan` na tabela `companies`:
 
 ```sql
-CREATE POLICY "Public can view companies with public events"
-  ON public.companies FOR SELECT
-  USING (
-    is_active = true
-    AND EXISTS (
-      SELECT 1 FROM events e
-      WHERE e.company_id = companies.id
-      AND e.status = 'a_venda'
-    )
-  );
+ALTER TABLE public.companies ADD COLUMN slogan text;
 ```
 
-Isso permite que o frontend consulte dados da empresa organizadora sem autenticacao.
+Campo opcional. Se preenchido, substitui as frases motivacionais fixas no PDF.
 
 ---
 
-## 3. Ampliar TicketCardData com dados da empresa
+## 2. Ampliar TicketCardData com dados completos da empresa
 
-Adicionar campos ao tipo `TicketCardData`:
-- `companyName: string`
-- `companyLogoUrl: string | null`
-- `companyCity: string | null`
-- `companyState: string | null`
-- `companyPrimaryColor: string | null`
+Novos campos no tipo `TicketCardData`:
+
+- `companyCnpj: string | null`
+- `companyPhone: string | null`
+- `companyWhatsapp: string | null`
+- `companyAddress: string | null`
+- `companySlogan: string | null`
 
 **Arquivo:** `src/components/public/TicketCard.tsx`
 
 ---
 
-## 4. Tela de Confirmacao (`Confirmation.tsx`)
+## 3. TicketCard -- Redesenho visual profissional
 
-### Alteracoes:
-- Buscar `company` junto com o evento (join ou query separada via `sale.event.company_id`)
-- Propagar dados da empresa para cada `TicketCard`
-- No topo da secao de passagens, exibir bloco com:
-  - Logo da empresa (se disponivel)
-  - Nome fantasia
-  - Cidade/UF
-  - Texto "Transporte oficial do evento"
-- Remover qualquer referencia visual ao aplicativo
+### Cabecalho do card:
+- Logo (maior, ~48px) a esquerda
+- Nome da empresa em destaque (font-semibold, tamanho maior)
+- CNPJ formatado abaixo do nome
+- Cidade/UF
+- Telefone e WhatsApp com icones discretos (Phone, MessageCircle)
+- Barra superior colorida com `primary_color`
+
+### Corpo:
+- QR Code centralizado (sem alteracao de logica)
+- Badge de status refinado
+- Blocos de informacao organizados
+
+### Imagem QR (handleDownloadImage):
+- Topo: nome da empresa, cidade/UF, CNPJ (fonte menor)
+- Centro: QR Code grande
+- Base: evento, assento, data
+- Layout de mini-ingresso profissional
+
+**Arquivo:** `src/components/public/TicketCard.tsx`
 
 ---
 
-## 5. Componente TicketCard (visual)
+## 4. PDF -- Redesenho profissional
 
-### Alteracoes:
-- Adicionar no topo do card: logo + nome da empresa com estilo discreto
-- Usar `primary_color` da empresa como cor de destaque na barra superior ou lateral do card
-- Manter QR Code, dados do passageiro e botoes de acao
-- Badge de status com visual mais refinado
-
----
-
-## 6. PDF da Passagem (`ticketPdfGenerator.ts`)
-
-### Cabecalho novo:
-- Logo da empresa organizadora (lado esquerdo) em vez do logo do app
+### Cabecalho:
+- Logo da empresa (esquerda)
 - Nome da empresa em destaque
-- Cidade/UF abaixo
-- Frase motivacional fixa (rotativa entre opcoes):
-  - "Prepare-se para a melhor viagem da sua vida!"
-  - "Nos vemos no embarque!"
-  - "Partiu viver essa experiencia!"
-- Cor do cabecalho usando `primary_color` da empresa
+- CNPJ formatado
+- Endereco (se existir)
+- Telefone | WhatsApp
+- Cidade/UF
+- Linha divisoria elegante
+- Frase: slogan da empresa (se existir) ou frase motivacional rotativa
 
-### Layout:
-- Informacoes em blocos visuais claros e organizados
-- QR Code centralizado com bom tamanho
-- Badge "PAGA" mais elegante (com cantos arredondados e cor solida)
-- Blocos separados: Evento, Data, Passageiro, CPF, Assento, Local, Horario
+### Corpo:
+- QR Code centralizado (tamanho confortavel)
+- Badge "PAGA" com cantos arredondados e cor solida
+- Blocos organizados: Evento, Data, Passageiro, CPF mascarado, Assento, Local de embarque, Horario
 
 ### Rodape:
-- Apenas "Emitido digitalmente" (sem propaganda do app)
+- Apenas "Documento emitido digitalmente."
 
-### Tecnico:
-- Receber dados da empresa como parametro adicional
-- Usar `loadImageAsBase64` de `pdfUtils.ts` para carregar logo da empresa via URL
-- Fallback: se logo nao disponivel, exibir apenas nome textual
+**Arquivo:** `src/lib/ticketPdfGenerator.ts`
 
 ---
 
-## 7. Imagem QR Code (PNG)
+## 5. Tela de Confirmacao
 
-### Alteracoes no `handleDownloadImage` do TicketCard:
-- Topo: logo da empresa (se disponivel) + nome da empresa
-- Centro: QR Code grande
-- Abaixo: Evento + Assento + Nome do passageiro
-- Layout equilibrado com fundo branco e boa tipografia
-- Parecer um "ingresso oficial"
+- Buscar dados completos da empresa (incluindo cnpj, phone, whatsapp, address, slogan)
+- Propagar todos os novos campos para cada TicketCard
+- Bloco de identidade da empresa no topo dos tickets com dados completos
 
-### Tecnico:
-- Carregar logo da empresa via Image() e desenhar no canvas
-- Se logo indisponivel, exibir nome da empresa em texto grande
+**Arquivo:** `src/pages/public/Confirmation.tsx`
 
 ---
 
-## 8. Tela Consultar Passagens (`TicketLookup.tsx`)
+## 6. Tela Consultar Passagens
 
-### Alteracoes:
-- Ao buscar tickets, carregar tambem os dados da empresa vinculada ao evento
-- Exibir no topo dos resultados: logo + nome da empresa
-- Cada card de passagem recebe dados da empresa
-- Melhorar espacamento e hierarquia visual
-- Deve parecer que a consulta e feita no sistema da empresa
+- Buscar dados completos da empresa
+- Bloco de identidade com CNPJ, telefone, WhatsApp
+- Propagar dados completos para cada TicketCard
+
+**Arquivo:** `src/pages/public/TicketLookup.tsx`
 
 ---
 
@@ -136,21 +117,22 @@ Adicionar campos ao tipo `TicketCardData`:
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/public/TicketCard.tsx` | Adicionar campos da empresa ao tipo, exibir logo/nome/cor no card, melhorar visual da imagem QR |
-| `src/lib/ticketPdfGenerator.ts` | Cabecalho com empresa, frase motivacional, layout profissional, rodape discreto |
-| `src/pages/public/Confirmation.tsx` | Buscar dados da empresa, propagar para TicketCards, bloco de identidade no topo |
-| `src/pages/public/TicketLookup.tsx` | Buscar empresa, exibir identidade, melhorar layout |
+| `src/components/public/TicketCard.tsx` | Ampliar tipo, redesenho do card com dados completos, redesenho da imagem QR |
+| `src/lib/ticketPdfGenerator.ts` | Cabecalho com dados completos da empresa, slogan, layout profissional |
+| `src/pages/public/Confirmation.tsx` | Buscar e propagar cnpj, phone, whatsapp, address, slogan |
+| `src/pages/public/TicketLookup.tsx` | Buscar e propagar dados completos, bloco de identidade melhorado |
+| `src/types/database.ts` | Atualizar tipo Company se necessario |
 
 ## Migracao de banco
 
 | Alteracao | Descricao |
 |-----------|-----------|
-| Politica RLS em `companies` | Permitir SELECT publico para empresas ativas com eventos a venda |
+| Coluna `slogan` em `companies` | Campo texto opcional para frase personalizada |
 
 ## O que NAO sera alterado
 
 - Logica de pagamento, QR Code ou webhook
 - Estrutura de rotas
-- Logica de validacao de assentos
 - Componentes do painel administrativo
+- StatusBadge (reutilizado como esta)
 
