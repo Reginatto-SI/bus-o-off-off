@@ -14,6 +14,8 @@ interface SeatMapProps {
   floors: number;
   seatsLeftSide: number;
   seatsRightSide: number;
+  loadingStatus?: boolean;
+  interactionDisabled?: boolean;
 }
 
 export function SeatMap({
@@ -25,6 +27,8 @@ export function SeatMap({
   floors,
   seatsLeftSide,
   seatsRightSide,
+  loadingStatus = false,
+  interactionDisabled = false,
 }: SeatMapProps) {
   const [activeFloor, setActiveFloor] = useState(1);
 
@@ -54,6 +58,10 @@ export function SeatMap({
   };
 
   const handleSeatClick = (seatId: string) => {
+    if (interactionDisabled) {
+      return;
+    }
+
     if (selectedSeats.includes(seatId)) {
       onSelectionChange(selectedSeats.filter((id) => id !== seatId));
     } else {
@@ -86,6 +94,10 @@ export function SeatMap({
       <div className="text-center text-sm font-medium text-foreground">
         Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
       </div>
+
+      {loadingStatus && (
+        <p className="text-center text-xs text-muted-foreground">Carregando assentos...</p>
+      )}
 
       {/* Vehicle body */}
       <div className="relative max-w-[320px] mx-auto">
