@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Seat } from '@/types/database';
 import { SeatButton, SeatState } from './SeatButton';
 import { SeatLegend } from './SeatLegend';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 
 interface SeatMapProps {
   seats: Seat[];
@@ -31,6 +32,23 @@ export function SeatMap({
   interactionDisabled = false,
 }: SeatMapProps) {
   const [activeFloor, setActiveFloor] = useState(1);
+  const [showSynced, setShowSynced] = useState(false);
+  const [wasLoading, setWasLoading] = useState(false);
+
+  // Track loading → loaded transition to show "synced" indicator
+  useEffect(() => {
+    if (loadingStatus || interactionDisabled) {
+      setWasLoading(true);
+      setShowSynced(false);
+    } else if (wasLoading) {
+      setShowSynced(true);
+      setWasLoading(false);
+      const timer = setTimeout(() => setShowSynced(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [loadingStatus, interactionDisabled, wasLoading]);
+
+  const isBlocked = loadingStatus || interactionDisabled;
 
   const floorSeats = seats
     .filter((s) => s.floor === activeFloor)
@@ -42,7 +60,6 @@ export function SeatMap({
   const maxCol = Math.max(...floorSeats.map((s) => s.column_number), 0);
   const totalCols = maxCol;
 
-  // Group seats by row
   const rows = new Map<number, Seat[]>();
   floorSeats.forEach((s) => {
     const existing = rows.get(s.row_number) || [];
@@ -58,9 +75,7 @@ export function SeatMap({
   };
 
   const handleSeatClick = (seatId: string) => {
-    if (interactionDisabled) {
-      return;
-    }
+    if (isBlocked) return;
 
     if (selectedSeats.includes(seatId)) {
       onSelectionChange(selectedSeats.filter((id) => id !== seatId));
@@ -73,8 +88,6 @@ export function SeatMap({
     }
   };
 
-  // Build row rendering: left seats | corridor | right seats
-  // Comentário: corredor central respeita configuração do veículo (2x2, 2x1, 3x1 etc.).
   const corridorAfterCol = Math.max(1, seatsLeftSide);
   const rightSideColumnCount = Math.max(1, seatsRightSide);
 
@@ -95,12 +108,25 @@ export function SeatMap({
         Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
       </div>
 
-      {loadingStatus && (
-        <p className="text-center text-xs text-muted-foreground">Carregando assentos...</p>
+      {/* Synced indicator */}
+      {showSynced && (
+        <div className="flex items-center justify-center gap-1.5 text-xs text-green-600 animate-in fade-in duration-300">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span>Assentos sincronizados</span>
+        </div>
       )}
 
       {/* Vehicle body */}
       <div className="relative max-w-[320px] mx-auto">
+        {/* Loading overlay */}
+        {isBlocked && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm rounded-2xl">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+            <p className="text-sm font-medium text-foreground">Carregando assentos...</p>
+            <p className="text-xs text-muted-foreground mt-1">Sincronizando disponibilidade</p>
+          </div>
+        )}
+
         {/* Windshield shape */}
         <div className="bg-muted/30 border-2 border-border rounded-t-[2.5rem] rounded-b-2xl overflow-hidden">
           {/* Driver row */}
