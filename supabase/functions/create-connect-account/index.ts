@@ -120,11 +120,24 @@ serve(async (req) => {
     // Check if onboarding is already complete
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
-    // Sync DB flag if Stripe confirms full activation
-    if (account.details_submitted && account.charges_enabled && !company.stripe_onboarding_complete) {
+    // Extract capabilities status
+    const transfersActive = account.capabilities?.transfers === 'active';
+    const paymentsActive = account.capabilities?.card_payments === 'active';
+    const capabilitiesReady = transfersActive && paymentsActive;
+
+    // Sync DB flag only if capabilities are fully active
+    if (capabilitiesReady && !company.stripe_onboarding_complete) {
       await supabaseAdmin
         .from("companies")
         .update({ stripe_onboarding_complete: true })
+        .eq("id", company_id);
+    }
+
+    // If DB says complete but capabilities aren't ready, correct the flag
+    if (!capabilitiesReady && company.stripe_onboarding_complete) {
+      await supabaseAdmin
+        .from("companies")
+        .update({ stripe_onboarding_complete: false })
         .eq("id", company_id);
     }
 
@@ -138,6 +151,11 @@ serve(async (req) => {
           JSON.stringify({
             already_complete: true,
             dashboard_url: loginLink.url,
+            capabilities_ready: capabilitiesReady,
+            capabilities: {
+              transfers: account.capabilities?.transfers || 'inactive',
+              card_payments: account.capabilities?.card_payments || 'inactive',
+            },
           }),
           {
             status: 200,

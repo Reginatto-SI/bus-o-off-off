@@ -66,7 +66,7 @@ serve(async (req) => {
 
     if (!company.stripe_account_id || !company.stripe_onboarding_complete) {
       return new Response(
-        JSON.stringify({ error: "Company has no Stripe account configured" }),
+        JSON.stringify({ error: "Company has no Stripe account configured", error_code: "no_stripe_account" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -77,6 +77,28 @@ serve(async (req) => {
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
     });
+
+    // Pre-validate capabilities before creating checkout session
+    const connectedAccount = await stripe.accounts.retrieve(company.stripe_account_id);
+    const transfersActive = connectedAccount.capabilities?.transfers === 'active';
+    const paymentsActive = connectedAccount.capabilities?.card_payments === 'active';
+
+    if (!transfersActive || !paymentsActive) {
+      return new Response(
+        JSON.stringify({
+          error: "A conta Stripe da empresa ainda não está totalmente ativa. As capabilities 'transfers' e 'card_payments' precisam estar ativas. Aguarde a aprovação do Stripe ou entre em contato com o administrador.",
+          error_code: "capabilities_not_ready",
+          capabilities: {
+            transfers: connectedAccount.capabilities?.transfers || 'inactive',
+            card_payments: connectedAccount.capabilities?.card_payments || 'inactive',
+          },
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const totalAmountCents = Math.round(sale.unit_price * sale.quantity * 100);
     const applicationFeeCents = Math.round(totalAmountCents * PLATFORM_FEE_PERCENT);

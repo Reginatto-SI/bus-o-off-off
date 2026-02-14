@@ -622,13 +622,39 @@ export default function Checkout() {
         window.location.href = checkoutData.url;
         return;
       }
-    } catch (err) {
-      // Stripe not configured for this company — fallback to confirmation
-      console.log('Stripe checkout not available, falling back to confirmation:', err);
-    }
 
-    // Fallback: go to confirmation without payment
-    navigate(`/confirmacao/${sale.id}`);
+      // Parse error response
+      const errorCode = checkoutData?.error_code;
+      const errorMessage = checkoutData?.error;
+
+      if (errorCode === 'no_stripe_account') {
+        // Company has no Stripe — fallback to reservation
+        console.log('Stripe not configured, falling back to confirmation');
+        navigate(`/confirmacao/${sale.id}`);
+        return;
+      }
+
+      if (errorCode === 'capabilities_not_ready') {
+        // Capabilities not active — show error, don't create false reservation
+        toast.error('O pagamento online não está disponível no momento. A conta de pagamentos da empresa ainda está sendo ativada. Tente novamente mais tarde.');
+        // Delete the sale and tickets since payment can't proceed
+        await supabase.from('tickets').delete().eq('sale_id', sale.id);
+        await supabase.from('sales').delete().eq('id', sale.id);
+        setSubmitting(false);
+        return;
+      }
+
+      // Generic error
+      toast.error(errorMessage || 'Erro ao iniciar pagamento. Tente novamente.');
+      await supabase.from('tickets').delete().eq('sale_id', sale.id);
+      await supabase.from('sales').delete().eq('id', sale.id);
+      setSubmitting(false);
+      return;
+    } catch (err) {
+      // Network error or edge function unavailable — fallback to confirmation
+      console.log('Stripe checkout not available, falling back to confirmation:', err);
+      navigate(`/confirmacao/${sale.id}`);
+    }
   };
 
   // Format the departure time for display
