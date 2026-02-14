@@ -81,6 +81,8 @@ export type Database = {
           phone: string | null
           primary_color: string | null
           state: string | null
+          stripe_account_id: string | null
+          stripe_onboarding_complete: boolean
           trade_name: string | null
           updated_at: string
           website: string | null
@@ -102,6 +104,8 @@ export type Database = {
           phone?: string | null
           primary_color?: string | null
           state?: string | null
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
           trade_name?: string | null
           updated_at?: string
           website?: string | null
@@ -123,6 +127,8 @@ export type Database = {
           phone?: string | null
           primary_color?: string | null
           state?: string | null
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
           trade_name?: string | null
           updated_at?: string
           website?: string | null
@@ -432,6 +438,8 @@ export type Database = {
           quantity: number
           seller_id: string | null
           status: Database["public"]["Enums"]["sale_status"]
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
           trip_id: string
           unit_price: number
           updated_at: string
@@ -451,6 +459,8 @@ export type Database = {
           quantity: number
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           trip_id: string
           unit_price?: number
           updated_at?: string
@@ -470,6 +480,8 @@ export type Database = {
           quantity?: number
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
           trip_id?: string
           unit_price?: number
           updated_at?: string

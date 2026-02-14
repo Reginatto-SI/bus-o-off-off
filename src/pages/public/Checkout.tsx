@@ -610,6 +610,24 @@ export default function Checkout() {
       return;
     }
 
+    // Try to create Stripe checkout session
+    try {
+      const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
+        'create-checkout-session',
+        { body: { sale_id: sale.id } }
+      );
+
+      if (!checkoutError && checkoutData?.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = checkoutData.url;
+        return;
+      }
+    } catch (err) {
+      // Stripe not configured for this company — fallback to confirmation
+      console.log('Stripe checkout not available, falling back to confirmation:', err);
+    }
+
+    // Fallback: go to confirmation without payment
     navigate(`/confirmacao/${sale.id}`);
   };
 
@@ -880,10 +898,10 @@ export default function Checkout() {
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Finalizando...
+                  Processando...
                 </>
               ) : (
-                'Finalizar compra'
+                'Ir para pagamento'
               )}
             </Button>
           </>

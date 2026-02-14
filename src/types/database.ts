@@ -31,6 +31,9 @@ export interface Company {
   website: string | null;
   address: string | null;
   notes: string | null;
+  // Stripe Connect
+  stripe_account_id: string | null;
+  stripe_onboarding_complete: boolean;
   // Sistema
   is_active: boolean;
   created_at: string;
@@ -253,6 +256,9 @@ export interface Sale {
   cancel_reason: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
+  // Stripe
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
   created_at: string;
   updated_at: string;
   event?: Event;
