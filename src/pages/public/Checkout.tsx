@@ -456,12 +456,49 @@ export default function Checkout() {
     await fetchOccupiedSeats(tripId, () => true);
   };
 
+  // Revalidate seats against the database, returns true if all OK
+  const revalidateSeats = async (): Promise<boolean> => {
+    if (!tripId) return false;
+
+    const { data: tickets, error } = await supabase
+      .from('tickets')
+      .select('seat_id')
+      .eq('trip_id', tripId);
+
+    if (error) {
+      toast.error('Erro ao verificar disponibilidade. Tente novamente.');
+      return false;
+    }
+
+    const currentOccupied = (tickets ?? []).map((t: { seat_id: string | null }) => t.seat_id).filter(Boolean) as string[];
+    setOccupiedSeatIds(currentOccupied);
+
+    // Check which selected seats are now occupied
+    const conflicting = selectedSeats.filter(seatId => currentOccupied.includes(seatId));
+    if (conflicting.length > 0) {
+      const remaining = selectedSeats.filter(seatId => !currentOccupied.includes(seatId));
+      setSelectedSeats(remaining);
+      toast.error('Alguns assentos que você selecionou já foram vendidos. Escolha outros.');
+      return false;
+    }
+
+    return true;
+  };
+
   // Init passengers array when advancing to step 2
-  const handleAdvanceToPassengers = () => {
+  const handleAdvanceToPassengers = async () => {
     if (selectedSeats.length !== quantity) {
       toast.error(`Selecione exatamente ${quantity} assento${quantity > 1 ? 's' : ''}`);
       return;
     }
+
+    // Revalidate before advancing
+    setSubmitting(true);
+    const valid = await revalidateSeats();
+    setSubmitting(false);
+
+    if (!valid) return;
+
     setPassengers(
       selectedSeats.map(() => ({ name: '', cpf: '', phone: '' }))
     );
@@ -545,7 +582,17 @@ export default function Checkout() {
 
     setSubmitting(true);
 
-    // Re-check availability
+    // Revalidate seats before creating sale
+    const seatsValid = await revalidateSeats();
+    if (!seatsValid) {
+      // Go back to step 1 so user can pick new seats
+      setStep(1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setSubmitting(false);
+      return;
+    }
+
+    // Re-check capacity
     const { data: availableSeats } = await supabase.rpc('get_trip_available_capacity', {
       trip_uuid: tripId!,
     });
@@ -767,11 +814,20 @@ export default function Checkout() {
 
             <Button
               className="w-full h-14 text-lg font-medium"
-              disabled={selectedSeats.length !== quantity || generatingSeats}
+              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
               onClick={handleAdvanceToPassengers}
             >
-              Continuar para dados dos passageiros
-              <ChevronRight className="h-5 w-5 ml-1" />
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Verificando assentos...
+                </>
+              ) : (
+                <>
+                  Continuar para dados dos passageiros
+                  <ChevronRight className="h-5 w-5 ml-1" />
+                </>
+              )}
             </Button>
           </>
         )}
