@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Ticket } from 'lucide-react';
+import { Loader2, Search, Ticket, Phone, MessageCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
@@ -20,6 +20,13 @@ function formatCpfInput(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function formatCnpjDisplay(cnpj: string | null): string | null {
+  if (!cnpj) return null;
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return cnpj;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
 interface CompanyInfo {
   name: string;
   trade_name: string | null;
@@ -27,6 +34,11 @@ interface CompanyInfo {
   city: string | null;
   state: string | null;
   primary_color: string | null;
+  cnpj: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  address: string | null;
+  slogan: string | null;
 }
 
 export default function TicketLookup() {
@@ -84,16 +96,16 @@ export default function TicketLookup() {
 
       const filtered = ticketRows.filter((t: any) => t.trip?.event_id === selectedEventId);
 
-      // Fetch company from event
+      // Fetch full company data from event
       let companyInfo: CompanyInfo | null = null;
       const eventCompanyId = (filtered[0] as any)?.sale?.event?.company_id;
       if (eventCompanyId) {
         const { data: companyData } = await supabase
           .from('companies')
-          .select('name, trade_name, logo_url, city, state, primary_color')
+          .select('name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
           .eq('id', eventCompanyId)
           .maybeSingle();
-        companyInfo = companyData;
+        companyInfo = companyData as CompanyInfo | null;
       }
       setCompany(companyInfo);
 
@@ -118,6 +130,11 @@ export default function TicketLookup() {
         companyCity: companyInfo?.city || null,
         companyState: companyInfo?.state || null,
         companyPrimaryColor: companyInfo?.primary_color || null,
+        companyCnpj: companyInfo?.cnpj || null,
+        companyPhone: companyInfo?.phone || null,
+        companyWhatsapp: companyInfo?.whatsapp || null,
+        companyAddress: companyInfo?.address || null,
+        companySlogan: companyInfo?.slogan || null,
       }));
 
       // Fetch boarding departure times
@@ -145,6 +162,7 @@ export default function TicketLookup() {
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
+  const formattedCnpj = formatCnpjDisplay(company?.cnpj);
 
   return (
     <PublicLayout>
@@ -213,19 +231,34 @@ export default function TicketLookup() {
               <div className="space-y-4">
                 {/* Company identity block */}
                 {company && (
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 border">
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
                     {company.logo_url && (
                       <img
                         src={company.logo_url}
                         alt={companyDisplayName}
-                        className="h-12 w-12 rounded-lg object-contain"
+                        className="h-14 w-14 rounded-lg object-contain shrink-0"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     )}
-                    <div>
-                      <p className="font-semibold text-foreground">{companyDisplayName}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground text-base">{companyDisplayName}</p>
+                      {formattedCnpj && <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>}
                       {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
-                      <p className="text-xs text-muted-foreground">Transporte oficial do evento</p>
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {company.phone && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Phone className="h-3 w-3" />
+                            {company.phone}
+                          </span>
+                        )}
+                        {company.whatsapp && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <MessageCircle className="h-3 w-3" />
+                            {company.whatsapp}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Transporte oficial do evento</p>
                     </div>
                   </div>
                 )}

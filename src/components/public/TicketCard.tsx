@@ -3,7 +3,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Download, FileText, Armchair, Calendar, MapPin, Clock } from 'lucide-react';
+import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
@@ -29,6 +29,12 @@ export interface TicketCardData {
   companyCity: string | null;
   companyState: string | null;
   companyPrimaryColor: string | null;
+  // Company details (new)
+  companyCnpj: string | null;
+  companyPhone: string | null;
+  companyWhatsapp: string | null;
+  companyAddress: string | null;
+  companySlogan: string | null;
 }
 
 function maskCpf(cpf: string): string {
@@ -37,11 +43,20 @@ function maskCpf(cpf: string): string {
   return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 }
 
+function formatCnpjDisplay(cnpj: string | null): string | null {
+  if (!cnpj) return null;
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return cnpj;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
 export function TicketCard({ ticket }: { ticket: TicketCardData }) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
   const isCancelled = ticket.saleStatus === 'cancelado';
   const accentColor = ticket.companyPrimaryColor || '#F97316';
+  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
+  const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
 
   const handleDownloadPdf = async () => {
     const canvas = qrRef.current;
@@ -55,7 +70,7 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
     if (!sourceCanvas) return;
 
     const canvasW = 420;
-    const canvasH = 560;
+    const canvasH = 620;
     const canvas = document.createElement('canvas');
     canvas.width = canvasW;
     canvas.height = canvasH;
@@ -70,50 +85,56 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
     ctx.fillStyle = accentColor;
     ctx.fillRect(0, 0, canvasW, 6);
 
-    let currentY = 30;
+    let currentY = 26;
 
     // Company logo or name
     if (ticket.companyLogoUrl) {
       try {
         const logo = await loadImage(ticket.companyLogoUrl);
-        const logoH = 40;
+        const logoH = 44;
         const logoW = (logo.width / logo.height) * logoH;
         ctx.drawImage(logo, (canvasW - logoW) / 2, currentY, logoW, logoH);
         currentY += logoH + 8;
       } catch {
-        // fallback to text
         ctx.fillStyle = '#1a1a1a';
-        ctx.font = 'bold 18px Arial, sans-serif';
+        ctx.font = 'bold 20px Arial, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(ticket.companyName, canvasW / 2, currentY + 18);
-        currentY += 30;
+        ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
+        currentY += 32;
       }
     } else {
       ctx.fillStyle = '#1a1a1a';
-      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.font = 'bold 20px Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(ticket.companyName, canvasW / 2, currentY + 18);
-      currentY += 30;
+      ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
+      currentY += 32;
     }
 
     // Company location
-    const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
     if (companyLoc) {
       ctx.fillStyle = '#666666';
       ctx.font = '12px Arial, sans-serif';
       ctx.fillText(companyLoc, canvasW / 2, currentY + 12);
-      currentY += 22;
+      currentY += 18;
+    }
+
+    // CNPJ
+    if (formattedCnpj) {
+      ctx.fillStyle = '#999999';
+      ctx.font = '10px Arial, sans-serif';
+      ctx.fillText(`CNPJ: ${formattedCnpj}`, canvasW / 2, currentY + 12);
+      currentY += 18;
     }
 
     // Divider
-    currentY += 10;
+    currentY += 8;
     ctx.strokeStyle = '#e5e5e5';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(40, currentY);
     ctx.lineTo(canvasW - 40, currentY);
     ctx.stroke();
-    currentY += 20;
+    currentY += 16;
 
     // QR Code centered
     const qrSize = 200;
@@ -146,7 +167,7 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
     // Footer
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '10px Arial, sans-serif';
-    ctx.fillText('Emitido digitalmente', canvasW / 2, canvasH - 16);
+    ctx.fillText('Documento emitido digitalmente.', canvasW / 2, canvasH - 16);
 
     const link = document.createElement('a');
     link.download = `passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.png`;
@@ -160,23 +181,40 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
       <div className="h-1.5 rounded-t-lg" style={{ backgroundColor: accentColor }} />
       <CardContent className="p-4 sm:p-6">
         <div className="flex flex-col items-center gap-4">
-          {/* Company identity */}
-          <div className="flex items-center gap-3 w-full">
-            {ticket.companyLogoUrl ? (
-              <img
-                src={ticket.companyLogoUrl}
-                alt={ticket.companyName}
-                className="h-8 w-8 rounded object-contain"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : null}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate">{ticket.companyName}</p>
-              {(ticket.companyCity || ticket.companyState) && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {[ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ')}
-                </p>
+          {/* Company identity header */}
+          <div className="w-full">
+            <div className="flex items-start gap-3">
+              {ticket.companyLogoUrl && (
+                <img
+                  src={ticket.companyLogoUrl}
+                  alt={ticket.companyName}
+                  className="h-12 w-12 rounded-lg object-contain shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
               )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-base truncate">{ticket.companyName}</p>
+                {formattedCnpj && (
+                  <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>
+                )}
+                {companyLoc && (
+                  <p className="text-xs text-muted-foreground">{companyLoc}</p>
+                )}
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                  {ticket.companyPhone && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Phone className="h-3 w-3" />
+                      {ticket.companyPhone}
+                    </span>
+                  )}
+                  {ticket.companyWhatsapp && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MessageCircle className="h-3 w-3" />
+                      {ticket.companyWhatsapp}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

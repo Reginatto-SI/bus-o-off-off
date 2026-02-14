@@ -10,7 +10,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import {
   CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
-  User, Phone, ExternalLink, Armchair, AlertCircle,
+  User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -23,6 +23,18 @@ interface CompanyInfo {
   city: string | null;
   state: string | null;
   primary_color: string | null;
+  cnpj: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  address: string | null;
+  slogan: string | null;
+}
+
+function formatCnpjDisplay(cnpj: string | null): string | null {
+  if (!cnpj) return null;
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return cnpj;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
 
 export default function Confirmation() {
@@ -56,15 +68,15 @@ export default function Confirmation() {
       if (saleRes.data) {
         setSale(saleRes.data as Sale);
 
-        // Fetch company data
+        // Fetch full company data
         const companyId = (saleRes.data as any).event?.company_id;
         if (companyId) {
           const { data: companyData } = await supabase
             .from('companies')
-            .select('name, trade_name, logo_url, city, state, primary_color')
+            .select('name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
             .eq('id', companyId)
             .maybeSingle();
-          if (companyData) setCompany(companyData);
+          if (companyData) setCompany(companyData as CompanyInfo);
         }
 
         // Fetch boarding departure time
@@ -113,6 +125,7 @@ export default function Confirmation() {
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
+  const formattedCnpj = formatCnpjDisplay(company?.cnpj);
 
   const ticketCards: TicketCardData[] = tickets.map((t) => ({
     ticketId: t.id,
@@ -133,6 +146,11 @@ export default function Confirmation() {
     companyCity: company?.city || null,
     companyState: company?.state || null,
     companyPrimaryColor: company?.primary_color || null,
+    companyCnpj: company?.cnpj || null,
+    companyPhone: company?.phone || null,
+    companyWhatsapp: company?.whatsapp || null,
+    companyAddress: company?.address || null,
+    companySlogan: company?.slogan || null,
   }));
 
   if (loading) {
@@ -202,19 +220,34 @@ export default function Confirmation() {
           <div className="space-y-4 mb-6">
             {/* Company identity block */}
             {company && (
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 border">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
                 {company.logo_url && (
                   <img
                     src={company.logo_url}
                     alt={companyDisplayName}
-                    className="h-12 w-12 rounded-lg object-contain"
+                    className="h-14 w-14 rounded-lg object-contain shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 )}
-                <div>
-                  <p className="font-semibold text-foreground">{companyDisplayName}</p>
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground text-base">{companyDisplayName}</p>
+                  {formattedCnpj && <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>}
                   {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
-                  <p className="text-xs text-muted-foreground">Transporte oficial do evento</p>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    {company.phone && (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Phone className="h-3 w-3" />
+                        {company.phone}
+                      </span>
+                    )}
+                    {company.whatsapp && (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MessageCircle className="h-3 w-3" />
+                        {company.whatsapp}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Transporte oficial do evento</p>
                 </div>
               </div>
             )}
