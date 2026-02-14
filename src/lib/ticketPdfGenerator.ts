@@ -18,7 +18,15 @@ function maskCpf(cpf: string): string {
   return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 }
 
-function getRandomPhrase(): string {
+function formatCnpjPdf(cnpj: string | null): string | null {
+  if (!cnpj) return null;
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return cnpj;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function getPhrase(slogan: string | null): string {
+  if (slogan) return slogan;
   return MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)];
 }
 
@@ -32,12 +40,11 @@ export async function generateTicketPdf({ ticket, qrBase64 }: GenerateTicketPdfP
   const pageW = 148;
   let y = 0;
 
-  // Determine company color
   const colorHex = ticket.companyPrimaryColor || '#F97316';
   const { r, g, b } = hexToRgb(colorHex);
 
   // ── Header bar ──
-  const headerH = 32;
+  const headerH = 38;
   doc.setFillColor(r, g, b);
   doc.rect(0, 0, pageW, headerH, 'F');
 
@@ -47,41 +54,79 @@ export async function generateTicketPdf({ ticket, qrBase64 }: GenerateTicketPdfP
     try {
       const logoB64 = await loadImageAsBase64(ticket.companyLogoUrl);
       if (logoB64) {
-        doc.addImage(logoB64, 'PNG', 8, 4, 22, 22);
-        logoEndX = 34;
+        doc.addImage(logoB64, 'PNG', 8, 4, 24, 24);
+        logoEndX = 36;
       }
     } catch {
-      // no logo available
+      // no logo
     }
   }
 
   // Company name
+  const textX = logoEndX;
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(ticket.companyName || 'PASSAGEM', logoEndX, 14);
+  doc.text(ticket.companyName || 'PASSAGEM', textX, 12);
 
-  // Company location
-  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
-  if (companyLoc) {
-    doc.setFontSize(8);
+  // CNPJ
+  const cnpj = formatCnpjPdf(ticket.companyCnpj);
+  let infoY = 17;
+  if (cnpj) {
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.text(companyLoc, logoEndX, 20);
+    doc.text(`CNPJ: ${cnpj}`, textX, infoY);
+    infoY += 4;
   }
 
-  // Motivational phrase
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'italic');
-  doc.text(getRandomPhrase(), logoEndX, 27);
+  // Address
+  if (ticket.companyAddress) {
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text(ticket.companyAddress, textX, infoY, { maxWidth: pageW - textX - 10 });
+    infoY += 4;
+  }
 
-  y = headerH + 8;
+  // Phone | WhatsApp
+  const contacts = [
+    ticket.companyPhone ? `Tel: ${ticket.companyPhone}` : null,
+    ticket.companyWhatsapp ? `WhatsApp: ${ticket.companyWhatsapp}` : null,
+  ].filter(Boolean).join(' | ');
+  if (contacts) {
+    doc.setFontSize(7);
+    doc.text(contacts, textX, infoY);
+    infoY += 4;
+  }
+
+  // City/UF
+  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
+  if (companyLoc) {
+    doc.setFontSize(7);
+    doc.text(companyLoc, textX, infoY);
+    infoY += 4;
+  }
+
+  y = headerH + 2;
+
+  // ── Divider line ──
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.3);
+  doc.line(10, y, pageW - 10, y);
+  y += 4;
+
+  // ── Motivational phrase ──
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(r, g, b);
+  doc.text(getPhrase(ticket.companySlogan), pageW / 2, y + 3, { align: 'center' });
+  y += 10;
 
   // ── QR Code centered ──
   doc.setTextColor(30, 30, 30);
-  const qrSize = 50;
+  const qrSize = 48;
   const qrX = (pageW - qrSize) / 2;
   doc.addImage(qrBase64, 'PNG', qrX, y, qrSize, qrSize);
-  y += qrSize + 6;
+  y += qrSize + 5;
 
   // ── Status badge ──
   if (ticket.saleStatus === 'pago') {
@@ -138,7 +183,7 @@ export async function generateTicketPdf({ ticket, qrBase64 }: GenerateTicketPdfP
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(170, 170, 170);
-  doc.text('Emitido digitalmente. Apresente este QR Code no embarque.', pageW / 2, 200, { align: 'center' });
+  doc.text('Documento emitido digitalmente.', pageW / 2, 200, { align: 'center' });
 
   doc.save(`passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.pdf`);
 }

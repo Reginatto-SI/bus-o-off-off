@@ -23,6 +23,7 @@ export interface Company {
   // Identidade visual
   logo_url: string | null;
   primary_color: string | null;
+  slogan: string | null;
   // Contato institucional
   document: string | null;
   phone: string | null;

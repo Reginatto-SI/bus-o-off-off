@@ -80,6 +80,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           primary_color: string | null
+          slogan: string | null
           state: string | null
           stripe_account_id: string | null
           stripe_onboarding_complete: boolean
@@ -103,6 +104,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           primary_color?: string | null
+          slogan?: string | null
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -126,6 +128,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           primary_color?: string | null
+          slogan?: string | null
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
