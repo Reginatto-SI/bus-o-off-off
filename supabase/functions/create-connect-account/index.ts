@@ -119,31 +119,38 @@ serve(async (req) => {
 
     // Check if onboarding is already complete
     const account = await stripe.accounts.retrieve(stripeAccountId);
-    if (account.details_submitted && account.charges_enabled) {
-      // Update onboarding status if not already done
-      if (!company.stripe_onboarding_complete) {
-        await supabaseAdmin
-          .from("companies")
-          .update({ stripe_onboarding_complete: true })
-          .eq("id", company_id);
-      }
 
-      // Return dashboard login link
-      const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
-      return new Response(
-        JSON.stringify({
-          already_complete: true,
-          dashboard_url: loginLink.url,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    // Sync DB flag if Stripe confirms full activation
+    if (account.details_submitted && account.charges_enabled && !company.stripe_onboarding_complete) {
+      await supabaseAdmin
+        .from("companies")
+        .update({ stripe_onboarding_complete: true })
+        .eq("id", company_id);
     }
 
-    // Generate onboarding link
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
+
+    // If onboarding appears complete (either Stripe or DB flag), try dashboard
+    if (account.details_submitted || company.stripe_onboarding_complete) {
+      try {
+        const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+        return new Response(
+          JSON.stringify({
+            already_complete: true,
+            dashboard_url: loginLink.url,
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      } catch (loginError) {
+        console.warn("createLoginLink failed (common in test mode), falling back to onboarding link:", loginError);
+        // Fall through to generate onboarding link as fallback
+      }
+    }
+
+    // Generate onboarding link (initial onboarding or fallback)
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
       refresh_url: `${origin}/admin/empresa?stripe=refresh`,
