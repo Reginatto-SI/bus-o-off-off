@@ -31,7 +31,9 @@ export default function Confirmation() {
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
+  // Initial data fetch
   useEffect(() => {
     const fetchSale = async () => {
       if (!id) return;
@@ -55,7 +57,6 @@ export default function Confirmation() {
       if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
 
       if (saleRes.data) {
-        // Usa o horário do embarque vinculado à venda para refletir exatamente a escolha do checkout.
         const { data: selectedBoarding } = await supabase
           .from('event_boarding_locations')
           .select('departure_time')
@@ -72,6 +73,33 @@ export default function Confirmation() {
 
     fetchSale();
   }, [id]);
+
+  // Polling: check sale status every 3s when payment=success but status != 'pago'
+  useEffect(() => {
+    if (!paymentSuccess || !id || !sale || sale.status === 'pago') return;
+
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    const interval = setInterval(async () => {
+      attempts++;
+      const { data } = await supabase
+        .from('sales')
+        .select('status')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (data?.status === 'pago') {
+        setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
+        clearInterval(interval);
+      } else if (attempts >= maxAttempts) {
+        setPollingTimedOut(true);
+        clearInterval(interval);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [paymentSuccess, id, sale?.status]);
 
   if (loading) {
     return (
@@ -97,18 +125,40 @@ export default function Confirmation() {
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center mb-8">
-          {sale.status === 'pago' || paymentSuccess ? (
+          {sale.status === 'pago' ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">
-                {sale.status === 'pago' ? 'Pagamento Confirmado!' : 'Aguardando Confirmação'}
+                Pagamento Confirmado!
               </h1>
               <p className="text-muted-foreground">
-                {sale.status === 'pago'
-                  ? 'Seu pagamento foi confirmado e suas passagens estão garantidas.'
-                  : 'Seu pagamento está sendo processado. As passagens serão confirmadas em instantes.'}
+                Seu pagamento foi confirmado e suas passagens estão garantidas.
+              </p>
+            </>
+          ) : paymentSuccess && !pollingTimedOut ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                Verificando Pagamento...
+              </h1>
+              <p className="text-muted-foreground">
+                Estamos confirmando seu pagamento. Isso pode levar alguns segundos.
+              </p>
+            </>
+          ) : paymentSuccess && pollingTimedOut ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                Pagamento em Processamento
+              </h1>
+              <p className="text-muted-foreground">
+                Seu pagamento está sendo processado. Atualize a página em alguns minutos para ver a confirmação.
               </p>
             </>
           ) : (
