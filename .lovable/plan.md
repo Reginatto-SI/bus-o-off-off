@@ -1,255 +1,198 @@
 
 
-# Evolucao de Status e Energia Visual dos Eventos
+# Integracao Stripe Connect — Vendas de Passagens Multiempresa
 
 ## Visao Geral
 
-Quatro grandes melhorias na tela `/admin/eventos`:
-1. Modal de decisao estrategica apos primeiro salvamento
-2. Alteracao rapida de status no menu "..." do card
-3. Visual diferenciado por status (dopamina para "A Venda")
-4. Indicadores de performance e pendencias nos cards
+Implementar pagamentos reais via **Stripe Connect** com o modelo de **destination charges**, onde cada empresa (conta conectada) recebe os pagamentos de seus eventos, e a plataforma (Busao Off Off) retém automaticamente 7,5% de comissao via `application_fee_amount`.
 
 ---
 
-## Parte 1: Confirmacao Inteligente no Primeiro Salvamento
+## Modelo Tecnico: Stripe Connect + Destination Charges
 
-### Arquivo: `src/pages/admin/Events.tsx`
-
-Adicionar estado para controlar o modal pos-criacao:
-
-```typescript
-const [postCreateDialogOpen, setPostCreateDialogOpen] = useState(false);
-const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+```text
+Cliente paga R$100
+  |
+  v
+Stripe Checkout (pagina externa)
+  |
+  v
+Plataforma recebe R$100
+  |-- R$7,50 (application_fee) -> fica na conta da plataforma
+  |-- R$92,50 (transfer) -> vai para conta conectada da empresa
+  |
+  v
+Webhook confirma pagamento -> atualiza sale.status para 'pago'
 ```
 
-No `handleSubmit`, apos criar evento com sucesso (bloco `if (!editingId && newEventId)`), ao inves de apenas redirecionar para aba "viagens", tambem abrir o modal de decisao:
-
-```typescript
-if (!editingId && newEventId) {
-  setEditingId(newEventId);
-  loadEventData(newEventId);
-  setActiveTab('viagens');
-  setNewlyCreatedEventId(newEventId);
-  setPostCreateDialogOpen(true);
-}
-```
-
-Novo AlertDialog com duas opcoes:
-- **"Ativar para Venda"**: verifica `publishChecklist.valid`. Se valido, atualiza status para `a_venda` e exibe toast animado. Se invalido, exibe aviso com itens pendentes e permite apenas Rascunho.
-- **"Manter como Rascunho"**: fecha o dialog e mantem status atual.
+**Refunds**: Por padrao no Stripe, quando se usa `application_fee_amount`, a plataforma mantem a taxa ao emitir reembolso (basta NAO passar `refund_application_fee: true`). Isso atende perfeitamente ao requisito.
 
 ---
 
-## Parte 2: Alteracao Rapida de Status no Card
+## Parte 1: Alteracoes no Banco de Dados
 
-### Arquivo: `src/pages/admin/Events.tsx`
+### 1.1 Tabela `companies` — adicionar campo Stripe
 
-Modificar a funcao `getEventActions` (linha 1270) para adicionar opcoes de troca de status:
-
-**Regras de transicao:**
-- Rascunho -> "Colocar a Venda" (verifica publicChecklist antes; se falhar, exibe toast com pendencias)
-- A Venda -> "Voltar para Rascunho" e "Encerrar Evento"
-- Encerrado -> nenhuma opcao de status (apenas visualizar)
-
-Para validar publicacao diretamente do card (sem abrir modal), sera necessario fazer uma query rapida para verificar os requisitos minimos do evento: viagens existentes, embarques de ida existentes, e preco > 0. Isso porque o `publishChecklist` atual depende de dados carregados apenas dentro do modal de edicao.
-
-Implementacao:
-```typescript
-// No getEventActions, apos as acoes existentes:
-if (event.status === 'rascunho') {
-  actions.push({
-    label: 'Colocar a Venda',
-    icon: ShoppingBag,
-    onClick: () => handleQuickStatusChange(event, 'a_venda'),
-  });
-}
-if (event.status === 'a_venda') {
-  actions.push({
-    label: 'Voltar para Rascunho',
-    icon: FileEdit,
-    onClick: () => handleQuickStatusChange(event, 'rascunho'),
-  });
-  actions.push({
-    label: 'Encerrar Evento',
-    icon: CheckCircle,
-    onClick: () => handleQuickStatusChange(event, 'encerrado'),
-  });
-}
+```sql
+ALTER TABLE public.companies ADD COLUMN stripe_account_id text;
+ALTER TABLE public.companies ADD COLUMN stripe_onboarding_complete boolean NOT NULL DEFAULT false;
 ```
 
-Nova funcao `handleQuickStatusChange`:
-- Para `a_venda`: query para validar requisitos (nome, data, cidade ja estao no objeto; precisa verificar trips, boardings, preco). Se invalido, toast com lista do que falta. Se valido, update + toast de sucesso animado.
-- Para `rascunho`: update direto.
-- Para `encerrado`: AlertDialog de confirmacao antes de encerrar.
+### 1.2 Tabela `sales` — adicionar rastreio Stripe
+
+```sql
+ALTER TABLE public.sales ADD COLUMN stripe_checkout_session_id text;
+ALTER TABLE public.sales ADD COLUMN stripe_payment_intent_id text;
+```
+
+Esses campos permitem auditoria e conciliacao confiavel entre sistema e Stripe.
 
 ---
 
-## Parte 3: Visual Diferenciado por Status nos Cards
+## Parte 2: Edge Functions (Backend)
 
-### Arquivo: `src/pages/admin/Events.tsx`
+### 2.1 `create-connect-account`
 
-No card de evento (linha 1562), adicionar classes condicionais baseadas no status:
+Funcao administrativa chamada pela tela de Empresa para criar/conectar conta Stripe.
 
-```typescript
-<Card 
-  key={event.id} 
-  className={cn(
-    'card-corporate h-full overflow-hidden transition-all duration-300',
-    event.status === 'a_venda' && 'ring-1 ring-success/30 shadow-[0_0_15px_-3px_hsl(var(--success)/0.15)]',
-    event.status === 'encerrado' && 'opacity-70',
-    event.status === 'rascunho' && 'border-dashed',
-  )}
->
-```
+Fluxo:
+1. Recebe `company_id` do admin autenticado
+2. Verifica se ja existe `stripe_account_id` na empresa
+3. Se nao existe: cria conta conectada via `stripe.accounts.create({ type: 'express' })`
+4. Gera link de onboarding via `stripe.accountLinks.create()`
+5. Salva `stripe_account_id` na tabela `companies`
+6. Retorna URL de onboarding para o frontend abrir em nova aba
 
-### Arquivo: `src/index.css`
+### 2.2 `create-checkout-session`
 
-Adicionar animacao sutil de entrada para cards ativos:
+Funcao publica chamada pelo checkout do cliente.
 
-```css
-@keyframes card-glow-pulse {
-  0%, 100% { box-shadow: 0 0 15px -3px hsl(var(--success) / 0.1); }
-  50% { box-shadow: 0 0 20px -3px hsl(var(--success) / 0.2); }
-}
+Fluxo:
+1. Recebe: `sale_id` (venda ja criada com status 'reservado')
+2. Busca a venda e o evento associado
+3. Busca `stripe_account_id` da empresa do evento
+4. Valida que a conta conectada esta ativa
+5. Calcula `application_fee_amount` = valor total * 0.075 (7,5%)
+6. Cria sessao Stripe Checkout com:
+   - `mode: 'payment'`
+   - `payment_method_types: ['card', 'boleto', 'pix']` (conforme disponivel)
+   - `line_items` com nome do evento + quantidade + preco
+   - `payment_intent_data.application_fee_amount`
+   - `payment_intent_data.transfer_data.destination` = conta conectada
+   - `success_url` = `/confirmacao/{sale_id}?payment=success`
+   - `cancel_url` = `/eventos/{event_id}/checkout?...` (volta ao checkout)
+   - `metadata.sale_id` = id da venda
+7. Salva `stripe_checkout_session_id` na venda
+8. Retorna `session.url`
 
-.card-active-glow {
-  animation: card-glow-pulse 3s ease-in-out infinite;
-}
-```
+### 2.3 `stripe-webhook`
 
-### StatusBadge Visual Upgrade
+Webhook para confirmar pagamentos.
 
-Para o status `a_venda`, adicionar um pequeno indicador pulsante (dot) ao lado do badge para reforcar que esta "ao vivo":
+Eventos tratados:
+- `checkout.session.completed`: marca venda como 'pago', salva `payment_intent_id`
+- `checkout.session.expired`: (opcional) pode marcar como expirado ou manter reservado
 
-```typescript
-// Dentro do card, ao lado do StatusBadge quando a_venda:
-{event.status === 'a_venda' && (
-  <span className="relative flex h-2 w-2 ml-1">
-    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
-    <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
-  </span>
-)}
-```
-
----
-
-## Parte 4: Indicadores de Performance e Pendencias
-
-### 4.1 Indicador de % Vendido
-
-Para exibir "X% vendido" no card, precisamos consultar vendas por evento. Duas abordagens:
-
-**Abordagem escolhida**: Fazer uma query agregada ao carregar eventos para obter contagem de tickets vendidos por evento. Isso evita N+1 queries.
-
-```typescript
-// Apos fetchEvents, buscar contagem de tickets por evento:
-const { data: salesData } = await supabase
-  .from('sales')
-  .select('event_id, quantity')
-  .in('status', ['reservado', 'pago']);
-
-// Agrupar por event_id
-const salesByEvent = new Map<string, number>();
-salesData?.forEach(sale => {
-  const current = salesByEvent.get(sale.event_id) || 0;
-  salesByEvent.set(sale.event_id, current + sale.quantity);
-});
-```
-
-No card, exibir barra de progresso discreta:
-
-```typescript
-// Calcular capacidade total do evento (soma de veiculos unicos)
-const totalSold = salesByEvent.get(event.id) || 0;
-const totalCapacity = /* soma capacidades dos veiculos */;
-const percentSold = totalCapacity > 0 ? Math.round((totalSold / totalCapacity) * 100) : 0;
-
-// No card footer:
-{event.status === 'a_venda' && totalCapacity > 0 && (
-  <div className="mt-2">
-    <div className="flex justify-between text-xs text-muted-foreground mb-1">
-      <span>{totalSold} vendido(s)</span>
-      <span>{percentSold}%</span>
-    </div>
-    <Progress value={percentSold} className="h-1.5" />
-  </div>
-)}
-```
-
-Para obter capacidade por evento, usamos os dados de `trips` ja presentes em `EventWithTrips`. Precisamos adicionar `capacity` ao select dos trips:
-
-```typescript
-// Alterar fetchEvents para incluir capacity:
-.select(`*, trips:trips(vehicle_id, driver_id, assistant_driver_id, capacity)`)
-```
-
-### 4.2 Indicador de Pendencias (Rascunho)
-
-Para rascunhos, verificar se faltam itens para publicar. Os dados basicos (nome, data, cidade, preco) ja estao no evento. Faltam verificar trips e boardings.
-
-Usando os dados ja carregados:
-- `event.trips.length === 0` -> falta frota
-- `event.unit_price <= 0` -> falta preco
-
-No card, exibir alerta sutil:
-
-```typescript
-{event.status === 'rascunho' && (
-  (() => {
-    const pendencias: string[] = [];
-    if (!event.trips?.length) pendencias.push('frota');
-    if (event.unit_price <= 0) pendencias.push('preco');
-    if (pendencias.length === 0) return null;
-    return (
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-warning">
-        <AlertTriangle className="h-3.5 w-3.5" />
-        <span>Faltam: {pendencias.join(', ')}</span>
-      </div>
-    );
-  })()
-)}
-```
-
-### 4.3 Microfeedback ao Ativar Evento
-
-Ao mudar status para `a_venda` com sucesso (tanto pelo modal de primeiro salvamento quanto pela troca rapida):
-
-```typescript
-toast.success('Evento publicado com sucesso! O evento ja esta visivel no portal.', {
-  duration: 4000,
-  icon: '🚀',
-});
-```
+Configuracao:
+- `verify_jwt = false` no config.toml (Stripe envia requests sem JWT)
+- Validacao via `stripe.webhooks.constructEvent()` com webhook secret
 
 ---
 
-## Parte 5: Resumo dos Arquivos Alterados
+## Parte 3: Alteracoes no Frontend
+
+### 3.1 Tela de Empresa (`/admin/empresa`) — Aba Stripe
+
+Adicionar nova aba "Pagamentos" ou secao na tela de empresa com:
+
+- Status da integracao (Conectado / Nao conectado / Pendente)
+- Botao "Conectar Stripe" -> chama edge function `create-connect-account` -> abre link de onboarding
+- Botao "Acessar Painel Stripe" -> link para dashboard Express do Stripe
+- Indicador visual se onboarding esta completo
+
+### 3.2 Checkout Publico (`/eventos/:id/checkout`)
+
+Alterar o botao "Finalizar compra":
+
+**Fluxo atual:**
+1. Cria sale + tickets -> redireciona para `/confirmacao/{id}`
+
+**Novo fluxo:**
+1. Cria sale + tickets (status 'reservado') — igual ao atual
+2. Chama edge function `create-checkout-session` com `sale_id`
+3. Recebe URL da sessao Stripe
+4. Redireciona o usuario para a pagina do Stripe (nova aba ou mesma janela)
+5. Apos pagamento, Stripe redireciona para `/confirmacao/{sale_id}?payment=success`
+
+O botao muda o texto para "Ir para pagamento" ao inves de "Finalizar compra".
+
+Se a empresa nao tiver Stripe configurado, o sistema mantem o comportamento atual (reserva sem pagamento).
+
+### 3.3 Tela de Confirmacao (`/confirmacao/:id`)
+
+Ajustes:
+- Verificar query param `payment=success` para exibir mensagem adequada
+- Buscar status atualizado da venda (pode ainda ser 'reservado' se webhook nao chegou)
+- Exibir estados: "Pagamento confirmado" ou "Aguardando confirmacao do pagamento"
+
+---
+
+## Parte 4: Seguranca
+
+### Secrets necessarios
+
+- `STRIPE_SECRET_KEY` — ja configurado (chave da plataforma)
+- `STRIPE_WEBHOOK_SECRET` — sera necessario adicionar apos criar o webhook endpoint no Stripe
+
+### RLS
+
+- Nenhuma alteracao de RLS necessaria. As novas colunas herdam as policies existentes.
+- Edge functions usam `SUPABASE_SERVICE_ROLE_KEY` para atualizar vendas via webhook.
+
+### Validacoes
+
+- Webhook valida assinatura Stripe antes de processar
+- Checkout session so e criado para vendas com status 'reservado'
+- `application_fee_amount` calculado no backend (nunca no frontend)
+- Conta conectada validada antes de criar sessao
+
+---
+
+## Parte 5: Resumo dos Arquivos
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `src/pages/admin/Events.tsx` | Editar | Modal pos-criacao, acoes rapidas de status no card, visual condicional, indicadores |
-| `src/index.css` | Editar | Animacao glow sutil para cards ativos |
-
-Nenhuma alteracao de banco de dados necessaria. Todas as mudancas sao no frontend.
-
----
-
-## Regras de Seguranca
-
-- Alteracao de status usa mesma query `supabase.from('events').update(...)` ja protegida por RLS
-- Validacao de publicacao (checklist) mantida identica
-- Encerramento protegido por confirmacao via AlertDialog
-- Nenhum dado financeiro exposto adicionalmente
+| Migracao SQL | Criar | Colunas stripe em companies e sales |
+| `supabase/functions/create-connect-account/index.ts` | Criar | Cria conta Express e gera link onboarding |
+| `supabase/functions/create-checkout-session/index.ts` | Criar | Cria sessao Checkout com destination charge |
+| `supabase/functions/stripe-webhook/index.ts` | Criar | Processa eventos de pagamento |
+| `supabase/config.toml` | Editar | verify_jwt = false para webhook |
+| `src/types/database.ts` | Editar | Novos campos em Company e Sale |
+| `src/pages/admin/Company.tsx` | Editar | Aba/secao Stripe Connect |
+| `src/pages/public/Checkout.tsx` | Editar | Redirecionar para Stripe Checkout |
+| `src/pages/public/Confirmation.tsx` | Editar | Status de pagamento |
 
 ---
 
-## Resultado Esperado
+## Parte 6: Regras de Negocio Garantidas
 
-- Primeiro salvamento: decisao imediata sobre publicacao
-- Menu "...": troca de status sem abrir modal de edicao
-- Cards "A Venda": glow sutil verde, dot pulsante, barra de progresso de vendas
-- Cards "Rascunho": borda tracejada, alerta de pendencias
-- Cards "Encerrado": opacidade reduzida, sem animacoes
-- Toast animado ao publicar evento
+1. Cada empresa recebe na sua propria conta Stripe (nao centralizado)
+2. 7,5% retido automaticamente como `application_fee_amount`
+3. Reembolsos NAO devolvem a comissao da plataforma (comportamento padrao do Stripe)
+4. Pagamento externo via Stripe Checkout (nao dentro do app)
+5. Venda so marcada como "paga" apos confirmacao real do Stripe via webhook
+6. Toda venda vinculada ao `stripe_checkout_session_id` e `stripe_payment_intent_id` para auditoria
+7. Se empresa nao tiver Stripe configurado, checkout continua funcionando como reserva
+
+---
+
+## Ordem de Implementacao Sugerida
+
+1. Migracao de banco (colunas novas)
+2. Edge function `create-connect-account`
+3. Aba Stripe na tela de Empresa
+4. Edge function `create-checkout-session`
+5. Alteracao no Checkout publico
+6. Edge function `stripe-webhook` + secret
+7. Ajustes na Confirmacao
 
