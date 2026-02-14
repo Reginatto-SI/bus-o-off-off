@@ -1,244 +1,265 @@
 
-# Comissionamento Variavel por Empresa + Repasse Automatico para Parceiro via Stripe
+
+# Novo Perfil Developer -- Acesso Total Cross-Company
 
 ## Resumo
 
-Implementar taxa de plataforma variavel por empresa, cadastro de parceiro com conta Stripe Connect, e repasse automatico da parte do parceiro via Stripe Transfer apos confirmacao de pagamento.
+Adicionar a role `developer` ao sistema RBAC existente. O developer tera acesso total a todas as telas administrativas e a todas as empresas, sem restricoes de `company_id`. Os perfis atuais (gerente, operador, vendedor, motorista) nao serao afetados.
 
 ---
 
-## 1. Migracao de Banco de Dados
+## 1. Migracao de Banco -- Enum e Funcoes
 
-### 1.1 Novos campos na tabela `companies`
+### 1.1 Adicionar `developer` ao enum `user_role`
 
 ```sql
-ALTER TABLE public.companies
-  ADD COLUMN platform_fee_percent numeric NOT NULL DEFAULT 7.5,
-  ADD COLUMN partner_split_percent numeric NOT NULL DEFAULT 50;
+ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'developer';
 ```
 
-- `platform_fee_percent`: taxa total da plataforma sobre a venda (ex: 7%, 9%, 6.5%)
-- `partner_split_percent`: percentual da comissao da plataforma que vai para o parceiro (ex: 50 = metade)
-
-### 1.2 Nova tabela `partners`
+### 1.2 Atualizar funcao `is_admin` para reconhecer developer
 
 ```sql
-CREATE TABLE public.partners (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  stripe_account_id text,
-  stripe_onboarding_complete boolean NOT NULL DEFAULT false,
-  split_percent numeric NOT NULL DEFAULT 50,
-  status text NOT NULL DEFAULT 'ativo',
-  notes text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+CREATE OR REPLACE FUNCTION public.is_admin(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('gerente', 'operador', 'developer')
+  )
+$$;
+```
 
-ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
+### 1.3 Nova funcao `is_developer` (security definer)
 
--- Somente gerentes podem gerenciar parceiros
-CREATE POLICY "Gerentes can manage partners"
+```sql
+CREATE OR REPLACE FUNCTION public.is_developer(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = 'developer'
+  )
+$$;
+```
+
+### 1.4 Atualizar funcao `user_belongs_to_company` para bypass do developer
+
+```sql
+CREATE OR REPLACE FUNCTION public.user_belongs_to_company(_user_id uuid, _company_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT
+    -- Developer tem acesso cross-company automatico
+    public.is_developer(_user_id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      JOIN public.companies c ON c.id = ur.company_id
+      WHERE ur.user_id = _user_id
+        AND ur.company_id = _company_id
+        AND c.is_active = true
+    )
+$$;
+```
+
+Isso e o ponto central: como todas as policies RLS ja usam `user_belongs_to_company()` ou `is_admin()`, o developer herdara acesso automaticamente a todas as tabelas sem precisar alterar cada policy individualmente.
+
+### 1.5 Atualizar funcao `get_user_active_company` para developer
+
+A funcao atual retorna apenas a primeira empresa vinculada. Para o developer, isso continua funcionando normalmente (ele tera pelo menos uma empresa vinculada). O bypass cross-company e feito via `user_belongs_to_company`, nao via esta funcao.
+
+---
+
+## 2. Politicas RLS -- Ajustes Pontuais
+
+### 2.1 Tabela `companies` -- Developer pode ver e gerenciar todas
+
+A policy "Gerentes can manage companies" usa join direto com `user_roles`. Precisamos adicionar uma policy separada para developer:
+
+```sql
+CREATE POLICY "Developer can manage all companies"
+  ON public.companies FOR ALL
+  USING (public.is_developer(auth.uid()))
+  WITH CHECK (public.is_developer(auth.uid()));
+```
+
+### 2.2 Tabela `partners` -- Developer tambem pode gerenciar
+
+A policy atual usa `has_role('gerente')`. Precisamos incluir developer:
+
+```sql
+DROP POLICY IF EXISTS "Gerentes can manage partners" ON public.partners;
+
+CREATE POLICY "Gerentes and developers can manage partners"
   ON public.partners FOR ALL
-  USING (has_role(auth.uid(), 'gerente'::user_role))
-  WITH CHECK (has_role(auth.uid(), 'gerente'::user_role));
+  USING (
+    has_role(auth.uid(), 'gerente'::user_role)
+    OR has_role(auth.uid(), 'developer'::user_role)
+  )
+  WITH CHECK (
+    has_role(auth.uid(), 'gerente'::user_role)
+    OR has_role(auth.uid(), 'developer'::user_role)
+  );
 ```
 
-Nota: A tabela `partners` nao possui `company_id` porque o parceiro e unico da plataforma (socio), nao vinculado a uma empresa especifica. O `split_percent` em `partners` e o default global, mas o campo `partner_split_percent` em `companies` permite customizacao por empresa.
+### 2.3 Tabela `sponsors` -- Developer tambem pode gerenciar
 
-### 1.3 Novos campos na tabela `sales` (registro financeiro)
+A policy "Admins can manage sponsors" usa `is_admin()`, que ja incluira developer apos a alteracao da funcao. OK, nenhuma alteracao necessaria.
+
+### 2.4 Demais tabelas
+
+As tabelas `boarding_locations`, `drivers`, `events`, `event_boarding_locations`, `fleet`, `sales`, `sale_logs`, `seats`, `tickets`, `trips`, `vehicles`, `sellers` usam `is_admin()` e/ou `user_belongs_to_company()`. Com as alteracoes nas funcoes, o developer ja tera acesso automaticamente. Nenhuma policy adicional necessaria.
+
+### 2.5 Tabela `user_roles` -- Developer pode ver tudo
+
+A policy "Admins can view all user_roles" usa `is_admin()`, que ja incluira developer. OK.
+
+### 2.6 Tabela `profiles` -- Developer pode ver e editar
+
+As policies de profiles usam `is_admin()` para UPDATE e `has_role('gerente')` para SELECT/UPDATE de profiles da empresa. Developer precisa de acesso:
 
 ```sql
-ALTER TABLE public.sales
-  ADD COLUMN gross_amount numeric,
-  ADD COLUMN platform_fee_total numeric,
-  ADD COLUMN partner_fee_amount numeric,
-  ADD COLUMN platform_net_amount numeric,
-  ADD COLUMN stripe_transfer_id text;
-```
+CREATE POLICY "Developer can view all profiles"
+  ON public.profiles FOR SELECT
+  USING (public.is_developer(auth.uid()));
 
-Todos nullable porque serao preenchidos somente apos confirmacao de pagamento.
-
-### 1.4 Trigger updated_at para partners
-
-```sql
-CREATE TRIGGER set_partners_updated_at
-  BEFORE UPDATE ON public.partners
-  FOR EACH ROW
-  EXECUTE FUNCTION public.update_updated_at_column();
+CREATE POLICY "Developer can update all profiles"
+  ON public.profiles FOR UPDATE
+  USING (public.is_developer(auth.uid()))
+  WITH CHECK (public.is_developer(auth.uid()));
 ```
 
 ---
 
-## 2. Edge Function: create-checkout-session (modificacao)
+## 3. Frontend -- AuthContext
 
-### Alteracoes:
-- Remover constante fixa `PLATFORM_FEE_PERCENT = 0.075`
-- Buscar `platform_fee_percent` da empresa no SELECT da company
-- Calcular `applicationFeeCents` usando a taxa variavel da empresa
-- Corrigir import do supabase (usar `"https://esm.sh/@supabase/supabase-js@2"` em vez de `npm:`)
+### 3.1 Atualizar tipo `UserRole`
 
-```text
-Antes:  const PLATFORM_FEE_PERCENT = 0.075;
-Depois: const feePercent = company.platform_fee_percent / 100;
-        const applicationFeeCents = Math.round(totalAmountCents * feePercent);
+Em `src/types/database.ts`:
+```typescript
+export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 ```
 
----
+### 3.2 Atualizar AuthContext
 
-## 3. Edge Function: stripe-webhook (modificacao principal)
-
-### Alteracoes no evento `checkout.session.completed`:
-
-Apos marcar a venda como `pago`, adicionar logica de:
-
-1. Buscar dados completos da venda (unit_price, quantity, company_id)
-2. Buscar `platform_fee_percent` e `partner_split_percent` da empresa
-3. Buscar parceiro ativo na tabela `partners`
-4. Calcular:
-   - `gross_amount` = unit_price * quantity
-   - `platform_fee_total` = gross_amount * (platform_fee_percent / 100)
-   - `partner_fee_amount` = platform_fee_total * (partner_split_percent / 100)
-   - `platform_net_amount` = platform_fee_total - partner_fee_amount
-5. Se parceiro ativo com `stripe_account_id`:
-   - Criar `stripe.transfers.create()` com `partner_fee_amount` para a conta do parceiro
-   - Registrar `stripe_transfer_id` na venda
-6. Atualizar a venda com todos os campos financeiros
-
-### Regras de seguranca:
-- Se parceiro inativo ou sem Stripe: nao fazer transfer, `partner_fee_amount = 0`, `platform_net_amount = platform_fee_total`
-- Logar erro mas nao falhar o webhook se transfer falhar
-
----
-
-## 4. Nova pagina: /admin/parceiros
-
-### Tela simples com CRUD basico seguindo padrao piloto:
-
-- PageHeader com titulo "Parceiros"
-- Listagem em tabela com colunas: Nome, Stripe Account, Status, Split %
-- Modal de criacao/edicao com campos:
-  - Nome
-  - Stripe Account ID (texto, preenchido manualmente)
-  - Status (ativo/inativo)
-  - Notas
-- Acesso exclusivo para perfil `gerente`
-
-### Nota importante:
-O `split_percent` do parceiro na tabela `partners` serve como referencia. O valor efetivo usado no calculo e o `partner_split_percent` da empresa. Isso permite flexibilidade por empresa.
-
----
-
-## 5. Tela /admin/vendas (modificacao)
-
-### Novas colunas na tabela (visiveis apenas para Gerente):
-- Valor Bruto (`gross_amount`)
-- Comissao Total (`platform_fee_total`)
-- Comissao Parceiro (`partner_fee_amount`)
-- Liquido Plataforma (`platform_net_amount`)
-
-### Tooltip explicativo:
-Ao passar o mouse sobre o cabecalho da coluna "Comissao", exibir:
-"Comissao = Valor Bruto x Taxa da Empresa. Parceiro recebe X% da comissao. Plataforma retém o restante."
-
-### Novos KPIs (somente Gerente):
-- Total Comissao Plataforma (soma de `platform_fee_total` das vendas pagas)
-- Total Parceiro (soma de `partner_fee_amount`)
-- Liquido Plataforma (soma de `platform_net_amount`)
-
----
-
-## 6. Tela /admin/empresa (modificacao)
-
-### Adicionar campos na aba de dados da empresa:
-- `platform_fee_percent` -- "Taxa da Plataforma (%)"
-- `partner_split_percent` -- "Repasse ao Parceiro (%)"
-
-Editavel apenas pelo Gerente.
-
----
-
-## 7. Tipos TypeScript
-
-### Atualizar `src/types/database.ts`:
+Adicionar flags derivadas:
 
 ```typescript
-// Em Company:
-platform_fee_percent: number;
-partner_split_percent: number;
+const isDeveloper = userRole === 'developer';
+const isGerente = userRole === 'gerente' || isDeveloper;
+const isOperador = userRole === 'operador';
+const isVendedor = userRole === 'vendedor';
+const canViewFinancials = userRole === 'gerente' || isDeveloper;
+```
 
-// Em Sale:
-gross_amount: number | null;
-platform_fee_total: number | null;
-partner_fee_amount: number | null;
-platform_net_amount: number | null;
-stripe_transfer_id: string | null;
+Chave da implementacao: ao fazer `isGerente = gerente || developer`, o developer herda automaticamente todo o acesso que o gerente tem em todas as telas, sem precisar alterar cada pagina individualmente.
 
-// Novo tipo:
-export type PartnerStatus = 'ativo' | 'inativo';
+Adicionar `isDeveloper` ao contexto para uso em funcionalidades exclusivas (como seletor de empresa).
 
-export interface Partner {
-  id: string;
-  name: string;
-  stripe_account_id: string | null;
-  stripe_onboarding_complete: boolean;
-  split_percent: number;
-  status: PartnerStatus;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
+### 3.3 Carregamento de empresas para developer (cross-company)
+
+No `fetchUserData`, quando o usuario for developer, buscar TODAS as empresas ativas (nao apenas as vinculadas via `user_roles`):
+
+```typescript
+// Se developer, buscar todas as empresas
+if (rolesData.some(r => r.role === 'developer')) {
+  const { data: allCompanies } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('is_active', true);
+  // usar allCompanies em vez de filtrar por companyIds
 }
 ```
 
 ---
 
-## 8. Navegacao
+## 4. Frontend -- Sidebar (Seletor Discreto de Empresa)
 
-### AdminSidebar:
-- Adicionar item "Parceiros" no grupo de configuracoes, com icone `Handshake` ou `Users`, visivel apenas para `gerente`
-- Rota: `/admin/parceiros`
+### 4.1 Seletor de empresa exclusivo para developer
 
-### App.tsx:
-- Adicionar rota `/admin/parceiros` apontando para o novo componente
+No `AdminSidebar.tsx`, adicionar um seletor de empresa discreto, visivel APENAS quando `isDeveloper === true` e houver mais de 1 empresa:
 
----
-
-## 9. Build error fix
-
-Corrigir o import nas edge functions de `npm:@supabase/supabase-js@2.57.2` para `https://esm.sh/@supabase/supabase-js@2` em todas as 3 edge functions (create-checkout-session, stripe-webhook, create-connect-account) para resolver o erro de build atual.
+- Posicionar acima do bloco de usuario (rodape do sidebar)
+- Usar um `<select>` ou dropdown compacto com label "Empresa ativa"
+- Ao trocar, chamar `switchCompany(companyId)`
+- Para demais perfis: nada muda, nenhum seletor aparece
 
 ---
 
-## Arquivos a criar
+## 5. Frontend -- Ajustes em Telas com Restricao de Role
 
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/pages/admin/Partners.tsx` | Tela CRUD de parceiros |
+### 5.1 AdminSidebar -- Navegacao
+
+Atualizar o tipo local `UserRole` no sidebar para incluir `developer`. O developer vera todos os itens de menu (como gerente).
+
+### 5.2 Telas com guard `if (!isGerente)` 
+
+Como `isGerente` passara a ser `true` para developer tambem, as seguintes telas ja funcionarao automaticamente:
+- `Partners.tsx` -- `if (!isGerente) return Navigate`
+- `Users.tsx` -- `if (!isGerente) return Navigate`
+- `Sponsors.tsx` -- `if (!isGerente) return Navigate`
+- `Company.tsx` -- `if (!isGerente && !isOperador) return Navigate`
+- `Sales.tsx` -- KPIs financeiros condicionados a `isGerente` e `canViewFinancials`
+
+Nenhuma alteracao necessaria nessas telas.
+
+### 5.3 Edge function `create-user`
+
+A verificacao `isGerente` na edge function usa query direta ao banco. Precisamos ajustar:
+
+```typescript
+const isAuthorized = roles.some(
+  (r: any) => r.role === 'gerente' || r.role === 'developer'
+);
+```
+
+---
+
+## 6. Funcao handle_new_user (trigger)
+
+A trigger atual atribui `gerente` como role padrao para novos usuarios. Isso NAO deve ser alterado -- developer sera atribuido manualmente.
+
+---
 
 ## Arquivos a modificar
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `supabase/functions/create-checkout-session/index.ts` | Taxa variavel por empresa, fix import |
-| `supabase/functions/stripe-webhook/index.ts` | Calculo de split, transfer para parceiro, registro financeiro, fix import |
-| `supabase/functions/create-connect-account/index.ts` | Fix import |
-| `src/pages/admin/Sales.tsx` | Novas colunas e KPIs financeiros |
-| `src/pages/admin/Company.tsx` | Campos de taxa e split |
-| `src/types/database.ts` | Novos tipos e campos |
-| `src/App.tsx` | Nova rota /admin/parceiros |
-| `src/components/layout/AdminSidebar.tsx` | Link Parceiros no menu |
+| `src/types/database.ts` | Adicionar `developer` ao tipo `UserRole` |
+| `src/contexts/AuthContext.tsx` | Adicionar `isDeveloper`, ajustar `isGerente`/`canViewFinancials`, busca cross-company |
+| `src/components/layout/AdminSidebar.tsx` | Adicionar `developer` ao tipo local, seletor de empresa exclusivo |
+| `supabase/functions/create-user/index.ts` | Incluir `developer` na verificacao de permissao |
 
 ## Migracoes de banco
 
 | Alteracao | Descricao |
 |-----------|-----------|
-| Campos em `companies` | `platform_fee_percent`, `partner_split_percent` |
-| Tabela `partners` | CRUD de parceiros com RLS |
-| Campos em `sales` | `gross_amount`, `platform_fee_total`, `partner_fee_amount`, `platform_net_amount`, `stripe_transfer_id` |
+| Enum `user_role` | Adicionar valor `developer` |
+| Funcao `is_admin` | Incluir `developer` |
+| Nova funcao `is_developer` | Verificacao de perfil developer |
+| Funcao `user_belongs_to_company` | Bypass para developer |
+| Policy em `companies` | Developer pode gerenciar todas |
+| Policy em `partners` | Developer pode gerenciar |
+| Policies em `profiles` | Developer pode ver/editar todos |
 
 ## O que NAO sera alterado
 
-- Logica de QR Code e passagens
-- Telas publicas
-- Regra de nao estorno da taxa (mantida)
-- Arquitetura multiempresa existente
+- Fluxo publico (cliente sem login)
+- Logica de pagamento, QR Code ou webhook
+- Comportamento dos perfis gerente, operador, vendedor, motorista
+- Trigger `handle_new_user` (novos usuarios continuam como gerente)
+- Nao sera criado selector de empresa para usuarios comuns
+
