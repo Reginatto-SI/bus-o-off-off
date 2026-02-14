@@ -78,7 +78,9 @@ export type Database = {
           logo_url: string | null
           name: string
           notes: string | null
+          partner_split_percent: number
           phone: string | null
+          platform_fee_percent: number
           primary_color: string | null
           slogan: string | null
           state: string | null
@@ -102,7 +104,9 @@ export type Database = {
           logo_url?: string | null
           name: string
           notes?: string | null
+          partner_split_percent?: number
           phone?: string | null
+          platform_fee_percent?: number
           primary_color?: string | null
           slogan?: string | null
           state?: string | null
@@ -126,7 +130,9 @@ export type Database = {
           logo_url?: string | null
           name?: string
           notes?: string | null
+          partner_split_percent?: number
           phone?: string | null
+          platform_fee_percent?: number
           primary_color?: string | null
           slogan?: string | null
           state?: string | null
@@ -316,6 +322,42 @@ export type Database = {
           },
         ]
       }
+      partners: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          split_percent: number
+          status: string
+          stripe_account_id: string | null
+          stripe_onboarding_complete: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          split_percent?: number
+          status?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          split_percent?: number
+          status?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           cep: string | null
@@ -440,12 +482,17 @@ export type Database = {
           customer_name: string
           customer_phone: string
           event_id: string
+          gross_amount: number | null
           id: string
+          partner_fee_amount: number | null
+          platform_fee_total: number | null
+          platform_net_amount: number | null
           quantity: number
           seller_id: string | null
           status: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
+          stripe_transfer_id: string | null
           trip_id: string
           unit_price: number
           updated_at: string
@@ -461,12 +508,17 @@ export type Database = {
           customer_name: string
           customer_phone: string
           event_id: string
+          gross_amount?: number | null
           id?: string
+          partner_fee_amount?: number | null
+          platform_fee_total?: number | null
+          platform_net_amount?: number | null
           quantity: number
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
           trip_id: string
           unit_price?: number
           updated_at?: string
@@ -482,12 +534,17 @@ export type Database = {
           customer_name?: string
           customer_phone?: string
           event_id?: string
+          gross_amount?: number | null
           id?: string
+          partner_fee_amount?: number | null
+          platform_fee_total?: number | null
+          platform_net_amount?: number | null
           quantity?: number
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_transfer_id?: string | null
           trip_id?: string
           unit_price?: number
           updated_at?: string

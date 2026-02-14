@@ -21,6 +21,7 @@ import UsersPage from "./pages/admin/Users";
 import CompanyPage from "./pages/admin/Company";
 import MyAccount from "./pages/admin/MyAccount";
 import Sponsors from "./pages/admin/Sponsors";
+import Partners from "./pages/admin/Partners";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
+            <Route path="/admin/parceiros" element={<Partners />} />
             
             {/* Catch all */}
             <Route path="*" element={<NotFound />} />

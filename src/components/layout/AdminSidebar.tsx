@@ -14,7 +14,8 @@ import {
   BarChart3,
   Settings,
   User,
-  Image
+  Image,
+  Handshake
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -121,6 +122,11 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Patrocinadores',
     href: '/admin/patrocinadores',
     icon: Image,
+    roles: ['gerente']
+  }, {
+    name: 'Parceiros',
+    href: '/admin/parceiros',
+    icon: Handshake,
     roles: ['gerente']
   }, {
     name: 'Minha Conta',
