@@ -11,10 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, IdCard, Loader2, MapPin, Phone } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,12 +38,14 @@ const formatCnpjInput = (value: string) => {
 
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador } = useAuth();
+  const [searchParams] = useSearchParams();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [stripeConnecting, setStripeConnecting] = useState(false);
   const [form, setForm] = useState({
     legal_name: '',
     trade_name: '',
@@ -108,6 +111,47 @@ export default function CompanyPage() {
   useEffect(() => {
     fetchCompany();
   }, [activeCompanyId]);
+
+  // Handle Stripe return from onboarding
+  useEffect(() => {
+    const stripeParam = searchParams.get('stripe');
+    if (stripeParam === 'complete') {
+      toast.success('Onboarding Stripe concluído! Os dados serão atualizados.');
+      fetchCompany();
+    } else if (stripeParam === 'refresh') {
+      toast.info('O onboarding Stripe precisa ser retomado.');
+    }
+  }, [searchParams]);
+
+  const handleConnectStripe = async () => {
+    if (!editingId) {
+      toast.error('Salve a empresa antes de conectar o Stripe');
+      return;
+    }
+
+    setStripeConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { company_id: editingId },
+      });
+
+      if (error) throw error;
+
+      if (data?.already_complete && data?.dashboard_url) {
+        window.open(data.dashboard_url, '_blank');
+        toast.success('Stripe já está conectado. Abrindo painel...');
+        fetchCompany();
+      } else if (data?.onboarding_url) {
+        window.open(data.onboarding_url, '_blank');
+        toast.info('Complete o cadastro na aba do Stripe que foi aberta.');
+      }
+    } catch (err) {
+      console.error('Stripe connect error:', err);
+      toast.error('Erro ao conectar Stripe. Tente novamente.');
+    } finally {
+      setStripeConnecting(false);
+    }
+  };
 
   const resetForm = () => {
     // Comentário: volta ao estado atual da empresa quando disponível.
@@ -410,6 +454,13 @@ export default function CompanyPage() {
                       <FileText className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Observações</span>
                     </TabsTrigger>
+                    <TabsTrigger
+                      value="pagamentos"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <CreditCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Pagamentos</span>
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="dados" className="mt-0 space-y-4">
@@ -590,6 +641,74 @@ export default function CompanyPage() {
                           rows={5}
                         />
                       </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="pagamentos" className="mt-0">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium">Integração Stripe</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Conecte sua conta Stripe para receber pagamentos online.
+                          </p>
+                        </div>
+                        {company?.stripe_onboarding_complete ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-200">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Conectado
+                          </Badge>
+                        ) : company?.stripe_account_id ? (
+                          <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            Pendente
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Não conectado</Badge>
+                        )}
+                      </div>
+
+                      {company?.stripe_onboarding_complete ? (
+                        <div className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            Sua conta Stripe está conectada e pronta para receber pagamentos.
+                            A plataforma retém automaticamente 7,5% de comissão sobre cada venda.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleConnectStripe}
+                            disabled={stripeConnecting}
+                          >
+                            {stripeConnecting ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                            )}
+                            Acessar Painel Stripe
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-muted-foreground">
+                            {company?.stripe_account_id
+                              ? 'Seu cadastro no Stripe está incompleto. Clique abaixo para retomar.'
+                              : 'Conecte ao Stripe para receber pagamentos de passagens vendidas online.'}
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={handleConnectStripe}
+                            disabled={stripeConnecting}
+                          >
+                            {stripeConnecting ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                              <CreditCard className="h-4 w-4 mr-2" />
+                            )}
+                            {company?.stripe_account_id ? 'Retomar Cadastro Stripe' : 'Conectar Stripe'}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                 </Tabs>

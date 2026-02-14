@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, TicketRecord } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -18,12 +18,15 @@ import {
   Phone,
   ExternalLink,
   Armchair,
+  AlertCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const paymentSuccess = searchParams.get('payment') === 'success';
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
@@ -94,15 +97,33 @@ export default function Confirmation() {
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success/10 mb-4">
-            <CheckCircle2 className="h-8 w-8 text-success" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">
-            Reserva Confirmada!
-          </h1>
-          <p className="text-muted-foreground">
-            Sua passagem foi reservada com sucesso
-          </p>
+          {sale.status === 'pago' || paymentSuccess ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+                <CheckCircle2 className="h-8 w-8 text-green-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                {sale.status === 'pago' ? 'Pagamento Confirmado!' : 'Aguardando Confirmação'}
+              </h1>
+              <p className="text-muted-foreground">
+                {sale.status === 'pago'
+                  ? 'Seu pagamento foi confirmado e suas passagens estão garantidas.'
+                  : 'Seu pagamento está sendo processado. As passagens serão confirmadas em instantes.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                Reserva Registrada
+              </h1>
+              <p className="text-muted-foreground">
+                Sua passagem foi reservada com sucesso
+              </p>
+            </>
+          )}
         </div>
 
         <Card className="mb-6">
