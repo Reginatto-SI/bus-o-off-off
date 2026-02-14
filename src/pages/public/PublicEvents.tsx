@@ -30,6 +30,8 @@ export default function PublicEvents() {
           )
         `)
         .eq('status', 'a_venda')
+        // Segurança operacional: evento arquivado nunca aparece no portal público.
+        .eq('is_archived', false)
         .order('date', { ascending: true });
 
       if (data) setEvents(data as EventWithCompany[]);

@@ -204,6 +204,8 @@ export interface Event {
   max_tickets_per_purchase: number;
   allow_online_sale: boolean;
   allow_seller_sale: boolean;
+  // Controle administrativo de exclusão virtual (não altera status operacional).
+  is_archived: boolean;
   image_url: string | null;
   company_id: string;
   created_at: string;

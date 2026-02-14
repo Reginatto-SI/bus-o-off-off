@@ -262,6 +262,7 @@ export type Database = {
           description: string | null
           id: string
           image_url: string | null
+          is_archived: boolean
           max_tickets_per_purchase: number
           name: string
           public_info: string | null
@@ -279,6 +280,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          is_archived?: boolean
           max_tickets_per_purchase?: number
           name: string
           public_info?: string | null
@@ -296,6 +298,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          is_archived?: boolean
           max_tickets_per_purchase?: number
           name?: string
           public_info?: string | null

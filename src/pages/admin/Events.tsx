@@ -71,6 +71,8 @@ import {
   Eye,
   Upload,
   GripVertical,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
@@ -78,11 +80,13 @@ import { ptBR } from 'date-fns/locale';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 // Types
 interface EventFilters {
   search: string;
   status: 'all' | 'rascunho' | 'a_venda' | 'encerrado';
+  archiveState: 'active' | 'archived';
   startDate: string;
   endDate: string;
   monthYear: 'all' | 'current' | 'next' | string;
@@ -110,6 +114,7 @@ interface EventBoardingLocationWithDetails extends EventBoardingLocation {
 const initialFilters: EventFilters = {
   search: '',
   status: 'all',
+  archiveState: 'active',
   startDate: '',
   endDate: '',
   monthYear: 'all',
@@ -153,8 +158,8 @@ export default function Events() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [eventToDelete, setEventToDelete] = useState<EventWithTrips | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [eventToArchiveAction, setEventToArchiveAction] = useState<EventWithTrips | null>(null);
   const [activeTab, setActiveTab] = useState('geral');
 
   // Post-create dialog
@@ -290,10 +295,12 @@ export default function Events() {
 
   // Stats calculations
   const stats = useMemo(() => {
-    const total = events.length;
-    const rascunhos = events.filter((e) => e.status === 'rascunho').length;
-    const aVenda = events.filter((e) => e.status === 'a_venda').length;
-    const encerrados = events.filter((e) => e.status === 'encerrado').length;
+    // KPIs do topo representam apenas eventos ativos para manter a leitura operacional da tela.
+    const activeEvents = events.filter((e) => !e.is_archived);
+    const total = activeEvents.length;
+    const rascunhos = activeEvents.filter((e) => e.status === 'rascunho').length;
+    const aVenda = activeEvents.filter((e) => e.status === 'a_venda').length;
+    const encerrados = activeEvents.filter((e) => e.status === 'encerrado').length;
     return { total, rascunhos, aVenda, encerrados };
   }, [events]);
 
@@ -351,6 +358,10 @@ export default function Events() {
           event.city.toLowerCase().includes(searchLower);
         if (!matchesSearch) return false;
       }
+
+      // Arquivamento é controle administrativo separado do status operacional.
+      const shouldShowArchived = filters.archiveState === 'archived';
+      if (event.is_archived !== shouldShowArchived) return false;
 
       if (filters.status !== 'all' && event.status !== filters.status) {
         return false;
@@ -419,6 +430,7 @@ export default function Events() {
     return (
       filters.search !== '' ||
       filters.status !== 'all' ||
+      filters.archiveState !== 'active' ||
       filters.startDate !== '' ||
       filters.endDate !== '' ||
       filters.monthYear !== 'all' ||
@@ -707,19 +719,36 @@ export default function Events() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!eventToDelete) return;
+  const handleArchiveToggle = async () => {
+    if (!eventToArchiveAction) return;
+    if (!activeCompanyId) {
+      toast.error('Empresa ativa não encontrada para arquivar o evento');
+      return;
+    }
 
-    const { error } = await supabase.from('events').delete().eq('id', eventToDelete.id);
+    const willArchive = !eventToArchiveAction.is_archived;
+
+    const { error } = await supabase
+      .from('events')
+      // Segurança extra no client: limita update ao tenant ativo e nunca altera status operacional.
+      .update({
+        is_archived: willArchive,
+        // Ao arquivar, bloqueamos venda online para evitar exposição operacional indevida.
+        allow_online_sale: willArchive ? false : eventToArchiveAction.allow_online_sale,
+      })
+      .eq('id', eventToArchiveAction.id)
+      .eq('company_id', activeCompanyId);
 
     if (error) {
-      toast.error('Erro ao excluir evento');
+      toast.error(willArchive ? 'Erro ao arquivar evento' : 'Erro ao reativar evento');
     } else {
-      toast.success('Evento excluído com sucesso');
+      toast.success(willArchive ? 'Evento arquivado com sucesso' : 'Evento reativado com sucesso');
       fetchEvents();
+      fetchSalesData();
     }
-    setDeleteDialogOpen(false);
-    setEventToDelete(null);
+
+    setArchiveDialogOpen(false);
+    setEventToArchiveAction(null);
   };
 
   // Trip handlers
@@ -1424,18 +1453,16 @@ export default function Events() {
       });
     }
 
-    const tripCount = event.trips?.length ?? 0;
-    if (tripCount === 0) {
-      actions.push({
-        label: 'Excluir',
-        icon: Trash2,
-        onClick: () => {
-          setEventToDelete(event);
-          setDeleteDialogOpen(true);
-        },
-        variant: 'destructive',
-      });
-    }
+    actions.push({
+      label: event.is_archived ? 'Reativar evento' : 'Arquivar evento',
+      icon: event.is_archived ? ArchiveRestore : Archive,
+      onClick: () => {
+        // Fluxo único: evento nunca é removido fisicamente, apenas alterna arquivamento.
+        setEventToArchiveAction(event);
+        setArchiveDialogOpen(true);
+      },
+      variant: event.is_archived ? 'default' : 'destructive',
+    });
 
     return actions;
   };
@@ -1514,6 +1541,18 @@ export default function Events() {
               onChange: (value) => setFilters({ ...filters, status: value as EventFilters['status'] }),
               options: statusOptions.map(opt => ({ value: opt.value, label: opt.label })),
               icon: CheckCircle,
+            },
+            {
+              id: 'archiveState',
+              label: 'Arquivamento',
+              placeholder: 'Arquivamento',
+              value: filters.archiveState,
+              onChange: (value) => setFilters({ ...filters, archiveState: value as EventFilters['archiveState'] }),
+              options: [
+                { value: 'active', label: 'Ativos' },
+                { value: 'archived', label: 'Arquivados' },
+              ],
+              icon: Archive,
             },
           ]}
           mainFilters={
@@ -1665,11 +1704,11 @@ export default function Events() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : events.length === 0 ? (
+        ) : events.filter((event) => event.is_archived === (filters.archiveState === 'archived')).length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum evento cadastrado"
-            description="Crie seu primeiro evento para começar a vender passagens"
+            title={filters.archiveState === 'archived' ? 'Nenhum evento arquivado' : 'Nenhum evento cadastrado'}
+            description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
               <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1734,6 +1773,9 @@ export default function Events() {
                   
                   <div className="mb-3 flex items-center gap-1.5">
                     <StatusBadge status={event.status} />
+                    {event.is_archived && (
+                      <Badge variant="secondary" className="uppercase tracking-wide">Arquivado</Badge>
+                    )}
                     {event.status === 'a_venda' && (
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
@@ -2963,23 +3005,24 @@ export default function Events() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        {/* Diálogo de arquivamento (exclusão virtual segura) */}
+        <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Excluir Evento</AlertDialogTitle>
+              <AlertDialogTitle>{eventToArchiveAction?.is_archived ? 'Reativar Evento' : 'Arquivar Evento'}</AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir o evento "{eventToDelete?.name}"?
-                Esta ação não pode ser desfeita.
+                {eventToArchiveAction?.is_archived
+                  ? 'O evento voltará para a listagem principal de ativos e poderá ser vendido novamente conforme suas regras atuais.'
+                  : 'O evento sairá da listagem principal e não ficará disponível para venda no portal público.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDelete}
+                onClick={handleArchiveToggle}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Excluir
+                {eventToArchiveAction?.is_archived ? 'Reativar' : 'Arquivar'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
