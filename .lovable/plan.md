@@ -1,71 +1,60 @@
-# Configuracao do Webhook Stripe + Polling na Confirmacao
+# Correcao do Webhook Stripe
 
-## Situacao Atual
+## Problema
 
-O pagamento Stripe funciona corretamente (dinheiro entra, split de 7,5% aplicado). Porem a tela de confirmacao fica presa em "Aguardando Confirmacao" porque:
+Dois problemas impedem o webhook de funcionar:
 
-1. O webhook Stripe nao esta configurado no painel Stripe, entao o Stripe nao avisa o sistema quando o pagamento e confirmado
-2. A tela de confirmacao carrega os dados uma unica vez e nao atualiza automaticamente
+### 1. Configuracao errada no painel do Stripe (acao manual)
 
-## Parte 1: Configurar o Webhook no Stripe (acao manual do usuario)
+Na tela de criacao do webhook, voce selecionou:
 
-Voce precisa configurar o webhook no painel do Stripe para que ele envie notificacoes ao sistema.
+- **"Contas conectadas e v2"** (errado) — deve ser **"Sua conta"** (card da esquerda)
+- **"Subscriptions"** (errado) — deve ser **"checkout.session.completed"** (evento individual)
 
-### Passo a passo:
+**O que fazer:**
 
-1. Acesse o Stripe Dashboard ([https://dashboard.stripe.com](https://dashboard.stripe.com))
-2. Va em **Developers > Webhooks**
-3. Clique em **Add endpoint**
-4. Configure:
-  - **URL do endpoint**: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
-  - **Eventos para escutar**: selecione `checkout.session.completed`
-5. Apos criar, copie o **Signing Secret** (comeca com `whsec_...`)
-6. Volte ao Lovable e me informe o signing secret para eu configurar como variavel de ambiente (`STRIPE_WEBHOOK_SECRET`)
+1. Selecione **"Sua conta"** (card da esquerda)
+2. Na secao de eventos, clique em **"Todos os eventos"**
+3. Pesquise por **checkout.session.completed**
+4. Marque **somente** esse evento
+5. Clique em "Continuar"
+6. Na proxima tela, cole a URL: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
+7. Finalize a criacao
+8. **Copie o novo Signing Secret** (`whsec_...`) e me envie, pois ele sera diferente do anterior  
+  
+Ja tenho aqui (whsec_yMNYVBzyyKiSxtUfj8PxjArDeW2tnong)
 
-### Importante sobre modo de teste:
+### 2. Bug no codigo da funcao (correcao automatica)
 
-- Certifique-se de estar no **modo teste** do Stripe ao criar o webhook
-- Use a URL exata acima — e o endereco publico da funcao de backend
-
-## Parte 2: Polling automatico na tela de Confirmacao (alteracao de codigo)
-
-Mesmo com o webhook configurado, pode haver um atraso de alguns segundos entre o pagamento e a chegada do webhook. Para que o usuario nao fique preso na tela "Aguardando Confirmacao", a pagina deve consultar automaticamente o status da venda a cada poucos segundos ate confirmar.
-
-### Alteracoes no arquivo `src/pages/public/Confirmation.tsx`:
-
-- Quando a URL contem `?payment=success` e o status da venda ainda e `reservado`, ativar um **polling** que consulta o banco a cada 3 segundos
-- Quando o status mudar para `pago`, parar o polling e atualizar a interface automaticamente
-- Limite maximo de tentativas (ex: 60 tentativas = ~3 minutos) para nao ficar consultando infinitamente
-- Exibir um indicador visual de que o sistema esta verificando o pagamento
-
-### Logica do polling:
+O log mostra o erro:
 
 ```text
-Se (paymentSuccess == true E sale.status != 'pago'):
-  A cada 3 segundos:
-    Consultar sale.status no banco
-    Se status == 'pago':
-      Atualizar estado local -> exibir "Pagamento Confirmado!"
-      Parar polling
-    Se tentativas > 60:
-      Parar polling
-      Exibir mensagem: "Pagamento sendo processado, atualize a pagina em alguns minutos"
+SubtleCryptoProvider cannot be used in a synchronous context.
+Use `await constructEventAsync(...)` instead of `constructEvent(...)`
 ```
 
-## Resumo dos Arquivos
+No ambiente Deno, o metodo sincrono `constructEvent()` nao funciona. A correcao e simples: trocar para `await constructEventAsync()`.
+
+**Alteracao no arquivo `supabase/functions/stripe-webhook/index.ts`:**
+
+Linha 29 — trocar:
+
+```text
+event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+```
+
+Por:
+
+```text
+event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+```
+
+## Resumo
 
 
-| Arquivo                             | Acao      | Descricao                                            |
-| ----------------------------------- | --------- | ---------------------------------------------------- |
-| `src/pages/public/Confirmation.tsx` | Editar    | Adicionar polling automatico do status da venda      |
-| Secret `STRIPE_WEBHOOK_SECRET`      | Adicionar | Sera solicitado ao usuario apos configurar o webhook |
-
-
-## Ordem de Execucao
-
-1. Implementar o polling na tela de Confirmacao (assim ja melhora a UX imediatamente)
-2. Solicitar ao usuario que configure o webhook no Stripe e forneça o signing secret
-3. Adicionar o secret `STRIPE_WEBHOOK_SECRET` no projeto  
-  
-  
-Ja tenho o `STRIPE_WEBHOOK_SECRET (whsec_23G0scYBDRiN8UsaQUwZKykHpq9S4Xsn)`  
+| Item                                             | Tipo   | Descricao                                                       |
+| ------------------------------------------------ | ------ | --------------------------------------------------------------- |
+| Selecionar "Sua conta" no Stripe                 | Manual | O checkout.session.completed e um evento da sua conta principal |
+| Marcar apenas checkout.session.completed         | Manual | Nao usar Subscriptions nem Accounts v2                          |
+| Informar novo Signing Secret                     | Manual | O novo endpoint tera um novo whsec_                             |
+| Corrigir constructEvent para constructEventAsync | Codigo | Linha 29 do stripe-webhook/index.ts                             |
