@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,13 +39,11 @@ serve(async (req) => {
 
     const userId = claimsData.claims.sub;
 
-    // Use service role for DB operations
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Verify user is admin
     const { data: isAdmin } = await supabaseAdmin.rpc("is_admin", { _user_id: userId });
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Forbidden: admin access required" }), {
@@ -62,7 +60,6 @@ serve(async (req) => {
       });
     }
 
-    // Verify user belongs to company
     const { data: belongs } = await supabaseAdmin.rpc("user_belongs_to_company", {
       _user_id: userId,
       _company_id: company_id,
@@ -74,7 +71,6 @@ serve(async (req) => {
       });
     }
 
-    // Get company
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select("id, name, stripe_account_id, stripe_onboarding_complete")
@@ -94,56 +90,38 @@ serve(async (req) => {
 
     let stripeAccountId = company.stripe_account_id;
 
-    // Create Stripe Express account if not exists
     if (!stripeAccountId) {
       const account = await stripe.accounts.create({
         type: "express",
         country: "BR",
         business_type: "company",
-        company: {
-          name: company.name,
-        },
+        company: { name: company.name },
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true },
         },
       });
-
       stripeAccountId = account.id;
-
       await supabaseAdmin
         .from("companies")
         .update({ stripe_account_id: stripeAccountId })
         .eq("id", company_id);
     }
 
-    // Check if onboarding is already complete
     const account = await stripe.accounts.retrieve(stripeAccountId);
-
-    // Extract capabilities status
     const transfersActive = account.capabilities?.transfers === 'active';
     const paymentsActive = account.capabilities?.card_payments === 'active';
     const capabilitiesReady = transfersActive && paymentsActive;
 
-    // Sync DB flag only if capabilities are fully active
     if (capabilitiesReady && !company.stripe_onboarding_complete) {
-      await supabaseAdmin
-        .from("companies")
-        .update({ stripe_onboarding_complete: true })
-        .eq("id", company_id);
+      await supabaseAdmin.from("companies").update({ stripe_onboarding_complete: true }).eq("id", company_id);
     }
-
-    // If DB says complete but capabilities aren't ready, correct the flag
     if (!capabilitiesReady && company.stripe_onboarding_complete) {
-      await supabaseAdmin
-        .from("companies")
-        .update({ stripe_onboarding_complete: false })
-        .eq("id", company_id);
+      await supabaseAdmin.from("companies").update({ stripe_onboarding_complete: false }).eq("id", company_id);
     }
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
-    // If onboarding appears complete (either Stripe or DB flag), try dashboard
     if (account.details_submitted || company.stripe_onboarding_complete) {
       try {
         const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
@@ -157,18 +135,13 @@ serve(async (req) => {
               card_payments: account.capabilities?.card_payments || 'inactive',
             },
           }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (loginError) {
-        console.warn("createLoginLink failed (common in test mode), falling back to onboarding link:", loginError);
-        // Fall through to generate onboarding link as fallback
+        console.warn("createLoginLink failed, falling back to onboarding link:", loginError);
       }
     }
 
-    // Generate onboarding link (initial onboarding or fallback)
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
       refresh_url: `${origin}/admin/empresa?stripe=refresh`,
@@ -178,19 +151,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ onboarding_url: accountLink.url }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error in create-connect-account:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

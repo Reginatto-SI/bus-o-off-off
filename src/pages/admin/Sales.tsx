@@ -222,7 +222,12 @@ export default function Sales() {
     const pagas = filteredSales.filter((s) => s.status === 'pago').length;
     const reservadas = filteredSales.filter((s) => s.status === 'reservado').length;
     const canceladas = filteredSales.filter((s) => s.status === 'cancelado').length;
-    return { total, totalValue, pagas, reservadas, canceladas };
+    // KPIs financeiros de comissão (somente vendas pagas com dados)
+    const paidSales = filteredSales.filter((s) => s.status === 'pago');
+    const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
+    const totalPartnerFee = paidSales.reduce((sum, s) => sum + (s.partner_fee_amount ?? 0), 0);
+    const totalPlatformNet = paidSales.reduce((sum, s) => sum + (s.platform_net_amount ?? 0), 0);
+    return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalPartnerFee, totalPlatformNet };
   }, [filteredSales]);
 
   // ── Flat data for export ──
@@ -493,6 +498,15 @@ export default function Sales() {
           <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
         </div>
 
+        {/* KPIs de Comissão — somente Gerente */}
+        {isGerente && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <StatsCard label="Comissão Total" value={`R$ ${stats.totalPlatformFee.toFixed(2)}`} icon={DollarSign} />
+            <StatsCard label="Comissão Parceiro" value={`R$ ${stats.totalPartnerFee.toFixed(2)}`} icon={DollarSign} />
+            <StatsCard label="Líquido Plataforma" value={`R$ ${stats.totalPlatformNet.toFixed(2)}`} icon={DollarSign} variant="success" />
+          </div>
+        )}
+
         {/* Filters */}
         <div className="mb-6">
           <FilterCard
@@ -588,9 +602,12 @@ export default function Sales() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Veículo</TableHead>
                     <TableHead>Local Embarque</TableHead>
-                    <TableHead>Qtd</TableHead>
-                    {canViewFinancials && <TableHead>Valor</TableHead>}
-                    <TableHead>Vendedor</TableHead>
+                     <TableHead>Qtd</TableHead>
+                     {canViewFinancials && <TableHead>Valor</TableHead>}
+                     {isGerente && <TableHead title="Comissão = Valor Bruto × Taxa da Empresa. Parceiro recebe X% da comissão. Plataforma retém o restante.">Comissão</TableHead>}
+                     {isGerente && <TableHead>Parceiro</TableHead>}
+                     {isGerente && <TableHead>Líq. Plat.</TableHead>}
+                     <TableHead>Vendedor</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
@@ -620,6 +637,21 @@ export default function Sales() {
                         {canViewFinancials && (
                           <TableCell className="font-medium">
                             R$ {(sale.quantity * sale.unit_price).toFixed(2)}
+                          </TableCell>
+                        )}
+                        {isGerente && (
+                          <TableCell className="text-sm">
+                            {sale.platform_fee_total != null ? `R$ ${sale.platform_fee_total.toFixed(2)}` : '—'}
+                          </TableCell>
+                        )}
+                        {isGerente && (
+                          <TableCell className="text-sm">
+                            {sale.partner_fee_amount != null ? `R$ ${sale.partner_fee_amount.toFixed(2)}` : '—'}
+                          </TableCell>
+                        )}
+                        {isGerente && (
+                          <TableCell className="text-sm font-medium">
+                            {sale.platform_net_amount != null ? `R$ ${sale.platform_net_amount.toFixed(2)}` : '—'}
                           </TableCell>
                         )}
                         <TableCell>{sale.seller?.name ?? '-'}</TableCell>

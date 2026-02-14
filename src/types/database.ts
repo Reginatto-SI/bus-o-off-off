@@ -1,6 +1,5 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
-// Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
@@ -10,21 +9,19 @@ export type ProfileStatus = 'ativo' | 'inativo';
 export type TripType = 'ida' | 'volta';
 export type SponsorStatus = 'ativo' | 'inativo';
 export type SponsorLinkType = 'site' | 'whatsapp';
+export type PartnerStatus = 'ativo' | 'inativo';
 
 export interface Company {
   id: string;
   name: string;
-  // Identidade institucional
   trade_name: string | null;
   legal_name: string | null;
   cnpj: string | null;
   city: string | null;
   state: string | null;
-  // Identidade visual
   logo_url: string | null;
   primary_color: string | null;
   slogan: string | null;
-  // Contato institucional
   document: string | null;
   phone: string | null;
   email: string | null;
@@ -35,6 +32,9 @@ export interface Company {
   // Stripe Connect
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
+  // Comissionamento variável
+  platform_fee_percent: number;
+  partner_split_percent: number;
   // Sistema
   is_active: boolean;
   created_at: string;
@@ -70,7 +70,6 @@ export interface UserRoleRecord {
   company_id: string;
 }
 
-// Interface auxiliar para tela de usuários com dados completos
 export interface UserWithRole extends Profile {
   role?: UserRole;
   seller_id?: string | null;
@@ -123,7 +122,6 @@ export interface Vehicle {
   notes: string | null;
   status: VehicleStatus;
   floors: number;
-  // Configuração visual do corredor (ex.: 2x2, 2x1, 3x1)
   seats_left_side: number;
   seats_right_side: number;
   company_id: string;
@@ -204,7 +202,6 @@ export interface Event {
   max_tickets_per_purchase: number;
   allow_online_sale: boolean;
   allow_seller_sale: boolean;
-  // Controle administrativo de exclusão virtual (não altera status operacional).
   is_archived: boolean;
   image_url: string | null;
   company_id: string;
@@ -212,7 +209,6 @@ export interface Event {
   updated_at: string;
 }
 
-// Tipo para criação de viagens (atalho ida+volta)
 export type TripCreationType = 'ida' | 'volta' | 'ida_volta';
 
 export interface Trip {
@@ -221,9 +217,9 @@ export interface Trip {
   vehicle_id: string;
   driver_id: string;
   assistant_driver_id: string | null;
-  paired_trip_id: string | null;        // Vínculo com viagem par (ida/volta)
+  paired_trip_id: string | null;
   trip_type: TripType;
-  departure_time: string | null;        // NULL = "A definir" (comum na volta)
+  departure_time: string | null;
   capacity: number;
   company_id: string;
   created_at: string;
@@ -239,7 +235,7 @@ export interface EventBoardingLocation {
   boarding_location_id: string;
   trip_id: string | null;
   departure_time: string | null;
-  stop_order: number;                   // Ordem da parada na rota
+  stop_order: number;
   company_id: string;
   boarding_location?: BoardingLocation;
   trip?: Trip;
@@ -263,6 +259,12 @@ export interface Sale {
   // Stripe
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
+  // Dados financeiros de comissão (preenchidos após pagamento)
+  gross_amount: number | null;
+  platform_fee_total: number | null;
+  partner_fee_amount: number | null;
+  platform_net_amount: number | null;
+  stripe_transfer_id: string | null;
   created_at: string;
   updated_at: string;
   event?: Event;
@@ -283,7 +285,18 @@ export interface SaleLog {
   created_at: string;
 }
 
-// Tipo para eventos com dados da empresa (usado na vitrine pública)
+export interface Partner {
+  id: string;
+  name: string;
+  stripe_account_id: string | null;
+  stripe_onboarding_complete: boolean;
+  split_percent: number;
+  status: PartnerStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EventWithCompany extends Event {
   company?: {
     id: string;

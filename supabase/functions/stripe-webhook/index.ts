@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,10 +25,8 @@ serve(async (req) => {
     let event: Stripe.Event;
 
     if (webhookSecret && signature) {
-      // Verify webhook signature
       event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } else {
-      // Fallback: parse without verification (development only)
       console.warn("STRIPE_WEBHOOK_SECRET not set — skipping signature verification");
       event = JSON.parse(body) as Stripe.Event;
     }
@@ -58,7 +56,7 @@ serve(async (req) => {
           stripe_payment_intent_id: session.payment_intent as string,
         })
         .eq("id", saleId)
-        .eq("status", "reservado"); // Only update if still reserved
+        .eq("status", "reservado");
 
       if (updateError) {
         console.error("Error updating sale:", updateError);
@@ -66,18 +64,87 @@ serve(async (req) => {
         console.log(`Sale ${saleId} marked as 'pago'`);
       }
 
-      // Log the payment
+      // ── Cálculo de comissão e repasse ao parceiro ──
+      // 1. Buscar dados completos da venda
       const { data: sale } = await supabaseAdmin
         .from("sales")
-        .select("company_id")
+        .select("company_id, unit_price, quantity")
         .eq("id", saleId)
         .single();
 
       if (sale) {
+        // 2. Buscar taxa da plataforma e split do parceiro na empresa
+        const { data: company } = await supabaseAdmin
+          .from("companies")
+          .select("platform_fee_percent, partner_split_percent")
+          .eq("id", sale.company_id)
+          .single();
+
+        const platformFeePercent = company?.platform_fee_percent ?? 7.5;
+        const partnerSplitPercent = company?.partner_split_percent ?? 50;
+
+        // 3. Calcular valores financeiros
+        const grossAmount = sale.unit_price * sale.quantity;
+        const platformFeeTotal = grossAmount * (platformFeePercent / 100);
+
+        // 4. Buscar parceiro ativo com conta Stripe
+        const { data: partner } = await supabaseAdmin
+          .from("partners")
+          .select("id, stripe_account_id, status")
+          .eq("status", "ativo")
+          .limit(1)
+          .maybeSingle();
+
+        let partnerFeeAmount = 0;
+        let platformNetAmount = platformFeeTotal;
+        let stripeTransferId: string | null = null;
+
+        // 5. Se parceiro ativo com conta Stripe, calcular split e fazer transfer
+        if (partner?.stripe_account_id && partner.status === "ativo") {
+          partnerFeeAmount = platformFeeTotal * (partnerSplitPercent / 100);
+          platformNetAmount = platformFeeTotal - partnerFeeAmount;
+
+          // Converter para centavos para o Stripe Transfer
+          const partnerFeeCents = Math.round(partnerFeeAmount * 100);
+
+          if (partnerFeeCents > 0) {
+            try {
+              const transfer = await stripe.transfers.create({
+                amount: partnerFeeCents,
+                currency: "brl",
+                destination: partner.stripe_account_id,
+                description: `Comissão parceiro — Venda ${saleId}`,
+                metadata: { sale_id: saleId },
+              });
+              stripeTransferId = transfer.id;
+              console.log(`Transfer ${transfer.id} created for partner (R$ ${partnerFeeAmount.toFixed(2)})`);
+            } catch (transferError) {
+              // Logar erro mas não falhar o webhook
+              console.error("Error creating partner transfer:", transferError);
+              // Se transfer falhar, toda a comissão fica na plataforma
+              partnerFeeAmount = 0;
+              platformNetAmount = platformFeeTotal;
+            }
+          }
+        }
+
+        // 6. Registrar dados financeiros na venda
+        await supabaseAdmin
+          .from("sales")
+          .update({
+            gross_amount: grossAmount,
+            platform_fee_total: platformFeeTotal,
+            partner_fee_amount: partnerFeeAmount,
+            platform_net_amount: platformNetAmount,
+            stripe_transfer_id: stripeTransferId,
+          })
+          .eq("id", saleId);
+
+        // 7. Log da confirmação de pagamento
         await supabaseAdmin.from("sale_logs").insert({
           sale_id: saleId,
           action: "payment_confirmed",
-          description: `Pagamento confirmado via Stripe (PI: ${session.payment_intent})`,
+          description: `Pagamento confirmado via Stripe (PI: ${session.payment_intent}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
           company_id: sale.company_id,
         });
       }

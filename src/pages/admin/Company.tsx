@@ -680,7 +680,59 @@ export default function CompanyPage() {
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">
-                    <div className="space-y-4">
+                    <div className="space-y-6">
+                      {/* Campos de taxa da plataforma — somente Gerente */}
+                      {isGerente && (
+                        <div className="rounded-lg border p-4 space-y-4">
+                          <h3 className="font-medium">Comissionamento da Plataforma</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Configure a taxa cobrada pela plataforma e o percentual repassado ao parceiro.
+                          </p>
+                          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="platform_fee_percent">Taxa da Plataforma (%)</Label>
+                              <Input
+                                id="platform_fee_percent"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={company?.platform_fee_percent ?? 7.5}
+                                onChange={async (e) => {
+                                  const val = parseFloat(e.target.value);
+                                  if (editingId && !isNaN(val)) {
+                                    await supabase.from('companies').update({ platform_fee_percent: val }).eq('id', editingId);
+                                    fetchCompany();
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="partner_split_percent">Repasse ao Parceiro (%)</Label>
+                              <Input
+                                id="partner_split_percent"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={company?.partner_split_percent ?? 50}
+                                onChange={async (e) => {
+                                  const val = parseFloat(e.target.value);
+                                  if (editingId && !isNaN(val)) {
+                                    await supabase.from('companies').update({ partner_split_percent: val }).eq('id', editingId);
+                                    fetchCompany();
+                                  }
+                                }}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Percentual da comissão da plataforma que será repassado automaticamente ao parceiro via Stripe Transfer.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Integração Stripe (existente) */}
                       <div className="flex items-center justify-between">
                         <div>
                           <h3 className="font-medium">Integração Stripe</h3>
@@ -732,7 +784,7 @@ export default function CompanyPage() {
                         <div className="space-y-3">
                           <p className="text-sm text-muted-foreground">
                             Sua conta Stripe está conectada e pronta para receber pagamentos.
-                            A plataforma retém automaticamente 7,5% de comissão sobre cada venda.
+                            A plataforma retém automaticamente <strong>{company?.platform_fee_percent ?? 7.5}%</strong> de comissão sobre cada venda.
                           </p>
                           <div className="flex gap-2">
                             <Button

@@ -1,14 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const PLATFORM_FEE_PERCENT = 0.075; // 7.5%
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -50,10 +48,10 @@ serve(async (req) => {
       });
     }
 
-    // Get company stripe account
+    // Get company with stripe account AND platform fee
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("stripe_account_id, stripe_onboarding_complete")
+      .select("stripe_account_id, stripe_onboarding_complete, platform_fee_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -86,7 +84,7 @@ serve(async (req) => {
     if (!transfersActive || !paymentsActive) {
       return new Response(
         JSON.stringify({
-          error: "A conta Stripe da empresa ainda não está totalmente ativa. As capabilities 'transfers' e 'card_payments' precisam estar ativas. Aguarde a aprovação do Stripe ou entre em contato com o administrador.",
+          error: "A conta Stripe da empresa ainda não está totalmente ativa. As capabilities 'transfers' e 'card_payments' precisam estar ativas.",
           error_code: "capabilities_not_ready",
           capabilities: {
             transfers: connectedAccount.capabilities?.transfers || 'inactive',
@@ -100,8 +98,10 @@ serve(async (req) => {
       );
     }
 
+    // Cálculo da taxa da plataforma: usa platform_fee_percent variável por empresa (default 7.5%)
+    const feePercent = (company.platform_fee_percent ?? 7.5) / 100;
     const totalAmountCents = Math.round(sale.unit_price * sale.quantity * 100);
-    const applicationFeeCents = Math.round(totalAmountCents * PLATFORM_FEE_PERCENT);
+    const applicationFeeCents = Math.round(totalAmountCents * feePercent);
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
