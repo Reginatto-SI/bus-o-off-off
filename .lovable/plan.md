@@ -1,73 +1,71 @@
+# Configuracao do Webhook Stripe + Polling na Confirmacao
 
+## Situacao Atual
 
-# Correcao: Capabilities da Conta Stripe + Feedback de Erro no Checkout
+O pagamento Stripe funciona corretamente (dinheiro entra, split de 7,5% aplicado). Porem a tela de confirmacao fica presa em "Aguardando Confirmacao" porque:
 
-## Problema Raiz
+1. O webhook Stripe nao esta configurado no painel Stripe, entao o Stripe nao avisa o sistema quando o pagamento e confirmado
+2. A tela de confirmacao carrega os dados uma unica vez e nao atualiza automaticamente
 
-A conta Express de teste foi criada e o onboarding foi concluido, mas o Stripe nao ativou as capabilities `transfers` e `card_payments`. Quando o `create-checkout-session` tenta criar a sessao com `transfer_data.destination`, o Stripe rejeita com erro 400. O frontend captura esse erro silenciosamente e faz fallback para "Reserva Registrada" sem informar o usuario.
+## Parte 1: Configurar o Webhook no Stripe (acao manual do usuario)
 
-## Solucao em 3 Partes
+Voce precisa configurar o webhook no painel do Stripe para que ele envie notificacoes ao sistema.
 
-### 1. Edge Function `create-connect-account` — Verificar e reportar capabilities
+### Passo a passo:
 
-Ao verificar o status da conta (quando o admin clica "Acessar Painel" ou ao retornar do onboarding), a funcao deve consultar `account.capabilities` e reportar ao frontend se `transfers` e `card_payments` estao ativos.
+1. Acesse o Stripe Dashboard ([https://dashboard.stripe.com](https://dashboard.stripe.com))
+2. Va em **Developers > Webhooks**
+3. Clique em **Add endpoint**
+4. Configure:
+  - **URL do endpoint**: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
+  - **Eventos para escutar**: selecione `checkout.session.completed`
+5. Apos criar, copie o **Signing Secret** (comeca com `whsec_...`)
+6. Volte ao Lovable e me informe o signing secret para eu configurar como variavel de ambiente (`STRIPE_WEBHOOK_SECRET`)
 
-Alteracoes:
-- Apos `stripe.accounts.retrieve()`, extrair `account.capabilities.transfers` e `account.capabilities.card_payments`
-- Incluir no response um campo `capabilities_ready: boolean` indicando se ambos estao `active`
-- Atualizar `stripe_onboarding_complete` no banco somente se capabilities estiverem ativas
+### Importante sobre modo de teste:
 
-### 2. Edge Function `create-checkout-session` — Validacao previa e erro claro
+- Certifique-se de estar no **modo teste** do Stripe ao criar o webhook
+- Use a URL exata acima — e o endereco publico da funcao de backend
 
-Antes de tentar criar a sessao Stripe, verificar se a conta conectada tem as capabilities necessarias. Se nao tiver, retornar um erro claro em vez de deixar o Stripe rejeitar.
+## Parte 2: Polling automatico na tela de Confirmacao (alteracao de codigo)
 
-Alteracoes:
-- Apos buscar `company.stripe_account_id`, chamar `stripe.accounts.retrieve()` para checar capabilities
-- Se `transfers` nao estiver `active`, retornar erro 400 com mensagem explicativa: "A conta Stripe da empresa ainda nao esta totalmente ativa. Aguarde a aprovacao do Stripe ou entre em contato com o administrador."
-- Isso evita o fallback silencioso
+Mesmo com o webhook configurado, pode haver um atraso de alguns segundos entre o pagamento e a chegada do webhook. Para que o usuario nao fique preso na tela "Aguardando Confirmacao", a pagina deve consultar automaticamente o status da venda a cada poucos segundos ate confirmar.
 
-### 3. Frontend — Feedback visual no Checkout e na tela de Empresa
+### Alteracoes no arquivo `src/pages/public/Confirmation.tsx`:
 
-#### Checkout (`Checkout.tsx`)
-- Quando `create-checkout-session` retornar erro, exibir toast com a mensagem de erro em vez de fazer fallback silencioso
-- Manter o fallback para reserva apenas se o erro for "Company has no Stripe account configured" (empresa sem Stripe)
-- Para outros erros (capabilities nao prontas), exibir mensagem ao usuario e NAO criar reserva falsa
+- Quando a URL contem `?payment=success` e o status da venda ainda e `reservado`, ativar um **polling** que consulta o banco a cada 3 segundos
+- Quando o status mudar para `pago`, parar o polling e atualizar a interface automaticamente
+- Limite maximo de tentativas (ex: 60 tentativas = ~3 minutos) para nao ficar consultando infinitamente
+- Exibir um indicador visual de que o sistema esta verificando o pagamento
 
-#### Tela de Empresa (`Company.tsx`)
-- Exibir status mais detalhado na aba Pagamentos:
-  - "Conectado e ativo" (verde) — quando capabilities estao prontas
-  - "Conectado — aguardando ativacao" (amarelo) — quando onboarding feito mas capabilities pendentes
-  - "Nao conectado" (cinza) — sem conta
-- Adicionar botao "Verificar status" que reconsulta a edge function para atualizar
-
-## Detalhes Tecnicos
-
-### Verificacao de capabilities no Stripe
+### Logica do polling:
 
 ```text
-const account = await stripe.accounts.retrieve(stripeAccountId);
-const transfersActive = account.capabilities?.transfers === 'active';
-const paymentsActive = account.capabilities?.card_payments === 'active';
-const capabilitiesReady = transfersActive && paymentsActive;
-```
-
-Em contas de teste, pode ser necessario que o usuario acesse o Stripe Dashboard da plataforma e ative manualmente as capabilities para a conta conectada, ou que complete todos os requisitos de verificacao.
-
-### Logica de fallback no Checkout
-
-```text
-Erro "no Stripe account" -> fallback para reserva (comportamento atual)
-Erro "capabilities not ready" -> toast de erro, NAO redireciona
-Erro generico -> toast de erro, NAO redireciona
-Sucesso -> redireciona para Stripe Checkout
+Se (paymentSuccess == true E sale.status != 'pago'):
+  A cada 3 segundos:
+    Consultar sale.status no banco
+    Se status == 'pago':
+      Atualizar estado local -> exibir "Pagamento Confirmado!"
+      Parar polling
+    Se tentativas > 60:
+      Parar polling
+      Exibir mensagem: "Pagamento sendo processado, atualize a pagina em alguns minutos"
 ```
 
 ## Resumo dos Arquivos
 
-| Arquivo | Acao | Descricao |
-|---------|------|-----------|
-| `supabase/functions/create-connect-account/index.ts` | Editar | Reportar status de capabilities |
-| `supabase/functions/create-checkout-session/index.ts` | Editar | Validar capabilities antes de criar sessao |
-| `src/pages/public/Checkout.tsx` | Editar | Feedback de erro em vez de fallback silencioso |
-| `src/pages/admin/Company.tsx` | Editar | Status detalhado de capabilities |
 
+| Arquivo                             | Acao      | Descricao                                            |
+| ----------------------------------- | --------- | ---------------------------------------------------- |
+| `src/pages/public/Confirmation.tsx` | Editar    | Adicionar polling automatico do status da venda      |
+| Secret `STRIPE_WEBHOOK_SECRET`      | Adicionar | Sera solicitado ao usuario apos configurar o webhook |
+
+
+## Ordem de Execucao
+
+1. Implementar o polling na tela de Confirmacao (assim ja melhora a UX imediatamente)
+2. Solicitar ao usuario que configure o webhook no Stripe e forneça o signing secret
+3. Adicionar o secret `STRIPE_WEBHOOK_SECRET` no projeto  
+  
+  
+Ja tenho o `STRIPE_WEBHOOK_SECRET (whsec_23G0scYBDRiN8UsaQUwZKykHpq9S4Xsn)`  
