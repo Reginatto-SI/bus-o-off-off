@@ -24,7 +24,7 @@ import { useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
 
-type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
+type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 
 type NavigationItem = {
   name: string;
@@ -160,13 +160,18 @@ export function AdminSidebar() {
   const {
     profile,
     userRole,
-    signOut
+    signOut,
+    isDeveloper,
+    userCompanies,
+    activeCompany,
+    switchCompany
   } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Developer vê todos os itens de menu (sem filtro de role)
   const visibleGroups = navigationGroups.map(group => ({
     ...group,
-    items: group.items.filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
+    items: group.items.filter(item => isDeveloper || !item.roles || (userRole && item.roles.includes(userRole)))
   })).filter(group => group.items.length > 0);
   // Mantém o menu lateral colapsado por padrão, deixando a expansão por ação do usuário.
   const defaultOpenGroups: string[] = [];
@@ -208,6 +213,24 @@ export function AdminSidebar() {
             </AccordionItem>)}
         </Accordion>
       </nav>
+
+      {/* Seletor de empresa exclusivo para developer */}
+      {isDeveloper && userCompanies.length > 1 && (
+        <div className="border-t border-sidebar-border bg-sidebar px-4 py-3">
+          <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+            Empresa ativa
+          </label>
+          <select
+            value={activeCompany?.id ?? ''}
+            onChange={(e) => switchCompany(e.target.value)}
+            className="w-full rounded-md border border-sidebar-border bg-[#1E293B] px-2 py-1.5 text-xs text-sidebar-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {userCompanies.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="border-t border-sidebar-border bg-sidebar p-4">
         <div className="mb-3">

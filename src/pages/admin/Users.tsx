@@ -83,6 +83,7 @@ const roleConfig: Record<UserRole, { label: string; bgColor: string; textColor: 
   operador: { label: 'Operador', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
   vendedor: { label: 'Vendedor', bgColor: 'bg-green-100', textColor: 'text-green-800' },
   motorista: { label: 'Motorista', bgColor: 'bg-orange-100', textColor: 'text-orange-800' },
+  developer: { label: 'Developer', bgColor: 'bg-red-100', textColor: 'text-red-800' },
 };
 
 export default function UsersPage() {

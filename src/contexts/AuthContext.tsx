@@ -19,6 +19,7 @@ interface AuthContextType {
   isGerente: boolean;
   isOperador: boolean;
   isVendedor: boolean;
+  isDeveloper: boolean;
   canViewFinancials: boolean;
 }
 
@@ -90,12 +91,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return; // Sai cedo, evita query inválida .in('id', [])
       }
 
+      // Developer cross-company: buscar TODAS as empresas ativas
+      const isDev = rolesData.some((r: any) => r.role === 'developer');
+
       // Buscar empresas ativas - só executa se tiver IDs válidos
       try {
-        const { data: companiesData, error: companiesError } = await supabase
-          .from('companies')
-          .select('*')
-          .in('id', companyIds);
+        const companiesQuery = isDev
+          ? supabase.from('companies').select('*').eq('is_active', true)
+          : supabase.from('companies').select('*').in('id', companyIds);
+
+        const { data: companiesData, error: companiesError } = await companiesQuery;
 
         if (companiesError) {
           console.error('[AuthContext] Erro ao carregar empresas (companies.select)', {
@@ -253,10 +258,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const isGerente = userRole === 'gerente';
+  // Developer herda acesso de gerente automaticamente
+  const isDeveloper = userRole === 'developer';
+  const isGerente = userRole === 'gerente' || isDeveloper;
   const isOperador = userRole === 'operador';
   const isVendedor = userRole === 'vendedor';
-  const canViewFinancials = isGerente;
+  const canViewFinancials = userRole === 'gerente' || isDeveloper;
 
   return (
     <AuthContext.Provider
@@ -276,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isGerente,
         isOperador,
         isVendedor,
+        isDeveloper,
         canViewFinancials,
       }}
     >
