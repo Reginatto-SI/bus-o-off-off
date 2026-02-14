@@ -1,70 +1,139 @@
 
 
-# Compra sem reserva + carregamento confiavel de assentos
+# Passagem com QR Code -- Validacao de embarque + salvar/compartilhar
 
-## Resumo das alteracoes
+## Resumo
 
-O objetivo e tornar o fluxo de selecao de assentos mais confiavel e profissional, com tres grandes melhorias:
-
-1. **Loading obrigatorio com bloqueio visual** antes de liberar a selecao
-2. **Revalidacao de assentos** antes de prosseguir ao pagamento
-3. **Remocao do conceito de "reserva" no fluxo publico** (a venda so e confirmada pelo Stripe)
+Implementar QR Codes unicos por passagem (ticket), exibi-los na tela de confirmacao pos-pagamento, criar uma tela publica de consulta de passagens (sem login), e permitir salvar como PDF e imagem.
 
 ---
 
-## Detalhes da implementacao
+## 1. Banco de dados
 
-### 1. Overlay de carregamento no SeatMap
+### Adicionar coluna `qr_code_token` na tabela `tickets`
 
-Ao entrar na tela de checkout (etapa 1), o mapa de assentos exibira um overlay com spinner e texto "Carregando assentos..." enquanto os dados reais sao buscados. Durante esse periodo, todos os botoes de assento ficarao desabilitados.
+- Tipo: `text`, NOT NULL, com default `gen_random_uuid()` (gera automaticamente um UUID v4 unico)
+- Adicionar indice unico para garantir que nenhum token se repita
+- Esse token sera o conteudo do QR Code (UUID seguro, impossivel de "chutar")
 
-Quando o carregamento terminar com sucesso, aparecera brevemente um microtexto "Assentos sincronizados" acima da grade, dando confianca ao usuario.
+```sql
+ALTER TABLE public.tickets
+  ADD COLUMN qr_code_token text NOT NULL DEFAULT gen_random_uuid()::text;
 
-**Arquivo:** `src/components/public/SeatMap.tsx`
-- Adicionar overlay visual sobre a grade quando `loadingStatus` ou `interactionDisabled` forem `true`
-- Exibir indicador "Assentos sincronizados" quando o loading terminar
+CREATE UNIQUE INDEX idx_tickets_qr_code_token ON public.tickets (qr_code_token);
+```
 
-### 2. Revalidacao de assentos antes de avancar para dados dos passageiros
-
-Quando o usuario clicar em "Continuar para dados dos passageiros", o sistema fara uma nova consulta ao banco para verificar se os assentos selecionados ainda estao disponiveis.
-
-Se algum assento tiver sido vendido/bloqueado nesse intervalo:
-- Exibir toast com mensagem clara ("Alguns assentos que voce selecionou ja foram vendidos. Escolha outros.")
-- Atualizar a lista de assentos ocupados automaticamente
-- Remover os assentos conflitantes da selecao do usuario
-- Manter o usuario na mesma tela (sem voltar)
-
-**Arquivo:** `src/pages/public/Checkout.tsx`
-- Modificar `handleAdvanceToPassengers` para revalidar assentos
-- Adicionar mesma logica de revalidacao em `handleSubmit` (antes de criar a venda)
-
-### 3. Revalidacao na submissao (handleSubmit)
-
-Antes de criar a venda e os tickets no banco, o sistema revalidara os assentos individualmente (alem da capacidade geral que ja e validada). Se houver conflito:
-- Exibir mensagem clara
-- Voltar para etapa 1 com assentos atualizados
-- Remover assentos conflitantes da selecao
-
-### 4. Limpeza de reserva em caso de falha no Stripe
-
-O fluxo atual ja limpa a venda e tickets quando o Stripe falha (capabilities_not_ready, erro generico). Isso sera mantido e reforçado para que nenhuma "reserva fantasma" fique no banco em caso de falha ou abandono.
-
-Nao sera alterado o mecanismo de criacao de sale + tickets antes do redirect ao Stripe, pois isso e necessario para que o webhook consiga atualizar a venda. Porem, caso o checkout Stripe expire, a venda permanecera como "reservado" e podera ser limpa futuramente por processo administrativo (fora do escopo deste MVP).
+Motivo: UUID v4 tem 122 bits de entropia, impossivel de adivinhar. O motorista/ajudante, ao escanear o QR, buscara o ticket pelo `qr_code_token`.
 
 ---
 
-## Arquivos a serem modificados
+## 2. Biblioteca de QR Code (frontend)
+
+Instalar `qrcode.react` para renderizar QR Codes como componentes React (SVG/Canvas).
+
+---
+
+## 3. Tela de Confirmacao (`/confirmacao/:id`) -- Evolucao
+
+### Quando `sale.status === 'pago'`:
+- Exibir cada ticket em um card individual contendo:
+  - QR Code (tamanho confortavel, ~180px)
+  - Nome do passageiro
+  - CPF mascarado (ex: `***.456.789-**`)
+  - Assento
+  - Evento + data
+  - Local e horario de embarque
+  - Badge "Paga"
+
+### Quando `sale.status !== 'pago'`:
+- Manter comportamento atual (sem QR Code)
+- Texto "Aguardando confirmacao de pagamento"
+
+### Quando `sale.status === 'cancelado'`:
+- Mostrar badge "Cancelada" e QR Code com opacity reduzida (historico visual)
+
+### Botoes de acao (somente quando pago):
+- **"Salvar passagem (PDF)"** -- gera um PDF por passageiro com QR Code, dados da passagem e informacoes de embarque usando `jspdf`
+- **"Salvar QR Code (imagem)"** -- baixa PNG do QR Code + dados minimos (evento + assento + nome) usando canvas
+
+### Implementacao tecnica:
+- Buscar tickets com o novo campo `qr_code_token` na query existente
+- Usar `qrcode.react` para renderizar QR com valor = `qr_code_token`
+- Para o PDF: renderizar QR em canvas offscreen, converter para base64, inserir no jspdf junto com os dados textuais
+- Para a imagem: criar canvas com QR + texto sobreposto, converter para PNG e disparar download
+
+---
+
+## 4. Nova pagina: Consultar Passagens (`/consultar-passagens`)
+
+### Rota: `/consultar-passagens`
+
+### Fluxo:
+1. Usuario seleciona evento (dropdown com eventos `a_venda` ou `encerrado`)
+2. Informa CPF
+3. Sistema busca tickets onde `passenger_cpf` = CPF informado e `trip.event_id` = evento selecionado
+4. Exibe lista de cards com QR Code e dados de cada passagem
+
+### Regras:
+- Sem login (tela publica)
+- Busca via `tickets` com join em `sales` e `events`
+- Exibir status visual (Paga / Cancelada)
+- Mesmos botoes de salvar PDF e imagem
+
+### RLS: as politicas atuais ja permitem SELECT publico em tickets (`true`), sales (`true`) e events (`status = 'a_venda'`). Para eventos encerrados, sera necessario ajustar a politica de SELECT em events para incluir `encerrado` na consulta publica, ou buscar via tickets diretamente (que ja tem acesso publico irrestrito).
+
+---
+
+## 5. Componente reutilizavel: `TicketCard`
+
+Criar `src/components/public/TicketCard.tsx` que encapsula:
+- Renderizacao do QR Code
+- Dados do passageiro
+- Botoes de salvar (PDF e imagem)
+
+Esse componente sera usado tanto na Confirmacao quanto na Consulta de Passagens.
+
+---
+
+## 6. Funcao utilitaria: Gerar PDF da passagem
+
+Criar `src/lib/ticketPdfGenerator.ts`:
+- Recebe dados do ticket + evento + embarque
+- Gera PDF em formato retrato (A5 ou similar, bom para mobile)
+- Inclui: QR Code grande, dados textuais, identidade visual da empresa
+- Reutiliza helpers de `pdfUtils.ts` (logo, cores, formatacao)
+
+---
+
+## 7. Envio por e-mail (adiado)
+
+O item 5.3 (enviar por e-mail) sera **preparado estruturalmente** mas nao implementado agora, pois requer uma edge function de envio de email e configuracao de provedor. O botao pode ser adicionado como "Em breve" ou implementado numa proxima iteracao.
+
+---
+
+## Arquivos a criar
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/components/public/TicketCard.tsx` | Card reutilizavel com QR Code + dados + botoes |
+| `src/lib/ticketPdfGenerator.ts` | Gerador de PDF individual da passagem |
+| `src/pages/public/TicketLookup.tsx` | Pagina publica de consulta de passagens |
+
+## Arquivos a modificar
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/public/SeatMap.tsx` | Overlay de loading com spinner, bloqueio de interacao, microtexto "Assentos sincronizados" |
-| `src/pages/public/Checkout.tsx` | Revalidacao de assentos em `handleAdvanceToPassengers` e `handleSubmit`, feedback de conflito |
+| `src/pages/public/Confirmation.tsx` | Exibir TicketCard para cada ticket quando pago, botoes de acao |
+| `src/App.tsx` | Adicionar rota `/consultar-passagens` |
+| `src/types/database.ts` | Adicionar `qr_code_token` ao `TicketRecord` |
+| `src/components/layout/PublicLayout.tsx` | Adicionar link "Consultar Passagens" na navegacao publica (se houver) |
 
-## O que NAO sera alterado
+## Migracao de banco
 
-- Layout geral das telas publicas
-- Fluxo de rotas (eventos -> checkout -> confirmacao)
-- Logica do webhook Stripe
-- Componente SeatButton (visual dos estados ja esta correto)
-- Tela de confirmacao
+- Adicionar coluna `qr_code_token` com default UUID em `tickets`
+- Indice unico na coluna
+
+## Dependencia nova
+
+- `qrcode.react` (renderizacao de QR Code no React)
 
