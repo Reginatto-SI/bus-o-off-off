@@ -26,7 +26,7 @@ serve(async (req) => {
 
     if (webhookSecret && signature) {
       // Verify webhook signature
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
     } else {
       // Fallback: parse without verification (development only)
       console.warn("STRIPE_WEBHOOK_SECRET not set — skipping signature verification");
