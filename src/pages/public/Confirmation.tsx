@@ -9,21 +9,21 @@ import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import {
-  CheckCircle2,
-  Calendar,
-  MapPin,
-  Clock,
-  Loader2,
-  Ticket,
-  User,
-  Phone,
-  ExternalLink,
-  Armchair,
-  AlertCircle,
+  CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
+  User, Phone, ExternalLink, Armchair, AlertCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { SaleStatus } from '@/types/database';
+
+interface CompanyInfo {
+  name: string;
+  trade_name: string | null;
+  logo_url: string | null;
+  city: string | null;
+  state: string | null;
+  primary_color: string | null;
+}
 
 export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
@@ -32,10 +32,10 @@ export default function Confirmation() {
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
-  // Initial data fetch
   useEffect(() => {
     const fetchSale = async () => {
       if (!id) return;
@@ -43,9 +43,7 @@ export default function Confirmation() {
       const [saleRes, ticketsRes] = await Promise.all([
         supabase
           .from('sales')
-          .select(
-            '*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)'
-          )
+          .select('*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)')
           .eq('id', id)
           .single(),
         supabase
@@ -55,10 +53,21 @@ export default function Confirmation() {
           .order('seat_label', { ascending: true }),
       ]);
 
-      if (saleRes.data) setSale(saleRes.data as Sale);
-      if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
-
       if (saleRes.data) {
+        setSale(saleRes.data as Sale);
+
+        // Fetch company data
+        const companyId = (saleRes.data as any).event?.company_id;
+        if (companyId) {
+          const { data: companyData } = await supabase
+            .from('companies')
+            .select('name, trade_name, logo_url, city, state, primary_color')
+            .eq('id', companyId)
+            .maybeSingle();
+          if (companyData) setCompany(companyData);
+        }
+
+        // Fetch boarding departure time
         const { data: selectedBoarding } = await supabase
           .from('event_boarding_locations')
           .select('departure_time')
@@ -66,17 +75,17 @@ export default function Confirmation() {
           .eq('trip_id', saleRes.data.trip_id)
           .eq('boarding_location_id', saleRes.data.boarding_location_id)
           .maybeSingle();
-
         setBoardingDepartureTime(selectedBoarding?.departure_time ?? null);
       }
 
+      if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
       setLoading(false);
     };
 
     fetchSale();
   }, [id]);
 
-  // Polling: check sale status every 3s when payment=success but status != 'pago'
+  // Polling for payment confirmation
   useEffect(() => {
     if (!paymentSuccess || !id || !sale || sale.status === 'pago') return;
 
@@ -85,19 +94,11 @@ export default function Confirmation() {
 
     const interval = setInterval(async () => {
       attempts++;
-      const { data } = await supabase
-        .from('sales')
-        .select('status')
-        .eq('id', id)
-        .maybeSingle();
+      const { data } = await supabase.from('sales').select('status').eq('id', id).maybeSingle();
 
       if (data?.status === 'pago') {
-        // Refetch tickets to get qr_code_token
         const { data: freshTickets } = await supabase
-          .from('tickets')
-          .select('*')
-          .eq('sale_id', id)
-          .order('seat_label', { ascending: true });
+          .from('tickets').select('*').eq('sale_id', id).order('seat_label', { ascending: true });
         if (freshTickets) setTickets(freshTickets as TicketRecord[]);
         setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
         clearInterval(interval);
@@ -110,7 +111,9 @@ export default function Confirmation() {
     return () => clearInterval(interval);
   }, [paymentSuccess, id, sale?.status]);
 
-  // Build TicketCardData from tickets
+  const companyDisplayName = company?.trade_name || company?.name || '';
+  const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
+
   const ticketCards: TicketCardData[] = tickets.map((t) => ({
     ticketId: t.id,
     qrCodeToken: t.qr_code_token,
@@ -125,6 +128,11 @@ export default function Confirmation() {
     boardingLocationAddress: sale?.boarding_location?.address || '',
     boardingDepartureTime: boardingDepartureTime,
     saleStatus: (sale?.status || 'reservado') as SaleStatus,
+    companyName: companyDisplayName,
+    companyLogoUrl: company?.logo_url || null,
+    companyCity: company?.city || null,
+    companyState: company?.state || null,
+    companyPrimaryColor: company?.primary_color || null,
   }));
 
   if (loading) {
@@ -152,61 +160,65 @@ export default function Confirmation() {
   return (
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Status header */}
         <div className="text-center mb-8">
           {sale.status === 'pago' ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Pagamento Confirmado!
-              </h1>
-              <p className="text-muted-foreground">
-                Seu pagamento foi confirmado e suas passagens estão garantidas.
-              </p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado!</h1>
+              <p className="text-muted-foreground">Seu pagamento foi confirmado e suas passagens estão garantidas.</p>
             </>
           ) : paymentSuccess && !pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Verificando Pagamento...
-              </h1>
-              <p className="text-muted-foreground">
-                Estamos confirmando seu pagamento. Isso pode levar alguns segundos.
-              </p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Verificando Pagamento...</h1>
+              <p className="text-muted-foreground">Estamos confirmando seu pagamento. Isso pode levar alguns segundos.</p>
             </>
           ) : paymentSuccess && pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Pagamento em Processamento
-              </h1>
-              <p className="text-muted-foreground">
-                Seu pagamento está sendo processado. Atualize a página em alguns minutos para ver a confirmação.
-              </p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento em Processamento</h1>
+              <p className="text-muted-foreground">Seu pagamento está sendo processado. Atualize a página em alguns minutos.</p>
             </>
           ) : (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">
-                Reserva Registrada
-              </h1>
-              <p className="text-muted-foreground">
-                Sua passagem foi reservada com sucesso
-              </p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Reserva Registrada</h1>
+              <p className="text-muted-foreground">Sua passagem foi reservada com sucesso</p>
             </>
           )}
         </div>
 
-        {/* QR Code Ticket Cards when paid or cancelled */}
+        {/* Company identity + ticket cards when paid/cancelled */}
         {(isPaid || sale.status === 'cancelado') && ticketCards.length > 0 && (
           <div className="space-y-4 mb-6">
+            {/* Company identity block */}
+            {company && (
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 border">
+                {company.logo_url && (
+                  <img
+                    src={company.logo_url}
+                    alt={companyDisplayName}
+                    className="h-12 w-12 rounded-lg object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
+                <div>
+                  <p className="font-semibold text-foreground">{companyDisplayName}</p>
+                  {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
+                  <p className="text-xs text-muted-foreground">Transporte oficial do evento</p>
+                </div>
+              </div>
+            )}
+
             <h2 className="font-semibold text-lg">
               {isPaid ? 'Suas Passagens' : 'Passagens (Canceladas)'}
             </h2>
@@ -216,6 +228,7 @@ export default function Confirmation() {
           </div>
         )}
 
+        {/* Sale details card */}
         <Card className="mb-6">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -229,10 +242,7 @@ export default function Confirmation() {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  {sale.event &&
-                    format(new Date(sale.event.date), "EEEE, dd 'de' MMMM 'de' yyyy", {
-                      locale: ptBR,
-                    })}
+                  {sale.event && format(new Date(sale.event.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
@@ -256,9 +266,7 @@ export default function Confirmation() {
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                   <span>{sale.boarding_location?.name}</span>
                 </div>
-                <p className="text-muted-foreground pl-6">
-                  {sale.boarding_location?.address}
-                </p>
+                <p className="text-muted-foreground pl-6">{sale.boarding_location?.address}</p>
                 {sale.boarding_location?.maps_url && (
                   <a
                     href={sale.boarding_location.maps_url}
@@ -273,7 +281,6 @@ export default function Confirmation() {
               </div>
             </div>
 
-            {/* Show passenger list only when NOT paid (no QR cards shown) */}
             {!isPaid && sale.status !== 'cancelado' && (
               <>
                 <Separator />
@@ -285,16 +292,12 @@ export default function Confirmation() {
                         <div key={ticket.id} className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
                           <Armchair className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                           <div className="text-sm space-y-0.5">
-                            <p className="font-medium">
-                              Assento {ticket.seat_label} — {ticket.passenger_name}
-                            </p>
+                            <p className="font-medium">Assento {ticket.seat_label} — {ticket.passenger_name}</p>
                             <p className="text-muted-foreground">
                               CPF: {ticket.passenger_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
                             </p>
                             {ticket.passenger_phone && (
-                              <p className="text-muted-foreground">
-                                Tel: {ticket.passenger_phone}
-                              </p>
+                              <p className="text-muted-foreground">Tel: {ticket.passenger_phone}</p>
                             )}
                           </div>
                         </div>
@@ -340,9 +343,7 @@ export default function Confirmation() {
             </Button>
           </Link>
           <Link to="/eventos">
-            <Button variant="outline" className="w-full">
-              Ver outros eventos
-            </Button>
+            <Button variant="outline" className="w-full">Ver outros eventos</Button>
           </Link>
         </div>
       </div>

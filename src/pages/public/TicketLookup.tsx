@@ -20,37 +20,35 @@ function formatCpfInput(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+interface CompanyInfo {
+  name: string;
+  trade_name: string | null;
+  logo_url: string | null;
+  city: string | null;
+  state: string | null;
+  primary_color: string | null;
+}
+
 export default function TicketLookup() {
   const { toast } = useToast();
   const [selectedEventId, setSelectedEventId] = useState('');
   const [cpf, setCpf] = useState('');
   const [tickets, setTickets] = useState<TicketCardData[]>([]);
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  // Fetch events (a_venda + encerrado via tickets public access)
   const { data: events, isLoading: eventsLoading } = useQuery({
     queryKey: ['ticket-lookup-events'],
     queryFn: async () => {
-      // Tickets have public SELECT, so we can get distinct events via tickets
-      const { data } = await supabase
-        .from('tickets')
-        .select('sale_id, trip_id');
-      
+      const { data } = await supabase.from('tickets').select('sale_id, trip_id');
       if (!data || data.length === 0) return [];
 
-      // Get unique trip_ids to find events
       const tripIds = [...new Set(data.map(t => t.trip_id))];
-      const { data: trips } = await supabase
-        .from('trips')
-        .select('id, event_id')
-        .in('id', tripIds);
-
+      const { data: trips } = await supabase.from('trips').select('id, event_id').in('id', tripIds);
       if (!trips) return [];
 
       const eventIds = [...new Set(trips.map(t => t.event_id))];
-      
-      // Try to get events directly (public policy allows a_venda)
       const { data: publicEvents } = await supabase
         .from('events')
         .select('id, name, date, city, status')
@@ -72,7 +70,6 @@ export default function TicketLookup() {
     setSearched(true);
 
     try {
-      // Get tickets for this CPF
       const { data: ticketRows } = await supabase
         .from('tickets')
         .select('*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*)')
@@ -80,31 +77,48 @@ export default function TicketLookup() {
 
       if (!ticketRows || ticketRows.length === 0) {
         setTickets([]);
+        setCompany(null);
         setSearching(false);
         return;
       }
 
-      // Filter by event
       const filtered = ticketRows.filter((t: any) => t.trip?.event_id === selectedEventId);
 
-      const cards: TicketCardData[] = filtered.map((t: any) => {
-        // Find boarding departure time
-        return {
-          ticketId: t.id,
-          qrCodeToken: t.qr_code_token,
-          passengerName: t.passenger_name,
-          passengerCpf: t.passenger_cpf,
-          seatLabel: t.seat_label,
-          boardingStatus: t.boarding_status,
-          eventName: t.sale?.event?.name || '',
-          eventDate: t.sale?.event?.date || '',
-          eventCity: t.sale?.event?.city || '',
-          boardingLocationName: t.sale?.boarding_location?.name || '',
-          boardingLocationAddress: t.sale?.boarding_location?.address || '',
-          boardingDepartureTime: null,
-          saleStatus: (t.sale?.status || 'reservado') as SaleStatus,
-        };
-      });
+      // Fetch company from event
+      let companyInfo: CompanyInfo | null = null;
+      const eventCompanyId = (filtered[0] as any)?.sale?.event?.company_id;
+      if (eventCompanyId) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('name, trade_name, logo_url, city, state, primary_color')
+          .eq('id', eventCompanyId)
+          .maybeSingle();
+        companyInfo = companyData;
+      }
+      setCompany(companyInfo);
+
+      const companyDisplayName = companyInfo?.trade_name || companyInfo?.name || '';
+
+      const cards: TicketCardData[] = filtered.map((t: any) => ({
+        ticketId: t.id,
+        qrCodeToken: t.qr_code_token,
+        passengerName: t.passenger_name,
+        passengerCpf: t.passenger_cpf,
+        seatLabel: t.seat_label,
+        boardingStatus: t.boarding_status,
+        eventName: t.sale?.event?.name || '',
+        eventDate: t.sale?.event?.date || '',
+        eventCity: t.sale?.event?.city || '',
+        boardingLocationName: t.sale?.boarding_location?.name || '',
+        boardingLocationAddress: t.sale?.boarding_location?.address || '',
+        boardingDepartureTime: null,
+        saleStatus: (t.sale?.status || 'reservado') as SaleStatus,
+        companyName: companyDisplayName,
+        companyLogoUrl: companyInfo?.logo_url || null,
+        companyCity: companyInfo?.city || null,
+        companyState: companyInfo?.state || null,
+        companyPrimaryColor: companyInfo?.primary_color || null,
+      }));
 
       // Fetch boarding departure times
       for (const card of cards) {
@@ -129,6 +143,9 @@ export default function TicketLookup() {
     setSearching(false);
   };
 
+  const companyDisplayName = company?.trade_name || company?.name || '';
+  const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
+
   return (
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -137,9 +154,7 @@ export default function TicketLookup() {
             <Ticket className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">Consultar Passagens</h1>
-          <p className="text-muted-foreground">
-            Informe o evento e seu CPF para visualizar suas passagens
-          </p>
+          <p className="text-muted-foreground">Informe o evento e seu CPF para visualizar suas passagens</p>
         </div>
 
         <Card className="mb-6">
@@ -156,14 +171,10 @@ export default function TicketLookup() {
                 </div>
               ) : (
                 <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o evento" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
                   <SelectContent>
                     {events?.map((e: any) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.name} — {e.city}
-                      </SelectItem>
+                      <SelectItem key={e.id} value={e.id}>{e.name} — {e.city}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -185,11 +196,7 @@ export default function TicketLookup() {
               onClick={handleSearch}
               disabled={searching || !selectedEventId || cpf.replace(/\D/g, '').length !== 11}
             >
-              {searching ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
+              {searching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
               Buscar Passagens
             </Button>
           </CardContent>
@@ -204,9 +211,26 @@ export default function TicketLookup() {
               </div>
             ) : (
               <div className="space-y-4">
-                <h2 className="font-semibold text-lg">
-                  {tickets.length} passagem(ns) encontrada(s)
-                </h2>
+                {/* Company identity block */}
+                {company && (
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 border">
+                    {company.logo_url && (
+                      <img
+                        src={company.logo_url}
+                        alt={companyDisplayName}
+                        className="h-12 w-12 rounded-lg object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <div>
+                      <p className="font-semibold text-foreground">{companyDisplayName}</p>
+                      {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
+                      <p className="text-xs text-muted-foreground">Transporte oficial do evento</p>
+                    </div>
+                  </div>
+                )}
+
+                <h2 className="font-semibold text-lg">{tickets.length} passagem(ns) encontrada(s)</h2>
                 {tickets.map((t) => (
                   <TicketCard key={t.ticketId} ticket={t} />
                 ))}

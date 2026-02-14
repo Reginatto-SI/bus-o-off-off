@@ -23,6 +23,12 @@ export interface TicketCardData {
   boardingLocationAddress: string;
   boardingDepartureTime: string | null;
   saleStatus: SaleStatus;
+  // Company branding
+  companyName: string;
+  companyLogoUrl: string | null;
+  companyCity: string | null;
+  companyState: string | null;
+  companyPrimaryColor: string | null;
 }
 
 function maskCpf(cpf: string): string {
@@ -35,6 +41,7 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
   const isCancelled = ticket.saleStatus === 'cancelado';
+  const accentColor = ticket.companyPrimaryColor || '#F97316';
 
   const handleDownloadPdf = async () => {
     const canvas = qrRef.current;
@@ -43,48 +50,136 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
     await generateTicketPdf({ ticket, qrBase64 });
   };
 
-  const handleDownloadImage = () => {
+  const handleDownloadImage = async () => {
     const sourceCanvas = qrRef.current;
     if (!sourceCanvas) return;
 
-    const padding = 24;
-    const textHeight = 80;
-    const width = sourceCanvas.width + padding * 2;
-    const height = sourceCanvas.height + padding * 2 + textHeight;
-
+    const canvasW = 420;
+    const canvasH = 560;
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = canvasW;
+    canvas.height = canvasH;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Background
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, canvasW, canvasH);
 
-    ctx.drawImage(sourceCanvas, padding, padding);
+    // Accent bar top
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, canvasW, 6);
 
+    let currentY = 30;
+
+    // Company logo or name
+    if (ticket.companyLogoUrl) {
+      try {
+        const logo = await loadImage(ticket.companyLogoUrl);
+        const logoH = 40;
+        const logoW = (logo.width / logo.height) * logoH;
+        ctx.drawImage(logo, (canvasW - logoW) / 2, currentY, logoW, logoH);
+        currentY += logoH + 8;
+      } catch {
+        // fallback to text
+        ctx.fillStyle = '#1a1a1a';
+        ctx.font = 'bold 18px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(ticket.companyName, canvasW / 2, currentY + 18);
+        currentY += 30;
+      }
+    } else {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = 'bold 18px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(ticket.companyName, canvasW / 2, currentY + 18);
+      currentY += 30;
+    }
+
+    // Company location
+    const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
+    if (companyLoc) {
+      ctx.fillStyle = '#666666';
+      ctx.font = '12px Arial, sans-serif';
+      ctx.fillText(companyLoc, canvasW / 2, currentY + 12);
+      currentY += 22;
+    }
+
+    // Divider
+    currentY += 10;
+    ctx.strokeStyle = '#e5e5e5';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, currentY);
+    ctx.lineTo(canvasW - 40, currentY);
+    ctx.stroke();
+    currentY += 20;
+
+    // QR Code centered
+    const qrSize = 200;
+    ctx.drawImage(sourceCanvas, (canvasW - qrSize) / 2, currentY, qrSize, qrSize);
+    currentY += qrSize + 20;
+
+    // Event name
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = 'bold 14px Arial';
-    const textY = sourceCanvas.height + padding + 20;
-    ctx.fillText(ticket.eventName, padding, textY);
-    ctx.font = '12px Arial';
-    ctx.fillText(`Assento ${ticket.seatLabel} — ${ticket.passengerName}`, padding, textY + 20);
+    ctx.font = 'bold 16px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(ticket.eventName, canvasW / 2, currentY);
+    currentY += 24;
+
+    // Seat + Passenger
+    ctx.fillStyle = '#444444';
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText(`Assento ${ticket.seatLabel} — ${ticket.passengerName}`, canvasW / 2, currentY);
+    currentY += 22;
+
+    // Date
+    ctx.fillStyle = '#666666';
+    ctx.font = '13px Arial, sans-serif';
     ctx.fillText(
       format(new Date(ticket.eventDate), "dd/MM/yyyy", { locale: ptBR }),
-      padding,
-      textY + 40
+      canvasW / 2,
+      currentY
     );
+    currentY += 30;
+
+    // Footer
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '10px Arial, sans-serif';
+    ctx.fillText('Emitido digitalmente', canvasW / 2, canvasH - 16);
 
     const link = document.createElement('a');
-    link.download = `qrcode-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.png`;
+    link.download = `passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
 
   return (
     <Card className={isCancelled ? 'opacity-60' : ''}>
+      {/* Company accent bar */}
+      <div className="h-1.5 rounded-t-lg" style={{ backgroundColor: accentColor }} />
       <CardContent className="p-4 sm:p-6">
         <div className="flex flex-col items-center gap-4">
+          {/* Company identity */}
+          <div className="flex items-center gap-3 w-full">
+            {ticket.companyLogoUrl ? (
+              <img
+                src={ticket.companyLogoUrl}
+                alt={ticket.companyName}
+                className="h-8 w-8 rounded object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : null}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{ticket.companyName}</p>
+              {(ticket.companyCity || ticket.companyState) && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {[ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ')}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* QR Code */}
           <div className="relative">
             <QRCodeCanvas
@@ -108,7 +203,7 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
           <div className="w-full space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-semibold">
-                <Armchair className="h-4 w-4 text-primary" />
+                <Armchair className="h-4 w-4" style={{ color: accentColor }} />
                 Assento {ticket.seatLabel}
               </div>
               <StatusBadge status={ticket.saleStatus} />
@@ -161,4 +256,14 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
       </CardContent>
     </Card>
   );
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
