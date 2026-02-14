@@ -1,4 +1,4 @@
-export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista';
+export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type VehicleStatus = 'ativo' | 'inativo';

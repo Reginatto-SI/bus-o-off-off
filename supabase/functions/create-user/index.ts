@@ -68,10 +68,11 @@ serve(async (req) => {
       );
     }
 
-    const isGerente = roles.some((r: any) => r.role === "gerente");
-    if (!isGerente) {
+    // Gerentes e developers podem criar usuários
+    const isAuthorized = roles.some((r: any) => r.role === "gerente" || r.role === "developer");
+    if (!isAuthorized) {
       return new Response(
-        JSON.stringify({ error: "Only gerentes can create users" }),
+        JSON.stringify({ error: "Only gerentes or developers can create users" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -88,9 +89,10 @@ serve(async (req) => {
       );
     }
 
-    // Verify company_id is one of the requesting user's companies
+    // Verify company_id is one of the requesting user's companies (developer bypasses)
+    const isDev = roles.some((r: any) => r.role === "developer");
     const userCompanyIds = roles.map((r: any) => r.company_id);
-    if (!userCompanyIds.includes(company_id)) {
+    if (!isDev && !userCompanyIds.includes(company_id)) {
       return new Response(
         JSON.stringify({ error: "Cannot create users for this company" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }

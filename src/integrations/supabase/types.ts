@@ -1037,6 +1037,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_developer: { Args: { _user_id: string }; Returns: boolean }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean
@@ -1046,7 +1047,7 @@ export type Database = {
       event_status: "rascunho" | "a_venda" | "encerrado"
       sale_status: "reservado" | "pago" | "cancelado"
       seller_status: "ativo" | "inativo"
-      user_role: "gerente" | "operador" | "vendedor" | "motorista"
+      user_role: "gerente" | "operador" | "vendedor" | "motorista" | "developer"
       vehicle_type: "onibus" | "van" | "micro_onibus"
     }
     CompositeTypes: {
@@ -1178,7 +1179,7 @@ export const Constants = {
       event_status: ["rascunho", "a_venda", "encerrado"],
       sale_status: ["reservado", "pago", "cancelado"],
       seller_status: ["ativo", "inativo"],
-      user_role: ["gerente", "operador", "vendedor", "motorista"],
+      user_role: ["gerente", "operador", "vendedor", "motorista", "developer"],
       vehicle_type: ["onibus", "van", "micro_onibus"],
     },
   },
