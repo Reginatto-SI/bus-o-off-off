@@ -1,49 +1,73 @@
 
 
-# Correcao: Acesso ao Painel Stripe para Contas de Teste
+# Correcao: Capabilities da Conta Stripe + Feedback de Erro no Checkout
 
-## Problema Identificado
+## Problema Raiz
 
-A edge function `create-connect-account` verifica na API do Stripe se `account.details_submitted && account.charges_enabled` para decidir se retorna o link do painel ou o link de onboarding. Em contas de teste Express, o Stripe frequentemente nao ativa `charges_enabled`, entao o sistema sempre retorna o link de onboarding -- mesmo com `stripe_onboarding_complete: true` no banco.
+A conta Express de teste foi criada e o onboarding foi concluido, mas o Stripe nao ativou as capabilities `transfers` e `card_payments`. Quando o `create-checkout-session` tenta criar a sessao com `transfer_data.destination`, o Stripe rejeita com erro 400. O frontend captura esse erro silenciosamente e faz fallback para "Reserva Registrada" sem informar o usuario.
 
-## Solucao
+## Solucao em 3 Partes
 
-Ajustar a logica da edge function para considerar tambem o flag do banco de dados (`stripe_onboarding_complete`) ao decidir se deve gerar o link do painel. Alem disso, tratar o caso em que `createLoginLink` pode falhar (contas Express de teste nem sempre suportam login links) e fornecer um fallback adequado.
+### 1. Edge Function `create-connect-account` — Verificar e reportar capabilities
 
-## Alteracoes
+Ao verificar o status da conta (quando o admin clica "Acessar Painel" ou ao retornar do onboarding), a funcao deve consultar `account.capabilities` e reportar ao frontend se `transfers` e `card_payments` estao ativos.
 
-### 1. Edge Function `create-connect-account/index.ts`
+Alteracoes:
+- Apos `stripe.accounts.retrieve()`, extrair `account.capabilities.transfers` e `account.capabilities.card_payments`
+- Incluir no response um campo `capabilities_ready: boolean` indicando se ambos estao `active`
+- Atualizar `stripe_onboarding_complete` no banco somente se capabilities estiverem ativas
 
-Alterar a condicao que decide entre painel e onboarding:
+### 2. Edge Function `create-checkout-session` — Validacao previa e erro claro
 
-**Logica atual:**
+Antes de tentar criar a sessao Stripe, verificar se a conta conectada tem as capabilities necessarias. Se nao tiver, retornar um erro claro em vez de deixar o Stripe rejeitar.
+
+Alteracoes:
+- Apos buscar `company.stripe_account_id`, chamar `stripe.accounts.retrieve()` para checar capabilities
+- Se `transfers` nao estiver `active`, retornar erro 400 com mensagem explicativa: "A conta Stripe da empresa ainda nao esta totalmente ativa. Aguarde a aprovacao do Stripe ou entre em contato com o administrador."
+- Isso evita o fallback silencioso
+
+### 3. Frontend — Feedback visual no Checkout e na tela de Empresa
+
+#### Checkout (`Checkout.tsx`)
+- Quando `create-checkout-session` retornar erro, exibir toast com a mensagem de erro em vez de fazer fallback silencioso
+- Manter o fallback para reserva apenas se o erro for "Company has no Stripe account configured" (empresa sem Stripe)
+- Para outros erros (capabilities nao prontas), exibir mensagem ao usuario e NAO criar reserva falsa
+
+#### Tela de Empresa (`Company.tsx`)
+- Exibir status mais detalhado na aba Pagamentos:
+  - "Conectado e ativo" (verde) — quando capabilities estao prontas
+  - "Conectado — aguardando ativacao" (amarelo) — quando onboarding feito mas capabilities pendentes
+  - "Nao conectado" (cinza) — sem conta
+- Adicionar botao "Verificar status" que reconsulta a edge function para atualizar
+
+## Detalhes Tecnicos
+
+### Verificacao de capabilities no Stripe
+
 ```text
-if (account.details_submitted && account.charges_enabled) -> dashboard
-else -> onboarding
+const account = await stripe.accounts.retrieve(stripeAccountId);
+const transfersActive = account.capabilities?.transfers === 'active';
+const paymentsActive = account.capabilities?.card_payments === 'active';
+const capabilitiesReady = transfersActive && paymentsActive;
 ```
 
-**Nova logica:**
+Em contas de teste, pode ser necessario que o usuario acesse o Stripe Dashboard da plataforma e ative manualmente as capabilities para a conta conectada, ou que complete todos os requisitos de verificacao.
+
+### Logica de fallback no Checkout
+
 ```text
-if (account.details_submitted || company.stripe_onboarding_complete) {
-  tentar gerar loginLink
-  se falhar -> gerar accountLink de onboarding como fallback
-} else {
-  gerar accountLink de onboarding
-}
+Erro "no Stripe account" -> fallback para reserva (comportamento atual)
+Erro "capabilities not ready" -> toast de erro, NAO redireciona
+Erro generico -> toast de erro, NAO redireciona
+Sucesso -> redireciona para Stripe Checkout
 ```
-
-Isso garante que:
-- Contas de teste com onboarding completo consigam acessar o painel
-- Se o `createLoginLink` falhar (comum em test mode), o sistema nao quebra e oferece um fallback
-- O flag `stripe_onboarding_complete` no banco tambem e atualizado caso o Stripe confirme que `details_submitted` e `charges_enabled` estao ambos true
-
-### 2. Nenhuma alteracao no frontend
-
-O frontend ja trata corretamente os dois cenarios (`already_complete` com `dashboard_url` vs `onboarding_url`), entao nenhuma mudanca e necessaria na tela de Empresa.
 
 ## Resumo dos Arquivos
 
-| Arquivo | Acao |
-|---------|------|
-| `supabase/functions/create-connect-account/index.ts` | Editar |
+| Arquivo | Acao | Descricao |
+|---------|------|-----------|
+| `supabase/functions/create-connect-account/index.ts` | Editar | Reportar status de capabilities |
+| `supabase/functions/create-checkout-session/index.ts` | Editar | Validar capabilities antes de criar sessao |
+| `src/pages/public/Checkout.tsx` | Editar | Feedback de erro em vez de fallback silencioso |
+| `src/pages/admin/Company.tsx` | Editar | Status detalhado de capabilities |
 
