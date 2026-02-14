@@ -20,6 +20,33 @@ function formatCpfInput(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function formatEventDate(date: string): string {
+  const parsedDate = new Date(`${date}T00:00:00`);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return date;
+  }
+
+  return parsedDate.toLocaleDateString('pt-BR');
+}
+
+function formatCityState(city: string): string {
+  // Comentário: em alguns cadastros o campo cidade já vem como "Cidade — UF".
+  // Normalizamos para "Cidade/UF" para manter o padrão visual solicitado no dropdown.
+  const cityStateMatch = city.match(/^(.*)\s[-–—]\s([A-Za-z]{2})$/);
+
+  if (!cityStateMatch) {
+    return city;
+  }
+
+  const [, cityName, state] = cityStateMatch;
+  return `${cityName}/${state.toUpperCase()}`;
+}
+
+function formatEventOptionLabel(event: { name: string; city: string; date: string }): string {
+  return `${event.name} — ${formatCityState(event.city)} • ${formatEventDate(event.date)}`;
+}
+
 interface CompanyInfo {
   id: string;
   name: string;
@@ -57,10 +84,15 @@ export default function TicketLookup() {
       const { data: publicEvents } = await supabase
         .from('events')
         .select('id, name, date, city, status')
-        .in('id', eventIds)
-        .order('date', { ascending: false });
+        .in('id', eventIds);
 
-      return publicEvents || [];
+      // Comentário: ordenação principal por data crescente (evento mais próximo primeiro)
+      // e desempate por nome para manter previsibilidade na listagem.
+      return (publicEvents || []).sort((a, b) => {
+        const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateComparison !== 0) return dateComparison;
+        return a.name.localeCompare(b.name, 'pt-BR');
+      });
     },
   });
 
@@ -196,7 +228,9 @@ export default function TicketLookup() {
                   <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
                   <SelectContent>
                     {events?.map((e: any) => (
-                      <SelectItem key={e.id} value={e.id}>{e.name} — {e.city}</SelectItem>
+                      <SelectItem key={e.id} value={e.id} className="truncate">
+                        {formatEventOptionLabel(e)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
