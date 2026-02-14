@@ -123,6 +123,9 @@ export default function CompanyPage() {
     }
   }, [searchParams]);
 
+  const [capabilitiesReady, setCapabilitiesReady] = useState<boolean | null>(null);
+  const [capabilitiesDetail, setCapabilitiesDetail] = useState<{ transfers: string; card_payments: string } | null>(null);
+
   const handleConnectStripe = async () => {
     if (!editingId) {
       toast.error('Salve a empresa antes de conectar o Stripe');
@@ -137,9 +140,21 @@ export default function CompanyPage() {
 
       if (error) throw error;
 
+      // Update capabilities status from response
+      if (data?.capabilities_ready !== undefined) {
+        setCapabilitiesReady(data.capabilities_ready);
+      }
+      if (data?.capabilities) {
+        setCapabilitiesDetail(data.capabilities);
+      }
+
       if (data?.already_complete && data?.dashboard_url) {
         window.open(data.dashboard_url, '_blank');
-        toast.success('Stripe já está conectado. Abrindo painel...');
+        if (data.capabilities_ready) {
+          toast.success('Stripe conectado e ativo. Abrindo painel...');
+        } else {
+          toast.warning('Stripe conectado, mas as capabilities ainda não foram ativadas. Aguarde a aprovação do Stripe.');
+        }
         fetchCompany();
       } else if (data?.onboarding_url) {
         window.open(data.onboarding_url, '_blank');
@@ -148,6 +163,34 @@ export default function CompanyPage() {
     } catch (err) {
       console.error('Stripe connect error:', err);
       toast.error('Erro ao conectar Stripe. Tente novamente.');
+    } finally {
+      setStripeConnecting(false);
+    }
+  };
+
+  const handleCheckStripeStatus = async () => {
+    if (!editingId) return;
+    setStripeConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { company_id: editingId },
+      });
+      if (error) throw error;
+      if (data?.capabilities_ready !== undefined) {
+        setCapabilitiesReady(data.capabilities_ready);
+      }
+      if (data?.capabilities) {
+        setCapabilitiesDetail(data.capabilities);
+      }
+      fetchCompany();
+      if (data?.capabilities_ready) {
+        toast.success('Capabilities ativas! Pagamentos online prontos.');
+      } else {
+        toast.info('Capabilities ainda pendentes. Aguarde a aprovação do Stripe.');
+      }
+    } catch (err) {
+      console.error('Stripe status check error:', err);
+      toast.error('Erro ao verificar status. Tente novamente.');
     } finally {
       setStripeConnecting(false);
     }
@@ -653,40 +696,76 @@ export default function CompanyPage() {
                             Conecte sua conta Stripe para receber pagamentos online.
                           </p>
                         </div>
-                        {company?.stripe_onboarding_complete ? (
+                        {company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
                           <Badge className="bg-green-100 text-green-700 border-green-200">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Conectado
+                            Conectado e ativo
                           </Badge>
                         ) : company?.stripe_account_id ? (
                           <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200">
                             <AlertCircle className="h-3 w-3 mr-1" />
-                            Pendente
+                            {company?.stripe_onboarding_complete || capabilitiesReady === false
+                              ? 'Aguardando ativação'
+                              : 'Pendente'}
                           </Badge>
                         ) : (
                           <Badge variant="secondary">Não conectado</Badge>
                         )}
                       </div>
 
-                      {company?.stripe_onboarding_complete ? (
+                      {capabilitiesReady === false && company?.stripe_account_id && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+                          <p className="text-amber-800 font-medium">
+                            ⚠️ Capabilities ainda não ativas
+                          </p>
+                          <p className="text-amber-700 text-xs">
+                            A conta Stripe foi conectada, mas as capabilities de pagamento ({capabilitiesDetail?.transfers || 'transfers'}: {capabilitiesDetail?.transfers || '?'}, {capabilitiesDetail?.card_payments || 'card_payments'}: {capabilitiesDetail?.card_payments || '?'}) ainda não foram ativadas pelo Stripe. Em contas de teste, pode ser necessário ativar manualmente no dashboard da plataforma Stripe.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCheckStripeStatus}
+                            disabled={stripeConnecting}
+                          >
+                            {stripeConnecting ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            ) : null}
+                            Verificar status
+                          </Button>
+                        </div>
+                      )}
+
+                      {company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
                         <div className="space-y-3">
                           <p className="text-sm text-muted-foreground">
                             Sua conta Stripe está conectada e pronta para receber pagamentos.
                             A plataforma retém automaticamente 7,5% de comissão sobre cada venda.
                           </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={handleConnectStripe}
-                            disabled={stripeConnecting}
-                          >
-                            {stripeConnecting ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                            )}
-                            Acessar Painel Stripe
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleConnectStripe}
+                              disabled={stripeConnecting}
+                            >
+                              {stripeConnecting ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : (
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                              )}
+                              Acessar Painel Stripe
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCheckStripeStatus}
+                              disabled={stripeConnecting}
+                            >
+                              Verificar status
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-3">
