@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Ticket, Phone, MessageCircle } from 'lucide-react';
+import { Loader2, Search, Ticket } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
@@ -20,14 +20,8 @@ function formatCpfInput(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
-function formatCnpjDisplay(cnpj: string | null): string | null {
-  if (!cnpj) return null;
-  const digits = cnpj.replace(/\D/g, '');
-  if (digits.length !== 14) return cnpj;
-  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-}
-
 interface CompanyInfo {
+  id: string;
   name: string;
   trade_name: string | null;
   logo_url: string | null;
@@ -46,7 +40,6 @@ export default function TicketLookup() {
   const [selectedEventId, setSelectedEventId] = useState('');
   const [cpf, setCpf] = useState('');
   const [tickets, setTickets] = useState<TicketCardData[]>([]);
-  const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
 
@@ -89,29 +82,40 @@ export default function TicketLookup() {
 
       if (!ticketRows || ticketRows.length === 0) {
         setTickets([]);
-        setCompany(null);
         setSearching(false);
         return;
       }
 
       const filtered = ticketRows.filter((t: any) => t.trip?.event_id === selectedEventId);
 
-      // Fetch full company data from event
-      let companyInfo: CompanyInfo | null = null;
-      const eventCompanyId = (filtered[0] as any)?.sale?.event?.company_id;
-      if (eventCompanyId) {
-        const { data: companyData } = await supabase
+      // Comentário: uma consulta pode retornar passagens de empresas diferentes,
+      // então mapeamos os dados institucionais por company_id para preencher cada card corretamente.
+      const companyIds = [
+        ...new Set(
+          filtered
+            .map((ticket: any) => ticket?.sale?.event?.company_id)
+            .filter((companyId: string | null | undefined): companyId is string => Boolean(companyId))
+        ),
+      ];
+
+      const companyMap = new Map<string, CompanyInfo>();
+      if (companyIds.length > 0) {
+        const { data: companyRows } = await supabase
           .from('companies')
-          .select('name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
-          .eq('id', eventCompanyId)
-          .maybeSingle();
-        companyInfo = companyData as CompanyInfo | null;
+          .select('id, name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
+          .in('id', companyIds);
+
+        for (const companyRow of companyRows ?? []) {
+          companyMap.set(companyRow.id, companyRow as CompanyInfo);
+        }
       }
-      setCompany(companyInfo);
 
-      const companyDisplayName = companyInfo?.trade_name || companyInfo?.name || '';
+      const cards: TicketCardData[] = filtered.map((t: any) => {
+        const eventCompanyId = t?.sale?.event?.company_id as string | undefined;
+        const companyInfo = eventCompanyId ? companyMap.get(eventCompanyId) ?? null : null;
+        const companyDisplayName = companyInfo?.trade_name || companyInfo?.name || '';
 
-      const cards: TicketCardData[] = filtered.map((t: any) => ({
+        return {
         ticketId: t.id,
         qrCodeToken: t.qr_code_token,
         passengerName: t.passenger_name,
@@ -135,7 +139,8 @@ export default function TicketLookup() {
         companyWhatsapp: companyInfo?.whatsapp || null,
         companyAddress: companyInfo?.address || null,
         companySlogan: companyInfo?.slogan || null,
-      }));
+      };
+      });
 
       // Fetch boarding departure times
       for (const card of cards) {
@@ -160,9 +165,8 @@ export default function TicketLookup() {
     setSearching(false);
   };
 
-  const companyDisplayName = company?.trade_name || company?.name || '';
-  const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
-  const formattedCnpj = formatCnpjDisplay(company?.cnpj);
+  const uniqueCompanies = new Set(tickets.map((ticket) => ticket.companyName).filter(Boolean));
+  const hasMultipleCompanies = uniqueCompanies.size > 1;
 
   return (
     <PublicLayout>
@@ -229,44 +233,22 @@ export default function TicketLookup() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Company identity block */}
-                {company && (
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
-                    {company.logo_url && (
-                      <img
-                        src={company.logo_url}
-                        alt={companyDisplayName}
-                        className="h-14 w-14 rounded-lg object-contain shrink-0"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-semibold text-foreground text-base">{companyDisplayName}</p>
-                      {formattedCnpj && <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>}
-                      {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
-                      <div className="flex items-center gap-3 mt-1 flex-wrap">
-                        {company.phone && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Phone className="h-3 w-3" />
-                            {company.phone}
-                          </span>
-                        )}
-                        {company.whatsapp && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MessageCircle className="h-3 w-3" />
-                            {company.whatsapp}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">Transporte oficial do evento</p>
-                    </div>
-                  </div>
-                )}
-
                 <h2 className="font-semibold text-lg">{tickets.length} passagem(ns) encontrada(s)</h2>
-                {tickets.map((t) => (
-                  <TicketCard key={t.ticketId} ticket={t} />
-                ))}
+                {tickets.map((t, index) => {
+                  const previousCompanyName = index > 0 ? tickets[index - 1].companyName : null;
+                  const shouldShowCompanySeparator = hasMultipleCompanies && t.companyName !== previousCompanyName;
+
+                  return (
+                    <div key={t.ticketId} className="space-y-2">
+                      {shouldShowCompanySeparator && (
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Empresa: {t.companyName}
+                        </p>
+                      )}
+                      <TicketCard ticket={t} />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

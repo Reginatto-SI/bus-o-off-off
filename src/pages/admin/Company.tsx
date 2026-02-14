@@ -25,6 +25,15 @@ const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+x
 // Comentário: este bucket deve existir no Supabase Storage para permitir o upload da logo.
 const COMPANY_LOGO_BUCKET = 'company-logos';
 
+
+function isBucketMissingErrorMessage(message?: string | null) {
+  const normalized = (message ?? '').toLowerCase();
+  return (
+    normalized.includes('bucket')
+    && (normalized.includes('not found') || normalized.includes('does not exist') || normalized.includes('não encontrado'))
+  );
+}
+
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
 
 const formatCnpjInput = (value: string) => {
@@ -342,29 +351,6 @@ export default function CompanyPage() {
       return;
     }
 
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-    if (bucketsError) {
-      logSupabaseError({
-        label: 'Erro ao listar buckets (storage.listBuckets)',
-        error: bucketsError,
-        context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId, userId: user?.id },
-      });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao validar bucket de logo',
-          error: bucketsError,
-          context: { action: 'listBuckets', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
-        })
-      );
-      return;
-    }
-
-    const hasLogoBucket = buckets?.some((bucket) => bucket.name === COMPANY_LOGO_BUCKET);
-    if (!hasLogoBucket) {
-      toast.error('Bucket de logos não encontrado. Crie o bucket company-logos no Supabase Storage.');
-      return;
-    }
-
     const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
     const fileName = `company-${editingId}.${extension}`;
 
@@ -382,19 +368,25 @@ export default function CompanyPage() {
         error: uploadError,
         context: { action: 'upload', bucket: COMPANY_LOGO_BUCKET, companyId: editingId, userId: user?.id },
       });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao enviar logo',
-          error: uploadError,
-          context: { action: 'upload', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
-        })
-      );
+
+      if (isBucketMissingErrorMessage(uploadError.message)) {
+        toast.error('Não foi possível enviar a logo agora porque o bucket de armazenamento ainda não está disponível. Tente novamente em instantes ou contate o suporte.');
+      } else {
+        toast.error(
+          buildDebugToastMessage({
+            title: 'Erro ao enviar logo',
+            error: uploadError,
+            context: { action: 'upload', bucket: COMPANY_LOGO_BUCKET, companyId: editingId },
+          })
+        );
+      }
       setLogoUploading(false);
       return;
     }
 
+    const cacheBustedVersion = Date.now();
     const { data } = supabase.storage.from(COMPANY_LOGO_BUCKET).getPublicUrl(fileName);
-    const publicUrl = data?.publicUrl;
+    const publicUrl = data?.publicUrl ? `${data.publicUrl}?v=${cacheBustedVersion}` : null;
 
     if (!publicUrl) {
       toast.error('Não foi possível obter a URL da logo');
