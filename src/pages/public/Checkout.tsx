@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, BoardingLocation, Seat, VehicleType } from '@/types/database';
@@ -199,6 +199,34 @@ function isPassengerComplete(p: PassengerData): boolean {
   return p.name.trim().length >= 3 && rawCpf.length === 11 && isValidCpf(rawCpf);
 }
 
+function buildPreviewSeatsForVehicle(trip: Trip): Seat[] {
+  const vehicle = trip.vehicle;
+
+  if (!vehicle) return [];
+
+  const layout = generateSeatLayout(
+    vehicle.capacity,
+    vehicle.type,
+    vehicle.floors ?? 1,
+    vehicle.seats_left_side,
+    vehicle.seats_right_side,
+  );
+
+  // Comentário de suporte: o preview evita sensação de tela travada na primeira entrada.
+  // Enquanto buscamos/normalizamos assentos reais no banco, já mostramos o layout base.
+  return layout.map((seat) => ({
+    id: `preview-${seat.floor}-${seat.row_number}-${seat.column_number}`,
+    vehicle_id: trip.vehicle_id,
+    label: seat.label,
+    floor: seat.floor,
+    row_number: seat.row_number,
+    column_number: seat.column_number,
+    status: seat.status,
+    company_id: trip.company_id,
+    created_at: new Date().toISOString(),
+  }));
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -217,6 +245,8 @@ export default function Checkout() {
   const [occupiedSeatIds, setOccupiedSeatIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingSeats, setGeneratingSeats] = useState(false);
+  const [loadingSeatStatus, setLoadingSeatStatus] = useState(false);
+  const [seatStatusError, setSeatStatusError] = useState<string | null>(null);
 
   // Step management: 1 = seat selection, 2 = passenger data
   const [step, setStep] = useState(1);
@@ -227,156 +257,204 @@ export default function Checkout() {
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
 
+  const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
+    setLoadingSeatStatus(true);
+    setSeatStatusError(null);
+
+    try {
+      const { data: tickets, error: ticketsError } = await supabase
+        .from('tickets')
+        .select('seat_id')
+        .eq('trip_id', tripUuid);
+
+      if (ticketsError) {
+        throw ticketsError;
+      }
+
+      if (!isActive()) return;
+
+      setOccupiedSeatIds((tickets ?? []).map((t: { seat_id: string | null }) => t.seat_id).filter(Boolean) as string[]);
+    } catch (error) {
+      console.error('Erro ao carregar status dos assentos:', error);
+      if (!isActive()) return;
+      setSeatStatusError('Não foi possível atualizar os assentos ocupados.');
+    } finally {
+      if (isActive()) {
+        setLoadingSeatStatus(false);
+      }
+    }
+  }, []);
+
   // ---- Load data ----
   useEffect(() => {
+    let active = true;
+    const isActive = () => active;
+
     const fetchData = async () => {
       if (!id || !tripId || !locationId) {
         navigate('/eventos');
         return;
       }
 
-      const [eventRes, tripRes, locationRes] = await Promise.all([
-        supabase.from('events').select('*').eq('id', id).single(),
-        supabase.from('trips').select('*, vehicle:vehicles(*)').eq('id', tripId).single(),
-        supabase.from('boarding_locations').select('*').eq('id', locationId).single(),
-      ]);
+      setLoading(true);
 
-      if (eventRes.data) setEvent(eventRes.data as Event);
-      if (tripRes.data) setTrip(tripRes.data as Trip);
-      if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
+      try {
+        const [eventRes, tripRes, locationRes] = await Promise.all([
+          supabase.from('events').select('*').eq('id', id).single(),
+          supabase.from('trips').select('*, vehicle:vehicles(*)').eq('id', tripId).single(),
+          supabase.from('boarding_locations').select('*').eq('id', locationId).single(),
+        ]);
 
-      // Fetch seats for this vehicle
-      if (tripRes.data) {
-        const vehicleId = (tripRes.data as Trip).vehicle_id;
-        const { data: existingSeats } = await supabase
-          .from('seats')
-          .select('*')
-          .eq('vehicle_id', vehicleId)
-          .order('floor', { ascending: true })
-          .order('row_number', { ascending: true })
-          .order('column_number', { ascending: true });
+        if (!isActive()) return;
 
-        if (existingSeats && existingSeats.length > 0) {
-          // Validate layout compatibility with vehicle type
-          const vehicle = (tripRes.data as Trip).vehicle!;
-          const seatsLeftSide = vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2);
-          const seatsRightSide = vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2);
-          const expectedCols = seatsLeftSide + seatsRightSide;
-          const maxCol = Math.max(...existingSeats.map((s: any) => s.column_number));
-          const numberingMismatch = hasRightSideNumberingMismatch(existingSeats as Seat[], seatsLeftSide);
+        if (eventRes.data) setEvent(eventRes.data as Event);
+        if (tripRes.data) setTrip(tripRes.data as Trip);
+        if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
 
-          if (maxCol !== expectedCols || numberingMismatch) {
-            // Check if any tickets exist for this trip before regenerating
-            const { count: ticketCount } = await supabase
-              .from('tickets')
-              .select('id', { count: 'exact', head: true })
-              .eq('trip_id', tripId!);
+        // Comentário de suporte: liberamos o layout da tela assim que dados básicos chegam,
+        // evitando tela vazia na primeira abertura enquanto os assentos reais ainda sincronizam.
+        setLoading(false);
 
-            if (!ticketCount || ticketCount === 0) {
-              // Safe to delete and regenerate
-              await supabase.from('seats').delete().eq('vehicle_id', vehicleId);
+        if (tripRes.data) {
+          const currentTrip = tripRes.data as Trip;
+          const vehicleId = currentTrip.vehicle_id;
 
-              setGeneratingSeats(true);
-              const layout = generateSeatLayout(
-                vehicle.capacity,
-                vehicle.type,
-                vehicle.floors ?? 1,
-                vehicle.seats_left_side,
-                vehicle.seats_right_side,
-              );
-              const seatInserts = layout.map((s) => ({
-                vehicle_id: vehicleId,
-                label: s.label,
-                floor: s.floor,
-                row_number: s.row_number,
-                column_number: s.column_number,
-                status: s.status,
-                company_id: (tripRes.data as Trip).company_id,
-              }));
-              const { data: created } = await supabase
-                .from('seats')
-                .insert(seatInserts)
-                .select();
-              if (created) setSeats(created as Seat[]);
-              setGeneratingSeats(false);
-            } else if (numberingMismatch) {
-              // Comentário: com bilhetes emitidos, não podemos recriar assentos; corrigimos somente os labels do lado direito.
-              const labelFixes = buildRightSideNumberingFixes(existingSeats as Seat[], seatsLeftSide);
+          // Comentário de causa raiz: antes a página ficava bloqueada até terminar toda a sequência
+          // (carregar/criar assentos + status). Em rede lenta, o usuário via "vazio" na 1ª entrada.
+          // Aqui exibimos um layout base imediato e depois sincronizamos assentos reais/status.
+          setSeats(buildPreviewSeatsForVehicle(currentTrip));
 
-              if (labelFixes.length > 0) {
-                const updatePromises = labelFixes.map((fix) =>
-                  supabase
-                    .from('seats')
-                    .update({ label: fix.label })
-                    .eq('id', fix.id)
+          const { data: existingSeats, error: seatsError } = await supabase
+            .from('seats')
+            .select('*')
+            .eq('vehicle_id', vehicleId)
+            .order('floor', { ascending: true })
+            .order('row_number', { ascending: true })
+            .order('column_number', { ascending: true });
+
+          if (seatsError) {
+            throw seatsError;
+          }
+
+          if (!isActive()) return;
+
+          if (existingSeats && existingSeats.length > 0) {
+            const vehicle = currentTrip.vehicle!;
+            const seatsLeftSide = vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2);
+            const seatsRightSide = vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2);
+            const expectedCols = seatsLeftSide + seatsRightSide;
+            const maxCol = Math.max(...existingSeats.map((s) => s.column_number));
+            const numberingMismatch = hasRightSideNumberingMismatch(existingSeats as Seat[], seatsLeftSide);
+
+            if (maxCol !== expectedCols || numberingMismatch) {
+              const { count: ticketCount } = await supabase
+                .from('tickets')
+                .select('id', { count: 'exact', head: true })
+                .eq('trip_id', tripId);
+
+              if (!ticketCount || ticketCount === 0) {
+                setGeneratingSeats(true);
+                await supabase.from('seats').delete().eq('vehicle_id', vehicleId);
+
+                const layout = generateSeatLayout(
+                  vehicle.capacity,
+                  vehicle.type,
+                  vehicle.floors ?? 1,
+                  vehicle.seats_left_side,
+                  vehicle.seats_right_side,
                 );
-
-                await Promise.all(updatePromises);
-
-                const fixesBySeatId = new Map(labelFixes.map((fix) => [fix.id, fix.label]));
-                const patchedSeats = (existingSeats as Seat[]).map((seat) => ({
-                  ...seat,
-                  label: fixesBySeatId.get(seat.id) ?? seat.label,
+                const seatInserts = layout.map((s) => ({
+                  vehicle_id: vehicleId,
+                  label: s.label,
+                  floor: s.floor,
+                  row_number: s.row_number,
+                  column_number: s.column_number,
+                  status: s.status,
+                  company_id: currentTrip.company_id,
                 }));
+                const { data: created } = await supabase.from('seats').insert(seatInserts).select();
+                if (!isActive()) return;
+                if (created) setSeats(created as Seat[]);
+                setGeneratingSeats(false);
+              } else if (numberingMismatch) {
+                const labelFixes = buildRightSideNumberingFixes(existingSeats as Seat[], seatsLeftSide);
 
-                setSeats(patchedSeats);
+                if (labelFixes.length > 0) {
+                  await Promise.all(
+                    labelFixes.map((fix) => supabase.from('seats').update({ label: fix.label }).eq('id', fix.id))
+                  );
+
+                  if (!isActive()) return;
+
+                  const fixesBySeatId = new Map(labelFixes.map((fix) => [fix.id, fix.label]));
+                  const patchedSeats = (existingSeats as Seat[]).map((seat) => ({
+                    ...seat,
+                    label: fixesBySeatId.get(seat.id) ?? seat.label,
+                  }));
+
+                  setSeats(patchedSeats);
+                } else {
+                  setSeats(existingSeats as Seat[]);
+                }
               } else {
                 setSeats(existingSeats as Seat[]);
               }
             } else {
-              // Tickets exist e layout de colunas divergente — mantemos assentos atuais para não impactar vendas existentes.
               setSeats(existingSeats as Seat[]);
             }
           } else {
-            setSeats(existingSeats as Seat[]);
+            setGeneratingSeats(true);
+            const vehicle = currentTrip.vehicle!;
+            const layout = generateSeatLayout(
+              vehicle.capacity,
+              vehicle.type,
+              vehicle.floors ?? 1,
+              vehicle.seats_left_side,
+              vehicle.seats_right_side,
+            );
+
+            const seatInserts = layout.map((s) => ({
+              vehicle_id: vehicleId,
+              label: s.label,
+              floor: s.floor,
+              row_number: s.row_number,
+              column_number: s.column_number,
+              status: s.status,
+              company_id: currentTrip.company_id,
+            }));
+
+            const { data: created } = await supabase.from('seats').insert(seatInserts).select();
+
+            if (!isActive()) return;
+
+            if (created) setSeats(created as Seat[]);
+            setGeneratingSeats(false);
           }
-        } else {
-          // Auto-generate seats
-          setGeneratingSeats(true);
-          const vehicle = (tripRes.data as Trip).vehicle!;
-          const layout = generateSeatLayout(
-            vehicle.capacity,
-            vehicle.type,
-            vehicle.floors ?? 1,
-            vehicle.seats_left_side,
-            vehicle.seats_right_side,
-          );
 
-          const seatInserts = layout.map((s) => ({
-            vehicle_id: vehicleId,
-            label: s.label,
-            floor: s.floor,
-            row_number: s.row_number,
-            column_number: s.column_number,
-            status: s.status,
-            company_id: (tripRes.data as Trip).company_id,
-          }));
-
-          const { data: created } = await supabase
-            .from('seats')
-            .insert(seatInserts)
-            .select();
-
-          if (created) setSeats(created as Seat[]);
-          setGeneratingSeats(false);
+          await fetchOccupiedSeats(tripId, isActive);
         }
-
-        // Fetch occupied seats (tickets for this trip)
-        const { data: tickets } = await supabase
-          .from('tickets')
-          .select('seat_id')
-          .eq('trip_id', tripId);
-
-        if (tickets) {
-          setOccupiedSeatIds(tickets.map((t: any) => t.seat_id).filter(Boolean));
+      } catch (error) {
+        console.error('Erro ao carregar checkout:', error);
+        setGeneratingSeats(false);
+        setSeatStatusError('Não foi possível carregar o mapa de assentos.');
+      } finally {
+        if (isActive()) {
+          setLoading(false);
         }
       }
-
-      setLoading(false);
     };
 
     fetchData();
-  }, [id, tripId, locationId, navigate]);
+
+    return () => {
+      active = false;
+    };
+  }, [id, tripId, locationId, navigate, fetchOccupiedSeats]);
+
+  const handleRetrySeatStatus = async () => {
+    if (!tripId) return;
+    await fetchOccupiedSeats(tripId, () => true);
+  };
 
   // Init passengers array when advancing to step 2
   const handleAdvanceToPassengers = () => {
@@ -540,14 +618,12 @@ export default function Checkout() {
 
   // ---- Render ----
 
-  if (loading || generatingSeats) {
+  if (loading) {
     return (
       <PublicLayout>
         <div className="flex flex-col items-center justify-center py-12 gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">
-            {generatingSeats ? 'Preparando mapa de assentos...' : 'Carregando...'}
-          </p>
+          <p className="text-sm text-muted-foreground">Carregando...</p>
         </div>
       </PublicLayout>
     );
@@ -622,6 +698,16 @@ export default function Checkout() {
         {/* ============ STEP 1: Seat Selection ============ */}
         {step === 1 && (
           <>
+            {seatStatusError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <p className="text-destructive font-medium">{seatStatusError}</p>
+                <p className="text-muted-foreground text-xs mt-1">Você pode tentar novamente sem sair desta tela.</p>
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={handleRetrySeatStatus} disabled={loadingSeatStatus}>
+                  {loadingSeatStatus ? 'Tentando...' : 'Tentar novamente'}
+                </Button>
+              </div>
+            )}
+
             <SeatMap
               seats={seats}
               occupiedSeatIds={occupiedSeatIds}
@@ -631,11 +717,13 @@ export default function Checkout() {
               floors={trip.vehicle?.floors ?? 1}
               seatsLeftSide={trip.vehicle?.seats_left_side ?? (trip.vehicle?.type === 'van' ? 2 : 2)}
               seatsRightSide={trip.vehicle?.seats_right_side ?? (trip.vehicle?.type === 'van' ? 1 : 2)}
+              loadingStatus={loadingSeatStatus || generatingSeats}
+              interactionDisabled={generatingSeats}
             />
 
             <Button
               className="w-full h-14 text-lg font-medium"
-              disabled={selectedSeats.length !== quantity}
+              disabled={selectedSeats.length !== quantity || generatingSeats}
               onClick={handleAdvanceToPassengers}
             >
               Continuar para dados dos passageiros
