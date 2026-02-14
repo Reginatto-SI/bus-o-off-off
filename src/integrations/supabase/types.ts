@@ -673,6 +673,7 @@ export type Database = {
           passenger_cpf: string
           passenger_name: string
           passenger_phone: string | null
+          qr_code_token: string
           sale_id: string
           seat_id: string | null
           seat_label: string
@@ -687,6 +688,7 @@ export type Database = {
           passenger_cpf: string
           passenger_name: string
           passenger_phone?: string | null
+          qr_code_token?: string
           sale_id: string
           seat_id?: string | null
           seat_label: string
@@ -701,6 +703,7 @@ export type Database = {
           passenger_cpf?: string
           passenger_name?: string
           passenger_phone?: string | null
+          qr_code_token?: string
           sale_id?: string
           seat_id?: string | null
           seat_label?: string

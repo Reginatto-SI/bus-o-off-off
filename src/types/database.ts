@@ -154,6 +154,7 @@ export interface TicketRecord {
   passenger_cpf: string;
   passenger_phone: string | null;
   boarding_status: string;
+  qr_code_token: string;
   company_id: string;
   created_at: string;
   updated_at: string;

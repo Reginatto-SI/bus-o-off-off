@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import {
   CheckCircle2,
   Calendar,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import type { SaleStatus } from '@/types/database';
 
 export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +92,13 @@ export default function Confirmation() {
         .maybeSingle();
 
       if (data?.status === 'pago') {
+        // Refetch tickets to get qr_code_token
+        const { data: freshTickets } = await supabase
+          .from('tickets')
+          .select('*')
+          .eq('sale_id', id)
+          .order('seat_label', { ascending: true });
+        if (freshTickets) setTickets(freshTickets as TicketRecord[]);
         setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
         clearInterval(interval);
       } else if (attempts >= maxAttempts) {
@@ -100,6 +109,23 @@ export default function Confirmation() {
 
     return () => clearInterval(interval);
   }, [paymentSuccess, id, sale?.status]);
+
+  // Build TicketCardData from tickets
+  const ticketCards: TicketCardData[] = tickets.map((t) => ({
+    ticketId: t.id,
+    qrCodeToken: t.qr_code_token,
+    passengerName: t.passenger_name,
+    passengerCpf: t.passenger_cpf,
+    seatLabel: t.seat_label,
+    boardingStatus: t.boarding_status,
+    eventName: sale?.event?.name || '',
+    eventDate: sale?.event?.date || '',
+    eventCity: sale?.event?.city || '',
+    boardingLocationName: sale?.boarding_location?.name || '',
+    boardingLocationAddress: sale?.boarding_location?.address || '',
+    boardingDepartureTime: boardingDepartureTime,
+    saleStatus: (sale?.status || 'reservado') as SaleStatus,
+  }));
 
   if (loading) {
     return (
@@ -120,6 +146,8 @@ export default function Confirmation() {
       </PublicLayout>
     );
   }
+
+  const isPaid = sale.status === 'pago';
 
   return (
     <PublicLayout>
@@ -175,6 +203,18 @@ export default function Confirmation() {
             </>
           )}
         </div>
+
+        {/* QR Code Ticket Cards when paid or cancelled */}
+        {(isPaid || sale.status === 'cancelado') && ticketCards.length > 0 && (
+          <div className="space-y-4 mb-6">
+            <h2 className="font-semibold text-lg">
+              {isPaid ? 'Suas Passagens' : 'Passagens (Canceladas)'}
+            </h2>
+            {ticketCards.map((tc) => (
+              <TicketCard key={tc.ticketId} ticket={tc} />
+            ))}
+          </div>
+        )}
 
         <Card className="mb-6">
           <CardHeader>
@@ -233,51 +273,54 @@ export default function Confirmation() {
               </div>
             </div>
 
-            <Separator />
-
-            {/* Tickets / passengers */}
-            {tickets.length > 0 ? (
-              <div>
-                <h4 className="font-medium mb-3">Passageiros</h4>
-                <div className="space-y-3">
-                  {tickets.map((ticket) => (
-                    <div key={ticket.id} className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
-                      <Armchair className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <div className="text-sm space-y-0.5">
-                        <p className="font-medium">
-                          Assento {ticket.seat_label} — {ticket.passenger_name}
-                        </p>
-                        <p className="text-muted-foreground">
-                          CPF: {ticket.passenger_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
-                        </p>
-                        {ticket.passenger_phone && (
-                          <p className="text-muted-foreground">
-                            Tel: {ticket.passenger_phone}
-                          </p>
-                        )}
+            {/* Show passenger list only when NOT paid (no QR cards shown) */}
+            {!isPaid && sale.status !== 'cancelado' && (
+              <>
+                <Separator />
+                {tickets.length > 0 ? (
+                  <div>
+                    <h4 className="font-medium mb-3">Passageiros</h4>
+                    <div className="space-y-3">
+                      {tickets.map((ticket) => (
+                        <div key={ticket.id} className="flex items-start gap-3 bg-muted/40 rounded-lg p-3">
+                          <Armchair className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                          <div className="text-sm space-y-0.5">
+                            <p className="font-medium">
+                              Assento {ticket.seat_label} — {ticket.passenger_name}
+                            </p>
+                            <p className="text-muted-foreground">
+                              CPF: {ticket.passenger_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}
+                            </p>
+                            {ticket.passenger_phone && (
+                              <p className="text-muted-foreground">
+                                Tel: {ticket.passenger_phone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="font-medium mb-2">Passageiro</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span>{sale.customer_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span>{sale.customer_phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Ticket className="h-4 w-4 text-muted-foreground" />
+                        <span>{sale.quantity} passagem(ns)</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h4 className="font-medium mb-2">Passageiro</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{sale.customer_name}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{sale.customer_phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Ticket className="h-4 w-4 text-muted-foreground" />
-                    <span>{sale.quantity} passagem(ns)</span>
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -289,11 +332,19 @@ export default function Confirmation() {
           </p>
         </div>
 
-        <Link to="/eventos">
-          <Button variant="outline" className="w-full">
-            Ver outros eventos
-          </Button>
-        </Link>
+        <div className="flex flex-col gap-3">
+          <Link to="/consultar-passagens">
+            <Button variant="outline" className="w-full">
+              <Ticket className="h-4 w-4 mr-2" />
+              Consultar Passagens
+            </Button>
+          </Link>
+          <Link to="/eventos">
+            <Button variant="outline" className="w-full">
+              Ver outros eventos
+            </Button>
+          </Link>
+        </div>
       </div>
     </PublicLayout>
   );
