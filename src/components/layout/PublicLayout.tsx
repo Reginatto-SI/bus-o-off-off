@@ -16,12 +16,20 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             <Link to="/eventos" className="flex items-center gap-2">
               <Logo size="lg" />
             </Link>
-            <Link
-              to="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Área Administrativa
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link
+                to="/consultar-passagens"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Minhas Passagens
+              </Link>
+              <Link
+                to="/login"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Área Administrativa
+              </Link>
+            </div>
           </div>
         </div>
       </header>

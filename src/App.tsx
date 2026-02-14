@@ -27,6 +27,7 @@ import PublicEvents from "./pages/public/PublicEvents";
 import PublicEventDetail from "./pages/public/PublicEventDetail";
 import Checkout from "./pages/public/Checkout";
 import Confirmation from "./pages/public/Confirmation";
+import TicketLookup from "./pages/public/TicketLookup";
 
 import NotFound from "./pages/NotFound";
 
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/eventos/:id" element={<PublicEventDetail />} />
             <Route path="/eventos/:id/checkout" element={<Checkout />} />
             <Route path="/confirmacao/:id" element={<Confirmation />} />
+            <Route path="/consultar-passagens" element={<TicketLookup />} />
             
             {/* Admin Panel */}
             <Route path="/admin/eventos" element={<Events />} />
