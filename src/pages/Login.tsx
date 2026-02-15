@@ -10,13 +10,19 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Logo } from '@/components/Logo';
 import { Checkbox } from '@/components/ui/checkbox';
 
+function getRedirectByRole(role: string | null): string {
+  if (role === 'vendedor') return '/vendedor/minhas-vendas';
+  return '/admin/eventos';
+}
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, user, loading: authLoading } = useAuth();
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  const { signIn, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const rememberEmailKey = 'boo.remember_email';
   const rememberedEmailKey = 'boo.remembered_email';
@@ -32,6 +38,13 @@ export default function Login() {
     setRememberEmail(shouldRememberEmail);
   }, []);
 
+  // Redirect após login bem-sucedido ou sessão existente
+  useEffect(() => {
+    if (user && userRole) {
+      navigate(getRedirectByRole(userRole), { replace: true });
+    }
+  }, [user, userRole, navigate]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -40,8 +53,16 @@ export default function Login() {
     );
   }
 
+  // Sessão existente: aguardar role resolver antes de redirecionar
   if (user) {
-    return <Navigate to="/admin/eventos" replace />;
+    if (!userRole) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    return <Navigate to={getRedirectByRole(userRole)} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,15 +77,14 @@ export default function Login() {
       setLoading(false);
     } else {
       if (rememberEmail) {
-        // Salvamos apenas o e-mail por segurança; a senha nunca deve ser armazenada.
         localStorage.setItem(rememberEmailKey, 'true');
         localStorage.setItem(rememberedEmailKey, email);
       } else {
         localStorage.removeItem(rememberEmailKey);
         localStorage.removeItem(rememberedEmailKey);
       }
-
-      navigate('/admin/eventos');
+      // Redirect será tratado pelo useEffect quando user + userRole resolverem
+      setLoginSuccess(true);
     }
   };
 
