@@ -8,10 +8,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// seller_id não participa do fluxo Stripe. Comissão do vendedor é apurada manualmente pelo gerente.
+/**
+ * IMPORTANTE: seller_id NÃO participa do fluxo Stripe/pagamento.
+ * Vendedores são 100% gerenciais — controle interno de comissão manual e rastreamento via link de referência.
+ * A comissão do vendedor é apurada e paga manualmente pelo gerente (Pix ou outro meio próprio).
+ * O Stripe lida apenas com pagamento do cliente final e repasse ao parceiro (partners).
+ */
+
 /** Processa pagamento confirmado: marca venda como pago, calcula comissão da plataforma e faz transfer ao parceiro */
 async function processPaymentConfirmed(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
   stripe: Stripe,
   session: Stripe.Checkout.Session,
   connectedAccountId?: string
@@ -117,7 +123,7 @@ async function processPaymentConfirmed(
 
 /** Processa falha de pagamento assíncrono (Pix expirado): cancela venda e libera assentos */
 async function processAsyncPaymentFailed(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
   session: Stripe.Checkout.Session,
   connectedAccountId?: string
 ) {
@@ -196,7 +202,7 @@ serve(async (req) => {
     const connectedAccountId = (event as any).account as string | undefined;
     console.log(`Webhook event: ${event.type}, account: ${connectedAccountId || 'platform'}`);
 
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = createClient<any>(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
