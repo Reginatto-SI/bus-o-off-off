@@ -120,72 +120,6 @@ function generateSeatLayout(
   return seats;
 }
 
-function hasRightSideNumberingMismatch(seats: Seat[], seatsLeftSide: number): boolean {
-  const rows = new Map<string, Seat[]>();
-
-  seats.forEach((seat) => {
-    // Comentário: row_number pode se repetir entre andares, por isso usamos floor + row como chave.
-    const rowKey = `${seat.floor}-${seat.row_number}`;
-    const rowSeats = rows.get(rowKey) ?? [];
-    rowSeats.push(seat);
-    rows.set(rowKey, rowSeats);
-  });
-
-  for (const rowSeats of rows.values()) {
-    const rightSideSeats = rowSeats
-      .filter((seat) => seat.column_number > seatsLeftSide)
-      .sort((a, b) => a.column_number - b.column_number);
-
-    if (rightSideSeats.length <= 1) continue;
-
-    const labels = rightSideSeats.map((seat) => Number.parseInt(seat.label, 10));
-
-    // Se houver rótulo não numérico, mantemos como válido para não forçar regeneração indevida.
-    if (labels.some(Number.isNaN)) continue;
-
-    for (let index = 1; index < labels.length; index++) {
-      if (labels[index] > labels[index - 1]) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function buildRightSideNumberingFixes(seats: Seat[], seatsLeftSide: number): Array<{ id: string; label: string }> {
-  const rows = new Map<string, Seat[]>();
-
-  seats.forEach((seat) => {
-    const rowKey = `${seat.floor}-${seat.row_number}`;
-    const rowSeats = rows.get(rowKey) ?? [];
-    rowSeats.push(seat);
-    rows.set(rowKey, rowSeats);
-  });
-
-  const fixes: Array<{ id: string; label: string }> = [];
-
-  for (const rowSeats of rows.values()) {
-    const rightSideSeats = rowSeats
-      .filter((seat) => seat.column_number > seatsLeftSide)
-      .sort((a, b) => a.column_number - b.column_number);
-
-    if (rightSideSeats.length <= 1) continue;
-
-    const parsed = rightSideSeats.map((seat) => Number.parseInt(seat.label, 10));
-    if (parsed.some(Number.isNaN)) continue;
-
-    const isAscending = parsed.every((value, index) => index === 0 || value > parsed[index - 1]);
-    if (!isAscending) continue;
-
-    const correctedLabels = [...parsed].sort((a, b) => b - a);
-    rightSideSeats.forEach((seat, index) => {
-      fixes.push({ id: seat.id, label: String(correctedLabels[index]) });
-    });
-  }
-
-  return fixes;
-}
 
 // ---- Passenger data type ----
 interface PassengerData {
@@ -321,70 +255,10 @@ export default function Checkout() {
           if (!isActive()) return;
 
           if (existingSeats && existingSeats.length > 0) {
-            const vehicle = currentTrip.vehicle!;
-            const seatsLeftSide = vehicle.seats_left_side ?? (vehicle.type === 'van' ? 2 : 2);
-            const seatsRightSide = vehicle.seats_right_side ?? (vehicle.type === 'van' ? 1 : 2);
-            const expectedCols = seatsLeftSide + seatsRightSide;
-            const maxCol = Math.max(...existingSeats.map((s) => s.column_number));
-            const numberingMismatch = hasRightSideNumberingMismatch(existingSeats as Seat[], seatsLeftSide);
-
-            if (maxCol !== expectedCols || numberingMismatch) {
-              const { count: ticketCount } = await supabase
-                .from('tickets')
-                .select('id', { count: 'exact', head: true })
-                .eq('trip_id', tripId);
-
-              if (!ticketCount || ticketCount === 0) {
-                setGeneratingSeats(true);
-                await supabase.from('seats').delete().eq('vehicle_id', vehicleId);
-
-                const layout = generateSeatLayout(
-                  vehicle.capacity,
-                  vehicle.type,
-                  vehicle.floors ?? 1,
-                  vehicle.seats_left_side,
-                  vehicle.seats_right_side,
-                );
-                const seatInserts = layout.map((s) => ({
-                  vehicle_id: vehicleId,
-                  label: s.label,
-                  floor: s.floor,
-                  row_number: s.row_number,
-                  column_number: s.column_number,
-                  status: s.status,
-                  company_id: currentTrip.company_id,
-                }));
-                const { data: created } = await supabase.from('seats').insert(seatInserts).select();
-                if (!isActive()) return;
-                if (created) setSeats(created as Seat[]);
-                setGeneratingSeats(false);
-              } else if (numberingMismatch) {
-                const labelFixes = buildRightSideNumberingFixes(existingSeats as Seat[], seatsLeftSide);
-
-                if (labelFixes.length > 0) {
-                  await Promise.all(
-                    labelFixes.map((fix) => supabase.from('seats').update({ label: fix.label }).eq('id', fix.id))
-                  );
-
-                  if (!isActive()) return;
-
-                  const fixesBySeatId = new Map(labelFixes.map((fix) => [fix.id, fix.label]));
-                  const patchedSeats = (existingSeats as Seat[]).map((seat) => ({
-                    ...seat,
-                    label: fixesBySeatId.get(seat.id) ?? seat.label,
-                  }));
-
-                  setSeats(patchedSeats);
-                } else {
-                  setSeats(existingSeats as Seat[]);
-                }
-              } else {
-                setSeats(existingSeats as Seat[]);
-              }
-            } else {
-              setSeats(existingSeats as Seat[]);
-            }
+            // Usar assentos existentes diretamente — sem reconciliação no contexto público
+            setSeats(existingSeats as Seat[]);
           } else {
+            // Criar assentos pela primeira vez (primeira visita ao veículo)
             setGeneratingSeats(true);
             const vehicle = currentTrip.vehicle!;
             const layout = generateSeatLayout(
@@ -405,11 +279,29 @@ export default function Checkout() {
               company_id: currentTrip.company_id,
             }));
 
-            const { data: created } = await supabase.from('seats').insert(seatInserts).select();
+            const { data: created, error: insertError } = await supabase.from('seats').insert(seatInserts).select();
 
             if (!isActive()) return;
 
-            if (created) setSeats(created as Seat[]);
+            if (insertError) {
+              console.error('Erro ao criar assentos:', insertError);
+              // Tentar buscar novamente — outro usuário pode ter criado
+              const { data: retrySeats } = await supabase
+                .from('seats')
+                .select('*')
+                .eq('vehicle_id', vehicleId)
+                .order('floor', { ascending: true })
+                .order('row_number', { ascending: true })
+                .order('column_number', { ascending: true });
+
+              if (retrySeats && retrySeats.length > 0) {
+                setSeats(retrySeats as Seat[]);
+              } else {
+                setSeatStatusError('Não foi possível criar o mapa de assentos.');
+              }
+            } else if (created) {
+              setSeats(created as Seat[]);
+            }
             setGeneratingSeats(false);
           }
 
