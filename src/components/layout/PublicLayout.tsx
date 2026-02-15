@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Building2, Menu, Search, ShoppingBag, Ticket } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
 import { Button } from '@/components/ui/button';
@@ -13,11 +13,12 @@ interface PublicLayoutProps {
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Comentário: reutilizamos os ícones Lucide já adotados no projeto para manter padrão visual moderno no mobile.
   const mobileLinks = [
-    { to: '/eventos', label: '🎫 Comprar Passagens' },
-    { to: '/consultar-passagens', label: '🔎 Minhas Passagens' },
-    { to: '/vendedor/minhas-vendas', label: '📊 Área do Vendedor' },
-    { to: '/login', label: '🔐 Área Administrativa' },
+    { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
+    { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
+    { to: '/vendedor/minhas-vendas', label: 'Área do Vendedor', icon: ShoppingBag },
+    { to: '/login', label: 'Área Administrativa', icon: Building2 },
   ];
 
   return (
@@ -73,8 +74,9 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                       key={item.to}
                       to={item.to}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="rounded-md px-4 py-3 text-base font-medium text-foreground hover:bg-muted transition-colors"
+                      className="flex items-center gap-3 rounded-md px-4 py-3 text-base font-medium text-foreground hover:bg-muted transition-colors"
                     >
+                      <item.icon className="h-4 w-4 text-muted-foreground" />
                       {item.label}
                     </Link>
                   ))}
