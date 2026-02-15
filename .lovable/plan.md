@@ -1,83 +1,109 @@
 
 
-# Correcao: Vinculo vendedor-usuario + Build errors + Documentacao "Vendedores != Stripe"
+# Link Curto + QR Code SVG para Vendedores
 
-## Contexto importante (gravado permanentemente)
+## Resumo
 
-**Vendedores do sistema sao 100% gerenciais.** Nao tem nenhuma relacao com Stripe, gateway de pagamento ou qualquer integracao financeira. O vendedor e um cadastro interno para controle de comissao manual e rastreamento de vendas via link de referencia. A comissao e apurada e paga manualmente pelo gerente (via Pix ou outro meio proprio). O Stripe lida apenas com o pagamento do cliente final e repasse ao parceiro — vendedores nao participam desse fluxo.
+Criar um sistema interno de link curto para vendedores e adicionar modal de QR Code com download em SVG na tela `/admin/vendedores`.
 
 ---
 
-## Problema 1: "Nao foi possivel confirmar o vinculo salvo"
+## 1. Link curto interno
 
-### Causa raiz
-A politica RLS `"Gerente can manage user_roles"` so permite escrita para o perfil `gerente`. O perfil `developer` consegue LER (via `is_admin`), mas **nao consegue ESCREVER** na tabela `user_roles`. O UPDATE executa sem erro mas nao altera nenhuma linha (comportamento silencioso do RLS), e a verificacao posterior detecta que nada mudou.
+### Abordagem
 
-### Correcao
-Migracao SQL para substituir a policy incluindo `developer`:
+Adicionar uma coluna `short_code` na tabela `sellers` com um codigo alfanumerico curto (6 caracteres, gerado a partir do UUID do vendedor, estavel e unico). Criar uma rota publica `/v/:code` que busca o vendedor pelo `short_code` e redireciona para `/eventos?ref={seller.id}`.
+
+### Migracao SQL
 
 ```sql
-DROP POLICY "Gerente can manage user_roles" ON public.user_roles;
-CREATE POLICY "Gerente and developer can manage user_roles"
-  ON public.user_roles FOR ALL
-  TO authenticated
-  USING (
-    has_role(auth.uid(), 'gerente'::user_role)
-    OR has_role(auth.uid(), 'developer'::user_role)
-  )
-  WITH CHECK (
-    has_role(auth.uid(), 'gerente'::user_role)
-    OR has_role(auth.uid(), 'developer'::user_role)
-  );
+ALTER TABLE public.sellers ADD COLUMN short_code text UNIQUE;
+
+-- Gerar codigos para vendedores existentes (6 chars do UUID)
+UPDATE public.sellers SET short_code = UPPER(LEFT(REPLACE(id::text, '-', ''), 6))
+WHERE short_code IS NULL;
+
+ALTER TABLE public.sellers ALTER COLUMN short_code SET NOT NULL;
+ALTER TABLE public.sellers ALTER COLUMN short_code SET DEFAULT UPPER(LEFT(REPLACE(gen_random_uuid()::text, '-', ''), 6));
 ```
+
+### RLS para rota publica
+
+```sql
+CREATE POLICY "Public can resolve seller short_code"
+  ON public.sellers FOR SELECT
+  TO anon, authenticated
+  USING (true);
+```
+
+Na verdade, ja existe a policy "Users can view sellers of their company" mas ela exige autenticacao. A rota `/v/:code` sera publica (sem login), entao precisa de uma policy SELECT para anon que retorne apenas o necessario. Porem, como RLS filtra linhas e nao colunas, a rota so buscara `id` e `short_code` via `.select('id, short_code')`.
+
+Alternativa mais segura: criar uma funcao RPC publica que recebe o short_code e retorna o seller_id sem expor a tabela inteira.
+
+**Decisao**: usar RPC publica para manter a tabela sellers protegida.
+
+```sql
+CREATE OR REPLACE FUNCTION public.resolve_seller_short_code(code text)
+RETURNS uuid
+LANGUAGE sql STABLE SECURITY DEFINER
+AS $$
+  SELECT id FROM public.sellers WHERE short_code = code AND status = 'ativo' LIMIT 1;
+$$;
+```
+
+### Nova rota e pagina de redirecionamento
+
+- Arquivo: `src/pages/public/SellerRedirect.tsx`
+- Rota: `/v/:code`
+- Comportamento: chama a RPC, se encontrar redireciona para `/eventos?ref={sellerId}`, senao mostra 404
+
+### Atualizacao no App.tsx
+
+Adicionar `<Route path="/v/:code" element={<SellerRedirect />} />` nas rotas publicas.
 
 ---
 
-## Problema 2: 18 build errors no stripe-webhook
+## 2. Atualizacao do "Copiar Link de Venda"
 
-### Causa raiz
-O `createClient` sem tipo generico faz o TypeScript inferir `never` para todas as tabelas. Nada a ver com vendedores.
-
-### Correcao
-Tipar o cliente com `<any>` e as funcoes auxiliares para aceitar esse tipo:
-
-```typescript
-const supabaseAdmin = createClient<any>(...);
-```
-
-E nas assinaturas das funcoes:
-
-```typescript
-async function processPaymentConfirmed(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  ...
-)
-```
+No `Sellers.tsx`, a funcao `handleCopyLink` passara a copiar o link curto (`{origin}/v/{short_code}`). Se `short_code` estiver vazio (fallback), copia o link longo e avisa.
 
 ---
 
-## Problema 3: Documentacao permanente — Vendedores != Stripe
+## 3. Modal de QR Code
 
-Adicionar comentarios explicitos nos seguintes locais:
+### Novo componente: `src/components/admin/SellerQRCodeModal.tsx`
 
-| Local | Comentario |
-|-------|-----------|
-| `src/pages/admin/Sellers.tsx` | Bloco de comentario no topo: vendedores sao gerenciais, sem vinculo com Stripe |
-| `src/pages/admin/Users.tsx` | Comentario no trecho de vinculo seller_id: o campo conecta usuario ao cadastro de vendedor para controle interno |
-| `supabase/functions/stripe-webhook/index.ts` | Comentario reforçando que seller_id nao participa do fluxo Stripe (ja existe parcialmente) |
-| `src/types/database.ts` | Comentario na interface Seller |
+- Recebe: `seller` (com `short_code`), `open`, `onOpenChange`
+- Exibe:
+  - QR Code grande usando `QRCodeSVG` do `qrcode.react` (ja instalado)
+  - Texto do link curto com botao "Copiar"
+  - Botao "Baixar SVG" (serializa o SVG do DOM e faz download)
+  - Botao "Baixar PNG" (renderiza o SVG em canvas e exporta)
+
+### Menu de acoes atualizado
+
+No `getSellerActions`, adicionar opcao "Ver QR Code" que abre o modal.
 
 ---
 
-## Arquivos modificados
+## 4. Atualizacao do tipo Seller
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| Migracao SQL (nova) | Atualizar RLS de user_roles para incluir developer |
-| `supabase/functions/stripe-webhook/index.ts` | Tipar createClient com `<any>`, corrigir assinaturas |
-| `src/pages/admin/Sellers.tsx` | Comentario documental no topo |
-| `src/pages/admin/Users.tsx` | Comentario documental no vinculo seller_id |
-| `src/types/database.ts` | Comentario na interface Seller |
+Adicionar `short_code` na interface `Seller` em `src/types/database.ts`. O arquivo `types.ts` gerado automaticamente sera atualizado pela migracao.
+
+---
+
+## Arquivos modificados/criados
+
+| Arquivo | Tipo | Descricao |
+|---------|------|-----------|
+| Migracao SQL | Novo | Coluna `short_code`, default, RPC publica |
+| `src/pages/public/SellerRedirect.tsx` | Novo | Pagina de redirecionamento `/v/:code` |
+| `src/components/admin/SellerQRCodeModal.tsx` | Novo | Modal com QR Code + download SVG/PNG |
+| `src/App.tsx` | Editado | Adicionar rota `/v/:code` |
+| `src/pages/admin/Sellers.tsx` | Editado | Copiar link curto + acao "Ver QR Code" |
+| `src/types/database.ts` | Editado | Adicionar `short_code` ao tipo Seller |
 
 ## Sem novas dependencias
+
+O projeto ja possui `qrcode.react` instalado. Sera usado `QRCodeSVG` (exportado pela mesma lib) em vez de `QRCodeCanvas`.
 
