@@ -248,6 +248,9 @@ export default function Checkout() {
   const [loadingSeatStatus, setLoadingSeatStatus] = useState(false);
   const [seatStatusError, setSeatStatusError] = useState<string | null>(null);
 
+  // Detect if current seats are still preview (not real DB seats)
+  const seatsArePreview = seats.length > 0 && seats[0].id.startsWith('preview-');
+
   // Step management: 1 = seat selection, 2 = passenger data
   const [step, setStep] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
@@ -495,6 +498,15 @@ export default function Checkout() {
 
   // Init passengers array when advancing to step 2
   const handleAdvanceToPassengers = async () => {
+    if (seatsArePreview) {
+      toast.error('Aguarde o carregamento completo dos assentos.');
+      return;
+    }
+    if (selectedSeats.some(id => id.startsWith('preview-'))) {
+      toast.error('Aguarde o carregamento completo dos assentos.');
+      setSelectedSeats([]);
+      return;
+    }
     if (selectedSeats.length !== quantity) {
       toast.error(`Selecione exatamente ${quantity} assento${quantity > 1 ? 's' : ''}`);
       return;
@@ -587,6 +599,14 @@ export default function Checkout() {
       return;
     }
     if (!event || !trip || !location) return;
+
+    // Guard: reject preview seat IDs
+    if (selectedSeats.some(id => id.startsWith('preview-'))) {
+      toast.error('Aguarde o carregamento completo dos assentos.');
+      setSelectedSeats([]);
+      setStep(1);
+      return;
+    }
 
     setSubmitting(true);
 
@@ -838,13 +858,13 @@ export default function Checkout() {
               floors={trip.vehicle?.floors ?? 1}
               seatsLeftSide={trip.vehicle?.seats_left_side ?? (trip.vehicle?.type === 'van' ? 2 : 2)}
               seatsRightSide={trip.vehicle?.seats_right_side ?? (trip.vehicle?.type === 'van' ? 1 : 2)}
-              loadingStatus={loadingSeatStatus || generatingSeats}
-              interactionDisabled={generatingSeats}
+              loadingStatus={loadingSeatStatus || generatingSeats || seatsArePreview}
+              interactionDisabled={generatingSeats || seatsArePreview}
             />
 
             <Button
               className="w-full h-14 text-lg font-medium"
-              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
+              disabled={selectedSeats.length !== quantity || generatingSeats || submitting || seatsArePreview}
               onClick={handleAdvanceToPassengers}
             >
               {submitting ? (
