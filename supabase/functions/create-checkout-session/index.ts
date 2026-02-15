@@ -107,6 +107,12 @@ serve(async (req) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      payment_method_types: ['card', 'pix'],
+      payment_method_options: {
+        pix: {
+          expires_after_seconds: 900, // 15 minutos para pagar
+        },
+      },
       line_items: [
         {
           price_data: {
