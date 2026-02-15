@@ -12,7 +12,8 @@ const corsHeaders = {
 async function processPaymentConfirmed(
   supabaseAdmin: ReturnType<typeof createClient>,
   stripe: Stripe,
-  session: Stripe.Checkout.Session
+  session: Stripe.Checkout.Session,
+  connectedAccountId?: string
 ) {
   const saleId = session.metadata?.sale_id;
   if (!saleId) {
@@ -35,7 +36,7 @@ async function processPaymentConfirmed(
     return;
   }
 
-  console.log(`Sale ${saleId} marked as 'pago'`);
+  console.log(`Sale ${saleId} marked as 'pago' (Direct Charge, account: ${connectedAccountId || 'unknown'})`);
 
   // ── Cálculo de comissão e repasse ao parceiro ──
   const { data: sale } = await supabaseAdmin
@@ -108,7 +109,7 @@ async function processPaymentConfirmed(
   await supabaseAdmin.from("sale_logs").insert({
     sale_id: saleId,
     action: "payment_confirmed",
-    description: `Pagamento confirmado via Stripe (PI: ${session.payment_intent || 'pix'}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
+    description: `Pagamento confirmado via Stripe Direct Charge (account: ${connectedAccountId || 'unknown'}, PI: ${session.payment_intent || 'pix'}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
     company_id: sale.company_id,
   });
 }
@@ -116,7 +117,8 @@ async function processPaymentConfirmed(
 /** Processa falha de pagamento assíncrono (Pix expirado): cancela venda e libera assentos */
 async function processAsyncPaymentFailed(
   supabaseAdmin: ReturnType<typeof createClient>,
-  session: Stripe.Checkout.Session
+  session: Stripe.Checkout.Session,
+  connectedAccountId?: string
 ) {
   const saleId = session.metadata?.sale_id;
   if (!saleId) {
@@ -124,7 +126,6 @@ async function processAsyncPaymentFailed(
     return;
   }
 
-  // Marcar venda como cancelado
   const { error: updateError } = await supabaseAdmin
     .from("sales")
     .update({
@@ -140,9 +141,8 @@ async function processAsyncPaymentFailed(
     return;
   }
 
-  console.log(`Sale ${saleId} cancelled due to async payment failure`);
+  console.log(`Sale ${saleId} cancelled due to async payment failure (account: ${connectedAccountId || 'unknown'})`);
 
-  // Liberar assentos — deletar tickets da venda
   const { error: deleteError } = await supabaseAdmin
     .from("tickets")
     .delete()
@@ -152,7 +152,6 @@ async function processAsyncPaymentFailed(
     console.error("Error deleting tickets:", deleteError);
   }
 
-  // Buscar company_id para o log
   const { data: sale } = await supabaseAdmin
     .from("sales")
     .select("company_id")
@@ -163,7 +162,7 @@ async function processAsyncPaymentFailed(
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: saleId,
       action: "payment_failed",
-      description: `Pagamento assíncrono (Pix) falhou ou expirou. Venda cancelada e assentos liberados.`,
+      description: `Pagamento assíncrono (Pix) falhou ou expirou (account: ${connectedAccountId || 'unknown'}). Venda cancelada e assentos liberados.`,
       company_id: sale.company_id,
     });
   }
@@ -192,6 +191,10 @@ serve(async (req) => {
       event = JSON.parse(body) as Stripe.Event;
     }
 
+    // Em Direct Charge com Connect Webhooks, event.account identifica a conta conectada
+    const connectedAccountId = (event as any).account as string | undefined;
+    console.log(`Webhook event: ${event.type}, account: ${connectedAccountId || 'platform'}`);
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -201,20 +204,18 @@ serve(async (req) => {
       const session = event.data.object as Stripe.Checkout.Session;
 
       if (session.payment_status === "paid") {
-        // Cartão: pagamento já confirmado
-        await processPaymentConfirmed(supabaseAdmin, stripe, session);
+        await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
       } else {
-        // Pix pendente (payment_status === 'unpaid'): aguardar async_payment_succeeded
         console.log(`Sale ${session.metadata?.sale_id} — checkout completed but payment_status=${session.payment_status}. Awaiting async payment.`);
       }
     } else if (event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
       console.log(`Async payment succeeded for sale ${session.metadata?.sale_id}`);
-      await processPaymentConfirmed(supabaseAdmin, stripe, session);
+      await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
     } else if (event.type === "checkout.session.async_payment_failed") {
       const session = event.data.object as Stripe.Checkout.Session;
       console.log(`Async payment failed for sale ${session.metadata?.sale_id}`);
-      await processAsyncPaymentFailed(supabaseAdmin, session);
+      await processAsyncPaymentFailed(supabaseAdmin, session, connectedAccountId);
     }
 
     return new Response(JSON.stringify({ received: true }), {
