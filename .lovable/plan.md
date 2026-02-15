@@ -1,34 +1,38 @@
 
 
-# Adicionar campo "Data do Embarque" no modal de Embarques (Events.tsx)
+# Redirecionamento por Perfil no Login + Bloqueio de Rotas Admin para Vendedor
 
-## Problema
+## Resumo
 
-A migration adicionou a coluna `departure_date` na tabela `event_boarding_locations`, mas o modal "Editar/Adicionar Local de Embarque" na pagina principal de eventos (`src/pages/admin/Events.tsx`) nao foi atualizado. O campo de data nao aparece no formulario.
+Tres alteracoes pontuais para garantir que vendedores nunca acessem o painel administrativo:
 
-## Alteracoes
+## 1. Login.tsx — Redirecionar por perfil apos login
 
-### Arquivo: `src/pages/admin/Events.tsx`
+Atualmente o `Login.tsx` redireciona hardcoded para `/admin/eventos`. Precisa aguardar o `userRole` resolver e redirecionar conforme o perfil:
 
-1. **Adicionar `departure_date` ao estado `boardingForm`** (linha 210)
-   - Incluir `departure_date: ''` no objeto inicial
+- `vendedor` -> `/vendedor/minhas-vendas`
+- Demais (gerente, operador, developer) -> `/admin/eventos`
 
-2. **Adicionar campo no modal** (entre "Horario de Embarque" e "Ordem da Parada", ~linha 2957)
-   - Novo campo "Data do Embarque" com `input type="date"`
-   - Default: data do evento sendo editado (`editingEvent?.date`)
+**Abordagem:** Usar um `useEffect` que observa `user` e `userRole` (do `useAuth`). Quando ambos estiverem definidos, redirecionar para a rota correta. Remover o redirect manual no `handleSubmit` e o `Navigate` estático.
 
-3. **Propagar no `handleEditBoarding`** (~linha 1030)
-   - Carregar `boarding.departure_date ?? ''` ao abrir para edicao
+## 2. AdminLayout.tsx — Bloquear vendedor antes de renderizar
 
-4. **Propagar no `handleSaveBoarding`** (~linhas 1072 e 1096)
-   - Incluir `departure_date: boardingForm.departure_date || null` nos objetos de insert e update
+Adicionar verificacao de `userRole` no `AdminLayout`. Se o perfil for `vendedor`, exibir toast "Acesso nao autorizado" e redirecionar para `/vendedor/minhas-vendas` sem renderizar sidebar/header admin.
 
-5. **Resetar nos pontos de limpeza** (~linhas 1042, 1091, 1113)
-   - Incluir `departure_date: ''` nos resets do formulario
+**Importante:** Tambem tratar o estado onde `userRole` ainda nao carregou (null) enquanto `user` ja existe — manter o loading spinner ate o role resolver, evitando flash do layout admin.
 
-6. **Exibir data na listagem de embarques** (onde mostra "Horario: XX:XX")
-   - Adicionar a data formatada antes do horario, ex: "15/02 as 20:00"
+## 3. Login.tsx — Redirect de sessao existente por perfil
 
-### Nenhuma alteracao de banco necessaria
+O bloco que hoje faz `if (user) return <Navigate to="/admin/eventos" />` precisa tambem considerar o role. Se `userRole` ainda nao carregou, mostrar loading. Se `vendedor`, redirecionar para `/vendedor/minhas-vendas`.
 
-A coluna `departure_date` ja existe na tabela `event_boarding_locations`.
+---
+
+## Arquivos modificados
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/pages/Login.tsx` | Redirect pos-login e redirect de sessao existente baseados em `userRole` |
+| `src/components/layout/AdminLayout.tsx` | Bloquear vendedor com redirect + toast antes de renderizar layout admin |
+
+## Sem alteracoes de banco ou novas dependencias
+
