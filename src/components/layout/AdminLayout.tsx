@@ -5,6 +5,8 @@ import { AdminSidebar } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
 import { Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
+import { cn } from '@/lib/utils';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -12,6 +14,7 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, userRole, loading } = useAuth();
+  const { collapsed } = useSidebarCollapsed();
   const toastShownRef = useRef(false);
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       <AdminSidebar />
-      <div className="lg:pl-64">
+      <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <AdminHeader />
         <main className="pt-16 lg:pt-0">
           {children}
