@@ -228,7 +228,7 @@ export function AdminSidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 bg-sidebar px-3 py-5 overflow-y-auto">
+      <nav className="sidebar-scroll-hidden flex-1 bg-sidebar px-3 py-5 overflow-y-auto">
         <Accordion type="multiple" defaultValue={defaultOpenGroups} className="space-y-2">
           {visibleGroups.map(group => (
             <AccordionItem key={group.id} value={group.id} className="border-0">
@@ -324,7 +324,7 @@ export function AdminSidebar() {
       </div>
 
       {/* Nav icons */}
-      <nav className="flex-1 bg-sidebar py-4 overflow-y-auto">
+      <nav className="sidebar-scroll-hidden flex-1 bg-sidebar py-4 overflow-y-auto">
         <div className="flex flex-col items-center gap-1">
           {visibleGroups.flatMap(group =>
             group.items.map(item => {
