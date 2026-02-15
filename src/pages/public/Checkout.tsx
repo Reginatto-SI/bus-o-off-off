@@ -605,6 +605,24 @@ export default function Checkout() {
 
     const payer = passengers[payerIndex];
 
+    // Vendedor é rastreio comercial (link/ref). Comissão de vendedor é manual e fora do Stripe.
+    // Stripe apenas confirma pagamento da venda (sale_status), independente de vendedor.
+    // Validar ref: só grava seller_id se vendedor existir, estiver ativo e pertencer à mesma empresa.
+    let validatedSellerId: string | null = null;
+    if (sellerRef) {
+      const { data: sellerData } = await supabase
+        .from('sellers')
+        .select('id, status, company_id')
+        .eq('id', sellerRef)
+        .single();
+
+      if (sellerData && sellerData.status === 'ativo' && sellerData.company_id === event.company_id) {
+        validatedSellerId = sellerData.id;
+      } else {
+        console.warn('Ref inválido ou vendedor inativo/outra empresa. Ignorando seller_id.', sellerRef);
+      }
+    }
+
     // Create sale
     const { data: sale, error: saleError } = await supabase
       .from('sales')
@@ -612,7 +630,7 @@ export default function Checkout() {
         event_id: id!,
         trip_id: tripId!,
         boarding_location_id: locationId!,
-        seller_id: sellerRef || null,
+        seller_id: validatedSellerId,
         customer_name: payer.name.trim(),
         customer_cpf: payer.cpf.replace(/\D/g, ''),
         customer_phone: payer.phone.replace(/\D/g, ''),
