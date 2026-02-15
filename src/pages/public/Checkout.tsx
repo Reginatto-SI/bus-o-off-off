@@ -307,7 +307,15 @@ export default function Checkout() {
 
         if (!isActive()) return;
 
-        if (eventRes.data) setEvent(eventRes.data as Event);
+        if (eventRes.data) {
+          const eventData = eventRes.data as Event;
+          if (!eventData.allow_online_sale) {
+            toast.error('Este evento não está disponível para compra online.');
+            navigate(`/eventos/${id}`);
+            return;
+          }
+          setEvent(eventData);
+        }
         if (tripRes.data) setTrip(tripRes.data as Trip);
         if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
 
@@ -644,7 +652,11 @@ export default function Checkout() {
 
     if (saleError || !sale) {
       console.error('Sale error:', saleError);
-      toast.error('Erro ao finalizar compra. Tente novamente.');
+      const isRlsError = saleError?.code === '42501' || saleError?.message?.includes('row-level security');
+      const msg = isRlsError
+        ? 'Este evento não está disponível para compra online no momento.'
+        : 'Erro ao finalizar compra. Tente novamente.';
+      toast.error(msg);
       setSubmitting(false);
       return;
     }
