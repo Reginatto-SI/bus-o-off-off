@@ -1,54 +1,95 @@
 
 
-# Corrigir Erro de Pagamento -- Pix Nao Ativado no Stripe
+# Migração de Destination Charges para Direct Charges
 
-## Diagnostico
+## Resumo
 
-O erro e claro nos logs da edge function:
+Migrar as duas edge functions (`create-checkout-session` e `stripe-webhook`) do modelo Destination Charges para Direct Charges, onde o pagamento é criado diretamente na conta conectada da empresa.
 
+---
+
+## Alterações em `create-checkout-session/index.ts`
+
+### O que muda
+
+1. **Remover `transfer_data`** do `payment_intent_data` — Direct Charge não usa `transfer_data.destination`
+2. **Manter `application_fee_amount`** — a plataforma retém sua comissão automaticamente
+3. **Passar `stripeAccount` como segundo argumento** do `stripe.checkout.sessions.create()` — isso cria a sessão NA conta conectada
+4. **Adicionar `company_id` nos metadata** — para rastreabilidade no webhook
+
+### Código atual (Destination Charge):
+```typescript
+payment_intent_data: {
+  application_fee_amount: applicationFeeCents,
+  transfer_data: {
+    destination: company.stripe_account_id,
+  },
+},
 ```
-The payment method type provided: pix is invalid. Please ensure the provided type is activated in your dashboard
+
+### Código novo (Direct Charge):
+```typescript
+payment_intent_data: {
+  application_fee_amount: applicationFeeCents,
+  // SEM transfer_data
+},
 ```
 
-O Pix **nao esta ativado** na sua conta Stripe (dashboard). Quando o codigo envia `payment_method_types: ['card', 'pix']`, o Stripe rejeita a requisicao inteira, impedindo qualquer pagamento (inclusive cartao).
+E a criação da sessão passa a incluir o header:
+```typescript
+// Antes (Destination — sessão na plataforma):
+session = await stripe.checkout.sessions.create({ ...params });
 
-## Solucao
+// Depois (Direct — sessão na conta conectada):
+session = await stripe.checkout.sessions.create({ ...params }, {
+  stripeAccount: company.stripe_account_id
+});
+```
 
-Tornar a edge function `create-checkout-session` resiliente: tentar criar a sessao com `['card', 'pix']` e, se falhar com erro de `payment_method_types`, repetir automaticamente apenas com `['card']`.
+O fallback Pix/cartão continua idêntico, apenas com o segundo argumento `stripeAccount` em ambas as chamadas.
 
-### Alteracao em `create-checkout-session/index.ts`
+---
 
-Implementar um fallback com try/catch:
+## Alterações em `stripe-webhook/index.ts`
 
-1. Primeira tentativa: `payment_method_types: ['card', 'pix']` com `payment_method_options` para Pix
-2. Se o Stripe retornar erro do tipo `StripeInvalidRequestError` com `param === 'payment_method_types'`:
-   - Repetir a criacao da sessao apenas com `payment_method_types: ['card']` e sem `payment_method_options`
-   - Logar um aviso informando que Pix nao esta disponivel
-3. Qualquer outro erro: propagar normalmente
+### O que muda
 
-Isso garante que:
-- O pagamento via cartao **nunca sera bloqueado** por causa do Pix
-- Quando voce ativar Pix no Stripe dashboard, ele passara a funcionar automaticamente sem precisar alterar codigo
-- Logs claros indicarao se Pix esta ou nao disponivel
+1. **Extrair `event.account`** — em Connect Webhooks, esse campo identifica de qual conta conectada veio o evento
+2. **Passar `connectedAccountId` para `processPaymentConfirmed`** — para logs mais detalhados
+3. **Logs atualizados** — indicam que o modelo é Direct Charge e de qual conta veio o evento
 
-## Acao manual necessaria (para habilitar Pix)
+### Lógica de split do parceiro
 
-Para que Pix funcione, voce precisa ativa-lo no painel do Stripe:
-1. Acesse https://dashboard.stripe.com/account/payments/settings
-2. Encontre "Pix" na lista de metodos de pagamento
-3. Ative-o
+Sem alteração funcional. O `stripe.transfers.create()` continua usando o saldo da plataforma (que agora vem exclusivamente da `application_fee`). A diferença é que antes a plataforma recebia o valor bruto e transferia ao destino; agora recebe apenas a comissão. O transfer para o parceiro sai dessa comissão.
 
-Ate la, o sistema funcionara normalmente apenas com cartao de credito.
+---
 
-## Arquivo a modificar
+## Configuração manual necessária no Stripe Dashboard
 
-| Arquivo | Alteracao |
+Após o deploy, você precisa:
+
+1. **Criar um webhook do tipo "Connect"** (não "Your account") no Stripe Dashboard, apontando para a mesma URL: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
+2. **Selecionar eventos**: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`
+3. **Atualizar o `STRIPE_WEBHOOK_SECRET`** com o novo signing secret do webhook Connect (é diferente do webhook anterior)
+4. **Remover o webhook antigo** (tipo "Your account") que era usado no modelo Destination Charges
+
+Importante: O webhook Connect recebe eventos de **todas** as contas conectadas com um único endpoint.
+
+---
+
+## Arquivos modificados
+
+| Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/create-checkout-session/index.ts` | Adicionar fallback card-only quando Pix nao estiver disponivel |
+| `supabase/functions/create-checkout-session/index.ts` | Remover `transfer_data`, adicionar `stripeAccount` header, adicionar `company_id` nos metadata |
+| `supabase/functions/stripe-webhook/index.ts` | Extrair `event.account`, passar para processamento, atualizar logs |
 
-## O que NAO sera alterado
+## O que NÃO muda
 
-- Webhook (ja esta correto para ambos os cenarios)
-- Telas publicas ou administrativas
-- Logica de comissao e transfer
+- Cálculo de comissão (mesma fórmula)
+- Split do parceiro (mesmo `stripe.transfers.create`)
+- Fallback Pix/cartão (mesma lógica)
+- Validação de capabilities
+- Fluxo de Pix assíncrono (async_payment_succeeded/failed)
+- Banco de dados (nenhuma alteração de schema)
 
