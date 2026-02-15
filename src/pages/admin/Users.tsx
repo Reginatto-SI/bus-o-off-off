@@ -400,6 +400,14 @@ export default function UsersPage() {
           ) {
             throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
           }
+
+          if (
+            updatedRole.role !== form.role ||
+            (form.role === 'vendedor' && updatedRole.seller_id !== form.seller_id) ||
+            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id)
+          ) {
+            throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
+          }
         }
 
         // Causa raiz: o modal podia ser reaberto antes do refresh da lista e hidratar
