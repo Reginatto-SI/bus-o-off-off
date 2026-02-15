@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Sale, SaleStatus, SaleLog, TicketRecord, Event, Seller } from '@/types/database';
+import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,7 +30,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -78,6 +77,13 @@ interface SalesFilters {
   dateTo: string;
 }
 
+interface SalesEventFilterOption {
+  id: string;
+  name: string;
+  date: string;
+  city: string | null;
+}
+
 const initialFilters: SalesFilters = {
   search: '',
   status: 'all',
@@ -103,7 +109,7 @@ const statusLabels: Record<string, string> = {
 export default function Sales() {
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<SalesEventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SalesFilters>(initialFilters);
@@ -145,7 +151,7 @@ export default function Sales() {
 
   // ── Fetch ──
   const fetchSales = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('sales')
       .select(`
         *,
@@ -156,6 +162,12 @@ export default function Sales() {
       `)
       .order('created_at', { ascending: false });
 
+    if (activeCompanyId) {
+      query = query.eq('company_id', activeCompanyId);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       toast.error('Erro ao carregar vendas');
     } else {
@@ -165,18 +177,42 @@ export default function Sales() {
   };
 
   const fetchFiltersData = async () => {
+    if (!activeCompanyId) {
+      setEvents([]);
+      setSellers([]);
+      return;
+    }
+
     const [eventsRes, sellersRes] = await Promise.all([
-      supabase.from('events').select('id, name').order('date', { ascending: false }),
-      supabase.from('sellers').select('id, name').eq('status', 'ativo').order('name'),
+      // Correção: o filtro de Evento deve usar exclusivamente a entidade events da empresa ativa.
+      supabase
+        .from('events')
+        .select('id, name, date, city')
+        .eq('company_id', activeCompanyId)
+        .order('date', { ascending: false }),
+      supabase
+        .from('sellers')
+        .select('id, name')
+        .eq('company_id', activeCompanyId)
+        .eq('status', 'ativo')
+        .order('name'),
     ]);
-    if (eventsRes.data) setEvents(eventsRes.data as Event[]);
+
+    if (eventsRes.data) setEvents(eventsRes.data as SalesEventFilterOption[]);
     if (sellersRes.data) setSellers(sellersRes.data as Seller[]);
   };
 
   useEffect(() => {
     fetchSales();
     fetchFiltersData();
-  }, []);
+  }, [activeCompanyId]);
+
+  const formatEventFilterLabel = (event: SalesEventFilterOption) => {
+    const eventDate = event.date ? format(parseISO(event.date), 'dd/MM/yyyy') : '';
+    return event.city
+      ? `${event.name} – ${eventDate} (${event.city})`
+      : `${event.name} – ${eventDate}`;
+  };
 
   // ── Filtered ──
   const filteredSales = useMemo(() => {
@@ -536,25 +572,23 @@ export default function Sales() {
                 onChange: (v) => setFilters((f) => ({ ...f, eventId: v })),
                 options: [
                   { value: 'all', label: 'Todos' },
-                  ...events.map((e) => ({ value: e.id, label: e.name })),
+                  ...events.map((e) => ({ value: e.id, label: formatEventFilterLabel(e) })),
+                ],
+              },
+              {
+                id: 'seller',
+                label: 'Vendedor',
+                placeholder: 'Todos',
+                value: filters.sellerId,
+                onChange: (v) => setFilters((f) => ({ ...f, sellerId: v })),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  ...sellers.map((s) => ({ value: s.id, label: s.name })),
                 ],
               },
             ]}
             advancedFilters={
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium text-muted-foreground">Vendedor</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={filters.sellerId}
-                    onChange={(e) => setFilters((f) => ({ ...f, sellerId: e.target.value }))}
-                  >
-                    <option value="all">Todos</option>
-                    {sellers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FilterInput
                   id="dateFrom"
                   label="Data Inicial"
