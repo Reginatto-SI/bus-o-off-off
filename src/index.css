@@ -222,3 +222,14 @@
 .card-active-glow {
   animation: card-glow-pulse 3s ease-in-out infinite;
 }
+
+/* Sidebar: mantém rolagem por mouse/trackpad, mas oculta a barra visualmente. */
+.sidebar-scroll-hidden {
+  -ms-overflow-style: none; /* IE e Edge legado */
+  scrollbar-width: none; /* Firefox */
+}
+
+.sidebar-scroll-hidden::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
