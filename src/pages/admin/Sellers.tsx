@@ -772,12 +772,12 @@ export default function Sellers() {
         title="Vendedores"
         company={activeCompany}
       />
-      {/* Modal de QR Code do vendedor */}
-      {qrModalSeller && (
+      {/* Modal de QR Code do vendedor — link curto */}
+      {qrModalSeller != null && (
         <SellerQRCodeModal
           sellerName={qrModalSeller.name}
           shortCode={qrModalSeller.short_code}
-          open={!!qrModalSeller}
+          open={qrModalSeller != null}
           onOpenChange={(open) => { if (!open) setQrModalSeller(null); }}
         />
       )}
