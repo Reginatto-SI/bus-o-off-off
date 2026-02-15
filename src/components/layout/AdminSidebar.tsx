@@ -83,7 +83,7 @@ const navigationGroups: NavigationGroup[] = [{
   label: 'Vendas & Comissão',
   items: [{
     name: 'Minhas Vendas',
-    href: '/admin/minhas-vendas',
+    href: '/vendedor/minhas-vendas',
     icon: BadgePercent,
     roles: ['vendedor']
   }]

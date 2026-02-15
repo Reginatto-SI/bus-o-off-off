@@ -16,12 +16,14 @@ import Drivers from "./pages/admin/Drivers";
 import BoardingLocations from "./pages/admin/BoardingLocations";
 import Sellers from "./pages/admin/Sellers";
 import Sales from "./pages/admin/Sales";
-import MySales from "./pages/admin/MySales";
 import UsersPage from "./pages/admin/Users";
 import CompanyPage from "./pages/admin/Company";
 import MyAccount from "./pages/admin/MyAccount";
 import Sponsors from "./pages/admin/Sponsors";
 import Partners from "./pages/admin/Partners";
+
+// Seller (mobile-first, fora do admin)
+import SellerDashboard from "./pages/seller/SellerDashboard";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -55,6 +57,11 @@ const App = () => (
             <Route path="/confirmacao/:id" element={<Confirmation />} />
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             
+            {/* Seller Portal (mobile-first, fora do admin) */}
+            <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
+            {/* Redirect legado para manter bookmarks */}
+            <Route path="/admin/minhas-vendas" element={<Navigate to="/vendedor/minhas-vendas" replace />} />
+
             {/* Admin Panel */}
             <Route path="/admin/eventos" element={<Events />} />
             <Route path="/admin/eventos/:id" element={<EventDetail />} />
@@ -63,7 +70,6 @@ const App = () => (
             <Route path="/admin/locais" element={<BoardingLocations />} />
             <Route path="/admin/vendedores" element={<Sellers />} />
             <Route path="/admin/vendas" element={<Sales />} />
-            <Route path="/admin/minhas-vendas" element={<MySales />} />
             <Route path="/admin/usuarios" element={<UsersPage />} />
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />

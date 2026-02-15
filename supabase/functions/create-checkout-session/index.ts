@@ -27,6 +27,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // seller_id não participa do fluxo Stripe. Comissão do vendedor é apurada manualmente pelo gerente.
     // Get sale with event
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")

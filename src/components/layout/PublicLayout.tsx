@@ -16,6 +16,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   const mobileLinks = [
     { to: '/eventos', label: '🎫 Comprar Passagens' },
     { to: '/consultar-passagens', label: '🔎 Minhas Passagens' },
+    { to: '/vendedor/minhas-vendas', label: '📊 Área do Vendedor' },
     { to: '/login', label: '🔐 Área Administrativa' },
   ];
 
@@ -35,6 +36,12 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 Minhas Passagens
+              </Link>
+              <Link
+                to="/vendedor/minhas-vendas"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Área do Vendedor
               </Link>
               <Link
                 to="/login"

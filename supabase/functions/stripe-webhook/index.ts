@@ -8,7 +8,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Processa pagamento confirmado: marca venda como pago, calcula comissão e faz transfer */
+// seller_id não participa do fluxo Stripe. Comissão do vendedor é apurada manualmente pelo gerente.
+/** Processa pagamento confirmado: marca venda como pago, calcula comissão da plataforma e faz transfer ao parceiro */
 async function processPaymentConfirmed(
   supabaseAdmin: ReturnType<typeof createClient>,
   stripe: Stripe,
