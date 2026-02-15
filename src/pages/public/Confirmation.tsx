@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatBoardingDateTime } from '@/lib/utils';
 import type { SaleStatus } from '@/types/database';
 
 interface CompanyInfo {
@@ -44,6 +45,7 @@ export default function Confirmation() {
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
+  const [boardingDepartureDate, setBoardingDepartureDate] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
@@ -79,15 +81,16 @@ export default function Confirmation() {
           if (companyData) setCompany(companyData as CompanyInfo);
         }
 
-        // Fetch boarding departure time
+        // Fetch boarding departure time and date
         const { data: selectedBoarding } = await supabase
           .from('event_boarding_locations')
-          .select('departure_time')
+          .select('departure_time, departure_date')
           .eq('event_id', saleRes.data.event_id)
           .eq('trip_id', saleRes.data.trip_id)
           .eq('boarding_location_id', saleRes.data.boarding_location_id)
           .maybeSingle();
         setBoardingDepartureTime(selectedBoarding?.departure_time ?? null);
+        setBoardingDepartureDate((selectedBoarding as any)?.departure_date ?? null);
       }
 
       if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
@@ -140,6 +143,7 @@ export default function Confirmation() {
     boardingLocationName: sale?.boarding_location?.name || '',
     boardingLocationAddress: sale?.boarding_location?.address || '',
     boardingDepartureTime: boardingDepartureTime,
+    boardingDepartureDate: boardingDepartureDate,
     saleStatus: (sale?.status || 'reservado') as SaleStatus,
     companyName: companyDisplayName,
     companyLogoUrl: company?.logo_url || null,
@@ -289,10 +293,10 @@ export default function Confirmation() {
             <div>
               <h4 className="font-medium mb-2">Informações de Embarque</h4>
               <div className="space-y-2 text-sm">
-                {boardingDepartureTime && (
+                {(boardingDepartureTime || boardingDepartureDate) && (
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>Horário de saída: {boardingDepartureTime.slice(0, 5)}</span>
+                    <span>{formatBoardingDateTime(boardingDepartureDate, boardingDepartureTime, sale?.event?.date || '')}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">

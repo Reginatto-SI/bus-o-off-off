@@ -1,0 +1,1 @@
+ALTER TABLE public.event_boarding_locations ADD COLUMN departure_date date;

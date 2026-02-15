@@ -175,8 +175,9 @@ export async function generateTicketPdf({ ticket, qrBase64 }: GenerateTicketPdfP
   addField('CPF', maskCpf(ticket.passengerCpf));
   addField('ASSENTO', ticket.seatLabel);
   addField('LOCAL DE EMBARQUE', ticket.boardingLocationName);
-  if (ticket.boardingDepartureTime) {
-    addField('HORÁRIO DE SAÍDA', ticket.boardingDepartureTime.slice(0, 5));
+  if (ticket.boardingDepartureTime || ticket.boardingDepartureDate) {
+    const { formatBoardingDateTime } = await import('@/lib/utils');
+    addField('EMBARQUE', formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate));
   }
 
   // ── Footer ──

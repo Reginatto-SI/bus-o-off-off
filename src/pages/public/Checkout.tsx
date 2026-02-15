@@ -600,7 +600,7 @@ export default function Checkout() {
     }
   };
 
-  // Format the departure time for display
+  // Format the departure info for display
   const displayTime = departureTime ? departureTime.slice(0, 5) : null;
 
   // ---- Render ----

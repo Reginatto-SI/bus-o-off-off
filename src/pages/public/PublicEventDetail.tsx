@@ -215,6 +215,7 @@ export default function PublicEventDetail() {
                     <BoardingLocationCard
                       key={loc.id}
                       location={loc}
+                      eventDate={event?.date || ''}
                       isSelected={selectedLocation === loc.boarding_location_id}
                       onSelect={() => setSelectedLocation(loc.boarding_location_id)}
                     />

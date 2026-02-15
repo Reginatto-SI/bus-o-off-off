@@ -202,6 +202,7 @@ export type Database = {
         Row: {
           boarding_location_id: string
           company_id: string
+          departure_date: string | null
           departure_time: string | null
           event_id: string
           id: string
@@ -211,6 +212,7 @@ export type Database = {
         Insert: {
           boarding_location_id: string
           company_id: string
+          departure_date?: string | null
           departure_time?: string | null
           event_id: string
           id?: string
@@ -220,6 +222,7 @@ export type Database = {
         Update: {
           boarding_location_id?: string
           company_id?: string
+          departure_date?: string | null
           departure_time?: string | null
           event_id?: string
           id?: string

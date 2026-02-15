@@ -248,6 +248,7 @@ export interface EventBoardingLocation {
   boarding_location_id: string;
   trip_id: string | null;
   departure_time: string | null;
+  departure_date: string | null;
   stop_order: number;
   company_id: string;
   boarding_location?: BoardingLocation;

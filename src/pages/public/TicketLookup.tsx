@@ -161,6 +161,7 @@ export default function TicketLookup() {
         boardingLocationName: t.sale?.boarding_location?.name || '',
         boardingLocationAddress: t.sale?.boarding_location?.address || '',
         boardingDepartureTime: null,
+        boardingDepartureDate: null,
         saleStatus: (t.sale?.status || 'reservado') as SaleStatus,
         companyName: companyDisplayName,
         companyLogoUrl: companyInfo?.logo_url || null,
@@ -181,12 +182,13 @@ export default function TicketLookup() {
         if (ticket?.sale) {
           const { data: ebl } = await supabase
             .from('event_boarding_locations')
-            .select('departure_time')
+            .select('departure_time, departure_date')
             .eq('event_id', ticket.trip?.event_id)
             .eq('trip_id', ticket.trip_id)
             .eq('boarding_location_id', ticket.sale.boarding_location_id)
             .maybeSingle();
           card.boardingDepartureTime = ebl?.departure_time ?? null;
+          card.boardingDepartureDate = (ebl as any)?.departure_date ?? null;
         }
       }
 
