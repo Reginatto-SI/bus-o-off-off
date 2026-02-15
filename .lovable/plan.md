@@ -1,110 +1,94 @@
 
-# Plano: Area do Vendedor Mobile-First + Blindagem do `ref`
 
-## Diagnostico do Estado Atual
+# Melhorias no Cadastro de Vendedores (Admin)
 
-### O que ja esta pronto
-- **Rastreio `ref`**: O parametro `?ref=sellerId` ja e propagado por todo o fluxo publico (`PublicEvents` -> `PublicEventDetail` -> `Checkout`)
-- **Gravacao `seller_id`**: No Checkout (linha 615), `sellerRef` e gravado diretamente como `seller_id` na tabela `sales`
-- **Tela "Minhas Vendas"**: Existe em `/admin/minhas-vendas` com KPIs (passagens vendidas, total vendido, comissao estimada), historico de vendas e botao "Gerar Link de Venda"
-- **CRUD de Vendedores**: Tela `/admin/vendedores` completa para gerentes criarem/editarem vendedores
-- **Sidebar**: "Minhas Vendas" aparece no grupo "Vendas & Comissao" com `roles: ['vendedor']`
+## Problema
 
-### O que falta / esta errado
-1. **"Minhas Vendas" usa `AdminLayout`** (sidebar desktop) -- vendedor deveria usar layout mobile-first, fora do admin
-2. **Sem validacao do `ref`**: Qualquer UUID e aceito como `seller_id`. Nao valida se existe, se esta ativo, nem se pertence a mesma empresa do evento
-3. **Sem acesso mobile dedicado**: O header publico (`PublicLayout`) nao tem link para "Area do Vendedor"
-4. **Nenhum comentario** esclarece que vendedor e rastreio comercial, sem relacao com Stripe
+A tela `/admin/vendedores` esta incompleta para operacao profissional. Faltam dados de contato, link de venda visivel e resumo de vendas por vendedor.
 
-### O que NAO deve ser feito agora
-- Comissao automatica / calculo de repasse
-- Integracao vendedor com Stripe
-- Relatorios avancados (permanecem "Em breve")
-- Dashboard consolidado de comissoes
+## O que sera feito
 
----
+### 1. Adicionar colunas na tabela `sellers` (migracao de banco)
 
-## Alteracoes Planejadas
+Novas colunas (todas opcionais para nao quebrar cadastros existentes):
 
-### 1. Nova rota `/vendedor/minhas-vendas` com layout mobile-first
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| phone | text | Telefone/WhatsApp |
+| email | text | E-mail do vendedor |
+| cpf | text | CPF |
+| pix_key | text | Chave Pix (para pagamento manual de comissao) |
+| notes | text | Observacoes livres |
 
-Criar uma nova pagina `src/pages/seller/SellerDashboard.tsx` que:
+### 2. Atualizar o modal de cadastro/edicao
 
-- **Nao usa `AdminLayout`** -- usa um layout proprio leve e mobile-first (sem sidebar admin)
-- Inclui header simples com logo, nome do vendedor e botao de logout
-- Exige autenticacao (redireciona para `/login` se nao logado)
-- Exige `role === 'vendedor'` (mostra mensagem de erro se outro perfil)
+Reorganizar as abas do modal:
 
-**Conteudo da tela:**
-- KPIs em cards empilhaveis (mobile): Passagens vendidas, Total vendido (R$), Vendas pagas, Vendas reservadas
-- Filtros simples (colapsaveis no mobile): periodo (de/ate) + status (todos/pago/reservado/cancelado)
-- Lista de vendas em formato card (nao tabela) -- otimizado para mobile
-- Botao fixo "Compartilhar Link de Venda" com acao de copiar e usar Web Share API quando disponivel
+**Aba "Identificacao"** (existente, expandida):
+- Nome (ja existe)
+- CPF (novo)
+- Telefone (novo)
+- E-mail (novo)
+- Status (ja existe)
 
-A logica de dados e reutilizada da tela `MySales.tsx` existente (query por `seller_id`).
+**Aba "Comissao"** (existente, expandida):
+- Comissao % (ja existe)
+- Chave Pix (novo)
+- Observacoes (novo)
 
-### 2. Rota e navegacao
+### 3. Adicionar coluna "Link de Venda" na tabela e acoes
 
-**App.tsx**: Adicionar rota `/vendedor/minhas-vendas` apontando para `SellerDashboard`.
+Na listagem de vendedores, adicionar:
+- Coluna **Telefone** na tabela
+- Acao **"Copiar Link de Venda"** no dropdown de acoes de cada vendedor
+- O link e montado como: `{origin}/eventos?ref={seller.id}`
+- Ao clicar, copia para a area de transferencia com feedback visual (toast)
 
-**PublicLayout.tsx**: Adicionar link "Area do Vendedor" no header publico, entre "Minhas Passagens" e "Area Administrativa". O link aponta para `/vendedor/minhas-vendas`.
+### 4. Adicionar resumo de vendas por vendedor na tabela
 
-**AdminSidebar.tsx**: Manter "Minhas Vendas" no sidebar admin (com `roles: ['vendedor']`) como atalho secundario, mas a URL passa a ser `/vendedor/minhas-vendas` (mesma pagina, fora do layout admin). Alternativa: redirecionar a rota antiga `/admin/minhas-vendas` para `/vendedor/minhas-vendas`.
+Buscar da tabela `sales` agrupado por `seller_id`:
+- Coluna **Vendas** (quantidade de vendas pagas)
+- Coluna **Total Vendido** (soma do valor bruto das vendas pagas)
 
-### 3. Blindagem do `ref` no Checkout
+Isso permite que o gerente veja rapidamente o desempenho de cada vendedor sem sair da tela.
 
-No `Checkout.tsx`, antes de gravar `seller_id` na venda, adicionar validacao:
+### 5. Atualizar exportacao (Excel/PDF)
 
-```text
-1. Se sellerRef existe:
-   a. Buscar na tabela sellers: id = sellerRef
-   b. Verificar status = 'ativo'
-   c. Verificar company_id = event.company_id
-2. Se qualquer validacao falha: ignorar ref (seller_id = null)
-3. Se valido: gravar seller_id normalmente
-```
-
-Isso impede que um UUID aleatorio ou vendedor de outra empresa seja associado a venda.
-
-### 4. Comentarios explicitos no codigo
-
-Adicionar comentarios padronizados nos pontos-chave:
-
-- **Checkout.tsx** (onde le `ref` e grava `seller_id`):
-  `// Vendedor e rastreio comercial (link/ref). Comissao de vendedor e manual e fora do Stripe.`
-  `// Stripe apenas confirma pagamento da venda (sale_status), independente de vendedor.`
-
-- **SellerDashboard.tsx** (novo):
-  `// Tela do vendedor: apenas visualizacao de vendas rastreadas via ref. Sem integracao com Stripe.`
-
-- **create-checkout-session** e **stripe-webhook** (edge functions):
-  `// seller_id nao participa do fluxo Stripe. Comissao do vendedor e apurada manualmente pelo gerente.`
-
-### 5. Pagina MySales existente
-
-A pagina `/admin/minhas-vendas` atual (`MySales.tsx`) sera transformada em um redirect para `/vendedor/minhas-vendas`, mantendo compatibilidade com bookmarks existentes.
+Incluir as novas colunas nos exports:
+- Telefone, E-mail, CPF, Chave Pix, Vendas, Total Vendido
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivos criados
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/pages/seller/SellerDashboard.tsx` | Tela mobile-first do vendedor com KPIs, filtros e lista de vendas |
+### Migracao de banco
+```sql
+ALTER TABLE public.sellers
+  ADD COLUMN phone text,
+  ADD COLUMN email text,
+  ADD COLUMN cpf text,
+  ADD COLUMN pix_key text,
+  ADD COLUMN notes text;
+```
 
 ### Arquivos modificados
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/App.tsx` | Adicionar rota `/vendedor/minhas-vendas`; redirecionar `/admin/minhas-vendas` |
-| `src/pages/public/Checkout.tsx` | Validar `ref` contra tabela `sellers` antes de gravar; comentarios |
-| `src/components/layout/PublicLayout.tsx` | Link "Area do Vendedor" no header |
-| `src/components/layout/AdminSidebar.tsx` | Atualizar href de "Minhas Vendas" para `/vendedor/minhas-vendas` |
-| `supabase/functions/create-checkout-session/index.ts` | Comentario explicito sobre seller_id vs Stripe |
-| `supabase/functions/stripe-webhook/index.ts` | Comentario explicito sobre seller_id vs Stripe |
+| `src/pages/admin/Sellers.tsx` | Modal expandido, colunas na tabela, acao "Copiar Link", busca de vendas por seller |
+| `src/types/database.ts` | Atualizar interface `Seller` com novos campos |
 
-### Nenhuma alteracao de banco de dados
-Nao e necessaria nenhuma migracão. A tabela `sellers` ja tem `status` e `company_id`.
+### Nenhuma nova dependencia
+Reutiliza componentes existentes (Input, Label, Textarea, toast, etc.)
 
-### Sem novas dependencias
-Reutiliza componentes existentes (Card, Badge, Button, StatusBadge, etc.)
+### RLS
+Nenhuma alteracao necessaria. As policies existentes em `sellers` ja cobrem os novos campos (sao colunas da mesma tabela).
+
+---
+
+## O que NAO sera feito
+- Calculo automatico de comissao ou repasse
+- Integracao com Pix/pagamento automatico
+- Relatorios avancados (permanecem "Em breve")
+
+O campo `pix_key` e apenas informativo para o gerente consultar na hora de fazer o pagamento manual.
+
