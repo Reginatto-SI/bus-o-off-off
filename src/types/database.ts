@@ -82,6 +82,11 @@ export interface UserWithRole extends Profile {
 export interface Seller {
   id: string;
   name: string;
+  phone: string | null;
+  email: string | null;
+  cpf: string | null;
+  pix_key: string | null;
+  notes: string | null;
   commission_percent: number;
   status: SellerStatus;
   company_id: string;

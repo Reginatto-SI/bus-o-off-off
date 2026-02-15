@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -40,9 +41,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  
   FileSpreadsheet,
   FileText,
   IdCard,
+  Link as LinkIcon,
   Loader2,
   Pencil,
   Percent,
@@ -69,9 +72,16 @@ const initialFilters: SellerFilters = {
   commissionMax: '',
 };
 
+// Resumo de vendas agrupado por seller_id
+interface SellerSalesStats {
+  count: number;
+  total: number;
+}
+
 export default function Sellers() {
   const { activeCompanyId, activeCompany, user } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
+  const [salesStats, setSalesStats] = useState<Record<string, SellerSalesStats>>({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -81,17 +91,22 @@ export default function Sellers() {
   const [filters, setFilters] = useState<SellerFilters>(initialFilters);
   const [form, setForm] = useState({
     name: '',
+    cpf: '',
+    phone: '',
+    email: '',
     commission_percent: '10',
+    pix_key: '',
+    notes: '',
     status: 'ativo' as Seller['status'],
   });
 
-  // Estatísticas para os cards no padrão da Frota (/admin/frota).
+  // Estatísticas para os cards
   const stats = useMemo(() => {
     const total = sellers.length;
-    const ativos = sellers.filter((seller) => seller.status === 'ativo').length;
-    const inativos = sellers.filter((seller) => seller.status === 'inativo').length;
+    const ativos = sellers.filter((s) => s.status === 'ativo').length;
+    const inativos = sellers.filter((s) => s.status === 'inativo').length;
     const averageCommission = total
-      ? sellers.reduce((sum, seller) => sum + seller.commission_percent, 0) / total
+      ? sellers.reduce((sum, s) => sum + s.commission_percent, 0) / total
       : 0;
     return { total, ativos, inativos, averageCommission };
   }, [sellers]);
@@ -100,14 +115,13 @@ export default function Sellers() {
     return sellers.filter((seller) => {
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
-        if (!seller.name.toLowerCase().includes(searchLower)) {
-          return false;
-        }
+        const matchName = seller.name.toLowerCase().includes(searchLower);
+        const matchPhone = seller.phone?.toLowerCase().includes(searchLower);
+        const matchEmail = seller.email?.toLowerCase().includes(searchLower);
+        if (!matchName && !matchPhone && !matchEmail) return false;
       }
 
-      if (filters.status !== 'all' && seller.status !== filters.status) {
-        return false;
-      }
+      if (filters.status !== 'all' && seller.status !== filters.status) return false;
 
       if (filters.commissionRange !== 'all') {
         const commission = seller.commission_percent ?? 0;
@@ -125,16 +139,12 @@ export default function Sellers() {
 
       if (filters.commissionMin) {
         const minValue = Number(filters.commissionMin);
-        if (!Number.isNaN(minValue) && seller.commission_percent < minValue) {
-          return false;
-        }
+        if (!Number.isNaN(minValue) && seller.commission_percent < minValue) return false;
       }
 
       if (filters.commissionMax) {
         const maxValue = Number(filters.commissionMax);
-        if (!Number.isNaN(maxValue) && seller.commission_percent > maxValue) {
-          return false;
-        }
+        if (!Number.isNaN(maxValue) && seller.commission_percent > maxValue) return false;
       }
 
       return true;
@@ -151,22 +161,55 @@ export default function Sellers() {
     );
   }, [filters]);
 
+  // Dados para exportação — inclui novos campos e resumo de vendas
   const exportColumns: ExportColumn[] = useMemo(
     () => [
       { key: 'name', label: 'Nome' },
-      { key: 'commission_percent', label: 'Comissão (%)', format: (v) => `${v ?? 0}%` },
-      { key: 'status', label: 'Status', format: (v) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
+      { key: 'cpf', label: 'CPF' },
+      { key: 'phone', label: 'Telefone' },
+      { key: 'email', label: 'E-mail' },
+      { key: 'commission_percent', label: 'Comissão (%)', format: (v: any) => `${v ?? 0}%` },
+      { key: 'pix_key', label: 'Chave Pix' },
+      { key: 'status', label: 'Status', format: (v: any) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
+      {
+        key: 'sales_count',
+        label: 'Vendas (pagas)',
+        format: (_v: any, row?: any) => {
+          const st = row ? salesStats[row.id] : undefined;
+          return st ? String(st.count) : '0';
+        },
+      },
+      {
+        key: 'sales_total',
+        label: 'Total Vendido (R$)',
+        format: (_v: any, row?: any) => {
+          const st = row ? salesStats[row.id] : undefined;
+          return st ? st.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
+        },
+      },
+      { key: 'notes', label: 'Observações' },
       {
         key: 'created_at',
         label: 'Criado em',
-        format: (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : ''),
+        format: (v: any) => (v ? new Date(v).toLocaleDateString('pt-BR') : ''),
       },
     ],
-    []
+    [salesStats]
   );
 
+  // Dados enriquecidos para exportação (adiciona campos calculados)
+  const exportData = useMemo(() => {
+    return filteredSellers.map((seller) => {
+      const st = salesStats[seller.id];
+      return {
+        ...seller,
+        sales_count: st?.count ?? 0,
+        sales_total: st?.total ?? 0,
+      };
+    });
+  }, [filteredSellers, salesStats]);
+
   const fetchSellers = async () => {
-    // Garantimos multiempresa filtrando por company_id quando disponível.
     if (!activeCompanyId) {
       setSellers([]);
       setLoading(false);
@@ -198,8 +241,36 @@ export default function Sellers() {
     setLoading(false);
   };
 
+  // Buscar resumo de vendas pagas agrupado por seller_id
+  const fetchSalesStats = async () => {
+    if (!activeCompanyId) return;
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select('seller_id, quantity, unit_price, gross_amount')
+      .eq('company_id', activeCompanyId)
+      .eq('status', 'pago')
+      .not('seller_id', 'is', null);
+
+    if (error) {
+      console.error('Erro ao buscar resumo de vendas por vendedor:', error);
+      return;
+    }
+
+    const grouped: Record<string, SellerSalesStats> = {};
+    (data || []).forEach((sale: any) => {
+      const sid = sale.seller_id as string;
+      if (!grouped[sid]) grouped[sid] = { count: 0, total: 0 };
+      grouped[sid].count += 1;
+      // Usa gross_amount se disponível, senão calcula
+      grouped[sid].total += sale.gross_amount ?? (sale.quantity * sale.unit_price);
+    });
+    setSalesStats(grouped);
+  };
+
   useEffect(() => {
     fetchSellers();
+    fetchSalesStats();
   }, [activeCompanyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -221,64 +292,41 @@ export default function Sellers() {
 
     if (!activeCompanyId) {
       const context = { action: editingId ? 'update' : 'insert', table: 'sellers', companyId: null, userId: user?.id };
-      // Comentário: erro bruto quando a empresa ativa não foi resolvida no contexto do usuário.
       console.error('active_company_id ausente ao salvar vendedor.', context);
-      toast.error(
-        buildDebugToastMessage({
-          title: 'active_company_id ausente',
-          context,
-        })
-      );
+      toast.error(buildDebugToastMessage({ title: 'active_company_id ausente', context }));
       setSaving(false);
       return;
     }
 
-    const data = {
+    const payload = {
       name: form.name,
+      cpf: form.cpf || null,
+      phone: form.phone || null,
+      email: form.email || null,
       commission_percent: commissionValue,
+      pix_key: form.pix_key || null,
+      notes: form.notes || null,
       status: form.status,
-      company_id: activeCompanyId,
     };
 
     let error;
     if (editingId) {
-      // Não atualiza company_id na edição
-      const { company_id, ...updateData } = data;
       ({ error } = await supabase
         .from('sellers')
-        .update(updateData)
+        .update(payload)
         .eq('id', editingId)
         .eq('company_id', activeCompanyId));
     } else {
-      ({ error } = await supabase.from('sellers').insert([data]));
+      ({ error } = await supabase.from('sellers').insert([{ ...payload, company_id: activeCompanyId }]));
     }
 
     if (error) {
       logSupabaseError({
         label: 'Erro ao salvar vendedor (sellers.insert/update)',
         error,
-        context: {
-          action: editingId ? 'update' : 'insert',
-          table: 'sellers',
-          companyId: activeCompanyId,
-          userId: user?.id,
-          editingId,
-          payload: data,
-        },
+        context: { action: editingId ? 'update' : 'insert', table: 'sellers', companyId: activeCompanyId, userId: user?.id, editingId, payload },
       });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao salvar vendedor',
-          error,
-          context: {
-            action: editingId ? 'update' : 'insert',
-            table: 'sellers',
-            companyId: activeCompanyId,
-            userId: user?.id,
-            editingId,
-          },
-        })
-      );
+      toast.error(buildDebugToastMessage({ title: 'Erro ao salvar vendedor', error, context: { action: editingId ? 'update' : 'insert', table: 'sellers', companyId: activeCompanyId, userId: user?.id, editingId } }));
     } else {
       toast.success(editingId ? 'Vendedor atualizado' : 'Vendedor cadastrado');
       setDialogOpen(false);
@@ -292,7 +340,12 @@ export default function Sellers() {
     setEditingId(seller.id);
     setForm({
       name: seller.name,
+      cpf: seller.cpf || '',
+      phone: seller.phone || '',
+      email: seller.email || '',
       commission_percent: seller.commission_percent.toString(),
+      pix_key: seller.pix_key || '',
+      notes: seller.notes || '',
       status: seller.status,
     });
     setDialogOpen(true);
@@ -302,12 +355,7 @@ export default function Sellers() {
     if (!activeCompanyId) {
       const context = { action: 'update', table: 'sellers', companyId: null, userId: user?.id, sellerId: seller.id };
       console.error('active_company_id ausente ao atualizar status do vendedor.', context);
-      toast.error(
-        buildDebugToastMessage({
-          title: 'active_company_id ausente',
-          context,
-        })
-      );
+      toast.error(buildDebugToastMessage({ title: 'active_company_id ausente', context }));
       return;
     }
 
@@ -321,36 +369,27 @@ export default function Sellers() {
       logSupabaseError({
         label: 'Erro ao atualizar status do vendedor (sellers.update)',
         error,
-        context: {
-          action: 'update',
-          table: 'sellers',
-          companyId: activeCompanyId,
-          userId: user?.id,
-          sellerId: seller.id,
-        },
+        context: { action: 'update', table: 'sellers', companyId: activeCompanyId, userId: user?.id, sellerId: seller.id },
       });
-      toast.error(
-        buildDebugToastMessage({
-          title: 'Erro ao atualizar status do vendedor',
-          error,
-          context: {
-            action: 'update',
-            table: 'sellers',
-            companyId: activeCompanyId,
-            userId: user?.id,
-            sellerId: seller.id,
-          },
-        })
-      );
+      toast.error(buildDebugToastMessage({ title: 'Erro ao atualizar status do vendedor', error, context: { action: 'update', table: 'sellers', companyId: activeCompanyId, userId: user?.id, sellerId: seller.id } }));
     } else {
       toast.success(`Vendedor ${nextStatus === 'ativo' ? 'ativado' : 'inativado'}`);
       fetchSellers();
     }
   };
 
+  // Vendedor é rastreio comercial (link/ref). Comissão de vendedor é manual e fora do Stripe.
+  const handleCopyLink = (seller: Seller) => {
+    const link = `${window.location.origin}/eventos?ref=${seller.id}`;
+    navigator.clipboard.writeText(link).then(
+      () => toast.success(`Link de venda de ${seller.name} copiado!`),
+      () => toast.error('Falha ao copiar link')
+    );
+  };
+
   const resetForm = () => {
     setEditingId(null);
-    setForm({ name: '', commission_percent: '10', status: 'ativo' });
+    setForm({ name: '', cpf: '', phone: '', email: '', commission_percent: '10', pix_key: '', notes: '', status: 'ativo' });
   };
 
   const getSellerActions = (seller: Seller): ActionItem[] => [
@@ -358,6 +397,11 @@ export default function Sellers() {
       label: 'Editar',
       icon: Pencil,
       onClick: () => handleEdit(seller),
+    },
+    {
+      label: 'Copiar Link de Venda',
+      icon: LinkIcon,
+      onClick: () => handleCopyLink(seller),
     },
     {
       label: seller.status === 'ativo' ? 'Inativar' : 'Ativar',
@@ -390,7 +434,6 @@ export default function Sellers() {
                     Adicionar Vendedor
                   </Button>
                 </DialogTrigger>
-                {/* Comentário: aplicamos o padrão do modal da Frota (/admin/frota) com abas, scroll interno e footer fixo. */}
                 <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
                   <DialogHeader className="admin-modal__header px-6 py-4">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Vendedor</DialogTitle>
@@ -418,12 +461,40 @@ export default function Sellers() {
                         <TabsContent value="identificacao" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="name">Nome</Label>
+                              <Label htmlFor="name">Nome *</Label>
                               <Input
                                 id="name"
                                 value={form.name}
                                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                                 required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="cpf">CPF</Label>
+                              <Input
+                                id="cpf"
+                                value={form.cpf}
+                                onChange={(e) => setForm({ ...form, cpf: e.target.value })}
+                                placeholder="000.000.000-00"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="phone">Telefone / WhatsApp</Label>
+                              <Input
+                                id="phone"
+                                value={form.phone}
+                                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                                placeholder="(00) 00000-0000"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="email">E-mail</Label>
+                              <Input
+                                id="email"
+                                type="email"
+                                value={form.email}
+                                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                                placeholder="vendedor@email.com"
                               />
                             </div>
                             <div className="space-y-2">
@@ -444,7 +515,6 @@ export default function Sellers() {
                           </div>
                         </TabsContent>
 
-                        {/* Comentário: não incluímos aba de contato por ausência de colunas no schema atual de sellers. */}
                         <TabsContent value="comissao" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
@@ -458,6 +528,28 @@ export default function Sellers() {
                                 value={form.commission_percent}
                                 onChange={(e) => setForm({ ...form, commission_percent: e.target.value })}
                                 required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="pix_key">Chave Pix</Label>
+                              <Input
+                                id="pix_key"
+                                value={form.pix_key}
+                                onChange={(e) => setForm({ ...form, pix_key: e.target.value })}
+                                placeholder="CPF, e-mail, telefone ou chave aleatória"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Informativo — para pagamento manual de comissão pelo gerente.
+                              </p>
+                            </div>
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label htmlFor="notes">Observações</Label>
+                              <Textarea
+                                id="notes"
+                                value={form.notes}
+                                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                                placeholder="Anotações internas sobre o vendedor..."
+                                rows={3}
                               />
                             </div>
                           </div>
@@ -483,7 +575,7 @@ export default function Sellers() {
           }
         />
 
-        {/* Comentário: KPIs reaproveitam o padrão de cards da Frota para manter consistência visual. */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatsCard label="Total de vendedores" value={stats.total} icon={UserCheck} />
           <StatsCard label="Vendedores ativos" value={stats.ativos} icon={UserCheck} variant="success" />
@@ -495,12 +587,12 @@ export default function Sellers() {
           />
         </div>
 
-        {/* Comentário: card de filtros segue o mesmo layout e comportamento de /admin/frota. */}
+        {/* Filtros */}
         <FilterCard
           className="mb-6"
           searchValue={filters.search}
           onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por nome..."
+          searchPlaceholder="Pesquisar por nome, telefone, e-mail..."
           selects={[
             {
               id: 'status',
@@ -588,29 +680,40 @@ export default function Sellers() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Telefone</TableHead>
                     <TableHead>Comissão (%)</TableHead>
+                    <TableHead>Vendas</TableHead>
+                    <TableHead>Total Vendido</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSellers.map((seller) => (
-                    <TableRow key={seller.id}>
-                      <TableCell className="font-medium">{seller.name}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Percent className="h-4 w-4 text-muted-foreground" />
-                          {seller.commission_percent}%
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={seller.status} />
-                      </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getSellerActions(seller)} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredSellers.map((seller) => {
+                    const st = salesStats[seller.id];
+                    return (
+                      <TableRow key={seller.id}>
+                        <TableCell className="font-medium">{seller.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{seller.phone || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Percent className="h-4 w-4 text-muted-foreground" />
+                            {seller.commission_percent}%
+                          </div>
+                        </TableCell>
+                        <TableCell>{st?.count ?? 0}</TableCell>
+                        <TableCell>
+                          {(st?.total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={seller.status} />
+                        </TableCell>
+                        <TableCell>
+                          <ActionsDropdown actions={getSellerActions(seller)} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -623,7 +726,7 @@ export default function Sellers() {
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
         columns={exportColumns}
-        data={filteredSellers}
+        data={exportData}
         storageKey="vendedores"
         fileName="vendedores"
         sheetName="Vendedores"
@@ -633,7 +736,7 @@ export default function Sellers() {
         open={pdfModalOpen}
         onOpenChange={setPdfModalOpen}
         columns={exportColumns}
-        data={filteredSellers}
+        data={exportData}
         storageKey="vendedores"
         fileName="vendedores"
         title="Vendedores"

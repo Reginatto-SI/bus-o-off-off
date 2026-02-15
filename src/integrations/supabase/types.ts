@@ -642,27 +642,42 @@ export type Database = {
         Row: {
           commission_percent: number
           company_id: string
+          cpf: string | null
           created_at: string
+          email: string | null
           id: string
           name: string
+          notes: string | null
+          phone: string | null
+          pix_key: string | null
           status: Database["public"]["Enums"]["seller_status"]
           updated_at: string
         }
         Insert: {
           commission_percent?: number
           company_id: string
+          cpf?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name: string
+          notes?: string | null
+          phone?: string | null
+          pix_key?: string | null
           status?: Database["public"]["Enums"]["seller_status"]
           updated_at?: string
         }
         Update: {
           commission_percent?: number
           company_id?: string
+          cpf?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string
+          notes?: string | null
+          phone?: string | null
+          pix_key?: string | null
           status?: Database["public"]["Enums"]["seller_status"]
           updated_at?: string
         }
