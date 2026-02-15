@@ -52,7 +52,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  
   FileSpreadsheet,
   FileText,
   IdCard,
@@ -62,8 +61,10 @@ import {
   Percent,
   Plus,
   Power,
+  QrCode,
   UserCheck,
 } from 'lucide-react';
+import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
@@ -100,6 +101,7 @@ export default function Sellers() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SellerFilters>(initialFilters);
+  const [qrModalSeller, setQrModalSeller] = useState<Seller | null>(null);
   const [form, setForm] = useState({
     name: '',
     cpf: '',
@@ -389,13 +391,25 @@ export default function Sellers() {
     }
   };
 
-  // Vendedor é rastreio comercial (link/ref). Comissão de vendedor é manual e fora do Stripe.
+  /**
+   * Copia o link curto do vendedor (/v/{short_code}).
+   * Se short_code não existir (fallback), copia o link longo e avisa.
+   */
   const handleCopyLink = (seller: Seller) => {
-    const link = `${window.location.origin}/eventos?ref=${seller.id}`;
-    navigator.clipboard.writeText(link).then(
-      () => toast.success(`Link de venda de ${seller.name} copiado!`),
-      () => toast.error('Falha ao copiar link')
-    );
+    if (seller.short_code) {
+      const shortLink = `${window.location.origin}/v/${seller.short_code}`;
+      navigator.clipboard.writeText(shortLink).then(
+        () => toast.success(`Link curto de ${seller.name} copiado!`),
+        () => toast.error('Falha ao copiar link')
+      );
+    } else {
+      // Fallback: link longo (não deveria acontecer, mas por segurança)
+      const longLink = `${window.location.origin}/eventos?ref=${seller.id}`;
+      navigator.clipboard.writeText(longLink).then(
+        () => toast.info(`Link longo copiado (short_code não disponível)`),
+        () => toast.error('Falha ao copiar link')
+      );
+    }
   };
 
   const resetForm = () => {
@@ -413,6 +427,11 @@ export default function Sellers() {
       label: 'Copiar Link de Venda',
       icon: LinkIcon,
       onClick: () => handleCopyLink(seller),
+    },
+    {
+      label: 'Ver QR Code',
+      icon: QrCode,
+      onClick: () => setQrModalSeller(seller),
     },
     {
       label: seller.status === 'ativo' ? 'Inativar' : 'Ativar',
@@ -753,6 +772,15 @@ export default function Sellers() {
         title="Vendedores"
         company={activeCompany}
       />
+      {/* Modal de QR Code do vendedor */}
+      {qrModalSeller && (
+        <SellerQRCodeModal
+          sellerName={qrModalSeller.name}
+          shortCode={qrModalSeller.short_code}
+          open={!!qrModalSeller}
+          onOpenChange={(open) => { if (!open) setQrModalSeller(null); }}
+        />
+      )}
     </AdminLayout>
   );
 }
