@@ -96,9 +96,8 @@ const navigationGroups: NavigationGroup[] = [{
   label: 'Relatórios',
   items: [{
     name: 'Relatório de Vendas',
-    icon: FileText,
-    disabled: true,
-    statusLabel: 'Em breve'
+    href: '/admin/relatorios/vendas',
+    icon: FileText
   }, {
     name: 'Relatório por Evento',
     icon: BarChart3,
