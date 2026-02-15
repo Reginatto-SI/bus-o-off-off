@@ -209,9 +209,8 @@ export default function Sales() {
 
   const formatEventFilterLabel = (event: SalesEventFilterOption) => {
     const eventDate = event.date ? format(parseISO(event.date), 'dd/MM/yyyy') : '';
-    return event.city
-      ? `${event.name} – ${eventDate} (${event.city})`
-      : `${event.name} – ${eventDate}`;
+    // Padronização solicitada no suporte: dropdown de Evento deve priorizar data no início.
+    return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
 
   // ── Filtered ──
