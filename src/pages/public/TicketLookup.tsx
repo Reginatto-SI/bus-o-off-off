@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Ticket } from 'lucide-react';
+import { ArrowLeft, Loader2, Search, Ticket } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
@@ -202,7 +203,17 @@ export default function TicketLookup() {
 
   return (
     <PublicLayout>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Comentário: ação de retorno destacada para o fluxo mobile entre consulta e compra. */}
+        <div className="mb-4">
+          <Button asChild variant="ghost" className="h-10 px-3 text-sm">
+            <Link to="/eventos">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Comprar Passagens
+            </Link>
+          </Button>
+        </div>
+
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
             <Ticket className="h-8 w-8 text-primary" />
