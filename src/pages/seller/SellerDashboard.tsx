@@ -11,11 +11,25 @@ import { Sale, Seller } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   Select,
   SelectContent,
@@ -40,11 +54,23 @@ import {
   Check,
   Filter,
   ChevronDown,
+  ChevronsUpDown,
   LinkIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+
+interface EventOption {
+  id: string;
+  name: string;
+  city: string;
+  date: string;
+  status: string;
+}
+
+const EVENT_STORAGE_KEY = 'seller-dashboard-selected-event';
 
 export default function SellerDashboard() {
   const { user, loading: authLoading, sellerId, profile, signOut, isVendedor, isDeveloper } = useAuth();
@@ -54,8 +80,12 @@ export default function SellerDashboard() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [eventOpen, setEventOpen] = useState(false);
 
   // Filters
+  const [eventSearch, setEventSearch] = useState('');
+  const [eventOptions, setEventOptions] = useState<EventOption[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -78,14 +108,81 @@ export default function SellerDashboard() {
 
       if (salesRes.data) setSales(salesRes.data as Sale[]);
       if (sellerRes.data) setSeller(sellerRes.data as Seller);
+
+      // A lista de eventos vem apenas das vendas do vendedor para manter o recorte de segurança e performance.
+      if (salesRes.data) {
+        const uniqueEvents = new Map<string, EventOption>();
+
+        (salesRes.data as Sale[]).forEach((sale) => {
+          if (!sale.event) return;
+          if (!uniqueEvents.has(sale.event.id)) {
+            uniqueEvents.set(sale.event.id, {
+              id: sale.event.id,
+              name: sale.event.name,
+              city: sale.event.city,
+              date: sale.event.date,
+              status: sale.event.status,
+            });
+          }
+        });
+
+        const sortedEvents = Array.from(uniqueEvents.values()).sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+
+        setEventOptions(sortedEvents);
+      }
       setLoading(false);
     };
 
     fetchData();
   }, [sellerId]);
 
+  useEffect(() => {
+    if (!eventOptions.length) {
+      setSelectedEventId('');
+      return;
+    }
+
+    // Mantém o evento salvo anteriormente quando o vendedor retorna para a tela.
+    const savedEventId = localStorage.getItem(`${EVENT_STORAGE_KEY}-${sellerId}`);
+    const savedEvent = eventOptions.find((event) => event.id === savedEventId);
+    if (savedEvent) {
+      setSelectedEventId(savedEvent.id);
+      return;
+    }
+
+    // Preferência de seleção inicial: evento mais recente em venda; fallback para o mais recente vendido.
+    const activeEvent = eventOptions.find((event) => event.status === 'a_venda');
+    const defaultEventId = activeEvent?.id ?? eventOptions[0].id;
+    setSelectedEventId(defaultEventId);
+  }, [eventOptions, sellerId]);
+
+  useEffect(() => {
+    if (!sellerId || !selectedEventId) return;
+    localStorage.setItem(`${EVENT_STORAGE_KEY}-${sellerId}`, selectedEventId);
+  }, [selectedEventId, sellerId]);
+
+  const filteredEventOptions = useMemo(() => {
+    if (!eventSearch.trim()) return eventOptions;
+    const normalizedSearch = eventSearch.toLowerCase();
+
+    return eventOptions.filter((event) => {
+      const searchableText = `${event.name} ${event.city} ${event.date}`.toLowerCase();
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [eventOptions, eventSearch]);
+
+  const selectedEventLabel = useMemo(() => {
+    const selectedEvent = eventOptions.find((event) => event.id === selectedEventId);
+    if (!selectedEvent) return '';
+
+    return `${selectedEvent.name} • ${selectedEvent.city} • ${format(new Date(selectedEvent.date), 'dd/MM/yyyy')}`;
+  }, [eventOptions, selectedEventId]);
+
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
+      if (selectedEventId && sale.event_id !== selectedEventId) return false;
       if (statusFilter !== 'todos' && sale.status !== statusFilter) return false;
       if (dateFrom && sale.created_at < dateFrom) return false;
       if (dateTo) {
@@ -94,7 +191,15 @@ export default function SellerDashboard() {
       }
       return true;
     });
-  }, [sales, statusFilter, dateFrom, dateTo]);
+  }, [sales, selectedEventId, statusFilter, dateFrom, dateTo]);
+
+  const advancedFiltersCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== 'todos') count += 1;
+    if (dateFrom) count += 1;
+    if (dateTo) count += 1;
+    return count;
+  }, [statusFilter, dateFrom, dateTo]);
 
   // KPIs
   const totalSold = filteredSales.reduce((sum, s) => sum + s.quantity, 0);
@@ -243,13 +348,65 @@ export default function SellerDashboard() {
               </Card>
             </div>
 
-            {/* Filters */}
+            {/* Filtro principal: evento sempre visível para contexto imediato da análise. */}
+            <div className="space-y-2 mb-4">
+              <Label className="text-xs">Evento</Label>
+              <Popover open={eventOpen} onOpenChange={setEventOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={eventOpen}
+                    className={cn('w-full justify-between font-normal', !selectedEventLabel && 'text-muted-foreground')}
+                  >
+                    <span className="truncate">{selectedEventLabel || 'Selecione um evento'}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Buscar evento..."
+                      value={eventSearch}
+                      onValueChange={setEventSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredEventOptions.map((event) => {
+                          const optionLabel = `${event.name} • ${event.city} • ${format(new Date(event.date), 'dd/MM/yyyy')}`;
+                          return (
+                            <CommandItem
+                              key={event.id}
+                              value={optionLabel}
+                              onSelect={() => {
+                                setSelectedEventId(event.id);
+                                setEventOpen(false);
+                                setEventSearch('');
+                              }}
+                            >
+                              <Check
+                                className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')}
+                              />
+                              <span className="truncate">{optionLabel}</span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Filtros secundários ficam colapsados para reduzir ruído visual no mobile. */}
             <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen} className="mb-4">
               <CollapsibleTrigger asChild>
                 <Button variant="outline" size="sm" className="w-full justify-between">
                   <span className="flex items-center gap-2">
                     <Filter className="h-4 w-4" />
-                    Filtros
+                    Filtros avançados
+                    {advancedFiltersCount > 0 && <Badge variant="secondary">{advancedFiltersCount}</Badge>}
                   </span>
                   <ChevronDown className={`h-4 w-4 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
                 </Button>
@@ -310,7 +467,7 @@ export default function SellerDashboard() {
               <EmptyState
                 icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />}
                 title="Nenhuma venda encontrada"
-                description="Compartilhe seu link de venda para começar"
+                description={selectedEventId ? 'Ajuste os filtros ou selecione outro evento.' : 'Selecione um evento para visualizar suas vendas.'}
               />
             ) : (
               <div className="space-y-3">
