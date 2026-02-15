@@ -105,14 +105,8 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
-    const session = await stripe.checkout.sessions.create({
+    const checkoutParams: Record<string, unknown> = {
       mode: "payment",
-      payment_method_types: ['card', 'pix'],
-      payment_method_options: {
-        pix: {
-          expires_after_seconds: 900, // 15 minutos para pagar
-        },
-      },
       line_items: [
         {
           price_data: {
@@ -136,7 +130,31 @@ serve(async (req) => {
       },
       success_url: `${origin}/confirmacao/${sale.id}?payment=success`,
       cancel_url: `${origin}/eventos/${sale.event_id}/checkout?trip=${sale.trip_id}&location=${sale.boarding_location_id}&quantity=${sale.quantity}`,
-    });
+    };
+
+    let session;
+    try {
+      // Try with card + pix
+      session = await stripe.checkout.sessions.create({
+        ...checkoutParams,
+        payment_method_types: ['card', 'pix'],
+        payment_method_options: {
+          pix: { expires_after_seconds: 900 },
+        },
+      } as any);
+      console.log("Checkout session created with card + pix");
+    } catch (pixError: any) {
+      if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
+        console.warn("Pix not available on this Stripe account, falling back to card-only");
+        session = await stripe.checkout.sessions.create({
+          ...checkoutParams,
+          payment_method_types: ['card'],
+        } as any);
+        console.log("Checkout session created with card only");
+      } else {
+        throw pixError;
+      }
+    }
 
     // Save checkout session id on the sale
     await supabaseAdmin
