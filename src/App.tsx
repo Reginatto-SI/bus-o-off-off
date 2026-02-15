@@ -21,6 +21,7 @@ import CompanyPage from "./pages/admin/Company";
 import MyAccount from "./pages/admin/MyAccount";
 import Sponsors from "./pages/admin/Sponsors";
 import Partners from "./pages/admin/Partners";
+import SalesReport from "./pages/admin/SalesReport";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
@@ -77,6 +78,7 @@ const App = () => (
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
             <Route path="/admin/parceiros" element={<Partners />} />
+            <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             
             {/* Catch all */}
             <Route path="*" element={<NotFound />} />
