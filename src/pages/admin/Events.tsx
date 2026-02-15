@@ -209,6 +209,7 @@ export default function Events() {
   const [editingBoardingId, setEditingBoardingId] = useState<string | null>(null);
   const [boardingForm, setBoardingForm] = useState({
     boarding_location_id: '',
+    departure_date: '',
     departure_time: '',
     trip_id: '',
     stop_order: '',
@@ -1029,6 +1030,7 @@ export default function Events() {
     setEditingBoardingId(boarding.id);
     setBoardingForm({
       boarding_location_id: boarding.boarding_location_id,
+      departure_date: boarding.departure_date ?? '',
       departure_time: boarding.departure_time ?? '',
       trip_id: boarding.trip_id ?? '',
       stop_order: boarding.stop_order?.toString() ?? '',
@@ -1041,6 +1043,7 @@ export default function Events() {
     setEditingBoardingId(null);
     setBoardingForm({
       boarding_location_id: '',
+      departure_date: form.date || '',
       departure_time: '',
       trip_id: selectedTripIdForBoardings || '',
       stop_order: '',
@@ -1071,6 +1074,7 @@ export default function Events() {
       // EDITING existing boarding
       const updateData = {
         boarding_location_id: boardingForm.boarding_location_id,
+        departure_date: boardingForm.departure_date || null,
         departure_time: boardingForm.departure_time || null,
         trip_id: tripId,
         stop_order: nextOrder,
@@ -1088,7 +1092,7 @@ export default function Events() {
         toast.success('Local de embarque atualizado');
         setBoardingDialogOpen(false);
         setEditingBoardingId(null);
-        setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
+        setBoardingForm({ boarding_location_id: '', departure_date: '', departure_time: '', trip_id: '', stop_order: '' });
         fetchEventBoardingLocations(editingId);
       }
     } else {
@@ -1096,6 +1100,7 @@ export default function Events() {
       const boardingData = {
         event_id: editingId,
         boarding_location_id: boardingForm.boarding_location_id,
+        departure_date: boardingForm.departure_date || null,
         departure_time: boardingForm.departure_time || null,
         trip_id: tripId,
         stop_order: nextOrder,
@@ -1110,7 +1115,7 @@ export default function Events() {
       } else {
         toast.success('Local de embarque adicionado');
         setBoardingDialogOpen(false);
-        setBoardingForm({ boarding_location_id: '', departure_time: '', trip_id: '', stop_order: '' });
+        setBoardingForm({ boarding_location_id: '', departure_date: '', departure_time: '', trip_id: '', stop_order: '' });
         fetchEventBoardingLocations(editingId);
       }
     }
@@ -2413,10 +2418,12 @@ export default function Events() {
                                           </p>
                                         )}
                                         <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                                          {ebl.departure_time && (
+                                          {(ebl.departure_date || ebl.departure_time) && (
                                             <span className="flex items-center gap-1">
                                               <Clock className="h-3 w-3" />
-                                              Horário: {ebl.departure_time.slice(0, 5)}
+                                              {ebl.departure_date
+                                                ? `${ebl.departure_date.split('-').reverse().slice(0, 2).join('/')}${ebl.departure_time ? ` às ${ebl.departure_time.slice(0, 5)}` : ''}`
+                                                : ebl.departure_time ? ebl.departure_time.slice(0, 5) : ''}
                                             </span>
                                           )}
                                           {!selectedTripIdForBoardings && (
@@ -2952,6 +2959,17 @@ export default function Events() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Departure Date */}
+              <div className="space-y-2">
+                <Label htmlFor="boarding_date">Data do Embarque</Label>
+                <Input
+                  id="boarding_date"
+                  type="date"
+                  value={boardingForm.departure_date}
+                  onChange={(e) => setBoardingForm({ ...boardingForm, departure_date: e.target.value })}
+                />
               </div>
 
               {/* Departure Time */}
