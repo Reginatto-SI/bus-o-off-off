@@ -1,95 +1,110 @@
 
+# Plano: Area do Vendedor Mobile-First + Blindagem do `ref`
 
-# Migração de Destination Charges para Direct Charges
+## Diagnostico do Estado Atual
 
-## Resumo
+### O que ja esta pronto
+- **Rastreio `ref`**: O parametro `?ref=sellerId` ja e propagado por todo o fluxo publico (`PublicEvents` -> `PublicEventDetail` -> `Checkout`)
+- **Gravacao `seller_id`**: No Checkout (linha 615), `sellerRef` e gravado diretamente como `seller_id` na tabela `sales`
+- **Tela "Minhas Vendas"**: Existe em `/admin/minhas-vendas` com KPIs (passagens vendidas, total vendido, comissao estimada), historico de vendas e botao "Gerar Link de Venda"
+- **CRUD de Vendedores**: Tela `/admin/vendedores` completa para gerentes criarem/editarem vendedores
+- **Sidebar**: "Minhas Vendas" aparece no grupo "Vendas & Comissao" com `roles: ['vendedor']`
 
-Migrar as duas edge functions (`create-checkout-session` e `stripe-webhook`) do modelo Destination Charges para Direct Charges, onde o pagamento é criado diretamente na conta conectada da empresa.
+### O que falta / esta errado
+1. **"Minhas Vendas" usa `AdminLayout`** (sidebar desktop) -- vendedor deveria usar layout mobile-first, fora do admin
+2. **Sem validacao do `ref`**: Qualquer UUID e aceito como `seller_id`. Nao valida se existe, se esta ativo, nem se pertence a mesma empresa do evento
+3. **Sem acesso mobile dedicado**: O header publico (`PublicLayout`) nao tem link para "Area do Vendedor"
+4. **Nenhum comentario** esclarece que vendedor e rastreio comercial, sem relacao com Stripe
+
+### O que NAO deve ser feito agora
+- Comissao automatica / calculo de repasse
+- Integracao vendedor com Stripe
+- Relatorios avancados (permanecem "Em breve")
+- Dashboard consolidado de comissoes
 
 ---
 
-## Alterações em `create-checkout-session/index.ts`
+## Alteracoes Planejadas
 
-### O que muda
+### 1. Nova rota `/vendedor/minhas-vendas` com layout mobile-first
 
-1. **Remover `transfer_data`** do `payment_intent_data` — Direct Charge não usa `transfer_data.destination`
-2. **Manter `application_fee_amount`** — a plataforma retém sua comissão automaticamente
-3. **Passar `stripeAccount` como segundo argumento** do `stripe.checkout.sessions.create()` — isso cria a sessão NA conta conectada
-4. **Adicionar `company_id` nos metadata** — para rastreabilidade no webhook
+Criar uma nova pagina `src/pages/seller/SellerDashboard.tsx` que:
 
-### Código atual (Destination Charge):
-```typescript
-payment_intent_data: {
-  application_fee_amount: applicationFeeCents,
-  transfer_data: {
-    destination: company.stripe_account_id,
-  },
-},
+- **Nao usa `AdminLayout`** -- usa um layout proprio leve e mobile-first (sem sidebar admin)
+- Inclui header simples com logo, nome do vendedor e botao de logout
+- Exige autenticacao (redireciona para `/login` se nao logado)
+- Exige `role === 'vendedor'` (mostra mensagem de erro se outro perfil)
+
+**Conteudo da tela:**
+- KPIs em cards empilhaveis (mobile): Passagens vendidas, Total vendido (R$), Vendas pagas, Vendas reservadas
+- Filtros simples (colapsaveis no mobile): periodo (de/ate) + status (todos/pago/reservado/cancelado)
+- Lista de vendas em formato card (nao tabela) -- otimizado para mobile
+- Botao fixo "Compartilhar Link de Venda" com acao de copiar e usar Web Share API quando disponivel
+
+A logica de dados e reutilizada da tela `MySales.tsx` existente (query por `seller_id`).
+
+### 2. Rota e navegacao
+
+**App.tsx**: Adicionar rota `/vendedor/minhas-vendas` apontando para `SellerDashboard`.
+
+**PublicLayout.tsx**: Adicionar link "Area do Vendedor" no header publico, entre "Minhas Passagens" e "Area Administrativa". O link aponta para `/vendedor/minhas-vendas`.
+
+**AdminSidebar.tsx**: Manter "Minhas Vendas" no sidebar admin (com `roles: ['vendedor']`) como atalho secundario, mas a URL passa a ser `/vendedor/minhas-vendas` (mesma pagina, fora do layout admin). Alternativa: redirecionar a rota antiga `/admin/minhas-vendas` para `/vendedor/minhas-vendas`.
+
+### 3. Blindagem do `ref` no Checkout
+
+No `Checkout.tsx`, antes de gravar `seller_id` na venda, adicionar validacao:
+
+```text
+1. Se sellerRef existe:
+   a. Buscar na tabela sellers: id = sellerRef
+   b. Verificar status = 'ativo'
+   c. Verificar company_id = event.company_id
+2. Se qualquer validacao falha: ignorar ref (seller_id = null)
+3. Se valido: gravar seller_id normalmente
 ```
 
-### Código novo (Direct Charge):
-```typescript
-payment_intent_data: {
-  application_fee_amount: applicationFeeCents,
-  // SEM transfer_data
-},
-```
+Isso impede que um UUID aleatorio ou vendedor de outra empresa seja associado a venda.
 
-E a criação da sessão passa a incluir o header:
-```typescript
-// Antes (Destination — sessão na plataforma):
-session = await stripe.checkout.sessions.create({ ...params });
+### 4. Comentarios explicitos no codigo
 
-// Depois (Direct — sessão na conta conectada):
-session = await stripe.checkout.sessions.create({ ...params }, {
-  stripeAccount: company.stripe_account_id
-});
-```
+Adicionar comentarios padronizados nos pontos-chave:
 
-O fallback Pix/cartão continua idêntico, apenas com o segundo argumento `stripeAccount` em ambas as chamadas.
+- **Checkout.tsx** (onde le `ref` e grava `seller_id`):
+  `// Vendedor e rastreio comercial (link/ref). Comissao de vendedor e manual e fora do Stripe.`
+  `// Stripe apenas confirma pagamento da venda (sale_status), independente de vendedor.`
 
----
+- **SellerDashboard.tsx** (novo):
+  `// Tela do vendedor: apenas visualizacao de vendas rastreadas via ref. Sem integracao com Stripe.`
 
-## Alterações em `stripe-webhook/index.ts`
+- **create-checkout-session** e **stripe-webhook** (edge functions):
+  `// seller_id nao participa do fluxo Stripe. Comissao do vendedor e apurada manualmente pelo gerente.`
 
-### O que muda
+### 5. Pagina MySales existente
 
-1. **Extrair `event.account`** — em Connect Webhooks, esse campo identifica de qual conta conectada veio o evento
-2. **Passar `connectedAccountId` para `processPaymentConfirmed`** — para logs mais detalhados
-3. **Logs atualizados** — indicam que o modelo é Direct Charge e de qual conta veio o evento
-
-### Lógica de split do parceiro
-
-Sem alteração funcional. O `stripe.transfers.create()` continua usando o saldo da plataforma (que agora vem exclusivamente da `application_fee`). A diferença é que antes a plataforma recebia o valor bruto e transferia ao destino; agora recebe apenas a comissão. O transfer para o parceiro sai dessa comissão.
+A pagina `/admin/minhas-vendas` atual (`MySales.tsx`) sera transformada em um redirect para `/vendedor/minhas-vendas`, mantendo compatibilidade com bookmarks existentes.
 
 ---
 
-## Configuração manual necessária no Stripe Dashboard
+## Detalhes Tecnicos
 
-Após o deploy, você precisa:
-
-1. **Criar um webhook do tipo "Connect"** (não "Your account") no Stripe Dashboard, apontando para a mesma URL: `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
-2. **Selecionar eventos**: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`
-3. **Atualizar o `STRIPE_WEBHOOK_SECRET`** com o novo signing secret do webhook Connect (é diferente do webhook anterior)
-4. **Remover o webhook antigo** (tipo "Your account") que era usado no modelo Destination Charges
-
-Importante: O webhook Connect recebe eventos de **todas** as contas conectadas com um único endpoint.
-
----
-
-## Arquivos modificados
-
-| Arquivo | Alteração |
+### Arquivos criados
+| Arquivo | Descricao |
 |---------|-----------|
-| `supabase/functions/create-checkout-session/index.ts` | Remover `transfer_data`, adicionar `stripeAccount` header, adicionar `company_id` nos metadata |
-| `supabase/functions/stripe-webhook/index.ts` | Extrair `event.account`, passar para processamento, atualizar logs |
+| `src/pages/seller/SellerDashboard.tsx` | Tela mobile-first do vendedor com KPIs, filtros e lista de vendas |
 
-## O que NÃO muda
+### Arquivos modificados
+| Arquivo | Alteracao |
+|---------|-----------|
+| `src/App.tsx` | Adicionar rota `/vendedor/minhas-vendas`; redirecionar `/admin/minhas-vendas` |
+| `src/pages/public/Checkout.tsx` | Validar `ref` contra tabela `sellers` antes de gravar; comentarios |
+| `src/components/layout/PublicLayout.tsx` | Link "Area do Vendedor" no header |
+| `src/components/layout/AdminSidebar.tsx` | Atualizar href de "Minhas Vendas" para `/vendedor/minhas-vendas` |
+| `supabase/functions/create-checkout-session/index.ts` | Comentario explicito sobre seller_id vs Stripe |
+| `supabase/functions/stripe-webhook/index.ts` | Comentario explicito sobre seller_id vs Stripe |
 
-- Cálculo de comissão (mesma fórmula)
-- Split do parceiro (mesmo `stripe.transfers.create`)
-- Fallback Pix/cartão (mesma lógica)
-- Validação de capabilities
-- Fluxo de Pix assíncrono (async_payment_succeeded/failed)
-- Banco de dados (nenhuma alteração de schema)
+### Nenhuma alteracao de banco de dados
+Nao e necessaria nenhuma migracão. A tabela `sellers` ja tem `status` e `company_id`.
 
+### Sem novas dependencias
+Reutiliza componentes existentes (Card, Badge, Button, StatusBadge, etc.)
