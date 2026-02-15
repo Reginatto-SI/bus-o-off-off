@@ -1,16 +1,29 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminSidebar } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
 import { Loader2 } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 export function AdminLayout({ children }: AdminLayoutProps) {
-  const { user, loading } = useAuth();
+  const { user, userRole, loading } = useAuth();
+  const toastShownRef = useRef(false);
+
+  useEffect(() => {
+    if (userRole === 'vendedor' && !toastShownRef.current) {
+      toastShownRef.current = true;
+      toast({
+        title: 'Acesso não autorizado',
+        description: 'Você não tem permissão para acessar o painel administrativo.',
+        variant: 'destructive',
+      });
+    }
+  }, [userRole]);
 
   if (loading) {
     return (
@@ -22,6 +35,20 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Aguardar role resolver antes de renderizar layout admin
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Bloquear vendedor
+  if (userRole === 'vendedor') {
+    return <Navigate to="/vendedor/minhas-vendas" replace />;
   }
 
   return (
