@@ -1,236 +1,120 @@
 
 
-# Novo Perfil Developer -- Acesso Total Cross-Company
+# Habilitacao de Pix no Stripe Checkout + Checklist de Producao
 
-## Resumo
+## Diagnostico
 
-Adicionar a role `developer` ao sistema RBAC existente. O developer tera acesso total a todas as telas administrativas e a todas as empresas, sem restricoes de `company_id`. Os perfis atuais (gerente, operador, vendedor, motorista) nao serao afetados.
+O Pix nao aparece como opcao de pagamento porque a edge function `create-checkout-session` **nao especifica `payment_method_types`**. Sem esse parametro, o Stripe usa apenas os metodos configurados no painel -- que por padrao e somente cartao.
 
----
-
-## 1. Migracao de Banco -- Enum e Funcoes
-
-### 1.1 Adicionar `developer` ao enum `user_role`
-
-```sql
-ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'developer';
-```
-
-### 1.2 Atualizar funcao `is_admin` para reconhecer developer
-
-```sql
-CREATE OR REPLACE FUNCTION public.is_admin(_user_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.user_roles
-    WHERE user_id = _user_id
-      AND role IN ('gerente', 'operador', 'developer')
-  )
-$$;
-```
-
-### 1.3 Nova funcao `is_developer` (security definer)
-
-```sql
-CREATE OR REPLACE FUNCTION public.is_developer(_user_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.user_roles
-    WHERE user_id = _user_id
-      AND role = 'developer'
-  )
-$$;
-```
-
-### 1.4 Atualizar funcao `user_belongs_to_company` para bypass do developer
-
-```sql
-CREATE OR REPLACE FUNCTION public.user_belongs_to_company(_user_id uuid, _company_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-  SELECT
-    -- Developer tem acesso cross-company automatico
-    public.is_developer(_user_id)
-    OR EXISTS (
-      SELECT 1
-      FROM public.user_roles ur
-      JOIN public.companies c ON c.id = ur.company_id
-      WHERE ur.user_id = _user_id
-        AND ur.company_id = _company_id
-        AND c.is_active = true
-    )
-$$;
-```
-
-Isso e o ponto central: como todas as policies RLS ja usam `user_belongs_to_company()` ou `is_admin()`, o developer herdara acesso automaticamente a todas as tabelas sem precisar alterar cada policy individualmente.
-
-### 1.5 Atualizar funcao `get_user_active_company` para developer
-
-A funcao atual retorna apenas a primeira empresa vinculada. Para o developer, isso continua funcionando normalmente (ele tera pelo menos uma empresa vinculada). O bypass cross-company e feito via `user_belongs_to_company`, nao via esta funcao.
+A documentacao do Stripe confirma que Pix e compativel com:
+- Destination Charges (nosso modelo atual)
+- Moeda BRL (ja usamos)
+- Stripe Checkout hosted
 
 ---
 
-## 2. Politicas RLS -- Ajustes Pontuais
+## 1. Habilitar Pix na criacao do Checkout Session
 
-### 2.1 Tabela `companies` -- Developer pode ver e gerenciar todas
+### Alteracao em `create-checkout-session/index.ts`
 
-A policy "Gerentes can manage companies" usa join direto com `user_roles`. Precisamos adicionar uma policy separada para developer:
-
-```sql
-CREATE POLICY "Developer can manage all companies"
-  ON public.companies FOR ALL
-  USING (public.is_developer(auth.uid()))
-  WITH CHECK (public.is_developer(auth.uid()));
-```
-
-### 2.2 Tabela `partners` -- Developer tambem pode gerenciar
-
-A policy atual usa `has_role('gerente')`. Precisamos incluir developer:
-
-```sql
-DROP POLICY IF EXISTS "Gerentes can manage partners" ON public.partners;
-
-CREATE POLICY "Gerentes and developers can manage partners"
-  ON public.partners FOR ALL
-  USING (
-    has_role(auth.uid(), 'gerente'::user_role)
-    OR has_role(auth.uid(), 'developer'::user_role)
-  )
-  WITH CHECK (
-    has_role(auth.uid(), 'gerente'::user_role)
-    OR has_role(auth.uid(), 'developer'::user_role)
-  );
-```
-
-### 2.3 Tabela `sponsors` -- Developer tambem pode gerenciar
-
-A policy "Admins can manage sponsors" usa `is_admin()`, que ja incluira developer apos a alteracao da funcao. OK, nenhuma alteracao necessaria.
-
-### 2.4 Demais tabelas
-
-As tabelas `boarding_locations`, `drivers`, `events`, `event_boarding_locations`, `fleet`, `sales`, `sale_logs`, `seats`, `tickets`, `trips`, `vehicles`, `sellers` usam `is_admin()` e/ou `user_belongs_to_company()`. Com as alteracoes nas funcoes, o developer ja tera acesso automaticamente. Nenhuma policy adicional necessaria.
-
-### 2.5 Tabela `user_roles` -- Developer pode ver tudo
-
-A policy "Admins can view all user_roles" usa `is_admin()`, que ja incluira developer. OK.
-
-### 2.6 Tabela `profiles` -- Developer pode ver e editar
-
-As policies de profiles usam `is_admin()` para UPDATE e `has_role('gerente')` para SELECT/UPDATE de profiles da empresa. Developer precisa de acesso:
-
-```sql
-CREATE POLICY "Developer can view all profiles"
-  ON public.profiles FOR SELECT
-  USING (public.is_developer(auth.uid()));
-
-CREATE POLICY "Developer can update all profiles"
-  ON public.profiles FOR UPDATE
-  USING (public.is_developer(auth.uid()))
-  WITH CHECK (public.is_developer(auth.uid()));
-```
-
----
-
-## 3. Frontend -- AuthContext
-
-### 3.1 Atualizar tipo `UserRole`
-
-Em `src/types/database.ts`:
-```typescript
-export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
-```
-
-### 3.2 Atualizar AuthContext
-
-Adicionar flags derivadas:
+Adicionar `payment_method_types: ['card', 'pix']` e configurar expiracao do Pix:
 
 ```typescript
-const isDeveloper = userRole === 'developer';
-const isGerente = userRole === 'gerente' || isDeveloper;
-const isOperador = userRole === 'operador';
-const isVendedor = userRole === 'vendedor';
-const canViewFinancials = userRole === 'gerente' || isDeveloper;
+const session = await stripe.checkout.sessions.create({
+  mode: "payment",
+  payment_method_types: ['card', 'pix'],
+  payment_method_options: {
+    pix: {
+      expires_after_seconds: 900, // 15 minutos para pagar
+    },
+  },
+  line_items: [ ... ],
+  // ... resto igual
+});
 ```
 
-Chave da implementacao: ao fazer `isGerente = gerente || developer`, o developer herda automaticamente todo o acesso que o gerente tem em todas as telas, sem precisar alterar cada pagina individualmente.
+Tambem sera necessario **remover** o bloco `payment_intent_data` e substituir por `payment_intent_data` apenas quando o metodo for cartao, porque Pix nao gera PaymentIntent direto -- gera um pagamento assincrono.
 
-Adicionar `isDeveloper` ao contexto para uso em funcionalidades exclusivas (como seletor de empresa).
+**Problema critico:** Destination Charges com `payment_intent_data.transfer_data` **nao sao compativeis com Pix** diretamente no mesmo checkout session quando `payment_method_types` inclui multiplos tipos. A solucao e usar `transfer_data` apenas no `payment_intent_data` e aceitar que o Stripe tratara o Pix via a mesma logica de Destination Charges.
 
-### 3.3 Carregamento de empresas para developer (cross-company)
+Na verdade, a documentacao confirma que Pix **funciona com Destination Charges**. Porem, a configuracao muda: devemos usar `payment_intent_data` para cartao e, para Pix, o Stripe trata automaticamente. A abordagem correta e manter `payment_intent_data` como esta -- o Stripe aplica a `application_fee_amount` e `transfer_data` tanto para cartao quanto para Pix.
 
-No `fetchUserData`, quando o usuario for developer, buscar TODAS as empresas ativas (nao apenas as vinculadas via `user_roles`):
+### Resumo da alteracao:
 
-```typescript
-// Se developer, buscar todas as empresas
-if (rolesData.some(r => r.role === 'developer')) {
-  const { data: allCompanies } = await supabase
-    .from('companies')
-    .select('*')
-    .eq('is_active', true);
-  // usar allCompanies em vez de filtrar por companyIds
-}
-```
+Apenas adicionar dois campos ao `stripe.checkout.sessions.create()`:
+- `payment_method_types: ['card', 'pix']`
+- `payment_method_options: { pix: { expires_after_seconds: 900 } }`
 
 ---
 
-## 4. Frontend -- Sidebar (Seletor Discreto de Empresa)
+## 2. Tratar pagamento assincrono do Pix no Webhook
 
-### 4.1 Seletor de empresa exclusivo para developer
+### Problema atual
 
-No `AdminSidebar.tsx`, adicionar um seletor de empresa discreto, visivel APENAS quando `isDeveloper === true` e houver mais de 1 empresa:
+O webhook so escuta `checkout.session.completed`. Para Pix, o fluxo e diferente:
 
-- Posicionar acima do bloco de usuario (rodape do sidebar)
-- Usar um `<select>` ou dropdown compacto com label "Empresa ativa"
-- Ao trocar, chamar `switchCompany(companyId)`
-- Para demais perfis: nada muda, nenhum seletor aparece
+1. `checkout.session.completed` dispara com `payment_status: 'unpaid'` (o cliente ainda nao pagou)
+2. Quando o cliente paga via Pix, dispara `checkout.session.async_payment_succeeded`
+3. Se expira sem pagamento, dispara `checkout.session.async_payment_failed`
 
----
+### Alteracao em `stripe-webhook/index.ts`
 
-## 5. Frontend -- Ajustes em Telas com Restricao de Role
+1. No evento `checkout.session.completed`:
+   - Verificar `session.payment_status`
+   - Se `payment_status === 'paid'` (cartao): processar normalmente como hoje
+   - Se `payment_status === 'unpaid'` (Pix pendente): **nao marcar como pago ainda**, apenas logar
 
-### 5.1 AdminSidebar -- Navegacao
+2. Adicionar tratamento para `checkout.session.async_payment_succeeded`:
+   - Mesmo fluxo que hoje faz no `checkout.session.completed` quando `payment_status === 'paid'`
+   - Marcar venda como `pago`
+   - Calcular comissao e fazer transfer para parceiro
 
-Atualizar o tipo local `UserRole` no sidebar para incluir `developer`. O developer vera todos os itens de menu (como gerente).
+3. Adicionar tratamento para `checkout.session.async_payment_failed`:
+   - Marcar venda como `cancelado` (ou manter `reservado` e logar)
+   - Liberar os assentos (deletar tickets)
+   - Logar no `sale_logs`
 
-### 5.2 Telas com guard `if (!isGerente)` 
+### Importante para o webhook do Stripe (painel)
 
-Como `isGerente` passara a ser `true` para developer tambem, as seguintes telas ja funcionarao automaticamente:
-- `Partners.tsx` -- `if (!isGerente) return Navigate`
-- `Users.tsx` -- `if (!isGerente) return Navigate`
-- `Sponsors.tsx` -- `if (!isGerente) return Navigate`
-- `Company.tsx` -- `if (!isGerente && !isOperador) return Navigate`
-- `Sales.tsx` -- KPIs financeiros condicionados a `isGerente` e `canViewFinancials`
-
-Nenhuma alteracao necessaria nessas telas.
-
-### 5.3 Edge function `create-user`
-
-A verificacao `isGerente` na edge function usa query direta ao banco. Precisamos ajustar:
-
-```typescript
-const isAuthorized = roles.some(
-  (r: any) => r.role === 'gerente' || r.role === 'developer'
-);
-```
+Sera necessario adicionar os eventos `checkout.session.async_payment_succeeded` e `checkout.session.async_payment_failed` no webhook configurado no painel do Stripe. Isso e uma configuracao manual que voce fara no painel do Stripe.
 
 ---
 
-## 6. Funcao handle_new_user (trigger)
+## 3. Checklist de Producao
 
-A trigger atual atribui `gerente` como role padrao para novos usuarios. Isso NAO deve ser alterado -- developer sera atribuido manualmente.
+### 3.1 O que ja esta correto
+
+- Chave secreta do Stripe configurada como secret
+- Webhook secret configurado
+- `verify_jwt = false` no webhook (necessario para Stripe chamar)
+- Validacao de assinatura do webhook via `constructEventAsync`
+- Calculo de comissao e transfer para parceiro
+- Capabilities pre-validadas antes do checkout
+
+### 3.2 Ajustes recomendados antes de producao
+
+| Item | Status | Acao |
+|------|--------|------|
+| Pix habilitado | Pendente | Implementar neste plano |
+| Webhook Pix async | Pendente | Implementar neste plano |
+| Chave Stripe em modo LIVE | Manual | Trocar a `STRIPE_SECRET_KEY` pela chave live no painel de secrets |
+| Webhook endpoint em LIVE | Manual | Criar novo webhook no Stripe apontando para a URL de producao |
+| Webhook events | Manual | Adicionar `checkout.session.async_payment_succeeded` e `checkout.session.async_payment_failed` |
+| `STRIPE_WEBHOOK_SECRET` | Manual | Atualizar com o signing secret do webhook de producao |
+| Conta Connect da empresa | Manual | Completar onboarding real no Stripe |
+| Limpeza de vendas de teste | Manual | Remover vendas de teste do banco antes de ir ao vivo |
+| Expirar reservas antigas | Recomendado futuro | Criar job para cancelar vendas `reservado` com mais de X minutos (Pix expirado) |
+
+### 3.3 Para trocar para producao
+
+Passos manuais que voce fara:
+
+1. No painel do Stripe: alternar para modo Live
+2. Copiar a nova `STRIPE_SECRET_KEY` (live) e atualizar o secret no projeto
+3. Criar um webhook endpoint apontando para `https://cdrcyjrvurrphnceromd.supabase.co/functions/v1/stripe-webhook`
+4. Selecionar os eventos: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`
+5. Copiar o signing secret do webhook e atualizar `STRIPE_WEBHOOK_SECRET`
+6. A conta Connect da empresa precisa completar o onboarding real
 
 ---
 
@@ -238,28 +122,13 @@ A trigger atual atribui `gerente` como role padrao para novos usuarios. Isso NAO
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/types/database.ts` | Adicionar `developer` ao tipo `UserRole` |
-| `src/contexts/AuthContext.tsx` | Adicionar `isDeveloper`, ajustar `isGerente`/`canViewFinancials`, busca cross-company |
-| `src/components/layout/AdminSidebar.tsx` | Adicionar `developer` ao tipo local, seletor de empresa exclusivo |
-| `supabase/functions/create-user/index.ts` | Incluir `developer` na verificacao de permissao |
-
-## Migracoes de banco
-
-| Alteracao | Descricao |
-|-----------|-----------|
-| Enum `user_role` | Adicionar valor `developer` |
-| Funcao `is_admin` | Incluir `developer` |
-| Nova funcao `is_developer` | Verificacao de perfil developer |
-| Funcao `user_belongs_to_company` | Bypass para developer |
-| Policy em `companies` | Developer pode gerenciar todas |
-| Policy em `partners` | Developer pode gerenciar |
-| Policies em `profiles` | Developer pode ver/editar todos |
+| `supabase/functions/create-checkout-session/index.ts` | Adicionar `payment_method_types` e `payment_method_options` para Pix |
+| `supabase/functions/stripe-webhook/index.ts` | Tratar `payment_status` no completed, adicionar handlers para async_payment_succeeded e async_payment_failed |
 
 ## O que NAO sera alterado
 
-- Fluxo publico (cliente sem login)
-- Logica de pagamento, QR Code ou webhook
-- Comportamento dos perfis gerente, operador, vendedor, motorista
-- Trigger `handle_new_user` (novos usuarios continuam como gerente)
-- Nao sera criado selector de empresa para usuarios comuns
+- Logica de QR Code e passagens
+- Telas publicas e administrativas
+- Calculo de comissao (mesma logica, apenas movida para funcao reutilizavel)
+- RLS e permissoes
 
