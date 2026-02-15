@@ -363,20 +363,36 @@ export default function UsersPage() {
         // Update user_role
         const editingUser = users.find((u) => u.id === editingId);
         if (editingUser?.user_role_id) {
-          const { error: roleError } = await supabase
+          // IMPORTANTE: usamos `select()` no update para validar persistência real
+          // do vínculo seller/driver antes de exibir toast de sucesso.
+          const { data: updatedRole, error: roleError } = await supabase
             .from('user_roles')
             .update({
               role: form.role,
               seller_id: form.role === 'vendedor' ? form.seller_id : null,
               driver_id: form.role === 'motorista' ? form.driver_id : null,
             })
-            .eq('id', editingUser.user_role_id);
+            .eq('id', editingUser.user_role_id)
+            .select('seller_id, driver_id, role')
+            .single();
 
           if (roleError) {
             throw roleError;
           }
+
+          if (
+            updatedRole.role !== form.role ||
+            (form.role === 'vendedor' && updatedRole.seller_id !== form.seller_id) ||
+            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id)
+          ) {
+            throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
+          }
         }
 
+        // Causa raiz: o modal podia ser reaberto antes do refresh da lista e hidratar
+        // com estado antigo. Esperamos o fetch terminar antes de fechar para garantir
+        // que a próxima abertura já carregue o vínculo persistido.
+        await fetchUsers();
         toast.success('Usuário atualizado com sucesso');
       } else {
         // Create new user via edge function
@@ -401,12 +417,12 @@ export default function UsersPage() {
           throw new Error(data.error);
         }
 
+        await fetchUsers();
         toast.success('Usuário criado! Um e-mail de confirmação foi enviado.');
       }
 
       setDialogOpen(false);
       resetForm();
-      fetchUsers();
     } catch (error: any) {
       console.error('Erro ao salvar usuário:', error);
       const message = error.message || 'Erro ao salvar usuário';
@@ -416,9 +432,8 @@ export default function UsersPage() {
     setSaving(false);
   };
 
-  const handleEdit = (userToEdit: UserWithRole) => {
-    setEditingId(userToEdit.id);
-    setForm({
+  const handleEdit = async (userToEdit: UserWithRole) => {
+    const baseForm = {
       name: userToEdit.name,
       email: userToEdit.email,
       role: userToEdit.role ?? 'operador',
@@ -426,7 +441,29 @@ export default function UsersPage() {
       seller_id: userToEdit.seller_id ?? '',
       driver_id: userToEdit.driver_id ?? '',
       notes: userToEdit.notes ?? '',
-    });
+    };
+
+    // Reidratação defensiva: busca vínculo mais recente no banco ao abrir o modal,
+    // evitando mostrar vazio quando o relacionamento já foi salvo.
+    if (userToEdit.user_role_id) {
+      const { data: roleData, error } = await supabase
+        .from('user_roles')
+        .select('role, seller_id, driver_id')
+        .eq('id', userToEdit.user_role_id)
+        .single();
+
+      if (error) {
+        toast.error('Erro ao carregar vínculos do usuário');
+        return;
+      }
+
+      baseForm.role = (roleData.role as UserRole) ?? baseForm.role;
+      baseForm.seller_id = roleData.seller_id ?? '';
+      baseForm.driver_id = roleData.driver_id ?? '';
+    }
+
+    setEditingId(userToEdit.id);
+    setForm(baseForm);
     setDialogOpen(true);
   };
 
