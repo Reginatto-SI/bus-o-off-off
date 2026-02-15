@@ -100,6 +100,8 @@ export default function UsersPage() {
   const [editingUserRoleId, setEditingUserRoleId] = useState<string | null>(null);
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
 
+  // seller_id e driver_id conectam o usuário ao cadastro gerencial de vendedor/motorista
+  // para controle interno de comissão e operação. Não tem relação com Stripe ou pagamento.
   const [form, setForm] = useState({
     name: '',
     email: '',

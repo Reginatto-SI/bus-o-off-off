@@ -79,6 +79,12 @@ export interface UserWithRole extends Profile {
   user_role_id?: string;
 }
 
+/**
+ * Vendedor — cadastro 100% gerencial.
+ * Não tem nenhuma relação com Stripe ou gateway de pagamento.
+ * Comissão é apurada e paga manualmente pelo gerente (Pix ou outro meio próprio).
+ * O campo seller_id em user_roles vincula um usuário do sistema a este cadastro para controle interno.
+ */
 export interface Seller {
   id: string;
   name: string;
