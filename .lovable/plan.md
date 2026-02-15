@@ -1,48 +1,39 @@
 
-# Correcao: Erro ao reservar assentos + Build error em Sales.tsx
+# Simplificar carregamento de assentos no checkout
 
-## Problema 1: "Erro ao reservar assentos" no checkout publico
+## Problema
 
-### Causa raiz
+O sistema de "preview seats" (assentos falsos com IDs como `preview-1-2-4`) foi criado para mostrar o layout enquanto os assentos reais carregam. Porem, a flag `seatsArePreview` que bloqueia interacao **nunca desliga** se o carregamento dos assentos reais falhar silenciosamente ou demorar, travando o mapa de assentos em "Carregando assentos..." infinitamente.
 
-Os logs do banco mostram: `invalid input syntax for type uuid: "preview-1-2-4"`.
+## Solucao: remover o sistema de preview
 
-O fluxo de checkout exibe um **layout de preview** imediato (com IDs falsos como `preview-1-1-3`) enquanto os assentos reais carregam do banco. Se o usuario seleciona assentos antes dos dados reais chegarem, os IDs de preview sao enviados na criacao dos tickets, causando erro no PostgreSQL porque `preview-1-2-4` nao e um UUID valido.
+A abordagem mais simples e confiavel e **eliminar os preview seats**. Em vez de mostrar assentos fantasmas bloqueados, mostrar apenas um spinner limpo ate os assentos reais carregarem.
 
-### Correcao
+### Alteracoes em `src/pages/public/Checkout.tsx`
 
-Duas medidas complementares:
+1. **Remover a linha que seta preview seats** (linha 336: `setSeats(buildPreviewSeatsForVehicle(...))`). Os seats comecam como array vazio e sao preenchidos diretamente com dados reais.
 
-1. **Bloquear selecao de assentos preview**: No `SeatMap` ou no `Checkout.tsx`, impedir que o usuario selecione assentos que tenham IDs comecando com `preview-`. Isso ja e parcialmente feito pelo overlay de loading, mas ha uma janela onde o preview esta visivel sem o overlay.
+2. **Remover a variavel `seatsArePreview`** (linha 252) — nao e mais necessaria.
 
-2. **Validacao no submit**: Antes de criar a venda, verificar se algum `selectedSeat` contem ID com prefixo `preview-` e bloquear o envio, mostrando toast pedindo para aguardar o carregamento.
+3. **Remover todas as guards de `preview-`** nos handlers `handleAdvanceToPassengers` e `handleSubmit` — sem preview seats, nao existem IDs invalidos.
 
-3. **Limpar selecao ao trocar de preview para real**: Quando os assentos reais carregam e substituem os de preview, limpar o `selectedSeats` para evitar IDs orfaos.
+4. **Simplificar as props do SeatMap**: voltar a usar apenas `loadingSeatStatus` e `generatingSeats` como indicadores de carregamento, sem `seatsArePreview`.
 
-### Arquivos modificados
+5. **Manter o `generatingSeats`** como unico bloqueador de interacao (para quando o sistema esta criando/recriando assentos no banco).
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/pages/public/Checkout.tsx` | Limpar selectedSeats ao carregar assentos reais; validar IDs antes do submit; bloquear interacao enquanto seats sao preview |
+6. **O SeatMap ja possui overlay de loading** — ele continuara exibindo "Carregando assentos..." enquanto `loadingStatus` ou `generatingSeats` estiverem ativos. Quando os dados reais chegam, o overlay some automaticamente.
 
----
+### Resultado
 
-## Problema 2: Build error em Sales.tsx
+- Sem preview, sem IDs falsos, sem risco de enviar UUIDs invalidos
+- Loading limpo e confiavel: spinner enquanto carrega, mapa interativo quando pronto
+- Codigo mais simples (menos estados, menos guards)
+- Se o carregamento falhar, o `seatStatusError` ja existente mostra mensagem com botao "Tentar novamente"
 
-### Causa raiz
-
-O componente `Label` e usado nas linhas 891, 895 e 919 mas nao esta importado no arquivo.
-
-### Correcao
-
-Adicionar `import { Label } from '@/components/ui/label';` nos imports do arquivo.
-
-### Arquivo modificado
+## Arquivos modificados
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/pages/admin/Sales.tsx` | Adicionar import de Label |
-
----
+| `src/pages/public/Checkout.tsx` | Remover preview seats, remover seatsArePreview, remover guards de preview-, simplificar props do SeatMap |
 
 ## Sem novas dependencias
