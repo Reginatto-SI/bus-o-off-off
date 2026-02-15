@@ -1,90 +1,89 @@
 
-
-# Menu Lateral Colapsavel — Painel Administrativo
+# Relatorio de Vendas — Tela Administrativa
 
 ## Resumo
 
-Implementar funcionalidade de colapso no menu lateral desktop do painel administrativo. Quando colapsado, exibe apenas icones com tooltips. Persistencia via localStorage. Transicao animada suave.
+Criar a tela `/admin/relatorios/vendas` com visao executiva e analitica das vendas, reaproveitando integralmente os padroes visuais e componentes ja existentes em `/admin/vendas`. Substituir o item "Em breve" no menu lateral por link funcional.
 
 ---
 
-## Abordagem
+## Arquivos a criar
 
-Implementacao custom sem usar o componente Shadcn Sidebar (o sidebar atual e totalmente custom). Adicionar estado `collapsed` gerenciado internamente no `AdminSidebar`, persistido em localStorage, e propagado para o `AdminLayout` para ajustar o padding do conteudo principal.
+### 1. `src/pages/admin/SalesReport.tsx` (novo)
+
+Pagina principal do relatorio. Estrutura identica ao padrao piloto:
+
+**Dados (fetch):**
+- Reutilizar mesma query de `Sales.tsx`: `sales` com joins em `events`, `trips.vehicles`, `boarding_locations`, `sellers`
+- Filtro obrigatorio por `company_id`
+- Periodo padrao ao abrir: ultimos 30 dias (pre-preencher `dateFrom` e `dateTo`)
+
+**Filtros (FilterCard):**
+- Busca textual (cliente/CPF)
+- Status (reservado, pago, cancelado)
+- Evento (dropdown com eventos da empresa)
+- Vendedor (dropdown)
+- Periodo (data inicial / data final) — nos filtros avancados como ja feito em Sales
+
+**KPIs (StatsCard — 8 cards):**
+1. Receita Bruta (soma `quantity * unit_price` de todas filtradas)
+2. Total de Vendas (contagem)
+3. Vendas Pagas (contagem status=pago)
+4. Ticket Medio (receita bruta / total vendas)
+5. Cancelamentos % (canceladas / total * 100)
+6. Receita Liquida Plataforma (soma `platform_net_amount` das pagas)
+7. Total Taxa Plataforma (soma `platform_fee_total` das pagas)
+8. Total Split Parceiro (soma `partner_fee_amount` das pagas)
+
+Regra: KPIs 6/7/8 visiveis apenas para `canViewFinancials` (gerente/developer). KPI 1 tambem restrito a `canViewFinancials`.
+
+**Tabs de conteudo (Tabs component):**
+
+- **Aba "Resumo por Evento"**: Tabela agregada com colunas: Evento, No de Vendas, Pagas, Canceladas, Receita Bruta, Receita Liq. Plataforma. Ordenacao por receita bruta desc. Colunas financeiras restritas a `canViewFinancials`.
+
+- **Aba "Detalhado por Venda"**: Tabela identica a de Sales.tsx com colunas: Data/Hora, Evento, Veiculo, Local Embarque, Cliente, Vendedor, Qtd, Valor Unit., Valor Total, Status, ID venda, ID pagamento. Menu de acoes "..." com opcao "Copiar Link" (mesma logica de Sales).
+
+**Botoes de acao (PageHeader):**
+- Atualizar (RefreshCw)
+- Exportar PDF (FileText) — abre ExportPDFModal com colunas da aba ativa
+- Exportar Excel (FileSpreadsheet) — abre ExportExcelModal com dados filtrados
+
+**PDF Executivo (customizacao):**
+O PDF do relatorio tera tratamento especial: alem da tabela padrao, incluira secao de KPIs no topo e rodape institucional obrigatorio:
+"Gerado por Reginatto SI — www.reginattosistemas.com.br — Contato: (65) 99210-2030"
+
+Para a Fase 1, o PDF executivo usara o ExportPDFModal existente com colunas do resumo por evento (nao lista todas as vendas). O rodape sera adicionado via override do `didDrawPage` no autoTable.
+
+**Excel Analitico:**
+Exporta dados completos (todas as vendas filtradas) usando ExportExcelModal existente com colunas expandidas incluindo ID da venda e ID de pagamento.
 
 ---
 
-## Alteracoes
+## Arquivos a modificar
 
-### 1. AdminSidebar.tsx — Estado de colapso + layout colapsado
+### 2. `src/components/layout/AdminSidebar.tsx`
 
-**Estado:**
-- Novo state `collapsed` inicializado a partir de `localStorage.getItem('sidebar_collapsed') === 'true'`
-- Funcao `toggleCollapsed` que alterna e persiste no localStorage
+No grupo `relatorios`, alterar o item "Relatorio de Vendas":
+- Remover `disabled: true` e `statusLabel: 'Em breve'`
+- Adicionar `href: '/admin/relatorios/vendas'`
 
-**Header (desktop):**
-- Quando colapsado: mostrar apenas o icone do busao (sem texto) + botao de toggle (seta para direita)
-- Quando expandido: layout atual + botao de toggle (seta para esquerda)
-- Botao de toggle: icone `PanelLeftClose`/`PanelLeftOpen` do lucide-react
+### 3. `src/App.tsx`
 
-**Navegacao (desktop):**
-- Quando colapsado: remover Accordion, mostrar apenas icones centralizados sem labels de grupo
-- Cada icone envolto em `Tooltip` (do Radix/shadcn ja existente) mostrando o nome do item
-- Quando expandido: manter layout atual com Accordion
-
-**Rodape usuario (desktop):**
-- Quando colapsado: mostrar apenas avatar com inicial do nome + tooltip
-- Botao Sair: apenas icone LogOut com tooltip
-
-**Seletor de empresa (developer):**
-- Quando colapsado: ocultar completamente (ocupa pouco espaco e nao faz sentido em modo icone)
-
-**Largura desktop:**
-- Expandido: `w-64` (atual)
-- Colapsado: `w-16`
-- Transicao: `transition-all duration-300`
-
-**Mobile:**
-- Nenhuma alteracao. Mobile continua com overlay de menu completo.
-
-### 2. AdminLayout.tsx — Padding dinamico
-
-- Importar estado de colapso do sidebar
-- Problema: AdminSidebar e AdminLayout sao componentes separados sem estado compartilhado
-
-**Solucao:** O AdminSidebar exporta o estado de collapsed via um callback prop OU usa um contexto simples. Abordagem mais simples: ler diretamente do localStorage no AdminLayout e escutar evento de storage.
-
-**Abordagem escolhida:** Criar um hook `useSidebarCollapsed` que le/escreve no localStorage e dispara um custom event para sincronizar entre componentes.
-
-- `lg:pl-64` (expandido) vs `lg:pl-16` (colapsado)
-- Transicao suave: `transition-all duration-300`
-
-### 3. Novo hook: src/hooks/use-sidebar-collapsed.ts
-
-```typescript
-// Hook que gerencia estado collapsed com persistencia e sincronizacao
-// - Le de localStorage('sidebar_collapsed')
-// - Dispara custom event 'sidebar-collapsed-change' ao alterar
-// - Escuta o mesmo evento para sincronizar entre AdminSidebar e AdminLayout
+Adicionar rota:
 ```
-
-Retorna: `{ collapsed: boolean, toggleCollapsed: () => void }`
-
-### 4. AdminHeader.tsx — Nenhuma alteracao necessaria
-
-O header ja e `hidden lg:flex` e fica dentro do container com padding. Ele se ajusta automaticamente.
+<Route path="/admin/relatorios/vendas" element={<SalesReport />} />
+```
+Importar o componente `SalesReport`.
 
 ---
 
-## Arquivos
+## Detalhes tecnicos
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/hooks/use-sidebar-collapsed.ts` | Novo hook de persistencia + sync |
-| `src/components/layout/AdminSidebar.tsx` | Estado de colapso, layout colapsado com tooltips, botao toggle |
-| `src/components/layout/AdminLayout.tsx` | Padding dinamico baseado em collapsed |
+- Componentes reutilizados: `AdminLayout`, `PageHeader`, `StatsCard`, `FilterCard`, `FilterInput`, `ExportExcelModal`, `ExportPDFModal`, `ActionsDropdown`, `StatusBadge`, `EmptyState`, `Table/*`
+- Governanca: filtro por `activeCompanyId` obrigatorio. RLS ja cobre via policies existentes em `sales`.
+- Performance: periodo padrao de 30 dias limita volume inicial. Sem paginacao na Fase 1 (mesmo padrao de Sales.tsx).
+- Permissoes: dados financeiros restritos a `canViewFinancials`. Operador ve quantidades e status mas nao valores monetarios.
 
-## Sem alteracoes de banco, dependencias ou rotas
+## Nenhuma alteracao de banco necessaria
 
-Usa apenas `lucide-react` (PanelLeftClose/PanelLeftOpen) e `Tooltip` do shadcn (ja existentes).
-
+Todos os dados ja existem nas tabelas `sales`, `events`, `trips`, `vehicles`, `boarding_locations`, `sellers`.
