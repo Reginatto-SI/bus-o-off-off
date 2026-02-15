@@ -97,6 +97,7 @@ export default function UsersPage() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingUserRoleId, setEditingUserRoleId] = useState<string | null>(null);
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
 
   const [form, setForm] = useState({
@@ -361,23 +362,43 @@ export default function UsersPage() {
         }
 
         // Update user_role
-        const editingUser = users.find((u) => u.id === editingId);
-        if (editingUser?.user_role_id) {
-          // IMPORTANTE: usamos `select()` no update para validar persistência real
-          // do vínculo seller/driver antes de exibir toast de sucesso.
-          const { data: updatedRole, error: roleError } = await supabase
+        if (editingUserRoleId) {
+          // Ajuste do erro reportado: `.single()` no retorno de update pode falhar
+          // com "cannot coerce ... single JSON object" em cenários de 0/múltiplas linhas.
+          // Fazemos update e validação em 2 passos para manter robustez sem mudar o layout/fluxo.
+          const { error: roleUpdateError } = await supabase
             .from('user_roles')
             .update({
               role: form.role,
               seller_id: form.role === 'vendedor' ? form.seller_id : null,
               driver_id: form.role === 'motorista' ? form.driver_id : null,
             })
-            .eq('id', editingUser.user_role_id)
-            .select('seller_id, driver_id, role')
-            .single();
+            .eq('id', editingUserRoleId);
 
-          if (roleError) {
-            throw roleError;
+          if (roleUpdateError) {
+            throw roleUpdateError;
+          }
+
+          const { data: updatedRole, error: roleFetchError } = await supabase
+            .from('user_roles')
+            .select('seller_id, driver_id, role')
+            .eq('id', editingUserRoleId)
+            .maybeSingle();
+
+          if (roleFetchError) {
+            throw roleFetchError;
+          }
+
+          if (!updatedRole) {
+            throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
+          }
+
+          if (
+            updatedRole.role !== form.role ||
+            (form.role === 'vendedor' && updatedRole.seller_id !== form.seller_id) ||
+            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id)
+          ) {
+            throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
           }
 
           if (
@@ -423,9 +444,9 @@ export default function UsersPage() {
 
       setDialogOpen(false);
       resetForm();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao salvar usuário:', error);
-      const message = error.message || 'Erro ao salvar usuário';
+      const message = error instanceof Error ? error.message : 'Erro ao salvar usuário';
       toast.error(message);
     }
 
@@ -450,10 +471,15 @@ export default function UsersPage() {
         .from('user_roles')
         .select('role, seller_id, driver_id')
         .eq('id', userToEdit.user_role_id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         toast.error('Erro ao carregar vínculos do usuário');
+        return;
+      }
+
+      if (!roleData) {
+        toast.error('Vínculo do usuário não encontrado para edição');
         return;
       }
 
@@ -463,6 +489,7 @@ export default function UsersPage() {
     }
 
     setEditingId(userToEdit.id);
+    setEditingUserRoleId(userToEdit.user_role_id ?? null);
     setForm(baseForm);
     setDialogOpen(true);
   };
@@ -489,6 +516,7 @@ export default function UsersPage() {
 
   const resetForm = () => {
     setEditingId(null);
+    setEditingUserRoleId(null);
     setForm({
       name: '',
       email: '',
