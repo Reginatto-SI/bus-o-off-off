@@ -1,18 +1,21 @@
 import { EventBoardingLocation } from '@/types/database';
 import { MapPin, Clock } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatBoardingDateTime } from '@/lib/utils';
 
 interface BoardingLocationCardProps {
   location: EventBoardingLocation;
+  eventDate: string;
   isSelected: boolean;
   onSelect: () => void;
 }
 
-export function BoardingLocationCard({ location, isSelected, onSelect }: BoardingLocationCardProps) {
+export function BoardingLocationCard({ location, eventDate, isSelected, onSelect }: BoardingLocationCardProps) {
   const bl = location.boarding_location;
-  const departureTime = location.departure_time
-    ? location.departure_time.slice(0, 5)
-    : null;
+  const formattedDateTime = formatBoardingDateTime(
+    location.departure_date,
+    location.departure_time,
+    eventDate,
+  );
 
   const cityState = [bl?.city, bl?.state].filter(Boolean).join(' — ');
 
@@ -52,10 +55,10 @@ export function BoardingLocationCard({ location, isSelected, onSelect }: Boardin
             <p className="text-sm text-muted-foreground pl-5">{cityState}</p>
           )}
 
-          {departureTime && (
+          {formattedDateTime && (
             <p className="text-sm font-semibold text-primary flex items-center gap-1.5 mt-2">
               <Clock className="h-3.5 w-3.5 shrink-0" />
-              Saída às {departureTime}
+              {formattedDateTime}
             </p>
           )}
         </div>

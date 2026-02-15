@@ -7,6 +7,7 @@ import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCi
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
+import { formatBoardingDateTime } from '@/lib/utils';
 import type { SaleStatus } from '@/types/database';
 
 export interface TicketCardData {
@@ -22,6 +23,7 @@ export interface TicketCardData {
   boardingLocationName: string;
   boardingLocationAddress: string;
   boardingDepartureTime: string | null;
+  boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
   // Company branding
   companyName: string;
@@ -258,10 +260,10 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
                 <MapPin className="h-3.5 w-3.5" />
                 {ticket.boardingLocationName}
               </div>
-              {ticket.boardingDepartureTime && (
+              {(ticket.boardingDepartureTime || ticket.boardingDepartureDate) && (
                 <div className="flex items-center gap-2">
                   <Clock className="h-3.5 w-3.5" />
-                  Saída: {ticket.boardingDepartureTime.slice(0, 5)}
+                  {formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)}
                 </div>
               )}
             </div>

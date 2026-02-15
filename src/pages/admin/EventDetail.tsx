@@ -83,6 +83,8 @@ export default function EventDetail() {
   // Location dialog
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [locationDepartureDate, setLocationDepartureDate] = useState('');
+  const [locationDepartureTime, setLocationDepartureTime] = useState('');
   const [savingLocation, setSavingLocation] = useState(false);
 
   const fetchData = async () => {
@@ -166,13 +168,15 @@ export default function EventDetail() {
     if (!selectedLocationId) return;
     setSavingLocation(true);
 
-    const { error } = await supabase.from('event_boarding_locations').insert([
-      {
-        event_id: id,
-        boarding_location_id: selectedLocationId,
-        company_id: activeCompanyId!,
-      },
-    ]);
+    const insertData: any = {
+      event_id: id,
+      boarding_location_id: selectedLocationId,
+      company_id: activeCompanyId!,
+    };
+    if (locationDepartureDate) insertData.departure_date = locationDepartureDate;
+    if (locationDepartureTime) insertData.departure_time = locationDepartureTime;
+
+    const { error } = await supabase.from('event_boarding_locations').insert([insertData]);
 
     if (error) {
       toast.error('Erro ao adicionar local');
@@ -180,6 +184,8 @@ export default function EventDetail() {
       toast.success('Local adicionado');
       setLocationDialogOpen(false);
       setSelectedLocationId('');
+      setLocationDepartureDate('');
+      setLocationDepartureTime('');
       fetchData();
     }
     setSavingLocation(false);
@@ -446,6 +452,24 @@ export default function EventDetail() {
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Data do Embarque</Label>
+                          <Input
+                            type="date"
+                            value={locationDepartureDate || event?.date || ''}
+                            onChange={(e) => setLocationDepartureDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Horário</Label>
+                          <Input
+                            type="time"
+                            value={locationDepartureTime}
+                            onChange={(e) => setLocationDepartureTime(e.target.value)}
+                          />
+                        </div>
+                      </div>
                       <Button
                         onClick={handleAddLocation}
                         className="w-full"
@@ -481,6 +505,13 @@ export default function EventDetail() {
                           <p className="text-sm text-muted-foreground">
                             {el.boarding_location?.address}
                           </p>
+                          {(el.departure_date || el.departure_time) && (
+                            <p className="text-sm text-primary font-medium mt-1">
+                              {el.departure_date && new Date(el.departure_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              {el.departure_date && el.departure_time && ' às '}
+                              {el.departure_time && el.departure_time.slice(0, 5)}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           {el.boarding_location?.maps_url && (
