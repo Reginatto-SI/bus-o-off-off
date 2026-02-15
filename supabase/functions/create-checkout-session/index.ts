@@ -105,6 +105,8 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
+    const stripeAccountHeader = { stripeAccount: company.stripe_account_id };
+
     const checkoutParams: Record<string, unknown> = {
       mode: "payment",
       line_items: [
@@ -121,12 +123,10 @@ serve(async (req) => {
       ],
       payment_intent_data: {
         application_fee_amount: applicationFeeCents,
-        transfer_data: {
-          destination: company.stripe_account_id,
-        },
       },
       metadata: {
         sale_id: sale.id,
+        company_id: sale.company_id,
       },
       success_url: `${origin}/confirmacao/${sale.id}?payment=success`,
       cancel_url: `${origin}/eventos/${sale.event_id}/checkout?trip=${sale.trip_id}&location=${sale.boarding_location_id}&quantity=${sale.quantity}`,
@@ -134,23 +134,23 @@ serve(async (req) => {
 
     let session;
     try {
-      // Try with card + pix
+      // Try with card + pix (Direct Charge — session on connected account)
       session = await stripe.checkout.sessions.create({
         ...checkoutParams,
         payment_method_types: ['card', 'pix'],
         payment_method_options: {
           pix: { expires_after_seconds: 900 },
         },
-      } as any);
-      console.log("Checkout session created with card + pix");
+      } as any, stripeAccountHeader);
+      console.log("Checkout session created with card + pix (Direct Charge)");
     } catch (pixError: any) {
       if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
-        console.warn("Pix not available on this Stripe account, falling back to card-only");
+        console.warn("Pix not available on connected account, falling back to card-only");
         session = await stripe.checkout.sessions.create({
           ...checkoutParams,
           payment_method_types: ['card'],
-        } as any);
-        console.log("Checkout session created with card only");
+        } as any, stripeAccountHeader);
+        console.log("Checkout session created with card only (Direct Charge)");
       } else {
         throw pixError;
       }
