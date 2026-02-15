@@ -199,33 +199,6 @@ function isPassengerComplete(p: PassengerData): boolean {
   return p.name.trim().length >= 3 && rawCpf.length === 11 && isValidCpf(rawCpf);
 }
 
-function buildPreviewSeatsForVehicle(trip: Trip): Seat[] {
-  const vehicle = trip.vehicle;
-
-  if (!vehicle) return [];
-
-  const layout = generateSeatLayout(
-    vehicle.capacity,
-    vehicle.type,
-    vehicle.floors ?? 1,
-    vehicle.seats_left_side,
-    vehicle.seats_right_side,
-  );
-
-  // Comentário de suporte: o preview evita sensação de tela travada na primeira entrada.
-  // Enquanto buscamos/normalizamos assentos reais no banco, já mostramos o layout base.
-  return layout.map((seat) => ({
-    id: `preview-${seat.floor}-${seat.row_number}-${seat.column_number}`,
-    vehicle_id: trip.vehicle_id,
-    label: seat.label,
-    floor: seat.floor,
-    row_number: seat.row_number,
-    column_number: seat.column_number,
-    status: seat.status,
-    company_id: trip.company_id,
-    created_at: new Date().toISOString(),
-  }));
-}
 
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
@@ -248,8 +221,6 @@ export default function Checkout() {
   const [loadingSeatStatus, setLoadingSeatStatus] = useState(false);
   const [seatStatusError, setSeatStatusError] = useState<string | null>(null);
 
-  // Detect if current seats are still preview (not real DB seats)
-  const seatsArePreview = seats.length > 0 && seats[0].id.startsWith('preview-');
 
   // Step management: 1 = seat selection, 2 = passenger data
   const [step, setStep] = useState(1);
@@ -333,7 +304,7 @@ export default function Checkout() {
           // Comentário de causa raiz: antes a página ficava bloqueada até terminar toda a sequência
           // (carregar/criar assentos + status). Em rede lenta, o usuário via "vazio" na 1ª entrada.
           // Aqui exibimos um layout base imediato e depois sincronizamos assentos reais/status.
-          setSeats(buildPreviewSeatsForVehicle(currentTrip));
+          
 
           const { data: existingSeats, error: seatsError } = await supabase
             .from('seats')
@@ -498,15 +469,6 @@ export default function Checkout() {
 
   // Init passengers array when advancing to step 2
   const handleAdvanceToPassengers = async () => {
-    if (seatsArePreview) {
-      toast.error('Aguarde o carregamento completo dos assentos.');
-      return;
-    }
-    if (selectedSeats.some(id => id.startsWith('preview-'))) {
-      toast.error('Aguarde o carregamento completo dos assentos.');
-      setSelectedSeats([]);
-      return;
-    }
     if (selectedSeats.length !== quantity) {
       toast.error(`Selecione exatamente ${quantity} assento${quantity > 1 ? 's' : ''}`);
       return;
@@ -599,14 +561,6 @@ export default function Checkout() {
       return;
     }
     if (!event || !trip || !location) return;
-
-    // Guard: reject preview seat IDs
-    if (selectedSeats.some(id => id.startsWith('preview-'))) {
-      toast.error('Aguarde o carregamento completo dos assentos.');
-      setSelectedSeats([]);
-      setStep(1);
-      return;
-    }
 
     setSubmitting(true);
 
@@ -858,13 +812,13 @@ export default function Checkout() {
               floors={trip.vehicle?.floors ?? 1}
               seatsLeftSide={trip.vehicle?.seats_left_side ?? (trip.vehicle?.type === 'van' ? 2 : 2)}
               seatsRightSide={trip.vehicle?.seats_right_side ?? (trip.vehicle?.type === 'van' ? 1 : 2)}
-              loadingStatus={loadingSeatStatus || generatingSeats || seatsArePreview}
-              interactionDisabled={generatingSeats || seatsArePreview}
+              loadingStatus={loadingSeatStatus || generatingSeats}
+              interactionDisabled={generatingSeats}
             />
 
             <Button
               className="w-full h-14 text-lg font-medium"
-              disabled={selectedSeats.length !== quantity || generatingSeats || submitting || seatsArePreview}
+              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
               onClick={handleAdvanceToPassengers}
             >
               {submitting ? (
