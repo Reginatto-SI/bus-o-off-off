@@ -650,6 +650,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           pix_key: string | null
+          short_code: string
           status: Database["public"]["Enums"]["seller_status"]
           updated_at: string
         }
@@ -664,6 +665,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           pix_key?: string | null
+          short_code?: string
           status?: Database["public"]["Enums"]["seller_status"]
           updated_at?: string
         }
@@ -678,6 +680,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           pix_key?: string | null
+          short_code?: string
           status?: Database["public"]["Enums"]["seller_status"]
           updated_at?: string
         }
@@ -1053,6 +1056,7 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_developer: { Args: { _user_id: string }; Returns: boolean }
+      resolve_seller_short_code: { Args: { code: string }; Returns: string }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean

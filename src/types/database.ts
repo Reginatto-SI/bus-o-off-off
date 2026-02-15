@@ -95,6 +95,8 @@ export interface Seller {
   notes: string | null;
   commission_percent: number;
   status: SellerStatus;
+  /** Código curto alfanumérico (6 chars) para link curto /v/{short_code}. Estável e único por vendedor. */
+  short_code: string;
   company_id: string;
   created_at: string;
   updated_at: string;
