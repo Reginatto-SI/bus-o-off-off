@@ -96,6 +96,14 @@ const initialFilters: ReportFilters = {
   dateTo: today,
 };
 
+
+const SALES_REPORT_TABS = {
+  resumo: 'resumo',
+  detalhado: 'detalhado',
+} as const;
+
+type SalesReportTab = (typeof SALES_REPORT_TABS)[keyof typeof SALES_REPORT_TABS];
+
 // ── Component ──
 export default function SalesReport() {
   const { canViewFinancials, activeCompanyId, activeCompany } = useAuth();
@@ -104,7 +112,7 @@ export default function SalesReport() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ReportFilters>(initialFilters);
-  const [activeTab, setActiveTab] = useState('resumo');
+  const [activeTab, setActiveTab] = useState<SalesReportTab>(SALES_REPORT_TABS.resumo);
 
   // Export modals
   const [excelModalOpen, setExcelModalOpen] = useState(false);
@@ -324,6 +332,15 @@ export default function SalesReport() {
       : []),
   ];
 
+
+  // Exporta conforme a aba ativa para manter consistência com a visualização atual.
+  const isSummaryView = activeTab === SALES_REPORT_TABS.resumo;
+  const exportColumns = isSummaryView ? summaryExportColumns : detailedExportColumns;
+  const exportData = isSummaryView ? summaryFlatData : detailedFlatData;
+  const exportStorageSuffix = isSummaryView ? 'resumo' : 'detalhado';
+  const exportFileNameSuffix = isSummaryView ? 'resumo-evento' : 'detalhado-venda';
+  const exportRecordCount = exportData.length;
+
   // ── Copy link ──
   const handleCopyLink = (saleId: string) => {
     const url = `${window.location.origin}/confirmacao/${saleId}`;
@@ -463,20 +480,20 @@ export default function SalesReport() {
             description={hasActiveFilters ? 'Tente ajustar os filtros ou o período' : 'As vendas aparecerão aqui quando forem realizadas'}
           />
         ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SalesReportTab)}>
             <TabsList className="mb-4">
-              <TabsTrigger value="resumo" className="gap-2">
+              <TabsTrigger value={SALES_REPORT_TABS.resumo} className="gap-2">
                 <BarChart3 className="h-4 w-4" />
                 Resumo por Evento
               </TabsTrigger>
-              <TabsTrigger value="detalhado" className="gap-2">
+              <TabsTrigger value={SALES_REPORT_TABS.detalhado} className="gap-2">
                 <List className="h-4 w-4" />
                 Detalhado por Venda
               </TabsTrigger>
             </TabsList>
 
             {/* Tab: Resumo por Evento */}
-            <TabsContent value="resumo">
+            <TabsContent value={SALES_REPORT_TABS.resumo}>
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -512,7 +529,7 @@ export default function SalesReport() {
             </TabsContent>
 
             {/* Tab: Detalhado por Venda */}
-            <TabsContent value="detalhado">
+            <TabsContent value={SALES_REPORT_TABS.detalhado}>
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -583,21 +600,22 @@ export default function SalesReport() {
         <ExportExcelModal
           open={excelModalOpen}
           onOpenChange={setExcelModalOpen}
-          columns={detailedExportColumns}
-          data={detailedFlatData}
-          storageKey="sales-report-excel"
-          fileName="relatorio-vendas"
-          sheetName="Vendas"
+          columns={exportColumns}
+          data={exportData}
+          storageKey={`sales-report-excel-${exportStorageSuffix}`}
+          fileName={`relatorio-vendas-${exportFileNameSuffix}`}
+          sheetName={isSummaryView ? 'Resumo por Evento' : 'Detalhado por Venda'}
         />
         <ExportPDFModal
           open={pdfModalOpen}
           onOpenChange={setPdfModalOpen}
-          columns={summaryExportColumns}
-          data={summaryFlatData}
-          storageKey="sales-report-pdf"
-          fileName="relatorio-vendas"
-          title="Relatório de Vendas"
+          columns={exportColumns}
+          data={exportData}
+          storageKey={`sales-report-pdf-${exportStorageSuffix}`}
+          fileName={`relatorio-vendas-${exportFileNameSuffix}`}
+          title={isSummaryView ? 'Relatório de Vendas - Resumo por Evento' : 'Relatório de Vendas - Detalhado por Venda'}
           company={activeCompany}
+          totalRecords={exportRecordCount}
         />
       </div>
     </AdminLayout>
