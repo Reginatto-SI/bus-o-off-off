@@ -151,7 +151,7 @@ export function ExportPDFModal({
         const yPosition = margin;
         const leftBlockX = margin;
         const rightBlockX = pageWidth - margin;
-        let leftY = yPosition;
+        const leftY = yPosition;
 
         // === BLOCO ESQUERDO (Identidade da Empresa) ===
         
@@ -227,7 +227,8 @@ export function ExportPDFModal({
         return separatorY + 6;
       };
 
-      const tableStartY = addHeader();
+      // Posição inicial da tabela abaixo do bloco de cabeçalho (logo + textos + separador).
+      const tableStartY = margin + 30;
 
       const selectedColumnObjects = columns.filter((c) => selectedColumns.includes(c.key));
       const tableHeaders = selectedColumnObjects.map((c) => c.label);
@@ -242,7 +243,8 @@ export function ExportPDFModal({
         head: [tableHeaders],
         body: tableData,
         startY: tableStartY,
-        margin: { left: margin, right: margin },
+        // Reserva margem superior fixa para todas as páginas e evita sobreposição do cabeçalho.
+        margin: { top: tableStartY, left: margin, right: margin },
         headStyles: {
           fillColor: [primaryColorRgb.r, primaryColorRgb.g, primaryColorRgb.b],
           textColor: [255, 255, 255],
@@ -262,11 +264,11 @@ export function ExportPDFModal({
           lineWidth: 0.1,
           cellPadding: 3,
         },
+        willDrawPage: () => {
+          // Desenha o cabeçalho antes do conteúdo da página para manter a hierarquia visual.
+          addHeader();
+        },
         didDrawPage: (pageData) => {
-          if (pageData.pageNumber > 1) {
-            addHeader();
-          }
-
           const pageCount = doc.getNumberOfPages();
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
