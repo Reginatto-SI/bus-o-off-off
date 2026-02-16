@@ -9,9 +9,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface ExportColumn {
@@ -43,14 +44,14 @@ export function ExportExcelModal({
   fileName,
   sheetName,
 }: ExportExcelModalProps) {
-  // Mantemos 8 opções por coluna para reduzir rolagem e facilitar o "bater o olho".
-  // Ajuste o número abaixo caso precise mudar o limite de itens por coluna no futuro.
-  const COLUMN_SIZE = 8;
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Load preferences from localStorage when modal opens
   useEffect(() => {
     if (open) {
+      // Sempre limpa a busca ao abrir para manter experiência previsível.
+      setSearchTerm('');
       const stored = localStorage.getItem(`export_columns_${storageKey}`);
       if (stored) {
         try {
@@ -79,6 +80,11 @@ export function ExportExcelModal({
     setSelectedColumns((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
+  };
+
+  const handleSelectEssential = () => {
+    // Mantém um atalho simples para começar com um conjunto reduzido sem regra complexa.
+    setSelectedColumns(columns.slice(0, Math.min(6, columns.length)).map((column) => column.key));
   };
 
   const handleExport = () => {
@@ -120,14 +126,13 @@ export function ExportExcelModal({
     onOpenChange(false);
   };
 
-  const columnGroups = Array.from(
-    { length: Math.ceil(columns.length / COLUMN_SIZE) },
-    (_, index) => columns.slice(index * COLUMN_SIZE, (index + 1) * COLUMN_SIZE)
+  const filteredColumns = columns.filter((column) =>
+    column.label.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
@@ -147,30 +152,44 @@ export function ExportExcelModal({
             <Button variant="outline" size="sm" onClick={handleDeselectAll}>
               Desmarcar Todos
             </Button>
+            <Button variant="outline" size="sm" onClick={handleSelectEssential}>
+              Selecionar Essenciais
+            </Button>
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pl-8"
+              placeholder="Buscar coluna..."
+            />
           </div>
 
           <ScrollArea className="h-[300px] rounded-md border p-4">
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {columnGroups.map((group, groupIndex) => (
-                <div key={`excel-col-group-${groupIndex}`} className="space-y-3">
-                  {group.map((column) => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`col-${column.key}`}
-                        checked={selectedColumns.includes(column.key)}
-                        onCheckedChange={() => handleToggleColumn(column.key)}
-                      />
-                      <Label
-                        htmlFor={`col-${column.key}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {column.label}
-                      </Label>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+              {filteredColumns.map((column) => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={selectedColumns.includes(column.key)}
+                    onCheckedChange={() => handleToggleColumn(column.key)}
+                  />
+                  <Label
+                    htmlFor={`col-${column.key}`}
+                    className="cursor-pointer text-sm font-normal leading-none"
+                  >
+                    {column.label}
+                  </Label>
                 </div>
               ))}
             </div>
+            {filteredColumns.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhuma coluna encontrada para a busca informada.
+              </p>
+            )}
           </ScrollArea>
 
           <p className="text-xs text-muted-foreground">

@@ -10,9 +10,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Loader2 } from 'lucide-react';
+import { FileText, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExportColumn } from './ExportExcelModal';
 import {
@@ -36,6 +37,7 @@ interface ExportPDFModalProps {
   fileName: string;
   title: string;
   company: Company | null;
+  totalRecords?: number;
 }
 
 interface StoredPreferences {
@@ -51,13 +53,16 @@ export function ExportPDFModal({
   fileName,
   title,
   company,
+  totalRecords,
 }: ExportPDFModalProps) {
-  const COLUMN_SIZE = 8;
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (open) {
+      // Sempre limpa a busca ao abrir para manter a experiência consistente.
+      setSearchTerm('');
       const stored = localStorage.getItem(`export_pdf_columns_${storageKey}`);
       if (stored) {
         try {
@@ -84,6 +89,11 @@ export function ExportPDFModal({
     setSelectedColumns((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
+  };
+
+  const handleSelectEssential = () => {
+    // Atalho opcional para iniciar com poucas colunas sem criar regras complexas.
+    setSelectedColumns(columns.slice(0, Math.min(6, columns.length)).map((column) => column.key));
   };
 
   const handleExport = async () => {
@@ -285,14 +295,13 @@ export function ExportPDFModal({
     }
   };
 
-  const columnGroups = Array.from(
-    { length: Math.ceil(columns.length / COLUMN_SIZE) },
-    (_, index) => columns.slice(index * COLUMN_SIZE, (index + 1) * COLUMN_SIZE)
+  const filteredColumns = columns.filter((column) =>
+    column.label.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -312,35 +321,49 @@ export function ExportPDFModal({
             <Button variant="outline" size="sm" onClick={handleDeselectAll}>
               Desmarcar Todos
             </Button>
+            <Button variant="outline" size="sm" onClick={handleSelectEssential}>
+              Selecionar Essenciais
+            </Button>
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pl-8"
+              placeholder="Buscar coluna..."
+            />
           </div>
 
           <ScrollArea className="h-[300px] rounded-md border p-4">
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {columnGroups.map((group, groupIndex) => (
-                <div key={`pdf-col-group-${groupIndex}`} className="space-y-3">
-                  {group.map((column) => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`pdf-col-${column.key}`}
-                        checked={selectedColumns.includes(column.key)}
-                        onCheckedChange={() => handleToggleColumn(column.key)}
-                      />
-                      <Label
-                        htmlFor={`pdf-col-${column.key}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {column.label}
-                      </Label>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2 xl:grid-cols-3">
+              {filteredColumns.map((column) => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`pdf-col-${column.key}`}
+                    checked={selectedColumns.includes(column.key)}
+                    onCheckedChange={() => handleToggleColumn(column.key)}
+                  />
+                  <Label
+                    htmlFor={`pdf-col-${column.key}`}
+                    className="cursor-pointer text-sm font-normal leading-none"
+                  >
+                    {column.label}
+                  </Label>
                 </div>
               ))}
             </div>
+            {filteredColumns.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhuma coluna encontrada para a busca informada.
+              </p>
+            )}
           </ScrollArea>
 
           <p className="text-xs text-muted-foreground">
             {selectedColumns.length} de {columns.length} colunas selecionadas •{' '}
-            {data.length} registros para exportar
+            {totalRecords ?? data.length} registros para exportar
           </p>
         </div>
 
