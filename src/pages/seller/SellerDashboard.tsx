@@ -49,7 +49,6 @@ import {
   ShoppingCart,
   DollarSign,
   CheckCircle2,
-  Clock,
   Share2,
   Check,
   Filter,
@@ -205,9 +204,9 @@ export default function SellerDashboard() {
   const totalSold = filteredSales.reduce((sum, s) => sum + s.quantity, 0);
   const totalValue = filteredSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
   const paidSales = filteredSales.filter((s) => s.status === 'pago');
-  const reservedSales = filteredSales.filter((s) => s.status === 'reservado');
   const paidValue = paidSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
-  const reservedValue = reservedSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
+  // Comissão agregada usa apenas vendas pagas e o percentual já configurado para o vendedor.
+  const sellerCommission = seller ? paidValue * (seller.commission_percent / 100) : 0;
 
   const shareLink = () => {
     const link = `${window.location.origin}/eventos?ref=${sellerId}`;
@@ -318,7 +317,7 @@ export default function SellerDashboard() {
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="text-xs text-muted-foreground">Total Vendido</p>
                       <p className="text-lg font-bold">R$ {totalValue.toFixed(2)}</p>
                     </div>
                   </div>
@@ -338,10 +337,11 @@ export default function SellerDashboard() {
               <Card>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-warning shrink-0" />
+                    <ShoppingCart className="h-4 w-4 text-warning shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Reservadas</p>
-                      <p className="text-lg font-bold">R$ {reservedValue.toFixed(2)}</p>
+                      {/* Exibe o KPI financeiro principal sem alterar a regra já existente de comissão. */}
+                      <p className="text-xs text-muted-foreground">Comissão a Receber</p>
+                      <p className="text-lg font-bold">R$ {sellerCommission.toFixed(2)}</p>
                     </div>
                   </div>
                 </CardContent>
