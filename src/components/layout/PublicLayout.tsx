@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { Building2, Menu, Search, Settings, ShoppingBag, Ticket, User } from 'lucide-react';
+import { Building2, Menu, Search, Settings, Ticket } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,13 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   const mobileLinks = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
-    { to: '/vendedor/minhas-vendas', label: 'Área do Vendedor', icon: ShoppingBag },
     { to: '/login', label: 'Área Administrativa', icon: Building2 },
   ];
 
   // Comentário: usamos `end` apenas quando necessário para evitar múltiplos itens ativos em rotas aninhadas.
+  // Comentário: removemos o atalho direto de vendedor no header para centralizar o acesso via Área Administrativa.
   const desktopLinks = [
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Ticket, end: false },
-    { to: '/vendedor/minhas-vendas', label: 'Área do Vendedor', icon: User, end: false },
     { to: '/login', label: 'Área Administrativa', icon: Settings, end: true },
   ];
 
