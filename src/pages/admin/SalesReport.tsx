@@ -32,9 +32,7 @@ import {
   XCircle,
   TrendingUp,
   Percent,
-  Landmark,
-  Banknote,
-  Handshake,
+  Users,
   Calendar,
   Copy,
   BarChart3,
@@ -227,11 +225,15 @@ export default function SalesReport() {
     const cancelPercent = total > 0 ? (canceladas / total) * 100 : 0;
 
     const paidSales = filteredSales.filter((s) => s.status === 'pago');
-    const platformNet = paidSales.reduce((sum, s) => sum + (s.platform_net_amount ?? 0), 0);
     const platformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
-    const partnerFee = paidSales.reduce((sum, s) => sum + (s.partner_fee_amount ?? 0), 0);
+    // Comissão segue o mesmo cálculo da tela /admin/vendas para manter consistência entre KPIs.
+    const sellersCommission = paidSales.reduce((sum, sale) => {
+      const saleGross = sale.quantity * sale.unit_price;
+      const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
+      return sum + (saleGross * sellerCommissionPercent) / 100;
+    }, 0);
 
-    return { total, grossRevenue, pagas, canceladas, ticketMedio, cancelPercent, platformNet, platformFee, partnerFee };
+    return { total, grossRevenue, pagas, canceladas, ticketMedio, cancelPercent, platformFee, sellersCommission };
   }, [filteredSales]);
 
   // ── Event summary ──
@@ -390,10 +392,9 @@ export default function SalesReport() {
         </div>
 
         {canViewFinancials && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <StatsCard label="Receita Líq. Plataforma" value={`R$ ${stats.platformNet.toFixed(2)}`} icon={Landmark} variant="success" />
-            <StatsCard label="Total Taxa Plataforma" value={`R$ ${stats.platformFee.toFixed(2)}`} icon={Banknote} />
-            <StatsCard label="Total Split Parceiro" value={`R$ ${stats.partnerFee.toFixed(2)}`} icon={Handshake} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <StatsCard label="Custo da Plataforma" value={`R$ ${stats.platformFee.toFixed(2)}`} icon={DollarSign} />
+            <StatsCard label="Comissão dos Vendedores" value={`R$ ${stats.sellersCommission.toFixed(2)}`} icon={Users} />
           </div>
         )}
 
