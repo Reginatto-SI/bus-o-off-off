@@ -1,90 +1,122 @@
 
-# Ajustes — /admin/vendas (Mascaras, Transporte, Confirmar, Poltrona)
+
+# Ajustes Finais — QR Code, Vendedor, Pos-Confirmacao e /consultar-passagens
 
 ## Resumo
 
-Corrigir 5 problemas no fluxo de Nova Venda e na listagem/detalhe de vendas: mascaras de CPF/telefone, label de transporte sem "Ida/Volta", bug do botao Confirmar, coluna Poltrona(s) na tabela, e Poltrona no modal de detalhes.
+Quatro melhorias no modulo /admin/vendas: (1) acoes de gerar passagem PDF/Imagem no menu "...", (2) campo Vendedor opcional na Nova Venda, (3) tela de sucesso pos-confirmacao com QR Code e botoes de download, (4) garantir que vendas admin aparecam em /consultar-passagens.
 
 ---
 
-## Alteracoes
+## Arquivos a modificar
 
-### 1. `src/components/admin/NewSaleModal.tsx`
+### 1. `src/pages/admin/Sales.tsx`
 
-**1a) Mascaras CPF e Telefone (Step 3 — passageiros)**
+**1a) Acoes "Gerar Passagem (PDF)" e "Gerar Passagem (Imagem)" no menu "..."**
 
-Adicionar funcoes `formatCpfMask` e `formatPhoneMask` identicas as de `Checkout.tsx`:
+Na funcao `getSaleActions`, adicionar duas novas acoes para vendas com `status !== 'cancelado'` e `customer_name !== 'BLOQUEIO'`:
+- "Gerar Passagem (PDF)" — abre um modal/dialog seletor de passageiro
+- "Gerar Passagem (Imagem)" — abre o mesmo seletor mas para imagem
 
-```
-function formatCpfMask(value: string): string {
-  const d = value.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return d.slice(0,3) + '.' + d.slice(3);
-  if (d.length <= 9) return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6);
-  return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6,9) + '-' + d.slice(9);
-}
+Logica do seletor de passageiro:
+- Ao clicar na acao, buscar tickets da venda (`supabase.from('tickets').select('*').eq('sale_id', sale.id)`)
+- Se 1 ticket: gerar diretamente sem seletor
+- Se multiplos: exibir dialog simples com lista (Nome + Poltrona) + opcao "Baixar todos (PDF)"
+- Para gerar, montar `TicketCardData` com dados da venda + empresa (mesma logica de Confirmation.tsx), renderizar QR invisivel com `QRCodeCanvas` offscreen, extrair base64 e chamar `generateTicketPdf` (PDF) ou reproduzir a logica de `handleDownloadImage` do `TicketCard` (Imagem)
 
-function formatPhoneMask(value: string): string {
-  const d = value.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return '(' + d.slice(0,2) + ') ' + d.slice(2);
-  return '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
-}
-```
+Novo state necessario:
+- `ticketGenSale: Sale | null` — venda selecionada para gerar passagem
+- `ticketGenMode: 'pdf' | 'image'` — modo selecionado
+- `ticketGenTickets: TicketRecord[]` — tickets da venda carregados
+- `ticketGenLoading: boolean`
 
-No `updatePassenger`, aplicar mascaras:
-- Campo `cpf`: usar `formatCpfMask(value)` em vez de `value.replace(/\D/g, '').slice(0, 11)`
-- Campo `phone`: usar `formatPhoneMask(value)`
+Novo componente inline (ou dialog dentro do mesmo arquivo):
+- Dialog "Gerar Passagem" com lista de passageiros e botoes de acao
 
-Na validacao `canConfirm`, ja esta usando `p.cpf.replace(/\D/g, '')` para extrair digitos — isso funciona com mascaras. Sem alteracao necessaria na validacao.
+Para construir `TicketCardData` de cada ticket, buscar dados da empresa via `activeCompany` (ja disponivel no contexto) e dados do evento/embarque da venda (ja carregados no `sale` com joins). Para `boardingDepartureTime`, buscar de `event_boarding_locations` (mesma query do detail modal).
 
-No `handleConfirm`, ja usa `p.cpf.replace(/\D/g, '')` — tambem ja funciona.
+**1b) Vendedor no modal de detalhes**
 
-**1b) Transporte sem "Ida/Volta"**
-
-Na linha ~458-461, remover o trecho `{t.trip_type === 'volta' ? ' (Volta)' : ''}` do label do SelectItem de transporte. Manter apenas: `Tipo + Placa + Capacidade + Motorista`.
-
-**1c) Bug do botao Confirmar**
-
-O problema: na aba Bloqueio, o CPF e pre-preenchido como `'00000000000'` (11 digitos sem mascara). Na validacao `canConfirm`, o bloco `if (!isBlock)` protege corretamente — para bloqueio nao valida nome/cpf. Entao bloqueio ja deveria funcionar.
-
-Para Venda Manual e Reserva: o CPF e inicializado como `''`. Quando o usuario digita com mascara (ex: `123.456.789-00`), `p.cpf.replace(/\D/g, '')` extrai 11 digitos — a validacao passa. Isso ja esta correto.
-
-O problema real: na aba **Reserva**, a validacao exige `parseFloat(unitPrice)` valido apenas para `activeTab === 'manual'`. Mas `unitPrice` e inicializado como `''` no `initPassengers` e so e preenchido com `selectedEvent.unit_price`. Verificar: se `selectedEvent` existe, `unitPrice` e preenchido. Para reserva, a condicao `if (activeTab === 'manual')` nao e avaliada, entao nao bloqueia. Parece correto.
-
-Verificacao adicional: o botao usa `disabled={!canConfirm}`. O `canConfirm` exige `passengers.length > 0`. Se o usuario nao preencheu nome, retorna false. Se preencheu nome e CPF com mascara (11 digitos limpos), retorna true.
-
-O bug pode estar no fato de que o CPF com mascara esta sendo comparado incorretamente. Vou garantir que a logica esta robusta e adicionar log de debug temporario se necessario. Mas o ajuste principal e garantir que a mascara funciona corretamente no `updatePassenger`.
-
-**Ajuste real no `canConfirm`:** Verificar se ha um edge case com `unitPrice` vazio para manual. Atualmente `parseFloat('')` retorna `NaN`, e `isNaN(NaN) || NaN < 0` e `true`, logo retorna `false`. Isso e correto — obriga preco. Mas se o usuario nao altera o preco pre-preenchido, pode haver um problema de timing. Garantir que `unitPrice` e setado no `initPassengers`.
+Ja existe `InfoRow label="Vendedor"` no detalhe — esta OK. Nenhuma alteracao necessaria aqui.
 
 ---
 
-### 2. `src/pages/admin/Sales.tsx`
+### 2. `src/components/admin/NewSaleModal.tsx`
 
-**2a) Coluna Poltrona(s) na tabela**
+**2a) Campo Vendedor (opcional) na aba Venda Manual**
 
-- Na query `fetchSales`, ja faz join com tickets? Nao. Precisa buscar tickets para cada venda ou fazer um fetch separado.
-- Abordagem eficiente: fazer uma query separada de tickets agrupados por `sale_id` apos carregar as vendas, ou incluir na query principal.
-- Abordagem mais simples: ao carregar vendas, fazer um segundo fetch de todos os tickets da empresa para mapear `sale_id -> seat_labels[]`.
+Adicionar:
+- State `sellers` (lista de vendedores ativos da empresa) — fetch ao abrir modal
+- State `selectedSellerId` (string, vazio por padrao)
+- No step 3, aba `manual`, adicionar Select "Vendedor (opcional)" na mesma grid da forma de recebimento e valor unitario (3 colunas: Recebimento / Valor / Vendedor)
+- No `handleConfirm`, incluir `seller_id: selectedSellerId || null` no insert de `sales`
+- Reset `selectedSellerId` ao abrir/fechar modal
 
-Implementacao:
-- Apos `fetchSales`, buscar `tickets` com `select('sale_id, seat_label')` filtrado por `company_id`
-- Criar um Map `saleId -> string[]` de seat_labels
-- Usar na tabela com formato compacto: ate 3 labels + `+N`
+Fetch de vendedores:
+```
+supabase.from('sellers').select('id, name')
+  .eq('company_id', activeCompanyId)
+  .eq('status', 'ativo')
+  .order('name')
+```
 
-- Adicionar coluna "Poltrona(s)" entre "Qtd" e "Valor" (ou apos "Cliente")
-- Formato: `28, 29, 30 +2` com Tooltip para lista completa
+**2b) Tela de sucesso pos-confirmacao com QR Code**
 
-**2b) Poltrona(s) no modal de detalhes**
+Apos `handleConfirm` com sucesso, em vez de fechar o modal imediatamente:
+- Adicionar state `confirmationData: { saleId: string; tickets: TicketRecord[]; event: Event; boardingName: string; departureTime: string | null } | null`
+- Apos insert de tickets, re-buscar os tickets recem-criados (para pegar `qr_code_token` gerado pelo banco)
+- Setar `confirmationData` com os dados
+- Exibir step 4 (sucesso) no modal:
+  - Icone de sucesso
+  - Para cada ticket: QR Code renderizado via `QRCodeCanvas`, nome, poltrona, evento
+  - Botoes: "Baixar PDF" e "Baixar Imagem" (reutilizando `generateTicketPdf` e logica do `TicketCard`)
+  - Botao "Fechar" que chama `onSuccess()`
+- Se multiplos tickets: navegacao por passageiro (tabs ou scroll)
+- Construir `TicketCardData` para cada ticket usando dados da empresa via `activeCompany` (precisara receber como prop ou buscar)
 
-- Aba "Dados da Venda": adicionar InfoRow "Poltrona(s)" usando `detailTickets` (ja carregados)
-- Aba "Passageiros": ja mostra `seat_label` na coluna "Assento" — esta OK
+Prop adicional necessaria: `company` (dados da empresa ativa, para montar TicketCardData com branding).
+Alterar em `Sales.tsx`: passar `company={activeCompany}` para `NewSaleModal`.
 
-**2c) Mascaras no Edit Passenger Modal**
+**2c) Nao fechar modal no onSuccess atual**
 
-- Aplicar `formatCpfMask` no campo CPF do modal de edicao de passageiro
-- Ao salvar, usar `replace(/\D/g, '')` para limpar antes de enviar ao banco
+Alterar fluxo: `onSuccess` so e chamado ao clicar "Fechar" no step de sucesso. O `toast.success` continua, mas o modal permanece aberto mostrando as passagens.
+
+---
+
+### 3. Verificacao — /consultar-passagens (TicketLookup.tsx)
+
+Analisando o codigo atual de `TicketLookup.tsx`:
+- A busca e feita por `tickets.passenger_cpf` com join em `sales` e filtro por `trip.event_id`
+- **Nao ha filtro por status** — retorna todos os tickets (pago, reservado, cancelado)
+- **Nao ha filtro por origem** — qualquer ticket criado (admin ou publico) aparece
+
+**Conclusao: a query atual ja funciona corretamente para vendas admin.** O unico requisito e que os dados estejam corretamente inseridos (passenger_cpf limpo, trip_id correto, event_id via trip). A insercao no `NewSaleModal` ja faz isso corretamente:
+- `passenger_cpf` e salvo limpo (`.replace(/\D/g, '')`)
+- `trip_id` e setado
+- `sale_id` aponta para sale com `event_id`
+- `qr_code_token` e gerado pelo default do banco
+
+**Nenhuma alteracao necessaria em TicketLookup.tsx.**
+
+Porem, ha um detalhe: o `TicketLookup` busca eventos que possuem tickets, usando uma cadeia `tickets -> trips -> events`. Para vendas admin, os tickets possuem `trip_id` valido, entao o evento aparecera no dropdown. Tudo OK.
+
+---
+
+## Detalhes tecnicos
+
+**Dependencia para gerar QR offscreen no Admin:**
+Para gerar PDF/Imagem no menu "...", sera necessario renderizar um `QRCodeCanvas` invisivel (offscreen) para extrair o base64. Abordagem: renderizar dentro do dialog de selecao de passageiro com `style={{ display: 'none' }}` e usar ref para capturar.
+
+**TicketCardData no Admin:**
+Para montar o objeto completo para o gerador de PDF, os dados da empresa vem de `activeCompany` (ja disponivel em Sales.tsx via `useAuth`). Os dados do evento e embarque vem do `sale` (ja com joins). O `boardingDepartureTime` precisa de fetch extra (mesma query usada no openDetail).
+
+**Fluxo resumido do Step 4 (sucesso):**
+1. Insert sale + tickets
+2. Re-fetch tickets recem-criados (para pegar qr_code_token)
+3. Fetch boarding departure time
+4. Montar array de TicketCardData
+5. Exibir no modal com QR + botoes de download
+6. Ao clicar "Fechar", chamar onSuccess()
 
 ---
 
@@ -97,4 +129,5 @@ Implementacao:
 
 ## Sem alteracoes de banco
 
-Usa dados ja existentes nas tabelas `tickets` e `sales`.
+Dados e tabelas existentes sao suficientes. TicketLookup.tsx nao precisa de ajuste.
+
