@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -43,7 +43,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   ShoppingCart,
   Loader2,
@@ -62,8 +61,8 @@ import {
   Users,
   History,
   Calendar,
-  User,
-  Armchair,
+  Download,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -71,6 +70,9 @@ import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { QRCodeCanvas } from 'qrcode.react';
+import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
+import type { TicketCardData } from '@/components/public/TicketCard';
 
 function formatCpfMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -130,6 +132,43 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado',
 };
 
+// ── Helper to build TicketCardData ──
+function buildTicketCardData(
+  ticket: TicketRecord,
+  sale: Sale,
+  company: any,
+  boardingDepartureTime: string | null,
+  boardingDepartureDate: string | null,
+): TicketCardData {
+  const companyDisplayName = company?.trade_name || company?.name || '';
+  return {
+    ticketId: ticket.id,
+    qrCodeToken: ticket.qr_code_token,
+    passengerName: ticket.passenger_name,
+    passengerCpf: ticket.passenger_cpf,
+    seatLabel: ticket.seat_label,
+    boardingStatus: ticket.boarding_status,
+    eventName: sale.event?.name || '',
+    eventDate: sale.event?.date || '',
+    eventCity: sale.event?.city || '',
+    boardingLocationName: sale.boarding_location?.name || '',
+    boardingLocationAddress: sale.boarding_location?.address || '',
+    boardingDepartureTime,
+    boardingDepartureDate,
+    saleStatus: sale.status as any,
+    companyName: companyDisplayName,
+    companyLogoUrl: company?.logo_url || null,
+    companyCity: company?.city || null,
+    companyState: company?.state || null,
+    companyPrimaryColor: company?.primary_color || null,
+    companyCnpj: company?.cnpj || null,
+    companyPhone: company?.phone || null,
+    companyWhatsapp: company?.whatsapp || null,
+    companyAddress: company?.address || null,
+    companySlogan: company?.slogan || null,
+  };
+}
+
 // ── Component ──
 export default function Sales() {
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
@@ -160,6 +199,16 @@ export default function Sales() {
   const [cancelSale, setCancelSale] = useState<Sale | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+
+  // Ticket generation states
+  const [ticketGenSale, setTicketGenSale] = useState<Sale | null>(null);
+  const [ticketGenMode, setTicketGenMode] = useState<'pdf' | 'image'>('pdf');
+  const [ticketGenTickets, setTicketGenTickets] = useState<TicketRecord[]>([]);
+  const [ticketGenBoardingTime, setTicketGenBoardingTime] = useState<string | null>(null);
+  const [ticketGenBoardingDate, setTicketGenBoardingDate] = useState<string | null>(null);
+  const [ticketGenLoading, setTicketGenLoading] = useState(false);
+  const [ticketGenGenerating, setTicketGenGenerating] = useState<string | null>(null);
+  const qrCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [
@@ -226,7 +275,6 @@ export default function Sales() {
     }
 
     const [eventsRes, sellersRes] = await Promise.all([
-      // Correção: o filtro de Evento deve usar exclusivamente a entidade events da empresa ativa.
       supabase
         .from('events')
         .select('id, name, date, city')
@@ -251,7 +299,6 @@ export default function Sales() {
 
   const formatEventFilterLabel = (event: SalesEventFilterOption) => {
     const eventDate = event.date ? format(parseISO(event.date), 'dd/MM/yyyy') : '';
-    // Padronização solicitada no suporte: dropdown de Evento deve priorizar data no início.
     return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
 
@@ -299,7 +346,6 @@ export default function Sales() {
     const pagas = filteredSales.filter((s) => s.status === 'pago').length;
     const reservadas = filteredSales.filter((s) => s.status === 'reservado').length;
     const canceladas = filteredSales.filter((s) => s.status === 'cancelado').length;
-    // KPIs financeiros de comissão (somente vendas pagas com dados)
     const paidSales = filteredSales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
     const totalPartnerFee = paidSales.reduce((sum, s) => sum + (s.partner_fee_amount ?? 0), 0);
@@ -341,7 +387,6 @@ export default function Sales() {
         .select('departure_time')
         .eq('event_id', sale.event_id)
         .eq('trip_id', sale.trip_id)
-        // Fonte de verdade: usa o local escolhido na venda (sales.boarding_location_id).
         .eq('boarding_location_id', sale.boarding_location_id)
         .maybeSingle(),
     ]);
@@ -382,7 +427,6 @@ export default function Sales() {
     if (error) {
       toast.error('Erro ao atualizar passageiro');
     } else {
-      // Log
       if (activeCompanyId && user) {
         const changes: string[] = [];
         if (oldName !== editPassengerName.trim()) changes.push(`Nome: ${oldName} → ${editPassengerName.trim()}`);
@@ -399,7 +443,7 @@ export default function Sales() {
       }
       toast.success('Passageiro atualizado');
       setEditingTicket(null);
-      openDetail(detailSale); // refresh
+      openDetail(detailSale);
     }
     setSavingPassenger(false);
   };
@@ -414,7 +458,6 @@ export default function Sales() {
 
     setCancelling(true);
 
-    // Check boarding status
     const { data: tickets } = await supabase
       .from('tickets')
       .select('id, boarding_status')
@@ -427,7 +470,6 @@ export default function Sales() {
       return;
     }
 
-    // Update sale
     const { error: saleError } = await supabase
       .from('sales')
       .update({
@@ -444,12 +486,10 @@ export default function Sales() {
       return;
     }
 
-    // Delete tickets to free seats
     if (tickets && tickets.length > 0) {
       await supabase.from('tickets').delete().eq('sale_id', cancelSale.id);
     }
 
-    // Log
     await supabase.from('sale_logs').insert({
       sale_id: cancelSale.id,
       action: 'cancelamento',
@@ -502,12 +542,90 @@ export default function Sales() {
     toast.success('Link copiado!');
   };
 
+  // ── Ticket Generation ──
+  const openTicketGen = async (sale: Sale, mode: 'pdf' | 'image') => {
+    setTicketGenSale(sale);
+    setTicketGenMode(mode);
+    setTicketGenLoading(true);
+    setTicketGenTickets([]);
+
+    const [ticketsRes, boardingRes] = await Promise.all([
+      supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
+      supabase
+        .from('event_boarding_locations')
+        .select('departure_time, departure_date')
+        .eq('event_id', sale.event_id)
+        .eq('trip_id', sale.trip_id)
+        .eq('boarding_location_id', sale.boarding_location_id)
+        .maybeSingle(),
+    ]);
+
+    const fetchedTickets = (ticketsRes.data ?? []) as TicketRecord[];
+    setTicketGenTickets(fetchedTickets);
+    setTicketGenBoardingTime(boardingRes.data?.departure_time ?? null);
+    setTicketGenBoardingDate((boardingRes.data as any)?.departure_date ?? null);
+    setTicketGenLoading(false);
+
+    // If single ticket, generate directly after a short delay for QR render
+    if (fetchedTickets.length === 1) {
+      // We need the dialog to render the QR first, so we keep it open briefly
+    }
+  };
+
+  const generateForTicket = useCallback(async (ticket: TicketRecord, mode: 'pdf' | 'image') => {
+    if (!ticketGenSale || !activeCompany) return;
+    setTicketGenGenerating(ticket.id);
+
+    const ticketData = buildTicketCardData(
+      ticket,
+      ticketGenSale,
+      activeCompany,
+      ticketGenBoardingTime,
+      ticketGenBoardingDate,
+    );
+
+    // Wait a tick for QR canvas to render
+    await new Promise((r) => setTimeout(r, 100));
+
+    const canvas = qrCanvasRefs.current[ticket.id];
+    if (!canvas) {
+      toast.error('Erro ao gerar QR Code');
+      setTicketGenGenerating(null);
+      return;
+    }
+
+    const qrBase64 = canvas.toDataURL('image/png');
+
+    if (mode === 'pdf') {
+      await generateTicketPdf({ ticket: ticketData, qrBase64 });
+    } else {
+      // Image generation (same logic as TicketCard)
+      await generateTicketImage(ticketData, canvas);
+    }
+
+    setTicketGenGenerating(null);
+  }, [ticketGenSale, activeCompany, ticketGenBoardingTime, ticketGenBoardingDate]);
+
+  const generateAllPdf = useCallback(async () => {
+    for (const ticket of ticketGenTickets) {
+      await generateForTicket(ticket, 'pdf');
+    }
+  }, [ticketGenTickets, generateForTicket]);
+
   // ── Actions dropdown ──
   const getSaleActions = (sale: Sale): ActionItem[] => {
     const actions: ActionItem[] = [
       { label: 'Ver Detalhes', icon: Eye, onClick: () => openDetail(sale) },
       { label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) },
     ];
+
+    // Ticket generation actions (not for blocks or cancelled)
+    if (sale.status !== 'cancelado' && sale.customer_name !== 'BLOQUEIO') {
+      actions.push(
+        { label: 'Gerar Passagem (PDF)', icon: FileText, onClick: () => openTicketGen(sale, 'pdf') },
+        { label: 'Gerar Passagem (Imagem)', icon: ImageIcon, onClick: () => openTicketGen(sale, 'image') },
+      );
+    }
 
     if (sale.status !== 'cancelado') {
       actions.push({
@@ -776,6 +894,7 @@ export default function Sales() {
           open={newSaleModalOpen}
           onOpenChange={setNewSaleModalOpen}
           onSuccess={() => { setNewSaleModalOpen(false); fetchSales(); }}
+          company={activeCompany}
         />
 
         {/* Export Modals */}
@@ -798,6 +917,73 @@ export default function Sales() {
           title="Relatório de Vendas"
           company={activeCompany}
         />
+
+        {/* ── Ticket Generation Dialog ── */}
+        <Dialog open={!!ticketGenSale} onOpenChange={(open) => { if (!open) { setTicketGenSale(null); setTicketGenTickets([]); } }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                Gerar Passagem ({ticketGenMode === 'pdf' ? 'PDF' : 'Imagem'})
+              </DialogTitle>
+            </DialogHeader>
+            {ticketGenLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : ticketGenTickets.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum passageiro encontrado.</p>
+            ) : (
+              <div className="space-y-3">
+                {ticketGenTickets.map((ticket) => (
+                  <div key={ticket.id} className="flex items-center justify-between p-3 rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="font-mono">{ticket.seat_label}</Badge>
+                      <div>
+                        <p className="text-sm font-medium">{ticket.passenger_name}</p>
+                        <p className="text-xs text-muted-foreground">CPF: {ticket.passenger_cpf}</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => generateForTicket(ticket, ticketGenMode)}
+                      disabled={ticketGenGenerating === ticket.id}
+                    >
+                      {ticketGenGenerating === ticket.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : ticketGenMode === 'pdf' ? (
+                        <><FileText className="h-4 w-4 mr-1" /> PDF</>
+                      ) : (
+                        <><Download className="h-4 w-4 mr-1" /> Imagem</>
+                      )}
+                    </Button>
+                    {/* Hidden QR canvas */}
+                    <div style={{ position: 'absolute', left: '-9999px' }}>
+                      <QRCodeCanvas
+                        ref={(el) => { qrCanvasRefs.current[ticket.id] = el; }}
+                        value={ticket.qr_code_token}
+                        size={256}
+                        level="M"
+                        includeMargin
+                      />
+                    </div>
+                  </div>
+                ))}
+                {ticketGenTickets.length > 1 && ticketGenMode === 'pdf' && (
+                  <Button variant="outline" className="w-full" onClick={generateAllPdf} disabled={!!ticketGenGenerating}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Baixar PDF de todos
+                  </Button>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ── Detail Modal ── */}
         <Dialog open={!!detailSale} onOpenChange={(open) => {
@@ -1025,7 +1211,7 @@ export default function Sales() {
   );
 }
 
-// ── Helper ──
+// ── Helpers ──
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
@@ -1033,4 +1219,115 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-medium">{value}</p>
     </div>
   );
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function generateTicketImage(ticket: TicketCardData, sourceCanvas: HTMLCanvasElement) {
+  const canvasW = 420;
+  const canvasH = 620;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const accentColor = ticket.companyPrimaryColor || '#F97316';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(0, 0, canvasW, 6);
+
+  let currentY = 26;
+
+  if (ticket.companyLogoUrl) {
+    try {
+      const logo = await loadImage(ticket.companyLogoUrl);
+      const logoH = 44;
+      const logoW = (logo.width / logo.height) * logoH;
+      ctx.drawImage(logo, (canvasW - logoW) / 2, currentY, logoW, logoH);
+      currentY += logoH + 8;
+    } catch {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
+      currentY += 32;
+    }
+  } else {
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
+    currentY += 32;
+  }
+
+  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
+  if (companyLoc) {
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText(companyLoc, canvasW / 2, currentY + 12);
+    currentY += 18;
+  }
+
+  if (ticket.companyCnpj) {
+    const digits = ticket.companyCnpj.replace(/\D/g, '');
+    if (digits.length === 14) {
+      const formatted = digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      ctx.fillStyle = '#999999';
+      ctx.font = '10px Arial, sans-serif';
+      ctx.fillText(`CNPJ: ${formatted}`, canvasW / 2, currentY + 12);
+      currentY += 18;
+    }
+  }
+
+  currentY += 8;
+  ctx.strokeStyle = '#e5e5e5';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(40, currentY);
+  ctx.lineTo(canvasW - 40, currentY);
+  ctx.stroke();
+  currentY += 16;
+
+  const qrSize = 200;
+  ctx.drawImage(sourceCanvas, (canvasW - qrSize) / 2, currentY, qrSize, qrSize);
+  currentY += qrSize + 20;
+
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = 'bold 16px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(ticket.eventName, canvasW / 2, currentY);
+  currentY += 24;
+
+  ctx.fillStyle = '#444444';
+  ctx.font = '14px Arial, sans-serif';
+  ctx.fillText(`Assento ${ticket.seatLabel} — ${ticket.passengerName}`, canvasW / 2, currentY);
+  currentY += 22;
+
+  ctx.fillStyle = '#666666';
+  ctx.font = '13px Arial, sans-serif';
+  const { format: fmtDate } = await import('date-fns');
+  const { ptBR: ptBRLocale } = await import('date-fns/locale');
+  ctx.fillText(fmtDate(new Date(ticket.eventDate), 'dd/MM/yyyy', { locale: ptBRLocale }), canvasW / 2, currentY);
+  currentY += 30;
+
+  ctx.fillStyle = '#aaaaaa';
+  ctx.font = '10px Arial, sans-serif';
+  ctx.fillText('Documento emitido digitalmente.', canvasW / 2, canvasH - 16);
+
+  const link = document.createElement('a');
+  link.download = `passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 }
