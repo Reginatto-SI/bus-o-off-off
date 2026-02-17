@@ -145,12 +145,12 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
       <div className={cn('flex items-center justify-center rounded-lg', compact ? 'h-8 w-8' : 'h-10 w-10')}>
         <img
           src={busaoIcon}
-          alt="Ícone do sistema Busão Off Off"
+          alt="Ícone do sistema Smartbus BR"
           className="h-full w-full rounded-lg object-contain"
         />
       </div>
       <span className={cn('font-semibold tracking-tight text-sidebar-foreground', compact ? 'text-sm' : 'text-base')}>
-        Busão Off Off
+        Smartbus BR
       </span>
     </div>
   );
@@ -300,7 +300,7 @@ export function AdminSidebar() {
       {/* Header */}
       <div className="flex flex-col items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 py-4">
         <div className="h-8 w-8 flex items-center justify-center rounded-lg">
-          <img src={busaoIcon} alt="Busão" className="h-full w-full rounded-lg object-contain" />
+          <img src={busaoIcon} alt="Smartbus BR" className="h-full w-full rounded-lg object-contain" />
         </div>
         <Button variant="ghost" size="icon" className="text-sidebar-foreground hover:bg-[#1E293B] h-7 w-7" onClick={toggleCollapsed}>
           <PanelLeftOpen className="h-4 w-4" />

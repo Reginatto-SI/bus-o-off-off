@@ -32,7 +32,7 @@ export function TrustFooter() {
       <div className="border-t py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Busão Off Off. Todos os direitos reservados.
+            © {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados.
           </p>
         </div>
       </div>

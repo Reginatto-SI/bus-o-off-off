@@ -16,8 +16,8 @@ export function Logo({ size = "md", showText = false, className = "" }: LogoProp
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <img src={logo} alt="Busão Off Off" className={`${sizes[size]} object-contain`} />
-      {showText && <span className="font-bold text-inherit">Busão Off Off</span>}
+      <img src={logo} alt="Smartbus BR" className={`${sizes[size]} object-contain`} />
+      {showText && <span className="font-bold text-inherit">Smartbus BR</span>}
     </div>
   );
 }

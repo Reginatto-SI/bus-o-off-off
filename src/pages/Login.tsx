@@ -95,7 +95,7 @@ export default function Login() {
           <div className="mx-auto mb-4">
             <Logo size="xl" />
           </div>
-          <CardTitle className="text-2xl">Busão Off Off</CardTitle>
+          <CardTitle className="text-2xl">Smartbus BR</CardTitle>
           <CardDescription>
             Entre com suas credenciais para acessar o painel
           </CardDescription>
