@@ -33,6 +33,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -169,10 +176,13 @@ function buildTicketCardData(
 export default function Sales() {
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
+  const [totalSalesCount, setTotalSalesCount] = useState(0);
   const [events, setEvents] = useState<SalesEventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SalesFilters>(initialFilters);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
@@ -220,6 +230,9 @@ export default function Sales() {
 
   // ── Fetch ──
   const fetchSales = async () => {
+    setLoading(true);
+
+    // Mantém os filtros aplicados no banco para evitar carga de volume total no cliente.
     let query = supabase
       .from('sales')
       .select(`
@@ -228,33 +241,75 @@ export default function Sales() {
         trip:trips(*, vehicle:vehicles(*)),
         boarding_location:boarding_locations(*),
         seller:sellers(*)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (activeCompanyId) {
       query = query.eq('company_id', activeCompanyId);
     }
 
-    const { data, error } = await query;
+    if (filters.search.trim()) {
+      const searchTerm = filters.search.trim();
+      query = query.or(`customer_name.ilike.%${searchTerm}%,customer_cpf.ilike.%${searchTerm}%`);
+    }
+
+    if (filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters.eventId !== 'all') {
+      query = query.eq('event_id', filters.eventId);
+    }
+
+    if (filters.sellerId !== 'all') {
+      query = query.eq('seller_id', filters.sellerId);
+    }
+
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom);
+      query = query.gte('created_at', fromDate.toISOString());
+    }
+
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', toDate.toISOString());
+    }
+
+    const rangeFrom = (currentPage - 1) * rowsPerPage;
+    const rangeTo = rangeFrom + rowsPerPage - 1;
+    query = query.range(rangeFrom, rangeTo);
+
+    const { data, error, count } = await query;
 
     if (error) {
       toast.error('Erro ao carregar vendas');
     } else {
       setSales((data ?? []) as Sale[]);
+      setTotalSalesCount(count ?? 0);
     }
 
-    // Fetch seat labels for all sales
-    if (activeCompanyId) {
-      const { data: ticketData } = await supabase
+    // Busca apenas as poltronas das vendas da página atual para reduzir custo de consulta.
+    const saleIds = (data ?? []).map((sale) => sale.id);
+    if (saleIds.length > 0) {
+      let ticketQuery = supabase
         .from('tickets')
         .select('sale_id, seat_label')
-        .eq('company_id', activeCompanyId);
+        .in('sale_id', saleIds);
+
+      if (activeCompanyId) {
+        ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
+      }
+
+      const { data: ticketData } = await ticketQuery;
       const map: Record<string, string[]> = {};
-      (ticketData ?? []).forEach((t: any) => {
-        if (!map[t.sale_id]) map[t.sale_id] = [];
-        map[t.sale_id].push(t.seat_label);
+      (ticketData ?? []).forEach((ticket: any) => {
+        if (!map[ticket.sale_id]) map[ticket.sale_id] = [];
+        map[ticket.sale_id].push(ticket.seat_label);
       });
       setSeatLabelsMap(map);
+    } else {
+      setSeatLabelsMap({});
     }
 
     setLoading(false);
@@ -287,39 +342,21 @@ export default function Sales() {
 
   useEffect(() => {
     fetchSales();
+  }, [activeCompanyId, filters, currentPage, rowsPerPage]);
+
+  useEffect(() => {
     fetchFiltersData();
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    // Sempre volta para a primeira página ao trocar filtros/tamanho da página.
+    setCurrentPage(1);
+  }, [filters, rowsPerPage]);
 
   const formatEventFilterLabel = (event: SalesEventFilterOption) => {
     const eventDate = event.date ? format(parseISO(event.date), 'dd/MM/yyyy') : '';
     return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
-
-  // ── Filtered ──
-  const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
-      if (filters.search) {
-        const s = filters.search.toLowerCase();
-        const match =
-          sale.customer_name.toLowerCase().includes(s) ||
-          sale.customer_cpf.toLowerCase().includes(s);
-        if (!match) return false;
-      }
-      if (filters.status !== 'all' && sale.status !== filters.status) return false;
-      if (filters.eventId !== 'all' && sale.event_id !== filters.eventId) return false;
-      if (filters.sellerId !== 'all' && sale.seller_id !== filters.sellerId) return false;
-      if (filters.dateFrom) {
-        const from = new Date(filters.dateFrom);
-        if (new Date(sale.created_at) < from) return false;
-      }
-      if (filters.dateTo) {
-        const to = new Date(filters.dateTo);
-        to.setHours(23, 59, 59, 999);
-        if (new Date(sale.created_at) > to) return false;
-      }
-      return true;
-    });
-  }, [sales, filters]);
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -334,21 +371,21 @@ export default function Sales() {
 
   // ── Stats ──
   const stats = useMemo(() => {
-    const total = filteredSales.length;
-    const totalValue = filteredSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
-    const pagas = filteredSales.filter((s) => s.status === 'pago').length;
-    const reservadas = filteredSales.filter((s) => s.status === 'reservado').length;
-    const canceladas = filteredSales.filter((s) => s.status === 'cancelado').length;
-    const paidSales = filteredSales.filter((s) => s.status === 'pago');
+    const total = totalSalesCount;
+    const totalValue = sales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
+    const pagas = sales.filter((s) => s.status === 'pago').length;
+    const reservadas = sales.filter((s) => s.status === 'reservado').length;
+    const canceladas = sales.filter((s) => s.status === 'cancelado').length;
+    const paidSales = sales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
     const totalPartnerFee = paidSales.reduce((sum, s) => sum + (s.partner_fee_amount ?? 0), 0);
     const totalPlatformNet = paidSales.reduce((sum, s) => sum + (s.platform_net_amount ?? 0), 0);
     return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalPartnerFee, totalPlatformNet };
-  }, [filteredSales]);
+  }, [sales, totalSalesCount]);
 
   // ── Flat data for export ──
   const flatData = useMemo(() => {
-    return filteredSales.map((s) => {
+    return sales.map((s) => {
       const vehicle = (s.trip as any)?.vehicle;
       return {
         created_at: s.created_at,
@@ -366,7 +403,18 @@ export default function Sales() {
         status: s.status,
       };
     });
-  }, [filteredSales]);
+  }, [sales]);
+
+  const totalPages = Math.max(1, Math.ceil(totalSalesCount / rowsPerPage));
+  const rangeStart = totalSalesCount === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const rangeEnd = totalSalesCount === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalSalesCount);
+
+  useEffect(() => {
+    // Protege navegação quando o total diminui (ex.: mudança de filtro com menos páginas).
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // ── Detail modal ──
   const openDetail = async (sale: Sale) => {
@@ -747,7 +795,7 @@ export default function Sales() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : filteredSales.length === 0 ? (
+        ) : sales.length === 0 ? (
           <EmptyState
             icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
@@ -773,7 +821,7 @@ export default function Sales() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSales.map((sale) => {
+                  {sales.map((sale) => {
                     const vehicle = (sale.trip as any)?.vehicle;
                     return (
                       <TableRow key={sale.id}>
@@ -833,6 +881,49 @@ export default function Sales() {
                   })}
                 </TableBody>
               </Table>
+
+              <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <span>Exibindo {rangeStart}–{rangeEnd} de {totalSalesCount} resultados</span>
+                  <div className="flex items-center gap-2">
+                    <span>Linhas por página</span>
+                    <Select
+                      value={String(rowsPerPage)}
+                      onValueChange={(value) => setRowsPerPage(Number(value))}
+                    >
+                      <SelectTrigger className="h-8 w-[80px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={currentPage === 1 || loading}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={currentPage >= totalPages || loading}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
