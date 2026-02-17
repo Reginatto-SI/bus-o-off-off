@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Check, ChevronsUpDown, MapPin } from 'lucide-react';
+import { Check, ChevronsUpDown, MapPin, Plus, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +15,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { searchCities, formatCityLabel, BrazilianCity } from '@/data/brazilian-cities';
+import { formatCityLabel, brazilianStates } from '@/lib/cityUtils';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+interface CityResult {
+  id: string;
+  name: string;
+  state: string;
+}
 
 interface CityAutocompleteProps {
   value: { city: string; state: string };
@@ -36,19 +45,59 @@ export function CityAutocomplete({
 }: CityAutocompleteProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
-  
-  // Garante que value.city e value.state nunca sejam null
+  const [cities, setCities] = React.useState<CityResult[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const { userRole } = useAuth();
+
+  const isAdmin = userRole === 'gerente' || userRole === 'operador' || userRole === 'developer';
+
   const safeCity = value?.city ?? '';
   const safeState = value?.state ?? '';
   const displayValue = formatCityLabel(safeCity, safeState);
-  
-  // Filtra cidades baseado na busca
-  const filteredCities = React.useMemo(() => {
-    if (!search) return [];
-    return searchCities(search, 15);
+
+  // Debounced search
+  React.useEffect(() => {
+    if (!search || search.length < 2) {
+      setCities([]);
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        // Normalize search term client-side for matching
+        const normalized = search
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        const { data, error } = await supabase
+          .from('cities')
+          .select('id, name, state')
+          .ilike('normalized_name', `%${normalized}%`)
+          .eq('is_active', true)
+          .order('name')
+          .limit(15);
+
+        if (error) throw error;
+        setCities(data || []);
+      } catch (err) {
+        console.error('Error searching cities:', err);
+        setCities([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [search]);
 
-  const handleSelect = (city: BrazilianCity) => {
+  const handleSelect = (city: CityResult) => {
     onChange({ city: city.name, state: city.state });
     setOpen(false);
     setSearch('');
@@ -56,10 +105,8 @@ export function CityAutocomplete({
 
   const handleInputChange = (newSearch: string) => {
     setSearch(newSearch);
-    
-    // Se permitir texto livre e o usuário digitar, atualiza o value
+
     if (allowFreeText && newSearch) {
-      // Tenta parsear se o usuário digitou no formato "Cidade — UF"
       const separators = [' — ', ' - ', ' – '];
       for (const sep of separators) {
         if (newSearch.includes(sep)) {
@@ -67,16 +114,73 @@ export function CityAutocomplete({
           const city = parts[0];
           const state = parts[1];
           if (city && state && state.length >= 2) {
-            onChange({ 
-              city: city.trim(), 
-              state: state.trim().toUpperCase().slice(0, 2) 
+            onChange({
+              city: city.trim(),
+              state: state.trim().toUpperCase().slice(0, 2),
             });
             return;
           }
         }
       }
-      // Se não está no formato padrão, apenas atualiza a cidade
       onChange({ city: newSearch, state: safeState });
+    }
+  };
+
+  const handleRegisterCity = async () => {
+    // Try to parse "Cidade — UF" from search
+    let cityName = search.trim();
+    let stateCode = '';
+
+    const separators = [' — ', ' - ', ' – '];
+    for (const sep of separators) {
+      if (cityName.includes(sep)) {
+        const parts = cityName.split(sep);
+        cityName = parts[0].trim();
+        stateCode = parts[1]?.trim().toUpperCase().slice(0, 2) || '';
+        break;
+      }
+    }
+
+    if (!stateCode) {
+      toast.error('Digite no formato "Cidade — UF" para cadastrar (ex: Caldas — MG)');
+      return;
+    }
+
+    const validState = brazilianStates.find((s) => s.code === stateCode);
+    if (!validState) {
+      toast.error(`UF "${stateCode}" inválida.`);
+      return;
+    }
+
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('cities')
+        .insert({
+          name: cityName,
+          state: stateCode,
+          source: 'admin',
+          created_by: user?.user?.id || null,
+        })
+        .select('id, name, state')
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          toast.info('Essa cidade já existe no cadastro.');
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      toast.success(`Cidade "${cityName} — ${stateCode}" cadastrada!`);
+      onChange({ city: data.name, state: data.state });
+      setOpen(false);
+      setSearch('');
+    } catch (err: any) {
+      console.error('Error registering city:', err);
+      toast.error('Erro ao cadastrar cidade.');
     }
   };
 
@@ -103,16 +207,38 @@ export function CityAutocomplete({
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command shouldFilter={false}>
-          <CommandInput 
-            placeholder="Digite para buscar..." 
+          <CommandInput
+            placeholder="Digite para buscar..."
             value={search}
             onValueChange={handleInputChange}
           />
           <CommandList>
-            {filteredCities.length === 0 && search.length > 0 && (
+            {loading && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Buscando...</span>
+              </div>
+            )}
+            {!loading && cities.length === 0 && search.length >= 2 && (
               <CommandEmpty>
-                <div className="text-sm text-muted-foreground py-2">
-                  {allowFreeText ? (
+                <div className="text-sm text-muted-foreground py-2 px-2">
+                  {isAdmin ? (
+                    <div className="space-y-2">
+                      <p>Nenhuma cidade encontrada.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={handleRegisterCity}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Cadastrar "{search}"
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Use o formato "Cidade — UF"
+                      </p>
+                    </div>
+                  ) : allowFreeText ? (
                     <>
                       Nenhuma cidade encontrada.
                       <br />
@@ -124,12 +250,12 @@ export function CityAutocomplete({
                 </div>
               </CommandEmpty>
             )}
-            {filteredCities.length > 0 && (
+            {cities.length > 0 && (
               <CommandGroup>
-                {filteredCities.map((city) => (
+                {cities.map((city) => (
                   <CommandItem
-                    key={`${city.name}-${city.state}`}
-                    value={city.label}
+                    key={city.id}
+                    value={`${city.name}-${city.state}`}
                     onSelect={() => handleSelect(city)}
                   >
                     <Check
@@ -140,7 +266,7 @@ export function CityAutocomplete({
                           : 'opacity-0'
                       )}
                     />
-                    {city.label}
+                    {formatCityLabel(city.name, city.state)}
                   </CommandItem>
                 ))}
               </CommandGroup>
