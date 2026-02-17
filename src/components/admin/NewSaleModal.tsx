@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Seat, Event, Trip, Vehicle, Driver } from '@/types/database';
+import { Seat, Event, Trip, Vehicle, Driver, TicketRecord, Seller } from '@/types/database';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { SeatMap } from '@/components/public/SeatMap';
-import { Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
+import { QRCodeCanvas } from 'qrcode.react';
+import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
+import type { TicketCardData } from '@/components/public/TicketCard';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -47,10 +50,16 @@ interface PassengerData {
   phone: string;
 }
 
+interface ConfirmationTicketData {
+  ticket: TicketRecord;
+  ticketCardData: TicketCardData;
+}
+
 interface NewSaleModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  company?: any;
 }
 
 const vehicleTypeLabels: Record<string, string> = {
@@ -74,7 +83,7 @@ function formatPhoneMask(value: string): string {
   return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
 }
 
-export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProps) {
+export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSaleModalProps) {
   const { activeCompanyId, user } = useAuth();
 
   // Tab state
@@ -106,6 +115,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
   const [blockReason, setBlockReason] = useState('manutencao');
   const [saving, setSaving] = useState(false);
 
+  // Seller
+  const [sellersList, setSellersList] = useState<Seller[]>([]);
+  const [selectedSellerId, setSelectedSellerId] = useState('');
+
+  // Step 4: Confirmation
+  const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
+  const [activeTicketIndex, setActiveTicketIndex] = useState(0);
+  const [generatingDownload, setGeneratingDownload] = useState<string | null>(null);
+  const confirmQrRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+
   // Derived
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const selectedTrip = trips.find((t) => t.id === selectedTripId);
@@ -125,7 +144,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
       setObservation('');
       setBlockReason('manutencao');
       setUnitPrice('');
+      setSelectedSellerId('');
+      setConfirmationData(null);
+      setActiveTicketIndex(0);
       fetchEvents();
+      fetchSellers();
     }
   }, [open]);
 
@@ -142,6 +165,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
       .order('date', { ascending: false });
     setEvents((data ?? []) as Event[]);
     setLoadingEvents(false);
+  };
+
+  // ── Fetch sellers ──
+  const fetchSellers = async () => {
+    if (!activeCompanyId) return;
+    const { data } = await supabase
+      .from('sellers')
+      .select('id, name')
+      .eq('company_id', activeCompanyId)
+      .eq('status', 'ativo')
+      .order('name');
+    setSellersList((data ?? []) as Seller[]);
   };
 
   // ── Fetch trips when event changes ──
@@ -277,6 +312,61 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
     return passengers.length > 0;
   }, [passengers, activeTab, unitPrice, saving]);
 
+  // ── Build TicketCardData for confirmation ──
+  const buildTicketCardData = (ticket: TicketRecord): TicketCardData => {
+    const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
+    const companyDisplayName = company?.trade_name || company?.name || '';
+    return {
+      ticketId: ticket.id,
+      qrCodeToken: ticket.qr_code_token,
+      passengerName: ticket.passenger_name,
+      passengerCpf: ticket.passenger_cpf,
+      seatLabel: ticket.seat_label,
+      boardingStatus: ticket.boarding_status,
+      eventName: selectedEvent?.name || '',
+      eventDate: selectedEvent?.date || '',
+      eventCity: selectedEvent?.city || '',
+      boardingLocationName: selectedBoarding?.name || '',
+      boardingLocationAddress: selectedBoarding?.address || '',
+      boardingDepartureTime: selectedBoarding?.departure_time || null,
+      boardingDepartureDate: selectedBoarding?.departure_date || null,
+      saleStatus: (activeTab === 'manual' ? 'pago' : 'reservado') as any,
+      companyName: companyDisplayName,
+      companyLogoUrl: company?.logo_url || null,
+      companyCity: company?.city || null,
+      companyState: company?.state || null,
+      companyPrimaryColor: company?.primary_color || null,
+      companyCnpj: company?.cnpj || null,
+      companyPhone: company?.phone || null,
+      companyWhatsapp: company?.whatsapp || null,
+      companyAddress: company?.address || null,
+      companySlogan: company?.slogan || null,
+    };
+  };
+
+  // ── Download handlers for confirmation step ──
+  const handleConfirmDownloadPdf = async (ticketData: TicketCardData, ticketId: string) => {
+    setGeneratingDownload(ticketId + '-pdf');
+    await new Promise((r) => setTimeout(r, 100));
+    const canvas = confirmQrRefs.current[ticketId];
+    if (!canvas) { setGeneratingDownload(null); return; }
+    const qrBase64 = canvas.toDataURL('image/png');
+    await generateTicketPdf({ ticket: ticketData, qrBase64 });
+    setGeneratingDownload(null);
+  };
+
+  const handleConfirmDownloadImage = async (ticketData: TicketCardData, ticketId: string) => {
+    setGeneratingDownload(ticketId + '-img');
+    await new Promise((r) => setTimeout(r, 100));
+    const canvas = confirmQrRefs.current[ticketId];
+    if (!canvas) { setGeneratingDownload(null); return; }
+
+    // Import generateTicketImage helper
+    const { generateTicketImageFromCanvas } = await import('@/lib/ticketImageGenerator');
+    await generateTicketImageFromCanvas(ticketData, canvas);
+    setGeneratingDownload(null);
+  };
+
   // ── Submit ──
   const handleConfirm = async () => {
     if (!activeCompanyId || !user) return;
@@ -293,7 +383,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
       if (conflicting.length > 0) {
         const labels = conflicting.map((id) => seats.find((s) => s.id === id)?.label).join(', ');
         toast.error(`Assentos já ocupados: ${labels}. Selecione outros.`);
-        // Refresh occupied
         setOccupiedSeatIds(Array.from(currentOccupied) as string[]);
         setSelectedSeats((prev) => prev.filter((id) => !currentOccupied.has(id)));
         setStep(2);
@@ -306,7 +395,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
       const price = isManual ? parseFloat(unitPrice) : (selectedEvent?.unit_price ?? 0);
       const quantity = passengers.length;
 
-      // Get boarding_location_id from the selected option
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
 
       // 1. Insert sale
@@ -318,12 +406,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
           boarding_location_id: selectedBoarding?.boarding_location_id ?? selectedBoardingId,
           customer_name: isBlock ? 'BLOQUEIO' : passengers[0]?.name.trim(),
           customer_cpf: isBlock ? '00000000000' : passengers[0]?.cpf.replace(/\D/g, ''),
-          customer_phone: isBlock ? '' : (passengers[0]?.phone ?? ''),
+          customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
           unit_price: price,
           status: isManual ? 'pago' : 'reservado',
           gross_amount: quantity * price,
           company_id: activeCompanyId,
+          seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
         } as any)
         .select('id')
         .single();
@@ -339,7 +428,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
         seat_label: p.seatLabel,
         passenger_name: p.name.trim(),
         passenger_cpf: p.cpf.replace(/\D/g, ''),
-        passenger_phone: p.phone || null,
+        passenger_phone: p.phone?.replace(/\D/g, '') || null,
         boarding_status: 'pendente',
         company_id: activeCompanyId,
       }));
@@ -376,7 +465,31 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
         bloqueio: 'Poltrona(s) bloqueada(s) com sucesso!',
       };
       toast.success(successMessages[activeTab]);
-      onSuccess();
+
+      // For blocks, close immediately
+      if (isBlock) {
+        onSuccess();
+        return;
+      }
+
+      // 4. Re-fetch tickets to get qr_code_token
+      const { data: freshTickets } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('sale_id', saleId)
+        .order('seat_label');
+
+      if (freshTickets && freshTickets.length > 0) {
+        const confirmData: ConfirmationTicketData[] = (freshTickets as TicketRecord[]).map((t) => ({
+          ticket: t,
+          ticketCardData: buildTicketCardData(t),
+        }));
+        setConfirmationData(confirmData);
+        setActiveTicketIndex(0);
+        setStep(4);
+      } else {
+        onSuccess();
+      }
     } catch (err: any) {
       console.error('Erro ao criar venda:', err);
       toast.error(err.message || 'Erro ao criar venda');
@@ -392,331 +505,483 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
     setSelectedSeats([]);
     setPassengers([]);
     setObservation('');
+    setConfirmationData(null);
   };
 
   const availableCapacity = selectedVehicle ? selectedVehicle.capacity - occupiedSeatIds.length : 999;
 
+  const handleClose = () => {
+    if (confirmationData) {
+      onSuccess();
+    } else {
+      onOpenChange(false);
+    }
+  };
+
   // ── Render ──
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
         <DialogHeader className="admin-modal__header px-6 py-4">
-          <DialogTitle>Nova Venda</DialogTitle>
+          <DialogTitle>{step === 4 ? 'Passagem Gerada' : 'Nova Venda'}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
-          <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-            <TabsTrigger value="manual">Venda Manual</TabsTrigger>
-            <TabsTrigger value="reserva">Reserva</TabsTrigger>
-            <TabsTrigger value="bloqueio">Bloquear Poltrona</TabsTrigger>
-          </TabsList>
-
-          <ScrollArea className="flex-1 px-6 py-4">
-            {/* Step indicators */}
-            <div className="flex items-center gap-2 mb-4">
-              {[1, 2, 3].map((s) => (
-                <div
-                  key={s}
-                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                    s === step
-                      ? 'bg-primary text-primary-foreground'
-                      : s < step
-                      ? 'bg-primary/20 text-primary'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {s}
+        {step === 4 && confirmationData ? (
+          // ── Step 4: Confirmation with QR ──
+          <>
+            <ScrollArea className="flex-1 px-6 py-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-100">
+                  <CheckCircle2 className="h-7 w-7 text-green-600" />
                 </div>
-              ))}
-              <span className="text-sm text-muted-foreground ml-2">
-                {step === 1 && 'Selecione evento, transporte e embarque'}
-                {step === 2 && 'Selecione as poltronas'}
-                {step === 3 && 'Dados dos passageiros'}
-              </span>
-            </div>
+                <p className="text-lg font-semibold text-center">
+                  {activeTab === 'manual' ? 'Venda concluída!' : 'Reserva criada!'}
+                </p>
 
-            {/* All tabs share the same wizard */}
-            <TabsContent value={activeTab} className="mt-0" forceMount>
-              {/* STEP 1 — Context */}
-              {step === 1 && (
-                <div className="space-y-4">
-                  {/* Event */}
-                  <div className="space-y-2">
-                    <Label>Evento *</Label>
-                    {loadingEvents ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
-                    ) : (
-                      <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
-                        <SelectContent>
-                          {events.map((e) => (
-                            <SelectItem key={e.id} value={e.id}>
-                              {format(parseISO(e.date), 'dd/MM/yyyy')} — {e.name} ({e.city})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                {confirmationData.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={activeTicketIndex === 0}
+                      onClick={() => setActiveTicketIndex((i) => i - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Passageiro {activeTicketIndex + 1} de {confirmationData.length}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={activeTicketIndex === confirmationData.length - 1}
+                      onClick={() => setActiveTicketIndex((i) => i + 1)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
                   </div>
+                )}
 
-                  {/* Trip/Vehicle */}
-                  <div className="space-y-2">
-                    <Label>Transporte *</Label>
-                    {loadingTrips ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
-                    ) : (
-                      <Select value={selectedTripId} onValueChange={setSelectedTripId} disabled={!selectedEventId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione o transporte" /></SelectTrigger>
-                        <SelectContent>
-                          {trips.map((t) => {
-                            const v = t.vehicle;
-                            const d = t.driver;
-                            return (
-                              <SelectItem key={t.id} value={t.id}>
-                                {v ? `${vehicleTypeLabels[v.type] ?? v.type} • ${v.plate} • ${v.capacity} lug.` : t.id.slice(0, 8)}
-                                {d ? ` • ${d.name}` : ''}
+                {(() => {
+                  const item = confirmationData[activeTicketIndex];
+                  if (!item) return null;
+                  const { ticket, ticketCardData } = item;
+                  return (
+                    <div className="w-full max-w-sm space-y-4">
+                      {/* QR Code */}
+                      <div className="flex justify-center">
+                        <QRCodeCanvas
+                          ref={(el) => { confirmQrRefs.current[ticket.id] = el; }}
+                          value={ticket.qr_code_token}
+                          size={180}
+                          level="M"
+                          includeMargin
+                        />
+                      </div>
+
+                      {/* Info */}
+                      <div className="space-y-2 text-sm text-center">
+                        <p className="font-semibold">{ticketCardData.eventName}</p>
+                        <p className="text-muted-foreground">
+                          {ticketCardData.eventDate && format(new Date(ticketCardData.eventDate), 'dd/MM/yyyy')}
+                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                          <Badge variant="outline" className="font-mono">{ticket.seat_label}</Badge>
+                          <span>{ticket.passenger_name}</span>
+                        </div>
+                        {ticketCardData.boardingLocationName && (
+                          <p className="text-muted-foreground">{ticketCardData.boardingLocationName}</p>
+                        )}
+                      </div>
+
+                      {/* Download buttons */}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleConfirmDownloadPdf(ticketCardData, ticket.id)}
+                          disabled={generatingDownload === ticket.id + '-pdf'}
+                        >
+                          {generatingDownload === ticket.id + '-pdf' ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <FileText className="h-4 w-4 mr-1" />
+                          )}
+                          Baixar PDF
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleConfirmDownloadImage(ticketCardData, ticket.id)}
+                          disabled={generatingDownload === ticket.id + '-img'}
+                        >
+                          {generatingDownload === ticket.id + '-img' ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-1" />
+                          )}
+                          Baixar Imagem
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </ScrollArea>
+            <DialogFooter className="px-6 py-4 border-t">
+              <Button onClick={handleClose}>Fechar</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          // ── Steps 1-3: Wizard ──
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
+            <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+              <TabsTrigger value="manual">Venda Manual</TabsTrigger>
+              <TabsTrigger value="reserva">Reserva</TabsTrigger>
+              <TabsTrigger value="bloqueio">Bloquear Poltrona</TabsTrigger>
+            </TabsList>
+
+            <ScrollArea className="flex-1 px-6 py-4">
+              {/* Step indicators */}
+              <div className="flex items-center gap-2 mb-4">
+                {[1, 2, 3].map((s) => (
+                  <div
+                    key={s}
+                    className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                      s === step
+                        ? 'bg-primary text-primary-foreground'
+                        : s < step
+                        ? 'bg-primary/20 text-primary'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {s}
+                  </div>
+                ))}
+                <span className="text-sm text-muted-foreground ml-2">
+                  {step === 1 && 'Selecione evento, transporte e embarque'}
+                  {step === 2 && 'Selecione as poltronas'}
+                  {step === 3 && 'Dados dos passageiros'}
+                </span>
+              </div>
+
+              {/* All tabs share the same wizard */}
+              <TabsContent value={activeTab} className="mt-0" forceMount>
+                {/* STEP 1 — Context */}
+                {step === 1 && (
+                  <div className="space-y-4">
+                    {/* Event */}
+                    <div className="space-y-2">
+                      <Label>Evento *</Label>
+                      {loadingEvents ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+                      ) : (
+                        <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
+                          <SelectContent>
+                            {events.map((e) => (
+                              <SelectItem key={e.id} value={e.id}>
+                                {format(parseISO(e.date), 'dd/MM/yyyy')} — {e.name} ({e.city})
                               </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
 
-                  {/* Boarding location */}
-                  <div className="space-y-2">
-                    <Label>Local / Horário de Embarque *</Label>
-                    {loadingBoarding ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+                    {/* Trip/Vehicle */}
+                    <div className="space-y-2">
+                      <Label>Transporte *</Label>
+                      {loadingTrips ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+                      ) : (
+                        <Select value={selectedTripId} onValueChange={setSelectedTripId} disabled={!selectedEventId}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o transporte" /></SelectTrigger>
+                          <SelectContent>
+                            {trips.map((t) => {
+                              const v = t.vehicle;
+                              const d = t.driver;
+                              return (
+                                <SelectItem key={t.id} value={t.id}>
+                                  {v ? `${vehicleTypeLabels[v.type] ?? v.type} • ${v.plate} • ${v.capacity} lug.` : t.id.slice(0, 8)}
+                                  {d ? ` • ${d.name}` : ''}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+
+                    {/* Boarding location */}
+                    <div className="space-y-2">
+                      <Label>Local / Horário de Embarque *</Label>
+                      {loadingBoarding ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
+                      ) : (
+                        <Select value={selectedBoardingId} onValueChange={setSelectedBoardingId} disabled={!selectedTripId}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o embarque" /></SelectTrigger>
+                          <SelectContent>
+                            {boardingOptions.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.name}
+                                {b.departure_time ? ` — ${b.departure_time.slice(0, 5)}` : ''}
+                                {b.departure_date ? ` (${format(parseISO(b.departure_date), 'dd/MM')})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 2 — Seat map */}
+                {step === 2 && (
+                  <div>
+                    {loadingSeats ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : seats.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <p>Nenhum assento cadastrado para este veículo.</p>
+                      </div>
                     ) : (
-                      <Select value={selectedBoardingId} onValueChange={setSelectedBoardingId} disabled={!selectedTripId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione o embarque" /></SelectTrigger>
-                        <SelectContent>
-                          {boardingOptions.map((b) => (
-                            <SelectItem key={b.id} value={b.id}>
-                              {b.name}
-                              {b.departure_time ? ` — ${b.departure_time.slice(0, 5)}` : ''}
-                              {b.departure_date ? ` (${format(parseISO(b.departure_date), 'dd/MM')})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SeatMap
+                        seats={seats}
+                        occupiedSeatIds={occupiedSeatIds}
+                        maxSelection={availableCapacity}
+                        selectedSeats={selectedSeats}
+                        onSelectionChange={setSelectedSeats}
+                        floors={selectedVehicle?.floors ?? 1}
+                        seatsLeftSide={selectedVehicle?.seats_left_side ?? 2}
+                        seatsRightSide={selectedVehicle?.seats_right_side ?? 2}
+                      />
                     )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* STEP 2 — Seat map */}
-              {step === 2 && (
-                <div>
-                  {loadingSeats ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                  ) : seats.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <p>Nenhum assento cadastrado para este veículo.</p>
-                    </div>
-                  ) : (
-                    <SeatMap
-                      seats={seats}
-                      occupiedSeatIds={occupiedSeatIds}
-                      maxSelection={availableCapacity}
-                      selectedSeats={selectedSeats}
-                      onSelectionChange={setSelectedSeats}
-                      floors={selectedVehicle?.floors ?? 1}
-                      seatsLeftSide={selectedVehicle?.seats_left_side ?? 2}
-                      seatsRightSide={selectedVehicle?.seats_right_side ?? 2}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* STEP 3 — Passenger data */}
-              {step === 3 && (
-                <div className="space-y-6">
-                  {/* Tab-specific fields */}
-                  {activeTab === 'manual' && (
-                    <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* STEP 3 — Passenger data */}
+                {step === 3 && (
+                  <div className="space-y-6">
+                    {/* Tab-specific fields */}
+                    {activeTab === 'manual' && (
+                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <Label>Forma de recebimento *</Label>
+                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pix">Pix</SelectItem>
+                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                <SelectItem value="cartao">Cartão</SelectItem>
+                                <SelectItem value="outro">Outro</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Valor unitário *</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={unitPrice}
+                              onChange={(e) => setUnitPrice(e.target.value)}
+                            />
+                            {selectedEvent && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Preço do evento: R$ {Number(selectedEvent.unit_price).toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Vendedor (opcional)</Label>
+                            <Select value={selectedSellerId || '__none__'} onValueChange={(v) => setSelectedSellerId(v === '__none__' ? '' : v)}>
+                              <SelectTrigger><SelectValue placeholder="Sem vendedor" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sem vendedor</SelectItem>
+                                {sellersList.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
                         <div className="space-y-2">
-                          <Label>Forma de recebimento *</Label>
-                          <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                          <Label>Observação</Label>
+                          <Textarea
+                            value={observation}
+                            onChange={(e) => setObservation(e.target.value)}
+                            placeholder="Ex: Recebido via Pix na hora do embarque"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTab === 'reserva' && (
+                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Vendedor (opcional)</Label>
+                            <Select value={selectedSellerId || '__none__'} onValueChange={(v) => setSelectedSellerId(v === '__none__' ? '' : v)}>
+                              <SelectTrigger><SelectValue placeholder="Sem vendedor" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sem vendedor</SelectItem>
+                                {sellersList.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Observação</Label>
+                          <Textarea
+                            value={observation}
+                            onChange={(e) => setObservation(e.target.value)}
+                            placeholder="Ex: Cliente vai pagar no dia do evento"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTab === 'bloqueio' && (
+                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <div className="space-y-2">
+                          <Label>Motivo do bloqueio *</Label>
+                          <Select value={blockReason} onValueChange={setBlockReason}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="pix">Pix</SelectItem>
-                              <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                              <SelectItem value="cartao">Cartão</SelectItem>
+                              <SelectItem value="manutencao">Manutenção</SelectItem>
+                              <SelectItem value="staff">Staff</SelectItem>
+                              <SelectItem value="cortesia">Cortesia</SelectItem>
+                              <SelectItem value="seguranca">Segurança</SelectItem>
                               <SelectItem value="outro">Outro</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Valor unitário *</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={unitPrice}
-                            onChange={(e) => setUnitPrice(e.target.value)}
+                          <Label>Observação</Label>
+                          <Textarea
+                            value={observation}
+                            onChange={(e) => setObservation(e.target.value)}
+                            placeholder="Detalhe o motivo do bloqueio"
+                            rows={2}
                           />
-                          {selectedEvent && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              Preço do evento: R$ {Number(selectedEvent.unit_price).toFixed(2)}
-                            </p>
-                          )}
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Observação</Label>
-                        <Textarea
-                          value={observation}
-                          onChange={(e) => setObservation(e.target.value)}
-                          placeholder="Ex: Recebido via Pix na hora do embarque"
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {activeTab === 'reserva' && (
-                    <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
-                      <Label>Observação</Label>
-                      <Textarea
-                        value={observation}
-                        onChange={(e) => setObservation(e.target.value)}
-                        placeholder="Ex: Cliente vai pagar no dia do evento"
-                        rows={2}
-                      />
-                    </div>
-                  )}
-
-                  {activeTab === 'bloqueio' && (
-                    <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
-                      <div className="space-y-2">
-                        <Label>Motivo do bloqueio *</Label>
-                        <Select value={blockReason} onValueChange={setBlockReason}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manutencao">Manutenção</SelectItem>
-                            <SelectItem value="staff">Staff</SelectItem>
-                            <SelectItem value="cortesia">Cortesia</SelectItem>
-                            <SelectItem value="seguranca">Segurança</SelectItem>
-                            <SelectItem value="outro">Outro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Observação</Label>
-                        <Textarea
-                          value={observation}
-                          onChange={(e) => setObservation(e.target.value)}
-                          placeholder="Detalhe o motivo do bloqueio"
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Passenger forms */}
-                  {activeTab !== 'bloqueio' && (
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
-                      {passengers.map((p, i) => (
-                        <div key={p.seatId} className="p-4 rounded-lg border space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
-                            <span className="text-sm text-muted-foreground">Passageiro {i + 1}</span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Nome *</Label>
-                              <Input
-                                value={p.name}
-                                onChange={(e) => updatePassenger(i, 'name', e.target.value)}
-                                placeholder="Nome completo"
-                              />
+                    {/* Passenger forms */}
+                    {activeTab !== 'bloqueio' && (
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
+                        {passengers.map((p, i) => (
+                          <div key={p.seatId} className="p-4 rounded-lg border space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
+                              <span className="text-sm text-muted-foreground">Passageiro {i + 1}</span>
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">CPF *</Label>
-                              <Input
-                                value={p.cpf}
-                                onChange={(e) => updatePassenger(i, 'cpf', e.target.value)}
-                                placeholder="000.000.000-00"
-                                maxLength={14}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Telefone</Label>
-                              <Input
-                                value={p.phone}
-                                onChange={(e) => updatePassenger(i, 'phone', e.target.value)}
-                                placeholder="(65) 99999-9999"
-                                maxLength={15}
-                              />
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Nome *</Label>
+                                <Input
+                                  value={p.name}
+                                  onChange={(e) => updatePassenger(i, 'name', e.target.value)}
+                                  placeholder="Nome completo"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">CPF *</Label>
+                                <Input
+                                  value={p.cpf}
+                                  onChange={(e) => updatePassenger(i, 'cpf', e.target.value)}
+                                  placeholder="000.000.000-00"
+                                  maxLength={14}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Telefone</Label>
+                                <Input
+                                  value={p.phone}
+                                  onChange={(e) => updatePassenger(i, 'phone', e.target.value)}
+                                  placeholder="(65) 99999-9999"
+                                  maxLength={15}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {activeTab === 'bloqueio' && (
-                    <div className="text-sm text-muted-foreground">
-                      <p>{passengers.length} poltrona(s) serão bloqueadas com nome "BLOQUEIO".</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {passengers.map((p) => (
-                          <Badge key={p.seatId} variant="secondary" className="font-mono">{p.seatLabel}</Badge>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Summary */}
-                  {activeTab === 'manual' && passengers.length > 0 && unitPrice && (
-                    <div className="p-3 rounded-md bg-primary/10 border border-primary/20">
-                      <p className="text-sm font-medium">
-                        Total: {passengers.length} × R$ {parseFloat(unitPrice || '0').toFixed(2)} = <strong>R$ {(passengers.length * parseFloat(unitPrice || '0')).toFixed(2)}</strong>
-                      </p>
-                    </div>
-                  )}
-                </div>
+                    {activeTab === 'bloqueio' && (
+                      <div className="text-sm text-muted-foreground">
+                        <p>{passengers.length} poltrona(s) serão bloqueadas com nome "BLOQUEIO".</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {passengers.map((p) => (
+                            <Badge key={p.seatId} variant="secondary" className="font-mono">{p.seatLabel}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    {activeTab === 'manual' && passengers.length > 0 && unitPrice && (
+                      <div className="p-3 rounded-md bg-primary/10 border border-primary/20">
+                        <p className="text-sm font-medium">
+                          Total: {passengers.length} × R$ {parseFloat(unitPrice || '0').toFixed(2)} = <strong>R$ {(passengers.length * parseFloat(unitPrice || '0')).toFixed(2)}</strong>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+        )}
+
+        {/* Footer navigation (steps 1-3 only) */}
+        {step < 4 && (
+          <DialogFooter className="px-6 py-4 border-t flex-row justify-between">
+            <div>
+              {step > 1 && (
+                <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+                </Button>
               )}
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
-
-        {/* Footer navigation */}
-        <DialogFooter className="px-6 py-4 border-t flex-row justify-between">
-          <div>
-            {step > 1 && (
-              <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
-                <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            {step < 3 && (
-              <Button
-                onClick={() => {
-                  if (step === 2) initPassengers();
-                  setStep((s) => s + 1);
-                }}
-                disabled={step === 1 ? !canGoStep2 : !canGoStep3}
-              >
-                Próximo <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-            {step === 3 && (
-              <Button onClick={handleConfirm} disabled={!canConfirm}>
-                {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Confirmar
-              </Button>
-            )}
-          </div>
-        </DialogFooter>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              {step < 3 && (
+                <Button
+                  onClick={() => {
+                    if (step === 2) initPassengers();
+                    setStep((s) => s + 1);
+                  }}
+                  disabled={step === 1 ? !canGoStep2 : !canGoStep3}
+                >
+                  Próximo <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              )}
+              {step === 3 && (
+                <Button onClick={handleConfirm} disabled={!canConfirm}>
+                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Confirmar
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
