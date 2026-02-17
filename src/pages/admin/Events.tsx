@@ -268,6 +268,93 @@ export default function Events() {
     setPendingImageFile(null);
   };
 
+  // Regras de progressão entre abas (fluxo guiado): evita pulo de etapa e reduz erros de backend.
+  const geralMissingFields = useMemo(() => {
+    const missing: string[] = [];
+    if (!form.name.trim()) missing.push('Nome');
+    if (!form.date) missing.push('Data');
+    if (!form.city.trim()) missing.push('Cidade');
+    return missing;
+  }, [form.name, form.date, form.city]);
+
+  const isGeralComplete = geralMissingFields.length === 0;
+  const hasAtLeastOneFleet = eventTrips.length > 0;
+  const hasValidBoarding = eventBoardingLocations.some((boarding) => Boolean(boarding.trip_id));
+  const hasTicketsRequirements = parseFloat(form.unit_price || '0') > 0;
+
+  const getTabLockMessage = (tabValue: string): string | null => {
+    if (tabValue === 'geral') return null;
+
+    if (tabValue === 'viagens') {
+      if (!isGeralComplete) {
+        return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Frotas.`;
+      }
+      if (!editingId) {
+        return 'Salve o evento na aba Geral para liberar Frotas.';
+      }
+      return null;
+    }
+
+    if (tabValue === 'embarques') {
+      if (!isGeralComplete) {
+        return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Embarques.`;
+      }
+      if (!editingId) {
+        return 'Salve o evento na aba Geral para liberar Embarques.';
+      }
+      if (!hasAtLeastOneFleet) {
+        return 'Adicione pelo menos 1 frota para liberar Embarques.';
+      }
+      return null;
+    }
+
+    if (tabValue === 'passagens') {
+      if (!isGeralComplete) {
+        return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Passagens.`;
+      }
+      if (!editingId) {
+        return 'Salve o evento na aba Geral para liberar Passagens.';
+      }
+      if (!hasAtLeastOneFleet) {
+        return 'Adicione pelo menos 1 frota para liberar Passagens.';
+      }
+      if (!hasValidBoarding) {
+        return 'Crie pelo menos 1 embarque para liberar Passagens.';
+      }
+      return null;
+    }
+
+    if (tabValue === 'publicacao') {
+      if (!isGeralComplete) {
+        return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Publicação.`;
+      }
+      if (!editingId) {
+        return 'Salve o evento na aba Geral para liberar Publicação.';
+      }
+      if (!hasAtLeastOneFleet) {
+        return 'Adicione pelo menos 1 frota para liberar Publicação.';
+      }
+      if (!hasValidBoarding) {
+        return 'Crie pelo menos 1 embarque para liberar Publicação.';
+      }
+      if (!hasTicketsRequirements) {
+        return 'Defina o preço da passagem para liberar Publicação.';
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  const handleTabChange = (nextTab: string) => {
+    const lockMessage = getTabLockMessage(nextTab);
+    if (lockMessage) {
+      toast.error(lockMessage);
+      return;
+    }
+    setActiveTab(nextTab);
+  };
+
   // Computed: can publish checklist - only requires IDA with boarding
   const publishChecklist = useMemo(() => {
     const hasName = form.name.trim() !== '';
@@ -1896,47 +1983,37 @@ export default function Events() {
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full flex-col overflow-hidden">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
                 <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2 border-b bg-muted/30">
-                  <TabsTrigger
-                    value="geral"
-                    className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                  >
-                    <FileText className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Geral</span>
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="viagens"
-                    className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    disabled={!editingId}
-                  >
-                    <Bus className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Frotas</span>
-                    {editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{uniqueFleets}</span>}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="embarques"
-                    className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                    disabled={!editingId}
-                  >
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Embarques</span>
-                    {editingId && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{eventBoardingLocations.length}</span>}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="passagens"
-                    className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                  >
-                    <Ticket className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Passagens</span>
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="publicacao"
-                    className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                  >
-                    <Globe className="h-4 w-4 shrink-0" />
-                    <span className="min-w-0 truncate">Publicação</span>
-                  </TabsTrigger>
+                  {[
+                    { value: 'geral', label: 'Geral', icon: FileText, count: null },
+                    { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
+                    { value: 'embarques', label: 'Embarques', icon: MapPin, count: editingId ? eventBoardingLocations.length : null },
+                    { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
+                    { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
+                  ].map((tab) => {
+                    const lockMessage = getTabLockMessage(tab.value);
+                    const TabIcon = tab.icon;
+
+                    return (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        aria-disabled={Boolean(lockMessage)}
+                        // UX simplificada: aba bloqueada fica apenas mais fosca para seguir o padrão visual da tela.
+                        className={cn(
+                          'inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80',
+                          lockMessage && 'opacity-45 text-muted-foreground'
+                        )}
+                      >
+                        <TabIcon className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 truncate">{tab.label}</span>
+                        {tab.count !== null && (
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{tab.count}</span>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
                 </TabsList>
 
                 <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
