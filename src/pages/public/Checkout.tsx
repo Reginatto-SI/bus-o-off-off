@@ -151,6 +151,7 @@ export default function Checkout() {
   const [location, setLocation] = useState<BoardingLocation | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [occupiedSeatIds, setOccupiedSeatIds] = useState<string[]>([]);
+  const [blockedSeatIds, setBlockedSeatIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingSeats, setGeneratingSeats] = useState(false);
   const [loadingSeatStatus, setLoadingSeatStatus] = useState(false);
@@ -173,7 +174,7 @@ export default function Checkout() {
     try {
       const { data: tickets, error: ticketsError } = await supabase
         .from('tickets')
-        .select('seat_id')
+        .select('seat_id, sale_id')
         .eq('trip_id', tripUuid);
 
       if (ticketsError) {
@@ -182,7 +183,31 @@ export default function Checkout() {
 
       if (!isActive()) return;
 
-      setOccupiedSeatIds((tickets ?? []).map((t: { seat_id: string | null }) => t.seat_id).filter(Boolean) as string[]);
+      const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+      const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
+
+      // Comentário de suporte: bloqueios operacionais são registrados em venda/ticket,
+      // então identificamos e separamos para não exibir como "ocupado" para cliente.
+      let blockedSales = new Set<string>();
+      if (saleIds.length > 0) {
+        const { data: blockedSalesData } = await supabase
+          .from('sales')
+          .select('id')
+          .in('id', saleIds)
+          .eq('customer_name', 'BLOQUEIO')
+          .neq('status', 'cancelado');
+        blockedSales = new Set((blockedSalesData ?? []).map((s: { id: string }) => s.id));
+      }
+
+      const blockedSeats = ticketRows
+        .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
+        .map((t) => t.seat_id as string);
+      const occupiedSeats = ticketRows
+        .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
+        .map((t) => t.seat_id as string);
+
+      setBlockedSeatIds(blockedSeats);
+      setOccupiedSeatIds(occupiedSeats);
     } catch (error) {
       console.error('Erro ao carregar status dos assentos:', error);
       if (!isActive()) return;
@@ -346,7 +371,7 @@ export default function Checkout() {
 
     const { data: tickets, error } = await supabase
       .from('tickets')
-      .select('seat_id')
+      .select('seat_id, sale_id')
       .eq('trip_id', tripId);
 
     if (error) {
@@ -354,7 +379,28 @@ export default function Checkout() {
       return false;
     }
 
-    const currentOccupied = (tickets ?? []).map((t: { seat_id: string | null }) => t.seat_id).filter(Boolean) as string[];
+    const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+    const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
+
+    let blockedSales = new Set<string>();
+    if (saleIds.length > 0) {
+      const { data: blockedSalesData } = await supabase
+        .from('sales')
+        .select('id')
+        .in('id', saleIds)
+        .eq('customer_name', 'BLOQUEIO')
+        .neq('status', 'cancelado');
+      blockedSales = new Set((blockedSalesData ?? []).map((s: { id: string }) => s.id));
+    }
+
+    const currentBlocked = ticketRows
+      .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
+      .map((t) => t.seat_id as string);
+    const currentOccupied = ticketRows
+      .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
+      .map((t) => t.seat_id as string);
+
+    setBlockedSeatIds(currentBlocked);
     setOccupiedSeatIds(currentOccupied);
 
     // Check which selected seats are now occupied
@@ -712,6 +758,7 @@ export default function Checkout() {
             <SeatMap
               seats={seats}
               occupiedSeatIds={occupiedSeatIds}
+              blockedSeatIds={blockedSeatIds}
               maxSelection={quantity}
               selectedSeats={selectedSeats}
               onSelectionChange={setSelectedSeats}
