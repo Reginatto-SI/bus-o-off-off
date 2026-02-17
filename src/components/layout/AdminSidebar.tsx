@@ -130,7 +130,8 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Parceiros',
     href: '/admin/parceiros',
     icon: Handshake,
-    roles: ['gerente']
+    // Tela restrita: somente usuários developer podem visualizar o menu de Parceiros.
+    roles: ['developer']
   }, {
     name: 'Minha Conta',
     href: '/admin/minha-conta',
