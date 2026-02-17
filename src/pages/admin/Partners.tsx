@@ -38,7 +38,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 
 export default function Partners() {
-  const { isGerente } = useAuth();
+  const { isDeveloper } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -125,7 +125,8 @@ export default function Partners() {
     setSaving(false);
   };
 
-  if (!isGerente) {
+  // Proteção de rota no front-end: página de parceiros é exclusiva para perfil developer.
+  if (!isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
 
