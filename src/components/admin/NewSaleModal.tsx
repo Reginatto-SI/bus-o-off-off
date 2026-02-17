@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Seat, Event, Trip, Vehicle, Driver, TicketRecord, Seller } from '@/types/database';
 import {
@@ -124,6 +125,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [activeTicketIndex, setActiveTicketIndex] = useState(0);
   const [generatingDownload, setGeneratingDownload] = useState<string | null>(null);
   const confirmQrRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
 
   // Derived
   const selectedEvent = events.find((e) => e.id === selectedEventId);
@@ -184,16 +186,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     if (!selectedEventId) {
       setTrips([]);
       setSelectedTripId('');
+      setEventFees([]);
       return;
     }
     const fetchTrips = async () => {
       setLoadingTrips(true);
-      const { data } = await supabase
-        .from('trips')
-        .select('*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(*)')
-        .eq('event_id', selectedEventId)
-        .eq('company_id', activeCompanyId!);
-      setTrips((data ?? []) as TripWithDetails[]);
+      const [tripsRes, feesRes] = await Promise.all([
+        supabase
+          .from('trips')
+          .select('*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(*)')
+          .eq('event_id', selectedEventId)
+          .eq('company_id', activeCompanyId!),
+        supabase
+          .from('event_fees')
+          .select('name, fee_type, value, is_active')
+          .eq('event_id', selectedEventId)
+          .eq('is_active', true)
+          .order('sort_order'),
+      ]);
+      setTrips((tripsRes.data ?? []) as TripWithDetails[]);
+      setEventFees((feesRes.data ?? []) as EventFeeInput[]);
       setSelectedTripId('');
       setSelectedBoardingId('');
       setLoadingTrips(false);
@@ -394,6 +406,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const isManual = activeTab === 'manual';
       const price = isManual ? parseFloat(unitPrice) : (selectedEvent?.unit_price ?? 0);
       const quantity = passengers.length;
+      const feeBreakdown = calculateFees(price, eventFees);
+      const grossTotal = isBlock ? 0 : feeBreakdown.unitPriceWithFees * quantity;
 
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
 
@@ -410,7 +424,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           quantity,
           unit_price: price,
           status: isManual ? 'pago' : 'reservado',
-          gross_amount: quantity * price,
+          gross_amount: grossTotal,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
         } as any)
@@ -936,13 +950,30 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {/* Summary */}
-                    {activeTab === 'manual' && passengers.length > 0 && unitPrice && (
-                      <div className="p-3 rounded-md bg-primary/10 border border-primary/20">
-                        <p className="text-sm font-medium">
-                          Total: {passengers.length} × R$ {parseFloat(unitPrice || '0').toFixed(2)} = <strong>R$ {(passengers.length * parseFloat(unitPrice || '0')).toFixed(2)}</strong>
-                        </p>
-                      </div>
-                    )}
+                    {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
+                      const price = parseFloat(unitPrice || '0');
+                      const breakdown = calculateFees(price, eventFees);
+                      const hasFees = breakdown.fees.length > 0;
+                      const total = breakdown.unitPriceWithFees * passengers.length;
+                      return (
+                        <div className="p-3 rounded-md bg-primary/10 border border-primary/20 space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Passagem × {passengers.length}</span>
+                            <span>R$ {(price * passengers.length).toFixed(2)}</span>
+                          </div>
+                          {hasFees && breakdown.fees.map((fee, idx) => (
+                            <div key={idx} className="flex justify-between text-sm text-muted-foreground">
+                              <span>{fee.name} × {passengers.length}</span>
+                              <span>R$ {(fee.amount * passengers.length).toFixed(2)}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between text-sm font-semibold pt-1 border-t">
+                            <span>Total</span>
+                            <span>R$ {total.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </TabsContent>

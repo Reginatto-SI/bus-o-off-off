@@ -311,6 +311,21 @@ export interface Partner {
   updated_at: string;
 }
 
+export type EventFeeType = 'fixed' | 'percent';
+
+export interface EventFee {
+  id: string;
+  event_id: string;
+  company_id: string;
+  name: string;
+  fee_type: EventFeeType;
+  value: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EventWithCompany extends Event {
   company?: {
     id: string;
