@@ -811,28 +811,24 @@ export default function Events() {
   };
 
   // Handlers
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const persistEvent = async (targetStatus: 'rascunho' | 'a_venda' | 'encerrado') => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
-      return;
+      return { error: true, eventId: editingId, isNew: false };
     }
 
     // Publicação gera receita: exige Stripe conectado antes de seguir.
-    if (form.status === 'a_venda') {
+    if (targetStatus === 'a_venda') {
       const hasStripe = await checkStripeConnection();
       if (!hasStripe) {
         setStripeGatePendingAction('publish_from_form');
         setStripeGateOpen(true);
-        return;
+        return { error: true, eventId: editingId, isNew: false };
       }
     }
 
-    setSaving(true);
-
     // Validate if trying to publish
-    if (form.status === 'a_venda' && !publishChecklist.valid) {
+    if (targetStatus === 'a_venda' && !publishChecklist.valid) {
       toast.error('Corrija os itens pendentes antes de publicar o evento');
       setActiveTab('publicacao');
       return { error: true, eventId: editingId, isNew: false };
@@ -843,7 +839,6 @@ export default function Events() {
       date: form.date,
       city: form.city.trim(),
       description: form.description || null,
-      // Salva o conteúdo que será mostrado no bottom sheet do app público.
       public_info: form.public_info || null,
       status: targetStatus,
       unit_price: parseFloat(form.unit_price || '0'),
