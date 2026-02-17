@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,11 +19,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { SeatMap } from '@/components/public/SeatMap';
-import { Loader2, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, FileText, Download } from 'lucide-react';
+import { TicketCard } from '@/components/public/TicketCard';
+import { Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
-import { QRCodeCanvas } from 'qrcode.react';
-import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import type { TicketCardData } from '@/components/public/TicketCard';
 
 // ── Types ──
@@ -123,8 +122,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // Step 4: Confirmation
   const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
   const [activeTicketIndex, setActiveTicketIndex] = useState(0);
-  const [generatingDownload, setGeneratingDownload] = useState<string | null>(null);
-  const confirmQrRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
 
   // Derived
@@ -328,6 +325,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const buildTicketCardData = (ticket: TicketRecord): TicketCardData => {
     const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
     const companyDisplayName = company?.trade_name || company?.name || '';
+    const isManualSale = activeTab === 'manual';
+    const ticketUnitPrice = isManualSale ? parseFloat(unitPrice || '0') : (selectedEvent?.unit_price ?? 0);
+    const feeBreakdown = calculateFees(ticketUnitPrice, eventFees);
+
+    // Reutiliza exatamente o detalhamento de taxas do ticket padrão para manter consistência visual e de exportação.
+    const ticketFees = feeBreakdown.appliedFees.map((fee) => ({
+      name: fee.name,
+      amount: fee.amount,
+    }));
+
     return {
       ticketId: ticket.id,
       qrCodeToken: ticket.qr_code_token,
@@ -353,30 +360,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       companyWhatsapp: company?.whatsapp || null,
       companyAddress: company?.address || null,
       companySlogan: company?.slogan || null,
+      fees: ticketFees,
+      totalPaid: feeBreakdown.unitPriceWithFees,
+      unitPrice: ticketUnitPrice,
     };
-  };
-
-  // ── Download handlers for confirmation step ──
-  const handleConfirmDownloadPdf = async (ticketData: TicketCardData, ticketId: string) => {
-    setGeneratingDownload(ticketId + '-pdf');
-    await new Promise((r) => setTimeout(r, 100));
-    const canvas = confirmQrRefs.current[ticketId];
-    if (!canvas) { setGeneratingDownload(null); return; }
-    const qrBase64 = canvas.toDataURL('image/png');
-    await generateTicketPdf({ ticket: ticketData, qrBase64 });
-    setGeneratingDownload(null);
-  };
-
-  const handleConfirmDownloadImage = async (ticketData: TicketCardData, ticketId: string) => {
-    setGeneratingDownload(ticketId + '-img');
-    await new Promise((r) => setTimeout(r, 100));
-    const canvas = confirmQrRefs.current[ticketId];
-    if (!canvas) { setGeneratingDownload(null); return; }
-
-    // Import generateTicketImage helper
-    const { generateTicketImageFromCanvas } = await import('@/lib/ticketImageGenerator');
-    await generateTicketImageFromCanvas(ticketData, canvas);
-    setGeneratingDownload(null);
   };
 
   // ── Submit ──
@@ -541,17 +528,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         </DialogHeader>
 
         {step === 4 && confirmationData ? (
-          // ── Step 4: Confirmation with QR ──
+          // ── Step 4: Confirmation using the same virtual ticket component used across the app ──
           <>
             <ScrollArea className="flex-1 px-6 py-4">
               <div className="flex flex-col items-center gap-4">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-100">
-                  <CheckCircle2 className="h-7 w-7 text-green-600" />
-                </div>
-                <p className="text-lg font-semibold text-center">
-                  {activeTab === 'manual' ? 'Venda concluída!' : 'Reserva criada!'}
-                </p>
-
                 {confirmationData.length > 1 && (
                   <div className="flex items-center gap-2">
                     <Button
@@ -581,66 +561,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 {(() => {
                   const item = confirmationData[activeTicketIndex];
                   if (!item) return null;
-                  const { ticket, ticketCardData } = item;
+
+                  // Mantém o mesmo card/popup do ticket oficial para visualização + exportações (PDF/QR).
                   return (
-                    <div className="w-full max-w-sm space-y-4">
-                      {/* QR Code */}
-                      <div className="flex justify-center">
-                        <QRCodeCanvas
-                          ref={(el) => { confirmQrRefs.current[ticket.id] = el; }}
-                          value={ticket.qr_code_token}
-                          size={180}
-                          level="M"
-                          includeMargin
-                        />
-                      </div>
-
-                      {/* Info */}
-                      <div className="space-y-2 text-sm text-center">
-                        <p className="font-semibold">{ticketCardData.eventName}</p>
-                        <p className="text-muted-foreground">
-                          {ticketCardData.eventDate && format(new Date(ticketCardData.eventDate), 'dd/MM/yyyy')}
-                        </p>
-                        <div className="flex items-center justify-center gap-2">
-                          <Badge variant="outline" className="font-mono">{ticket.seat_label}</Badge>
-                          <span>{ticket.passenger_name}</span>
-                        </div>
-                        {ticketCardData.boardingLocationName && (
-                          <p className="text-muted-foreground">{ticketCardData.boardingLocationName}</p>
-                        )}
-                      </div>
-
-                      {/* Download buttons */}
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => handleConfirmDownloadPdf(ticketCardData, ticket.id)}
-                          disabled={generatingDownload === ticket.id + '-pdf'}
-                        >
-                          {generatingDownload === ticket.id + '-pdf' ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                          ) : (
-                            <FileText className="h-4 w-4 mr-1" />
-                          )}
-                          Baixar PDF
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() => handleConfirmDownloadImage(ticketCardData, ticket.id)}
-                          disabled={generatingDownload === ticket.id + '-img'}
-                        >
-                          {generatingDownload === ticket.id + '-img' ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                          ) : (
-                            <Download className="h-4 w-4 mr-1" />
-                          )}
-                          Baixar Imagem
-                        </Button>
-                      </div>
+                    <div className="w-full max-w-2xl">
+                      <TicketCard ticket={item.ticketCardData} allowReservedDownloads />
                     </div>
                   );
                 })()}
