@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -61,8 +61,6 @@ import {
   Users,
   History,
   Calendar,
-  Download,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -70,9 +68,7 @@ import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { QRCodeCanvas } from 'qrcode.react';
-import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
-import type { TicketCardData } from '@/components/public/TicketCard';
+import { TicketCard, type TicketCardData } from '@/components/public/TicketCard';
 
 function formatCpfMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -202,13 +198,10 @@ export default function Sales() {
 
   // Ticket generation states
   const [ticketGenSale, setTicketGenSale] = useState<Sale | null>(null);
-  const [ticketGenMode, setTicketGenMode] = useState<'pdf' | 'image'>('pdf');
   const [ticketGenTickets, setTicketGenTickets] = useState<TicketRecord[]>([]);
   const [ticketGenBoardingTime, setTicketGenBoardingTime] = useState<string | null>(null);
   const [ticketGenBoardingDate, setTicketGenBoardingDate] = useState<string | null>(null);
   const [ticketGenLoading, setTicketGenLoading] = useState(false);
-  const [ticketGenGenerating, setTicketGenGenerating] = useState<string | null>(null);
-  const qrCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [
@@ -543,9 +536,11 @@ export default function Sales() {
   };
 
   // ── Ticket Generation ──
-  const openTicketGen = async (sale: Sale, mode: 'pdf' | 'image') => {
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+
+  const openTicketGen = async (sale: Sale) => {
     setTicketGenSale(sale);
-    setTicketGenMode(mode);
+    setSelectedTicketId(null);
     setTicketGenLoading(true);
     setTicketGenTickets([]);
 
@@ -566,51 +561,11 @@ export default function Sales() {
     setTicketGenBoardingDate((boardingRes.data as any)?.departure_date ?? null);
     setTicketGenLoading(false);
 
-    // If single ticket, generate directly after a short delay for QR render
     if (fetchedTickets.length === 1) {
-      // We need the dialog to render the QR first, so we keep it open briefly
+      // Suporte: quando houver apenas 1 passageiro, já abrimos direto a passagem no padrão público.
+      setSelectedTicketId(fetchedTickets[0].id);
     }
   };
-
-  const generateForTicket = useCallback(async (ticket: TicketRecord, mode: 'pdf' | 'image') => {
-    if (!ticketGenSale || !activeCompany) return;
-    setTicketGenGenerating(ticket.id);
-
-    const ticketData = buildTicketCardData(
-      ticket,
-      ticketGenSale,
-      activeCompany,
-      ticketGenBoardingTime,
-      ticketGenBoardingDate,
-    );
-
-    // Wait a tick for QR canvas to render
-    await new Promise((r) => setTimeout(r, 100));
-
-    const canvas = qrCanvasRefs.current[ticket.id];
-    if (!canvas) {
-      toast.error('Erro ao gerar QR Code');
-      setTicketGenGenerating(null);
-      return;
-    }
-
-    const qrBase64 = canvas.toDataURL('image/png');
-
-    if (mode === 'pdf') {
-      await generateTicketPdf({ ticket: ticketData, qrBase64 });
-    } else {
-      // Image generation (same logic as TicketCard)
-      await generateTicketImage(ticketData, canvas);
-    }
-
-    setTicketGenGenerating(null);
-  }, [ticketGenSale, activeCompany, ticketGenBoardingTime, ticketGenBoardingDate]);
-
-  const generateAllPdf = useCallback(async () => {
-    for (const ticket of ticketGenTickets) {
-      await generateForTicket(ticket, 'pdf');
-    }
-  }, [ticketGenTickets, generateForTicket]);
 
   // ── Actions dropdown ──
   const getSaleActions = (sale: Sale): ActionItem[] => {
@@ -619,12 +574,13 @@ export default function Sales() {
       { label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) },
     ];
 
-    // Ticket generation actions (not for blocks or cancelled)
+    // Ticket generation action (hidden for BLOQUEIO and cancelled sales)
     if (sale.status !== 'cancelado' && sale.customer_name !== 'BLOQUEIO') {
-      actions.push(
-        { label: 'Gerar Passagem (PDF)', icon: FileText, onClick: () => openTicketGen(sale, 'pdf') },
-        { label: 'Gerar Passagem (Imagem)', icon: ImageIcon, onClick: () => openTicketGen(sale, 'image') },
-      );
+      actions.push({
+        label: 'Gerar Passagem',
+        icon: FileText,
+        onClick: () => openTicketGen(sale),
+      });
     }
 
     if (sale.status !== 'cancelado') {
@@ -655,6 +611,18 @@ export default function Sales() {
 
     return actions;
   };
+  const selectedTicket = ticketGenTickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
+  const selectedTicketData = selectedTicket && ticketGenSale && activeCompany
+    ? buildTicketCardData(
+        selectedTicket,
+        ticketGenSale,
+        activeCompany,
+        ticketGenBoardingTime,
+        ticketGenBoardingDate,
+      )
+    : null;
+
+
 
   // ── Render ──
   return (
@@ -919,11 +887,20 @@ export default function Sales() {
         />
 
         {/* ── Ticket Generation Dialog ── */}
-        <Dialog open={!!ticketGenSale} onOpenChange={(open) => { if (!open) { setTicketGenSale(null); setTicketGenTickets([]); } }}>
+        <Dialog
+          open={!!ticketGenSale}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTicketGenSale(null);
+              setTicketGenTickets([]);
+              setSelectedTicketId(null);
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                Gerar Passagem ({ticketGenMode === 'pdf' ? 'PDF' : 'Imagem'})
+                Gerar Passagem
               </DialogTitle>
             </DialogHeader>
             {ticketGenLoading ? (
@@ -932,53 +909,33 @@ export default function Sales() {
               </div>
             ) : ticketGenTickets.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Nenhum passageiro encontrado.</p>
-            ) : (
+            ) : !selectedTicketId && ticketGenTickets.length > 1 ? (
               <div className="space-y-3">
+                <p className="text-sm font-medium">Qual passageiro?</p>
                 {ticketGenTickets.map((ticket) => (
-                  <div key={ticket.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="font-mono">{ticket.seat_label}</Badge>
-                      <div>
-                        <p className="text-sm font-medium">{ticket.passenger_name}</p>
-                        <p className="text-xs text-muted-foreground">CPF: {ticket.passenger_cpf}</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => generateForTicket(ticket, ticketGenMode)}
-                      disabled={ticketGenGenerating === ticket.id}
-                    >
-                      {ticketGenGenerating === ticket.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : ticketGenMode === 'pdf' ? (
-                        <><FileText className="h-4 w-4 mr-1" /> PDF</>
-                      ) : (
-                        <><Download className="h-4 w-4 mr-1" /> Imagem</>
-                      )}
-                    </Button>
-                    {/* Hidden QR canvas */}
-                    <div style={{ position: 'absolute', left: '-9999px' }}>
-                      <QRCodeCanvas
-                        ref={(el) => { qrCanvasRefs.current[ticket.id] = el; }}
-                        value={ticket.qr_code_token}
-                        size={256}
-                        level="M"
-                        includeMargin
-                      />
-                    </div>
-                  </div>
+                  <Button
+                    key={ticket.id}
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => setSelectedTicketId(ticket.id)}
+                  >
+                    {ticket.passenger_name} · Poltrona {ticket.seat_label}
+                  </Button>
                 ))}
-                {ticketGenTickets.length > 1 && ticketGenMode === 'pdf' && (
-                  <Button variant="outline" className="w-full" onClick={generateAllPdf} disabled={!!ticketGenGenerating}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Baixar PDF de todos
+              </div>
+            ) : selectedTicketData ? (
+              <div className="space-y-3">
+                {ticketGenTickets.length > 1 && (
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedTicketId(null)}>
+                    ← Trocar passageiro
                   </Button>
                 )}
+                {/* Reuso intencional do mesmo componente público para manter padrão visual e ações de download. */}
+                <TicketCard ticket={selectedTicketData} allowReservedDownloads />
               </div>
-            )}
+            ) : null}
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
+              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); setSelectedTicketId(null); }}>
                 Fechar
               </Button>
             </DialogFooter>
@@ -1219,115 +1176,4 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-medium">{value}</p>
     </div>
   );
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function generateTicketImage(ticket: TicketCardData, sourceCanvas: HTMLCanvasElement) {
-  const canvasW = 420;
-  const canvasH = 620;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvasW;
-  canvas.height = canvasH;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const accentColor = ticket.companyPrimaryColor || '#F97316';
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvasW, canvasH);
-
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(0, 0, canvasW, 6);
-
-  let currentY = 26;
-
-  if (ticket.companyLogoUrl) {
-    try {
-      const logo = await loadImage(ticket.companyLogoUrl);
-      const logoH = 44;
-      const logoW = (logo.width / logo.height) * logoH;
-      ctx.drawImage(logo, (canvasW - logoW) / 2, currentY, logoW, logoH);
-      currentY += logoH + 8;
-    } catch {
-      ctx.fillStyle = '#1a1a1a';
-      ctx.font = 'bold 20px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
-      currentY += 32;
-    }
-  } else {
-    ctx.fillStyle = '#1a1a1a';
-    ctx.font = 'bold 20px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(ticket.companyName, canvasW / 2, currentY + 20);
-    currentY += 32;
-  }
-
-  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
-  if (companyLoc) {
-    ctx.fillStyle = '#666666';
-    ctx.font = '12px Arial, sans-serif';
-    ctx.fillText(companyLoc, canvasW / 2, currentY + 12);
-    currentY += 18;
-  }
-
-  if (ticket.companyCnpj) {
-    const digits = ticket.companyCnpj.replace(/\D/g, '');
-    if (digits.length === 14) {
-      const formatted = digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-      ctx.fillStyle = '#999999';
-      ctx.font = '10px Arial, sans-serif';
-      ctx.fillText(`CNPJ: ${formatted}`, canvasW / 2, currentY + 12);
-      currentY += 18;
-    }
-  }
-
-  currentY += 8;
-  ctx.strokeStyle = '#e5e5e5';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(40, currentY);
-  ctx.lineTo(canvasW - 40, currentY);
-  ctx.stroke();
-  currentY += 16;
-
-  const qrSize = 200;
-  ctx.drawImage(sourceCanvas, (canvasW - qrSize) / 2, currentY, qrSize, qrSize);
-  currentY += qrSize + 20;
-
-  ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 16px Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(ticket.eventName, canvasW / 2, currentY);
-  currentY += 24;
-
-  ctx.fillStyle = '#444444';
-  ctx.font = '14px Arial, sans-serif';
-  ctx.fillText(`Assento ${ticket.seatLabel} — ${ticket.passengerName}`, canvasW / 2, currentY);
-  currentY += 22;
-
-  ctx.fillStyle = '#666666';
-  ctx.font = '13px Arial, sans-serif';
-  const { format: fmtDate } = await import('date-fns');
-  const { ptBR: ptBRLocale } = await import('date-fns/locale');
-  ctx.fillText(fmtDate(new Date(ticket.eventDate), 'dd/MM/yyyy', { locale: ptBRLocale }), canvasW / 2, currentY);
-  currentY += 30;
-
-  ctx.fillStyle = '#aaaaaa';
-  ctx.font = '10px Arial, sans-serif';
-  ctx.fillText('Documento emitido digitalmente.', canvasW / 2, canvasH - 16);
-
-  const link = document.createElement('a');
-  link.download = `passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
 }

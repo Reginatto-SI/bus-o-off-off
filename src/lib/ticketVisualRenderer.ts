@@ -1,0 +1,187 @@
+import { format } from 'date-fns';
+import type { TicketCardData } from '@/components/public/TicketCard';
+import { formatBoardingDateTime } from '@/lib/utils';
+
+interface TicketVisualRenderOptions {
+  width?: number;
+  backgroundColor?: string;
+}
+
+function maskCpf(cpf: string): string {
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11) return cpf;
+  return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
+}
+
+function formatCnpj(cnpj: string | null): string | null {
+  if (!cnpj) return null;
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return cnpj;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/**
+ * Renderiza uma imagem única da passagem para manter o mesmo padrão visual
+ * entre web, PDF e exportação do QR Code.
+ */
+export async function renderTicketVisual(
+  ticket: TicketCardData,
+  sourceCanvas: HTMLCanvasElement,
+  options: TicketVisualRenderOptions = {},
+): Promise<HTMLCanvasElement> {
+  const width = options.width ?? 820;
+  const height = 760;
+  const padding = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Falha ao criar contexto da passagem');
+  }
+
+  const accentColor = ticket.companyPrimaryColor || '#F97316';
+  const backgroundColor = options.backgroundColor ?? '#f5f6f8';
+  const cardX = padding;
+  const cardY = padding;
+  const cardW = width - padding * 2;
+  const cardH = height - padding * 2;
+
+  ctx.fillStyle = backgroundColor;
+  ctx.fillRect(0, 0, width, height);
+
+  // Cartão principal com sombra leve para preservar o visual do modal.
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
+  roundedRect(ctx, cardX, cardY, cardW, cardH, 12);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  ctx.fillStyle = accentColor;
+  roundedRect(ctx, cardX, cardY, cardW, 8, 8);
+  ctx.fill();
+
+  const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
+  const formattedCnpj = formatCnpj(ticket.companyCnpj);
+
+  let y = cardY + 26;
+
+  if (ticket.companyLogoUrl) {
+    try {
+      const logo = await loadImage(ticket.companyLogoUrl);
+      const logoSize = 52;
+      ctx.drawImage(logo, cardX + 24, y, logoSize, logoSize);
+    } catch {
+      // Seguimos somente com os textos quando a logo falhar no carregamento.
+    }
+  }
+
+  const headerX = cardX + 88;
+  ctx.fillStyle = '#111827';
+  ctx.font = '600 32px Inter, Arial, sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText(ticket.companyName, headerX, y + 2);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '400 18px Inter, Arial, sans-serif';
+  let companyMetaY = y + 40;
+
+  if (formattedCnpj) {
+    ctx.fillText(`CNPJ: ${formattedCnpj}`, headerX, companyMetaY);
+    companyMetaY += 24;
+  }
+
+  if (companyLoc) {
+    ctx.fillText(companyLoc, headerX, companyMetaY);
+    companyMetaY += 24;
+  }
+
+  const contacts = [ticket.companyPhone, ticket.companyWhatsapp].filter(Boolean).join('   •   ');
+  if (contacts) {
+    ctx.fillText(contacts, headerX, companyMetaY);
+  }
+
+  y = cardY + 130;
+  const qrSize = 240;
+  const qrX = cardX + (cardW - qrSize) / 2;
+  ctx.drawImage(sourceCanvas, qrX, y, qrSize, qrSize);
+
+  y += qrSize + 26;
+
+  ctx.fillStyle = '#111827';
+  ctx.font = '600 30px Inter, Arial, sans-serif';
+  ctx.fillText(`Assento ${ticket.seatLabel}`, cardX + 34, y);
+
+  const statusLabel = ticket.saleStatus === 'pago' ? 'Pago' : ticket.saleStatus === 'reservado' ? 'Reservado' : 'Cancelado';
+  const statusColor = ticket.saleStatus === 'pago' ? '#16a34a' : ticket.saleStatus === 'reservado' ? '#d97706' : '#dc2626';
+  const badgeW = statusLabel === 'Reservado' ? 126 : 98;
+  roundedRect(ctx, cardX + cardW - badgeW - 30, y - 2, badgeW, 34, 17);
+  ctx.fillStyle = `${statusColor}22`;
+  ctx.fill();
+  ctx.fillStyle = statusColor;
+  ctx.font = '600 18px Inter, Arial, sans-serif';
+  ctx.fillText(statusLabel, cardX + cardW - badgeW - 30 + 24, y + 6);
+
+  y += 46;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 32px Inter, Arial, sans-serif';
+  ctx.fillText(ticket.passengerName.toUpperCase(), cardX + 34, y);
+
+  y += 42;
+  ctx.fillStyle = '#64748b';
+  ctx.font = '400 24px Inter, Arial, sans-serif';
+  ctx.fillText(`CPF: ${maskCpf(ticket.passengerCpf)}`, cardX + 34, y);
+
+  y += 28;
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 30, y);
+  ctx.lineTo(cardX + cardW - 30, y);
+  ctx.stroke();
+
+  const details = [
+    `${ticket.eventName} — ${format(new Date(ticket.eventDate), 'dd/MM/yyyy')}`,
+    ticket.boardingLocationName,
+    (ticket.boardingDepartureDate || ticket.boardingDepartureTime)
+      ? formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)
+      : null,
+  ].filter(Boolean) as string[];
+
+  y += 20;
+  ctx.fillStyle = '#475569';
+  ctx.font = '400 22px Inter, Arial, sans-serif';
+  details.forEach((line) => {
+    ctx.fillText(line, cardX + 34, y);
+    y += 34;
+  });
+
+  return canvas;
+}
