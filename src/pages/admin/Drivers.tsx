@@ -177,10 +177,13 @@ export default function Drivers() {
     []
   );
 
+  // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchDrivers = async () => {
+    if (!activeCompanyId) return;
     const { data, error } = await supabase
       .from('drivers')
       .select('*')
+      .eq('company_id', activeCompanyId)
       .order('name');
 
     if (error) {
@@ -202,9 +205,10 @@ export default function Drivers() {
     setLoading(false);
   };
 
+  // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
   useEffect(() => {
-    fetchDrivers();
-  }, []);
+    if (activeCompanyId) fetchDrivers();
+  }, [activeCompanyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
