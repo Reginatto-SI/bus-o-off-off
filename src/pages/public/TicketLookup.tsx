@@ -49,21 +49,6 @@ function formatEventOptionLabel(event: { name: string; city: string; date: strin
   return `${event.name} — ${formatCityState(event.city)} • ${formatEventDate(event.date)}`;
 }
 
-interface CompanyInfo {
-  id: string;
-  name: string;
-  trade_name: string | null;
-  logo_url: string | null;
-  city: string | null;
-  state: string | null;
-  primary_color: string | null;
-  cnpj: string | null;
-  phone: string | null;
-  whatsapp: string | null;
-  address: string | null;
-  slogan: string | null;
-}
-
 export default function TicketLookup() {
   const { toast } = useToast();
   const [selectedEventId, setSelectedEventId] = useState('');
@@ -109,107 +94,53 @@ export default function TicketLookup() {
     setSearched(true);
 
     try {
-      const { data: ticketRows } = await supabase
-        .from('tickets')
-        .select('*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*)')
-        .eq('passenger_cpf', cpfDigits);
+      const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+        body: { event_id: selectedEventId, cpf: cpfDigits },
+      });
 
-      if (!ticketRows || ticketRows.length === 0) {
-        setTickets([]);
-        setSearching(false);
-        return;
-      }
+      if (error) throw error;
 
-      const filtered = ticketRows.filter((t: any) => t.trip?.event_id === selectedEventId);
-
-      // Comentário: uma consulta pode retornar passagens de empresas diferentes,
-      // então mapeamos os dados institucionais por company_id para preencher cada card corretamente.
-      const companyIds = [
-        ...new Set(
-          filtered
-            .map((ticket: any) => ticket?.sale?.event?.company_id)
-            .filter((companyId: string | null | undefined): companyId is string => Boolean(companyId))
-        ),
-      ];
-
-      const companyMap = new Map<string, CompanyInfo>();
-      if (companyIds.length > 0) {
-        const { data: companyRows } = await supabase
-          .from('companies')
-          .select('id, name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
-          .in('id', companyIds);
-
-        for (const companyRow of companyRows ?? []) {
-          companyMap.set(companyRow.id, companyRow as CompanyInfo);
-        }
-      }
-
-      // Fetch fees for the selected event
-      const { data: feesData } = await supabase
-        .from('event_fees')
-        .select('*')
-        .eq('event_id', selectedEventId)
-        .eq('is_active', true);
-
-      const eventFees: EventFeeInput[] = (feesData || []).map((f: any) => ({
+      const ticketResults = data?.tickets || [];
+      const eventFees: EventFeeInput[] = (data?.eventFees || []).map((f: any) => ({
         name: f.name,
         fee_type: f.fee_type as 'fixed' | 'percent',
         value: f.value,
         is_active: true,
       }));
 
-      const cards: TicketCardData[] = filtered.map((t: any) => {
-        const eventCompanyId = t?.sale?.event?.company_id as string | undefined;
-        const companyInfo = eventCompanyId ? companyMap.get(eventCompanyId) ?? null : null;
-        const companyDisplayName = companyInfo?.trade_name || companyInfo?.name || '';
-        const unitPrice = t?.sale?.unit_price ?? 0;
+      const cards: TicketCardData[] = ticketResults.map((t: any) => {
+        const unitPrice = t.unitPrice ?? 0;
         const breakdown = calculateFees(unitPrice, eventFees);
 
         return {
-        ticketId: t.id,
-        qrCodeToken: t.qr_code_token,
-        passengerName: t.passenger_name,
-        passengerCpf: t.passenger_cpf,
-        seatLabel: t.seat_label,
-        boardingStatus: t.boarding_status,
-        eventName: t.sale?.event?.name || '',
-        eventDate: t.sale?.event?.date || '',
-        eventCity: t.sale?.event?.city || '',
-        boardingLocationName: t.sale?.boarding_location?.name || '',
-        boardingLocationAddress: t.sale?.boarding_location?.address || '',
-        boardingDepartureTime: null,
-        boardingDepartureDate: null,
-        saleStatus: (t.sale?.status || 'reservado') as SaleStatus,
-        companyName: companyDisplayName,
-        companyLogoUrl: companyInfo?.logo_url || null,
-        companyCity: companyInfo?.city || null,
-        companyState: companyInfo?.state || null,
-        companyPrimaryColor: companyInfo?.primary_color || null,
-        companyCnpj: companyInfo?.cnpj || null,
-        companyPhone: companyInfo?.phone || null,
-        companyWhatsapp: companyInfo?.whatsapp || null,
-        companyAddress: companyInfo?.address || null,
-        companySlogan: companyInfo?.slogan || null,
-        fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
-        totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
-      };
+          ticketId: t.ticketId,
+          qrCodeToken: t.qrCodeToken,
+          passengerName: t.passengerName,
+          passengerCpf: t.passengerCpf,
+          seatLabel: t.seatLabel,
+          boardingStatus: t.boardingStatus,
+          eventName: t.eventName,
+          eventDate: t.eventDate,
+          eventCity: t.eventCity,
+          boardingLocationName: t.boardingLocationName,
+          boardingLocationAddress: t.boardingLocationAddress,
+          boardingDepartureTime: t.boardingDepartureTime,
+          boardingDepartureDate: t.boardingDepartureDate,
+          saleStatus: (t.saleStatus || 'reservado') as SaleStatus,
+          companyName: t.companyName,
+          companyLogoUrl: t.companyLogoUrl,
+          companyCity: t.companyCity,
+          companyState: t.companyState,
+          companyPrimaryColor: t.companyPrimaryColor,
+          companyCnpj: t.companyCnpj,
+          companyPhone: t.companyPhone,
+          companyWhatsapp: t.companyWhatsapp,
+          companyAddress: t.companyAddress,
+          companySlogan: t.companySlogan,
+          fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
+          totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
+        };
       });
-
-      // Fetch boarding departure times
-      for (const card of cards) {
-        const ticket = filtered.find((t: any) => t.id === card.ticketId);
-        if (ticket?.sale) {
-          const { data: ebl } = await supabase
-            .from('event_boarding_locations')
-            .select('departure_time, departure_date')
-            .eq('event_id', ticket.trip?.event_id)
-            .eq('trip_id', ticket.trip_id)
-            .eq('boarding_location_id', ticket.sale.boarding_location_id)
-            .maybeSingle();
-          card.boardingDepartureTime = ebl?.departure_time ?? null;
-          card.boardingDepartureDate = (ebl as any)?.departure_date ?? null;
-        }
-      }
 
       setTickets(cards);
     } catch {
