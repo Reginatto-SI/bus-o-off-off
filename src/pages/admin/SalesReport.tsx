@@ -219,7 +219,7 @@ export default function SalesReport() {
   // ── KPIs ──
   const stats = useMemo(() => {
     const total = filteredSales.length;
-    const grossRevenue = filteredSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
+    const grossRevenue = filteredSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
     const pagas = filteredSales.filter((s) => s.status === 'pago').length;
     const canceladas = filteredSales.filter((s) => s.status === 'cancelado').length;
     const ticketMedio = total > 0 ? grossRevenue / total : 0;
@@ -227,9 +227,8 @@ export default function SalesReport() {
 
     const paidSales = filteredSales.filter((s) => s.status === 'pago');
     const platformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
-    // Comissão segue o mesmo cálculo da tela /admin/vendas para manter consistência entre KPIs.
     const sellersCommission = paidSales.reduce((sum, sale) => {
-      const saleGross = sale.quantity * sale.unit_price;
+      const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
       return sum + (saleGross * sellerCommissionPercent) / 100;
     }, 0);
@@ -256,13 +255,12 @@ export default function SalesReport() {
       };
 
       existing.totalSales += 1;
-      existing.grossRevenue += sale.quantity * sale.unit_price;
+      existing.grossRevenue += sale.gross_amount ?? sale.quantity * sale.unit_price;
       if (sale.status === 'pago') {
         existing.paidSales += 1;
         existing.platformFee += sale.platform_fee_total ?? 0;
-        // Mantém a mesma regra dos KPIs para garantir consistência entre cards e tabela.
         const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
-        existing.sellersCommission += ((sale.quantity * sale.unit_price) * sellerCommissionPercent) / 100;
+        existing.sellersCommission += ((sale.gross_amount ?? sale.quantity * sale.unit_price) * sellerCommissionPercent) / 100;
       }
       if (sale.status === 'cancelado') existing.cancelledSales += 1;
 
@@ -288,7 +286,7 @@ export default function SalesReport() {
         seller_name: s.seller?.name ?? '-',
         quantity: s.quantity,
         unit_price: s.unit_price,
-        total_value: s.quantity * s.unit_price,
+        total_value: s.gross_amount ?? s.quantity * s.unit_price,
         status: s.status,
         sale_id: s.id,
         payment_id: s.stripe_payment_intent_id ?? '',

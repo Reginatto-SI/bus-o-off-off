@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType } from '@/types/database';
+import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -73,6 +73,7 @@ import {
   GripVertical,
   Archive,
   ArchiveRestore,
+  DollarSign,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
@@ -228,6 +229,14 @@ export default function Events() {
   const [copyBoardingsDialogOpen, setCopyBoardingsDialogOpen] = useState(false);
   const [invertBoardingsOrder, setInvertBoardingsOrder] = useState(true);
   const [copyingBoardings, setCopyingBoardings] = useState(false);
+
+  // Event fees state
+  const [eventFees, setEventFees] = useState<EventFee[]>([]);
+  const [loadingFees, setLoadingFees] = useState(false);
+  const [feeDialogOpen, setFeeDialogOpen] = useState(false);
+  const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
+  const [feeForm, setFeeForm] = useState({ name: '', fee_type: 'fixed' as 'fixed' | 'percent', value: '', is_active: true });
+  const [savingFee, setSavingFee] = useState(false);
 
   // Main form
   const [form, setForm] = useState({
@@ -566,6 +575,17 @@ export default function Events() {
     if (locationsRes.data) setBoardingLocations(locationsRes.data as BoardingLocation[]);
   };
 
+  const fetchEventFees = async (eventId: string) => {
+    setLoadingFees(true);
+    const { data } = await supabase
+      .from('event_fees')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('sort_order', { ascending: true });
+    setEventFees((data || []) as unknown as EventFee[]);
+    setLoadingFees(false);
+  };
+
   useEffect(() => {
     fetchEvents();
     fetchVehiclesAndDrivers();
@@ -585,6 +605,7 @@ export default function Events() {
     await Promise.all([
       fetchEventTrips(eventId),
       fetchEventBoardingLocations(eventId),
+      fetchEventFees(eventId),
     ]);
   };
 
@@ -2553,6 +2574,149 @@ export default function Events() {
                       </div>
                     </div>
 
+                    {/* Taxas Adicionais */}
+                    {editingId && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium">Taxas Adicionais</h3>
+                          {!isReadOnly && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setFeeForm({ name: '', fee_type: 'fixed', value: '', is_active: true });
+                                setEditingFeeId(null);
+                                setFeeDialogOpen(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Adicionar Taxa
+                            </Button>
+                          )}
+                        </div>
+
+                        {loadingFees ? (
+                          <div className="flex items-center justify-center py-6">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                          </div>
+                        ) : eventFees.length === 0 ? (
+                          <div className="text-center py-6 text-muted-foreground border rounded-lg">
+                            <DollarSign className="h-7 w-7 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">Nenhuma taxa adicional configurada</p>
+                            <p className="text-xs mt-1">Taxas como embarque ou operacional podem ser adicionadas aqui</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {eventFees.sort((a, b) => a.sort_order - b.sort_order).map((fee) => (
+                              <Card key={fee.id} className={cn('p-3', !fee.is_active && 'opacity-60')}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-sm truncate">{fee.name}</span>
+                                      <Badge variant={fee.is_active ? 'default' : 'secondary'} className="text-xs shrink-0">
+                                        {fee.is_active ? 'Ativa' : 'Inativa'}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {fee.fee_type === 'fixed'
+                                        ? `R$ ${Number(fee.value).toFixed(2)}`
+                                        : `${Number(fee.value).toFixed(1)}%`}
+                                      {fee.fee_type === 'percent' && form.unit_price && (
+                                        <span className="ml-1">
+                                          (≈ R$ {(parseFloat(form.unit_price || '0') * fee.value / 100).toFixed(2)})
+                                        </span>
+                                      )}
+                                    </p>
+                                  </div>
+                                  {!isReadOnly && (
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={async () => {
+                                          await supabase.from('event_fees').update({ is_active: !fee.is_active } as any).eq('id', fee.id);
+                                          fetchEventFees(editingId!);
+                                        }}
+                                      >
+                                        {fee.is_active ? <XCircle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => {
+                                          setEditingFeeId(fee.id);
+                                          setFeeForm({
+                                            name: fee.name,
+                                            fee_type: fee.fee_type as 'fixed' | 'percent',
+                                            value: String(fee.value),
+                                            is_active: fee.is_active,
+                                          });
+                                          setFeeDialogOpen(true);
+                                        }}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={async () => {
+                                          await supabase.from('event_fees').delete().eq('id', fee.id);
+                                          fetchEventFees(editingId!);
+                                          toast.success('Taxa removida');
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Fee calculation preview */}
+                        {eventFees.filter(f => f.is_active).length > 0 && form.unit_price && (
+                          <Card className="p-3 bg-muted/50">
+                            <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
+                            <div className="text-sm space-y-0.5">
+                              <div className="flex justify-between">
+                                <span>Passagem</span>
+                                <span>R$ {parseFloat(form.unit_price || '0').toFixed(2)}</span>
+                              </div>
+                              {eventFees.filter(f => f.is_active).map(fee => {
+                                const basePrice = parseFloat(form.unit_price || '0');
+                                const feeAmount = fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value;
+                                return (
+                                  <div key={fee.id} className="flex justify-between text-muted-foreground">
+                                    <span>{fee.name}</span>
+                                    <span>+ R$ {feeAmount.toFixed(2)}</span>
+                                  </div>
+                                );
+                              })}
+                              <div className="flex justify-between font-medium border-t pt-1 mt-1">
+                                <span>Total por passageiro</span>
+                                <span>R$ {(() => {
+                                  const basePrice = parseFloat(form.unit_price || '0');
+                                  const totalFees = eventFees.filter(f => f.is_active).reduce((sum, fee) => {
+                                    return sum + (fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value);
+                                  }, 0);
+                                  return (basePrice + totalFees).toFixed(2);
+                                })()}</span>
+                              </div>
+                            </div>
+                          </Card>
+                        )}
+                      </div>
+                    )}
+
                     {/* Event Summary */}
                     {editingId && (
                       <Card className="p-4 bg-muted/50">
@@ -2573,19 +2737,6 @@ export default function Events() {
                         </div>
                       </Card>
                     )}
-
-                    {/* Info Card */}
-                    <Card className="p-4 bg-primary/5 border-primary/20">
-                      <div className="flex items-start gap-3">
-                        <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div className="text-sm text-muted-foreground">
-                          <p>
-                            O pagamento será processado no momento da compra. Neste MVP, o pagamento é simulado. 
-                            A integração com gateway será implementada em versão futura.
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
                   </TabsContent>
 
                   {/* Tab Publicação */}
@@ -2747,6 +2898,88 @@ export default function Events() {
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Fee Dialog */}
+        <Dialog open={feeDialogOpen} onOpenChange={(open) => { setFeeDialogOpen(open); if (!open) { setEditingFeeId(null); setFeeForm({ name: '', fee_type: 'fixed', value: '', is_active: true }); } }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editingFeeId ? 'Editar Taxa' : 'Adicionar Taxa'}</DialogTitle>
+            </DialogHeader>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!editingId || !activeCompanyId) return;
+                setSavingFee(true);
+                const feeData = {
+                  name: feeForm.name,
+                  fee_type: feeForm.fee_type,
+                  value: parseFloat(feeForm.value) || 0,
+                  is_active: feeForm.is_active,
+                  event_id: editingId,
+                  company_id: activeCompanyId,
+                  sort_order: editingFeeId ? undefined : eventFees.length,
+                };
+                if (editingFeeId) {
+                  const { name, fee_type, value, is_active } = feeData;
+                  await supabase.from('event_fees').update({ name, fee_type, value, is_active } as any).eq('id', editingFeeId);
+                } else {
+                  await supabase.from('event_fees').insert(feeData as any);
+                }
+                setSavingFee(false);
+                setFeeDialogOpen(false);
+                setEditingFeeId(null);
+                fetchEventFees(editingId);
+                toast.success(editingFeeId ? 'Taxa atualizada' : 'Taxa adicionada');
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <Label>Nome da Taxa *</Label>
+                <Input
+                  value={feeForm.name}
+                  onChange={(e) => setFeeForm({ ...feeForm, name: e.target.value })}
+                  placeholder="Ex: Taxa de Embarque"
+                  required
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Tipo *</Label>
+                  <Select value={feeForm.fee_type} onValueChange={(v: 'fixed' | 'percent') => setFeeForm({ ...feeForm, fee_type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Valor Fixo (R$)</SelectItem>
+                      <SelectItem value="percent">Percentual (%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Valor *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={feeForm.value}
+                    onChange={(e) => setFeeForm({ ...feeForm, value: e.target.value })}
+                    placeholder={feeForm.fee_type === 'fixed' ? '0.00' : '0.0'}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>Taxa ativa</Label>
+                <Switch checked={feeForm.is_active} onCheckedChange={(v) => setFeeForm({ ...feeForm, is_active: v })} />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setFeeDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={savingFee || !feeForm.name || !feeForm.value}>
+                  {savingFee ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {editingFeeId ? 'Salvar' : 'Adicionar'}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
 
