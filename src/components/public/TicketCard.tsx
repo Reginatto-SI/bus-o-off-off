@@ -52,9 +52,15 @@ function formatCnpjDisplay(cnpj: string | null): string | null {
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
 
-export function TicketCard({ ticket }: { ticket: TicketCardData }) {
+interface TicketCardProps {
+  ticket: TicketCardData;
+  allowReservedDownloads?: boolean;
+}
+
+export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCardProps) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
+  const canDownload = isPaid || (allowReservedDownloads && ticket.saleStatus === 'reservado');
   const isCancelled = ticket.saleStatus === 'cancelado';
   const accentColor = ticket.companyPrimaryColor || '#F97316';
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
@@ -270,7 +276,7 @@ export function TicketCard({ ticket }: { ticket: TicketCardData }) {
           </div>
 
           {/* Actions */}
-          {isPaid && (
+          {canDownload && (
             <div className="w-full flex flex-col sm:flex-row gap-2 pt-2">
               <Button
                 variant="outline"
