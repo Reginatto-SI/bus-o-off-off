@@ -59,6 +59,21 @@ const vehicleTypeLabels: Record<string, string> = {
   van: 'Van',
 };
 
+function formatCpfMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
+  if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
+  return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+}
+
+function formatPhoneMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+  return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+}
+
 export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProps) {
   const { activeCompanyId, user } = useAuth();
 
@@ -235,7 +250,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
 
   // ── Passenger field update ──
   const updatePassenger = (index: number, field: keyof PassengerData, value: string) => {
-    setPassengers((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+    let formatted = value;
+    if (field === 'cpf') formatted = formatCpfMask(value);
+    else if (field === 'phone') formatted = formatPhoneMask(value);
+    setPassengers((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: formatted } : p)));
   };
 
   // ── Validation ──
@@ -457,7 +475,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
                               <SelectItem key={t.id} value={t.id}>
                                 {v ? `${vehicleTypeLabels[v.type] ?? v.type} • ${v.plate} • ${v.capacity} lug.` : t.id.slice(0, 8)}
                                 {d ? ` • ${d.name}` : ''}
-                                {t.trip_type === 'volta' ? ' (Volta)' : ''}
                               </SelectItem>
                             );
                           })}
@@ -625,9 +642,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
                               <Label className="text-xs">CPF *</Label>
                               <Input
                                 value={p.cpf}
-                                onChange={(e) => updatePassenger(i, 'cpf', e.target.value.replace(/\D/g, '').slice(0, 11))}
-                                placeholder="00000000000"
-                                maxLength={11}
+                                onChange={(e) => updatePassenger(i, 'cpf', e.target.value)}
+                                placeholder="000.000.000-00"
+                                maxLength={14}
                               />
                             </div>
                             <div className="space-y-1">
@@ -636,6 +653,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess }: NewSaleModalProp
                                 value={p.phone}
                                 onChange={(e) => updatePassenger(i, 'phone', e.target.value)}
                                 placeholder="(65) 99999-9999"
+                                maxLength={15}
                               />
                             </div>
                           </div>
