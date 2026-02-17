@@ -9,6 +9,7 @@ import { Loader2, CheckCircle2 } from 'lucide-react';
 interface SeatMapProps {
   seats: Seat[];
   occupiedSeatIds: string[];
+  blockedSeatIds?: string[];
   maxSelection: number;
   selectedSeats: string[];
   onSelectionChange: (seatIds: string[]) => void;
@@ -22,6 +23,7 @@ interface SeatMapProps {
 export function SeatMap({
   seats,
   occupiedSeatIds,
+  blockedSeatIds = [],
   maxSelection,
   selectedSeats,
   onSelectionChange,
@@ -68,7 +70,10 @@ export function SeatMap({
   });
 
   const getSeatState = (seat: Seat): SeatState => {
+    // Mantém coerência com o status real: bloqueios operacionais têm prioridade visual.
+    // Isso evita que uma poltrona bloqueada seja exibida como ocupada no mapa público.
     if (seat.status === 'bloqueado') return 'blocked';
+    if (blockedSeatIds.includes(seat.id)) return 'blocked';
     if (occupiedSeatIds.includes(seat.id)) return 'occupied';
     if (selectedSeats.includes(seat.id)) return 'selected';
     return 'available';
