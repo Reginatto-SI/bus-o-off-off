@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
+import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -147,6 +148,8 @@ function buildTicketCardData(
   company: any,
   boardingDepartureTime: string | null,
   boardingDepartureDate: string | null,
+  fees?: { name: string; amount: number }[],
+  totalPaid?: number,
 ): TicketCardData {
   const companyDisplayName = company?.trade_name || company?.name || '';
   return {
@@ -174,6 +177,8 @@ function buildTicketCardData(
     companyWhatsapp: company?.whatsapp || null,
     companyAddress: company?.address || null,
     companySlogan: company?.slogan || null,
+    fees,
+    totalPaid,
   };
 }
 
@@ -220,6 +225,8 @@ export default function Sales() {
   const [ticketGenBoardingTime, setTicketGenBoardingTime] = useState<string | null>(null);
   const [ticketGenBoardingDate, setTicketGenBoardingDate] = useState<string | null>(null);
   const [ticketGenLoading, setTicketGenLoading] = useState(false);
+  const [ticketGenFees, setTicketGenFees] = useState<{ name: string; amount: number }[] | undefined>(undefined);
+  const [ticketGenTotalPaid, setTicketGenTotalPaid] = useState<number | undefined>(undefined);
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [
@@ -418,15 +425,14 @@ export default function Sales() {
   // ── Stats ──
   const stats = useMemo(() => {
     const total = totalSalesCount;
-    const totalValue = sales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
+    const totalValue = sales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
     const pagas = sales.filter((s) => s.status === 'pago').length;
     const reservadas = sales.filter((s) => s.status === 'reservado').length;
     const canceladas = sales.filter((s) => s.status === 'cancelado').length;
     const paidSales = sales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
-    // Comissão calculada por venda paga, respeitando os filtros ativos já aplicados na query.
     const totalSellersCommission = paidSales.reduce((sum, sale) => {
-      const saleGross = sale.quantity * sale.unit_price;
+      const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
       return sum + (saleGross * sellerCommissionPercent) / 100;
     }, 0);
@@ -448,7 +454,7 @@ export default function Sales() {
           : '-',
         boarding_location_name: s.boarding_location?.name ?? '',
         quantity: s.quantity,
-        total_value: s.quantity * s.unit_price,
+        total_value: s.gross_amount ?? s.quantity * s.unit_price,
         seller_name: s.seller?.name ?? '-',
         status: s.status,
       };
@@ -641,8 +647,10 @@ export default function Sales() {
     setSelectedTicketId(null);
     setTicketGenLoading(true);
     setTicketGenTickets([]);
+    setTicketGenFees(undefined);
+    setTicketGenTotalPaid(undefined);
 
-    const [ticketsRes, boardingRes] = await Promise.all([
+    const [ticketsRes, boardingRes, feesRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase
         .from('event_boarding_locations')
@@ -651,16 +659,34 @@ export default function Sales() {
         .eq('trip_id', sale.trip_id)
         .eq('boarding_location_id', sale.boarding_location_id)
         .maybeSingle(),
+      supabase
+        .from('event_fees')
+        .select('*')
+        .eq('event_id', sale.event_id)
+        .eq('is_active', true),
     ]);
 
     const fetchedTickets = (ticketsRes.data ?? []) as TicketRecord[];
     setTicketGenTickets(fetchedTickets);
     setTicketGenBoardingTime(boardingRes.data?.departure_time ?? null);
     setTicketGenBoardingDate((boardingRes.data as any)?.departure_date ?? null);
+
+    // Calculate fees
+    const eventFees: EventFeeInput[] = (feesRes.data || []).map((f: any) => ({
+      name: f.name,
+      fee_type: f.fee_type as 'fixed' | 'percent',
+      value: f.value,
+      is_active: true,
+    }));
+    if (eventFees.length > 0) {
+      const breakdown = calculateFees(sale.unit_price, eventFees);
+      setTicketGenFees(breakdown.fees);
+      setTicketGenTotalPaid(breakdown.unitPriceWithFees);
+    }
+
     setTicketGenLoading(false);
 
     if (fetchedTickets.length === 1) {
-      // Suporte: quando houver apenas 1 passageiro, já abrimos direto a passagem no padrão público.
       setSelectedTicketId(fetchedTickets[0].id);
     }
   };
@@ -717,6 +743,8 @@ export default function Sales() {
         activeCompany,
         ticketGenBoardingTime,
         ticketGenBoardingDate,
+        ticketGenFees,
+        ticketGenTotalPaid,
       )
     : null;
 

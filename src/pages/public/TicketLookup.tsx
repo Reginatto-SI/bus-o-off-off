@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -143,10 +144,26 @@ export default function TicketLookup() {
         }
       }
 
+      // Fetch fees for the selected event
+      const { data: feesData } = await supabase
+        .from('event_fees')
+        .select('*')
+        .eq('event_id', selectedEventId)
+        .eq('is_active', true);
+
+      const eventFees: EventFeeInput[] = (feesData || []).map((f: any) => ({
+        name: f.name,
+        fee_type: f.fee_type as 'fixed' | 'percent',
+        value: f.value,
+        is_active: true,
+      }));
+
       const cards: TicketCardData[] = filtered.map((t: any) => {
         const eventCompanyId = t?.sale?.event?.company_id as string | undefined;
         const companyInfo = eventCompanyId ? companyMap.get(eventCompanyId) ?? null : null;
         const companyDisplayName = companyInfo?.trade_name || companyInfo?.name || '';
+        const unitPrice = t?.sale?.unit_price ?? 0;
+        const breakdown = calculateFees(unitPrice, eventFees);
 
         return {
         ticketId: t.id,
@@ -173,6 +190,8 @@ export default function TicketLookup() {
         companyWhatsapp: companyInfo?.whatsapp || null,
         companyAddress: companyInfo?.address || null,
         companySlogan: companyInfo?.slogan || null,
+        fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
+        totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
       };
       });
 
