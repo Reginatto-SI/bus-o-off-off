@@ -132,10 +132,13 @@ export default function BoardingLocations() {
     return filters.search !== '' || filters.status !== 'all';
   }, [filters]);
 
+  // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchLocations = async () => {
+    if (!activeCompanyId) return;
     const { data, error } = await supabase
       .from('boarding_locations')
       .select('*')
+      .eq('company_id', activeCompanyId)
       .order('name');
 
     if (error) {
@@ -157,9 +160,10 @@ export default function BoardingLocations() {
     setLoading(false);
   };
 
+  // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
   useEffect(() => {
-    fetchLocations();
-  }, []);
+    if (activeCompanyId) fetchLocations();
+  }, [activeCompanyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

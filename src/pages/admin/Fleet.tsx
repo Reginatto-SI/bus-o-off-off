@@ -261,10 +261,13 @@ export default function Fleet() {
     };
   }, [form.capacity, form.seats_left_side, form.seats_right_side]);
 
+  // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchVehicles = async () => {
+    if (!activeCompanyId) return;
     const { data, error } = await supabase
       .from('vehicles')
       .select('*')
+      .eq('company_id', activeCompanyId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -286,9 +289,10 @@ export default function Fleet() {
     setLoading(false);
   };
 
+  // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
   useEffect(() => {
-    fetchVehicles();
-  }, []);
+    if (activeCompanyId) fetchVehicles();
+  }, [activeCompanyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

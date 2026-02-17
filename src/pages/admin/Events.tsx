@@ -469,13 +469,16 @@ export default function Events() {
   }, [eventTrips]);
 
   // Fetch functions
+  // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchEvents = async () => {
+    if (!activeCompanyId) return;
     const { data, error } = await supabase
       .from('events')
       .select(`
         *,
         trips:trips(vehicle_id, driver_id, assistant_driver_id, capacity)
       `)
+      .eq('company_id', activeCompanyId)
       .order('date', { ascending: false });
 
     if (error) {
@@ -498,9 +501,11 @@ export default function Events() {
   };
 
   const fetchSalesData = async () => {
+    if (!activeCompanyId) return;
     const { data: salesData } = await supabase
       .from('sales')
       .select('event_id, quantity')
+      .eq('company_id', activeCompanyId)
       .in('status', ['reservado', 'pago']);
 
     const map = new Map<string, number>();
@@ -564,10 +569,11 @@ export default function Events() {
   };
 
   const fetchVehiclesAndDrivers = async () => {
+    if (!activeCompanyId) return;
     const [vehiclesRes, driversRes, locationsRes] = await Promise.all([
-      supabase.from('vehicles').select('*').eq('status', 'ativo').order('plate'),
-      supabase.from('drivers').select('*').eq('status', 'ativo').order('name'),
-      supabase.from('boarding_locations').select('*').eq('status', 'ativo').order('name'),
+      supabase.from('vehicles').select('*').eq('company_id', activeCompanyId).eq('status', 'ativo').order('plate'),
+      supabase.from('drivers').select('*').eq('company_id', activeCompanyId).eq('status', 'ativo').order('name'),
+      supabase.from('boarding_locations').select('*').eq('company_id', activeCompanyId).eq('status', 'ativo').order('name'),
     ]);
     
     if (vehiclesRes.data) setVehicles(vehiclesRes.data as Vehicle[]);
@@ -586,11 +592,14 @@ export default function Events() {
     setLoadingFees(false);
   };
 
+  // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
   useEffect(() => {
-    fetchEvents();
-    fetchVehiclesAndDrivers();
-    fetchSalesData();
-  }, []);
+    if (activeCompanyId) {
+      fetchEvents();
+      fetchVehiclesAndDrivers();
+      fetchSalesData();
+    }
+  }, [activeCompanyId]);
 
   useEffect(() => {
     return () => {

@@ -330,7 +330,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     const feeBreakdown = calculateFees(ticketUnitPrice, eventFees);
 
     // Reutiliza exatamente o detalhamento de taxas do ticket padrão para manter consistência visual e de exportação.
-    const ticketFees = feeBreakdown.appliedFees.map((fee) => ({
+    const ticketFees = feeBreakdown.fees.map((fee) => ({
       name: fee.name,
       amount: fee.amount,
     }));
