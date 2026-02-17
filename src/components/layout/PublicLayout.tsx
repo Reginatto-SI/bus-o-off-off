@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Building2, Menu, Search, ShoppingBag, Ticket } from 'lucide-react';
+import { Link, NavLink } from 'react-router-dom';
+import { Building2, Menu, Search, Settings, Ticket } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
 import { Button } from '@/components/ui/button';
@@ -13,12 +13,22 @@ interface PublicLayoutProps {
 export function PublicLayout({ children }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Comentário: centralizamos classes do link desktop para manter estilo consistente e facilitar suporte futuro.
+  const desktopNavItemClass =
+    'group inline-flex items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-all hover:text-foreground hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+
   // Comentário: reutilizamos os ícones Lucide já adotados no projeto para manter padrão visual moderno no mobile.
   const mobileLinks = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
-    { to: '/vendedor/minhas-vendas', label: 'Área do Vendedor', icon: ShoppingBag },
     { to: '/login', label: 'Área Administrativa', icon: Building2 },
+  ];
+
+  // Comentário: usamos `end` apenas quando necessário para evitar múltiplos itens ativos em rotas aninhadas.
+  // Comentário: removemos o atalho direto de vendedor no header para centralizar o acesso via Área Administrativa.
+  const desktopLinks = [
+    { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Ticket, end: false },
+    { to: '/login', label: 'Área Administrativa', icon: Settings, end: true },
   ];
 
   return (
@@ -31,25 +41,24 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <Logo size="md" className="sm:[&>img]:h-14" />
             </Link>
 
-            <div className="hidden sm:flex items-center gap-4">
-              <Link
-                to="/consultar-passagens"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Minhas Passagens
-              </Link>
-              <Link
-                to="/vendedor/minhas-vendas"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Área do Vendedor
-              </Link>
-              <Link
-                to="/login"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Área Administrativa
-              </Link>
+            <div className="hidden sm:flex items-center gap-5">
+              {desktopLinks.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `${desktopNavItemClass} ${
+                      isActive
+                        ? 'text-foreground underline underline-offset-4 decoration-1 decoration-foreground/60'
+                        : ''
+                    }`
+                  }
+                >
+                  <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
             </div>
 
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
