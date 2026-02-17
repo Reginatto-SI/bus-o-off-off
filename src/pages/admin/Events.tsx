@@ -74,6 +74,7 @@ import {
   Archive,
   ArchiveRestore,
   DollarSign,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
@@ -238,6 +239,11 @@ export default function Events() {
   const [feeForm, setFeeForm] = useState({ name: '', fee_type: 'fixed' as 'fixed' | 'percent', value: '', is_active: true });
   const [savingFee, setSavingFee] = useState(false);
 
+  // Gate Stripe para monetização: bloqueia criação/publicação sem conta conectada.
+  const [stripeGateOpen, setStripeGateOpen] = useState(false);
+  const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeGatePendingAction, setStripeGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
+
   // Main form
   const [form, setForm] = useState({
     name: '',
@@ -278,6 +284,97 @@ export default function Events() {
   }, [form.name, form.date, form.city]);
 
   const isGeralComplete = geralMissingFields.length === 0;
+
+  const checkStripeConnection = async () => {
+    if (!activeCompanyId) {
+      toast.error('Empresa não selecionada');
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('companies')
+      .select('stripe_account_id, stripe_onboarding_complete')
+      .eq('id', activeCompanyId)
+      .single();
+
+    if (error) {
+      toast.error('Não foi possível validar a conexão Stripe da empresa');
+      return false;
+    }
+
+    return Boolean(data?.stripe_account_id && data?.stripe_onboarding_complete);
+  };
+
+  const handleConnectStripeFromGate = async () => {
+    if (!activeCompanyId) {
+      toast.error('Empresa não selecionada');
+      return;
+    }
+
+    setStripeConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { company_id: activeCompanyId },
+      });
+
+      if (error) {
+        const errData = data || {};
+        throw new Error(errData.error || error.message);
+      }
+
+      if (data?.already_complete) {
+        toast.success('Sua empresa já está conectada ao Stripe.');
+      }
+
+      if (data?.onboarding_url) {
+        // Fluxo em mesma aba para retorno automático ao sistema após finalizar onboarding.
+        window.location.href = data.onboarding_url;
+        return;
+      }
+
+      const connected = await checkStripeConnection();
+      if (connected) {
+        setStripeGateOpen(false);
+      }
+    } catch (err: any) {
+      console.error('Erro ao iniciar Stripe Connect:', err);
+      toast.error(err?.message || 'Erro ao conectar com Stripe. Tente novamente.');
+    } finally {
+      setStripeConnecting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!stripeGateOpen) return;
+
+    const revalidateStripeStatus = async () => {
+      const connected = await checkStripeConnection();
+      if (!connected) return;
+
+      setStripeGateOpen(false);
+
+      // Continuidade automática: se estava tentando criar evento, abre modal de cadastro.
+      if (stripeGatePendingAction === 'create_event') {
+        resetForm();
+        setDialogOpen(true);
+      }
+
+      setStripeGatePendingAction(null);
+      toast.success('Stripe conectado com sucesso. Você já pode continuar.');
+    };
+
+    const onFocus = () => {
+      revalidateStripeStatus();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [stripeGateOpen, stripeGatePendingAction, activeCompanyId]);
   const hasAtLeastOneFleet = eventTrips.length > 0;
   const hasValidBoarding = eventBoardingLocations.some((boarding) => Boolean(boarding.trip_id));
   const hasTicketsRequirements = parseFloat(form.unit_price || '0') > 0;
@@ -714,14 +811,28 @@ export default function Events() {
   };
 
   // Handlers
-  const persistEvent = async (targetStatus: Event['status']) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
-      return { error: true, eventId: editingId, isNew: false };
+      return;
     }
 
-    // Status oficial "à venda" só pode ser definido quando checklist estiver válido.
-    if (targetStatus === 'a_venda' && !publishChecklist.valid) {
+    // Publicação gera receita: exige Stripe conectado antes de seguir.
+    if (form.status === 'a_venda') {
+      const hasStripe = await checkStripeConnection();
+      if (!hasStripe) {
+        setStripeGatePendingAction('publish_from_form');
+        setStripeGateOpen(true);
+        return;
+      }
+    }
+
+    setSaving(true);
+
+    // Validate if trying to publish
+    if (form.status === 'a_venda' && !publishChecklist.valid) {
       toast.error('Corrija os itens pendentes antes de publicar o evento');
       setActiveTab('publicacao');
       return { error: true, eventId: editingId, isNew: false };
@@ -1509,6 +1620,13 @@ export default function Events() {
   // Quick status change from card
   const handleQuickStatusChange = async (event: EventWithTrips, newStatus: Event['status']) => {
     if (newStatus === 'a_venda') {
+      const hasStripe = await checkStripeConnection();
+      if (!hasStripe) {
+        setStripeGatePendingAction(null);
+        setStripeGateOpen(true);
+        return;
+      }
+
       // Validate publish requirements
       const hasTrips = event.trips && event.trips.length > 0;
       const hasPrice = event.unit_price > 0;
@@ -1663,7 +1781,17 @@ export default function Events() {
           title="Eventos"
           description="Gerencie os eventos e viagens"
           actions={
-            <Button onClick={() => { resetForm(); setIsCreateWizardMode(true); setDialogOpen(true); }}>
+            <Button onClick={async () => {
+              const hasStripe = await checkStripeConnection();
+              if (!hasStripe) {
+                setStripeGatePendingAction('create_event');
+                setStripeGateOpen(true);
+                return;
+              }
+
+              resetForm();
+              setDialogOpen(true);
+            }}>
               <Plus className="h-4 w-4 mr-2" />
               Criar Evento
             </Button>
@@ -1880,7 +2008,17 @@ export default function Events() {
             title={filters.archiveState === 'archived' ? 'Nenhum evento arquivado' : 'Nenhum evento cadastrado'}
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
-              <Button onClick={() => { resetForm(); setIsCreateWizardMode(true); setDialogOpen(true); }}>
+              <Button onClick={async () => {
+                const hasStripe = await checkStripeConnection();
+                if (!hasStripe) {
+                  setStripeGatePendingAction('create_event');
+                  setStripeGateOpen(true);
+                  return;
+                }
+
+                resetForm();
+                setDialogOpen(true);
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar Evento
               </Button>
@@ -3417,7 +3555,54 @@ export default function Events() {
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+      </AlertDialog>
+
+      {/* Modal bloqueante para monetização: força Stripe antes de criar/publicar evento. */}
+      <Dialog open={stripeGateOpen} onOpenChange={(open) => {
+        if (!open) {
+          setStripeGateOpen(false);
+          setStripeGatePendingAction(null);
+          return;
+        }
+        setStripeGateOpen(open);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#635BFF]/10">
+              <ShieldCheck className="h-6 w-6 text-[#635BFF]" />
+            </div>
+            <DialogTitle className="text-center text-xl">Conecte sua conta Stripe para começar a vender</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Para receber os valores das passagens diretamente na sua conta bancária, é necessário conectar sua empresa ao Stripe. O processo é rápido e seguro.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setStripeGateOpen(false);
+                  setStripeGatePendingAction(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#635BFF] hover:bg-[#5A54E6] text-white"
+                onClick={handleConnectStripeFromGate}
+                disabled={stripeConnecting}
+              >
+                {stripeConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+                Conectar com Stripe
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
         {/* Delete Trip Dialog with Validation */}
         <AlertDialog open={deleteTripDialogOpen} onOpenChange={setDeleteTripDialogOpen}>
