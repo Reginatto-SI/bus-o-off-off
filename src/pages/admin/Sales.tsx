@@ -69,6 +69,7 @@ import {
   Calendar,
   ChevronUp,
   ChevronDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
