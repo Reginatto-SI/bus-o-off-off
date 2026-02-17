@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Busão Off Off - Corporate SaaS Design System */
+/* Smartbus BR - Corporate SaaS Design System */
 
 @layer base {
   :root {
@@ -16,7 +16,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Brand Orange (Busão Off Off) */
+    /* Primary - Brand Orange (Smartbus BR) */
     --primary: 25 95% 53%;
     --primary-foreground: 0 0% 100%;
 
@@ -80,7 +80,7 @@
     --popover: 222 47% 11%;
     --popover-foreground: 210 20% 98%;
 
-    /* Primary - Brand Orange (Busão Off Off) */
+    /* Primary - Brand Orange (Smartbus BR) */
     --primary: 25 95% 58%;
     --primary-foreground: 0 0% 100%;
 
