@@ -147,7 +147,21 @@ export default function CompanyPage() {
         body: { company_id: editingId },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Edge function returns structured error in data even on non-2xx
+        const errData = data || {};
+        if (errData.action_url) {
+          toast.error(errData.error || 'Erro na configuração do Stripe', {
+            duration: 10000,
+            action: {
+              label: 'Abrir Stripe',
+              onClick: () => window.open(errData.action_url, '_blank'),
+            },
+          });
+          return;
+        }
+        throw new Error(errData.error || error.message);
+      }
 
       // Update capabilities status from response
       if (data?.capabilities_ready !== undefined) {
@@ -169,9 +183,9 @@ export default function CompanyPage() {
         window.open(data.onboarding_url, '_blank');
         toast.info('Complete o cadastro na aba do Stripe que foi aberta.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Stripe connect error:', err);
-      toast.error('Erro ao conectar Stripe. Tente novamente.');
+      toast.error(err?.message || 'Erro ao conectar Stripe. Tente novamente.');
     } finally {
       setStripeConnecting(false);
     }
