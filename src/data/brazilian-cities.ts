@@ -162,6 +162,8 @@ export const brazilianCities: BrazilianCity[] = [
   { name: 'Varginha', state: 'MG', label: 'Varginha — MG' },
   { name: 'Conselheiro Lafaiete', state: 'MG', label: 'Conselheiro Lafaiete — MG' },
   { name: 'Vespasiano', state: 'MG', label: 'Vespasiano — MG' },
+  // Cidade solicitada para operação de eventos/embarques
+  { name: 'Pedro Leopoldo', state: 'MG', label: 'Pedro Leopoldo — MG' },
   { name: 'Araguari', state: 'MG', label: 'Araguari — MG' },
   { name: 'Itabira', state: 'MG', label: 'Itabira — MG' },
   { name: 'Passos', state: 'MG', label: 'Passos — MG' },
