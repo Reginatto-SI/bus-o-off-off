@@ -100,8 +100,10 @@ serve(async (req) => {
     }
 
     // Cálculo da taxa da plataforma: usa platform_fee_percent variável por empresa (default 7.5%)
+    // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend)
     const feePercent = (company.platform_fee_percent ?? 7.5) / 100;
-    const totalAmountCents = Math.round(sale.unit_price * sale.quantity * 100);
+    const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
+    const totalAmountCents = Math.round(grossAmount * 100);
     const applicationFeeCents = Math.round(totalAmountCents * feePercent);
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
@@ -115,9 +117,9 @@ serve(async (req) => {
           price_data: {
             currency: "brl",
             product_data: {
-              name: `${sale.event?.name || "Evento"} — ${sale.quantity} passagem(ns)`,
+              name: `${sale.event?.name || "Evento"} — ${sale.quantity} passagem(ns)${grossAmount > sale.unit_price * sale.quantity ? ' (com taxas)' : ''}`,
             },
-            unit_amount: Math.round(sale.unit_price * 100),
+            unit_amount: Math.round((grossAmount / sale.quantity) * 100),
           },
           quantity: sale.quantity,
         },

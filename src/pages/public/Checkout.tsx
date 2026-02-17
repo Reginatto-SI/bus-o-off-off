@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, BoardingLocation, Seat, VehicleType } from '@/types/database';
+import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { SeatMap } from '@/components/public/SeatMap';
@@ -164,7 +165,7 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
-
+  const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
     setLoadingSeatStatus(true);
     setSeatStatusError(null);
@@ -223,6 +224,15 @@ export default function Checkout() {
             return;
           }
           setEvent(eventData);
+
+          // Fetch event fees
+          const { data: feesData } = await supabase
+            .from('event_fees')
+            .select('name, fee_type, value, is_active')
+            .eq('event_id', id!)
+            .eq('is_active', true)
+            .order('sort_order');
+          setEventFees((feesData ?? []) as EventFeeInput[]);
         }
         if (tripRes.data) setTrip(tripRes.data as Trip);
         if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
@@ -497,6 +507,9 @@ export default function Checkout() {
       }
     }
 
+    // Calculate fees
+    const feeBreakdown = calculateFees(event.unit_price ?? 0, eventFees);
+
     // Create sale
     const { data: sale, error: saleError } = await supabase
       .from('sales')
@@ -510,6 +523,7 @@ export default function Checkout() {
         customer_phone: payer.phone.replace(/\D/g, ''),
         quantity,
         unit_price: event.unit_price ?? 0,
+        gross_amount: feeBreakdown.unitPriceWithFees * quantity,
         status: 'reservado' as const,
         company_id: event.company_id,
       })
@@ -867,6 +881,30 @@ export default function Checkout() {
                 </RadioGroup>
               </div>
             )}
+
+            {/* Fee breakdown summary */}
+            {event && (() => {
+              const breakdown = calculateFees(event.unit_price ?? 0, eventFees);
+              const hasActiveFees = breakdown.fees.length > 0;
+              return (
+                <div className="rounded-lg border p-4 space-y-2 bg-muted/30">
+                  <div className="flex justify-between text-sm">
+                    <span>Passagem × {quantity}</span>
+                    <span>R$ {((event.unit_price ?? 0) * quantity).toFixed(2)}</span>
+                  </div>
+                  {hasActiveFees && breakdown.fees.map((fee, idx) => (
+                    <div key={idx} className="flex justify-between text-sm text-muted-foreground">
+                      <span>{fee.name} × {quantity}</span>
+                      <span>R$ {(fee.amount * quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-base font-semibold pt-1 border-t">
+                    <span>Total</span>
+                    <span>R$ {(breakdown.unitPriceWithFees * quantity).toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <Button
               className="w-full h-14 text-lg font-medium"

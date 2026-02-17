@@ -260,6 +260,60 @@ export type Database = {
           },
         ]
       }
+      event_fees: {
+        Row: {
+          company_id: string
+          created_at: string
+          event_id: string
+          fee_type: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          event_id: string
+          fee_type?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          fee_type?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_fees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_fees_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           allow_online_sale: boolean

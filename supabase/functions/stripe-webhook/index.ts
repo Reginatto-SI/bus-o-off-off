@@ -48,7 +48,7 @@ async function processPaymentConfirmed(
   // ── Cálculo de comissão e repasse ao parceiro ──
   const { data: sale } = await supabaseAdmin
     .from("sales")
-    .select("company_id, unit_price, quantity")
+    .select("company_id, unit_price, quantity, gross_amount")
     .eq("id", saleId)
     .single();
 
@@ -63,7 +63,8 @@ async function processPaymentConfirmed(
   const platformFeePercent = company?.platform_fee_percent ?? 7.5;
   const partnerSplitPercent = company?.partner_split_percent ?? 50;
 
-  const grossAmount = sale.unit_price * sale.quantity;
+  // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend no momento da venda)
+  const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
   const platformFeeTotal = grossAmount * (platformFeePercent / 100);
 
   const { data: partner } = await supabaseAdmin

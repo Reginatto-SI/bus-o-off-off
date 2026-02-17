@@ -31,12 +31,16 @@ export interface TicketCardData {
   companyCity: string | null;
   companyState: string | null;
   companyPrimaryColor: string | null;
-  // Company details (new)
+  // Company details
   companyCnpj: string | null;
   companyPhone: string | null;
   companyWhatsapp: string | null;
   companyAddress: string | null;
   companySlogan: string | null;
+  // Fees breakdown (optional)
+  fees?: { name: string; amount: number }[];
+  totalPaid?: number;
+  unitPrice?: number;
 }
 
 function maskCpf(cpf: string): string {
@@ -169,6 +173,30 @@ export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCar
                 </div>
               )}
             </div>
+
+            {/* Fee breakdown */}
+            {ticket.fees && ticket.fees.length > 0 && (
+              <div className="border-t pt-2 mt-2 space-y-1 text-xs">
+                {ticket.unitPrice != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Passagem</span>
+                    <span>R$ {ticket.unitPrice.toFixed(2)}</span>
+                  </div>
+                )}
+                {ticket.fees.map((fee, idx) => (
+                  <div key={idx} className="flex justify-between">
+                    <span className="text-muted-foreground">{fee.name}</span>
+                    <span>R$ {fee.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+                {ticket.totalPaid != null && (
+                  <div className="flex justify-between font-semibold text-sm pt-1 border-t">
+                    <span>Total</span>
+                    <span>R$ {ticket.totalPaid.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Actions */}

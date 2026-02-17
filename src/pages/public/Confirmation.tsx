@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateFees, type EventFeeInput, type FeeLineItem } from '@/lib/feeCalculator';
 import { Sale, TicketRecord } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +50,7 @@ export default function Confirmation() {
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
 
   useEffect(() => {
     const fetchSale = async () => {
@@ -91,8 +93,19 @@ export default function Confirmation() {
           .maybeSingle();
         setBoardingDepartureTime(selectedBoarding?.departure_time ?? null);
         setBoardingDepartureDate((selectedBoarding as any)?.departure_date ?? null);
-      }
 
+        // Fetch event fees for ticket display
+        const { data: feesData } = await supabase
+          .from('event_fees')
+          .select('name, fee_type, value, is_active')
+          .eq('event_id', saleRes.data.event_id)
+          .eq('is_active', true)
+          .order('sort_order');
+        if (feesData && feesData.length > 0 && saleRes.data) {
+          const breakdown = calculateFees(saleRes.data.unit_price, feesData as EventFeeInput[]);
+          setFeeLines(breakdown.fees);
+        }
+      }
       if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
       setLoading(false);
     };
@@ -130,32 +143,42 @@ export default function Confirmation() {
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(company?.cnpj);
 
-  const ticketCards: TicketCardData[] = tickets.map((t) => ({
-    ticketId: t.id,
-    qrCodeToken: t.qr_code_token,
-    passengerName: t.passenger_name,
-    passengerCpf: t.passenger_cpf,
-    seatLabel: t.seat_label,
-    boardingStatus: t.boarding_status,
-    eventName: sale?.event?.name || '',
-    eventDate: sale?.event?.date || '',
-    eventCity: sale?.event?.city || '',
-    boardingLocationName: sale?.boarding_location?.name || '',
-    boardingLocationAddress: sale?.boarding_location?.address || '',
-    boardingDepartureTime: boardingDepartureTime,
-    boardingDepartureDate: boardingDepartureDate,
-    saleStatus: (sale?.status || 'reservado') as SaleStatus,
-    companyName: companyDisplayName,
-    companyLogoUrl: company?.logo_url || null,
-    companyCity: company?.city || null,
-    companyState: company?.state || null,
-    companyPrimaryColor: company?.primary_color || null,
-    companyCnpj: company?.cnpj || null,
-    companyPhone: company?.phone || null,
-    companyWhatsapp: company?.whatsapp || null,
-    companyAddress: company?.address || null,
-    companySlogan: company?.slogan || null,
-  }));
+  const ticketCards: TicketCardData[] = tickets.map((t) => {
+    const unitPrice = sale?.unit_price ?? 0;
+    const totalPaidPerTicket = feeLines.length > 0 && sale
+      ? (sale.gross_amount ?? sale.unit_price * sale.quantity) / sale.quantity
+      : undefined;
+
+    return {
+      ticketId: t.id,
+      qrCodeToken: t.qr_code_token,
+      passengerName: t.passenger_name,
+      passengerCpf: t.passenger_cpf,
+      seatLabel: t.seat_label,
+      boardingStatus: t.boarding_status,
+      eventName: sale?.event?.name || '',
+      eventDate: sale?.event?.date || '',
+      eventCity: sale?.event?.city || '',
+      boardingLocationName: sale?.boarding_location?.name || '',
+      boardingLocationAddress: sale?.boarding_location?.address || '',
+      boardingDepartureTime: boardingDepartureTime,
+      boardingDepartureDate: boardingDepartureDate,
+      saleStatus: (sale?.status || 'reservado') as SaleStatus,
+      companyName: companyDisplayName,
+      companyLogoUrl: company?.logo_url || null,
+      companyCity: company?.city || null,
+      companyState: company?.state || null,
+      companyPrimaryColor: company?.primary_color || null,
+      companyCnpj: company?.cnpj || null,
+      companyPhone: company?.phone || null,
+      companyWhatsapp: company?.whatsapp || null,
+      companyAddress: company?.address || null,
+      companySlogan: company?.slogan || null,
+      fees: feeLines.length > 0 ? feeLines : undefined,
+      unitPrice: feeLines.length > 0 ? unitPrice : undefined,
+      totalPaid: totalPaidPerTicket,
+    };
+  });
 
   if (loading) {
     return (
