@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
@@ -46,7 +46,7 @@ const formatCnpjInput = (value: string) => {
 };
 
 export default function CompanyPage() {
-  const { activeCompanyId, user, isGerente, isOperador } = useAuth();
+  const { activeCompanyId, user, isGerente, isOperador, isDeveloper } = useAuth();
   const [searchParams] = useSearchParams();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -681,10 +681,16 @@ export default function CompanyPage() {
 
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
-                      {/* Campos de taxa da plataforma — somente Gerente */}
-                      {isGerente && (
+                      {/* Comentário: card de comissionamento é uma área restrita e visível apenas para developer. */}
+                      {isDeveloper && (
                         <div className="rounded-lg border p-4 space-y-4">
-                          <h3 className="font-medium">Comissionamento da Plataforma</h3>
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="font-medium">Comissionamento da Plataforma</h3>
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Eye className="h-3.5 w-3.5" />
+                              Developer Only
+                            </span>
+                          </div>
                           <p className="text-sm text-muted-foreground">
                             Configure a taxa cobrada pela plataforma e o percentual repassado ao parceiro.
                           </p>
