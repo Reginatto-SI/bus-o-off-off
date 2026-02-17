@@ -664,12 +664,10 @@ export default function Sales() {
           <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
         </div>
 
-        {/* KPIs de Comissão — somente Gerente */}
+        {/* KPI financeiro resumido: mantemos apenas o custo da plataforma para reduzir ruído visual. */}
         {isGerente && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <StatsCard label="Comissão Total" value={`R$ ${stats.totalPlatformFee.toFixed(2)}`} icon={DollarSign} />
-            <StatsCard label="Comissão Parceiro" value={`R$ ${stats.totalPartnerFee.toFixed(2)}`} icon={DollarSign} />
-            <StatsCard label="Líquido Plataforma" value={`R$ ${stats.totalPlatformNet.toFixed(2)}`} icon={DollarSign} variant="success" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+            <StatsCard label="Custo da Plataforma" value={`R$ ${stats.totalPlatformFee.toFixed(2)}`} icon={DollarSign} />
           </div>
         )}
 
@@ -769,9 +767,6 @@ export default function Sales() {
                      <TableHead>Qtd</TableHead>
                      <TableHead>Poltrona(s)</TableHead>
                      {canViewFinancials && <TableHead>Valor</TableHead>}
-                     {isGerente && <TableHead title="Comissão = Valor Bruto × Taxa da Empresa. Parceiro recebe X% da comissão. Plataforma retém o restante.">Comissão</TableHead>}
-                     {isGerente && <TableHead>Parceiro</TableHead>}
-                     {isGerente && <TableHead>Líq. Plat.</TableHead>}
                      <TableHead>Vendedor</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
@@ -824,21 +819,6 @@ export default function Sales() {
                         {canViewFinancials && (
                           <TableCell className="font-medium">
                             R$ {(sale.quantity * sale.unit_price).toFixed(2)}
-                          </TableCell>
-                        )}
-                        {isGerente && (
-                          <TableCell className="text-sm">
-                            {sale.platform_fee_total != null ? `R$ ${sale.platform_fee_total.toFixed(2)}` : '—'}
-                          </TableCell>
-                        )}
-                        {isGerente && (
-                          <TableCell className="text-sm">
-                            {sale.partner_fee_amount != null ? `R$ ${sale.partner_fee_amount.toFixed(2)}` : '—'}
-                          </TableCell>
-                        )}
-                        {isGerente && (
-                          <TableCell className="text-sm font-medium">
-                            {sale.platform_net_amount != null ? `R$ ${sale.platform_net_amount.toFixed(2)}` : '—'}
                           </TableCell>
                         )}
                         <TableCell>{sale.seller?.name ?? '-'}</TableCell>
