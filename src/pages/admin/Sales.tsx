@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -67,6 +68,7 @@ import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
+import { NewSaleModal } from '@/components/admin/NewSaleModal';
 
 // ── Types ──
 interface SalesFilters {
@@ -116,6 +118,7 @@ export default function Sales() {
   const [filters, setFilters] = useState<SalesFilters>(initialFilters);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
@@ -442,7 +445,7 @@ export default function Sales() {
 
     await supabase.from('sale_logs').insert({
       sale_id: sale.id,
-      action: 'status_alterado',
+      action: newStatus === 'pago' ? 'marked_as_paid' : 'status_alterado',
       description: `Status alterado: ${statusLabels[sale.status]} → ${statusLabels[newStatus]}`,
       old_value: sale.status,
       new_value: newStatus,
@@ -507,6 +510,9 @@ export default function Sales() {
           description="Gerenciamento de vendas e suporte ao cliente"
           actions={
             <>
+              <Button onClick={() => setNewSaleModalOpen(true)}>
+                + Nova venda
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel
@@ -657,7 +663,12 @@ export default function Sales() {
                         <TableCell>{sale.event?.name ?? '-'}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{sale.customer_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-medium">{sale.customer_name}</p>
+                              {sale.customer_name === 'BLOQUEIO' && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Bloqueio</Badge>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground">{sale.customer_cpf}</p>
                           </div>
                         </TableCell>
@@ -703,6 +714,13 @@ export default function Sales() {
             </CardContent>
           </Card>
         )}
+
+        {/* New Sale Modal */}
+        <NewSaleModal
+          open={newSaleModalOpen}
+          onOpenChange={setNewSaleModalOpen}
+          onSuccess={() => { setNewSaleModalOpen(false); fetchSales(); }}
+        />
 
         {/* Export Modals */}
         <ExportExcelModal
