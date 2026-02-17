@@ -378,9 +378,13 @@ export default function Sales() {
     const canceladas = sales.filter((s) => s.status === 'cancelado').length;
     const paidSales = sales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
-    const totalPartnerFee = paidSales.reduce((sum, s) => sum + (s.partner_fee_amount ?? 0), 0);
-    const totalPlatformNet = paidSales.reduce((sum, s) => sum + (s.platform_net_amount ?? 0), 0);
-    return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalPartnerFee, totalPlatformNet };
+    // Comissão calculada por venda paga, respeitando os filtros ativos já aplicados na query.
+    const totalSellersCommission = paidSales.reduce((sum, sale) => {
+      const saleGross = sale.quantity * sale.unit_price;
+      const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
+      return sum + (saleGross * sellerCommissionPercent) / 100;
+    }, 0);
+    return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalSellersCommission };
   }, [sales, totalSalesCount]);
 
   // ── Flat data for export ──
@@ -714,8 +718,9 @@ export default function Sales() {
 
         {/* KPI financeiro resumido: mantemos apenas o custo da plataforma para reduzir ruído visual. */}
         {isGerente && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <StatsCard label="Custo da Plataforma" value={`R$ ${stats.totalPlatformFee.toFixed(2)}`} icon={DollarSign} />
+            <StatsCard label="Comissão dos Vendedores" value={`R$ ${stats.totalSellersCommission.toFixed(2)}`} icon={Users} />
           </div>
         )}
 
