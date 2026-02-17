@@ -155,9 +155,22 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in create-connect-account:", error);
+
+    const message = error instanceof Error ? error.message : "Internal server error";
+    let userMessage = message;
+    let actionUrl: string | undefined;
+
+    if (message.includes("signed up for Connect")) {
+      userMessage = "O Stripe Connect ainda não está ativado na sua conta Stripe. Acesse o Dashboard do Stripe, vá em 'Connect' e ative a funcionalidade antes de continuar.";
+      actionUrl = "https://dashboard.stripe.com/connect/overview";
+    } else if (message.includes("responsibilities of managing losses") || message.includes("platform-profile")) {
+      userMessage = "Você precisa revisar e aceitar as responsabilidades do Stripe Connect no seu Dashboard. Acesse o link abaixo, complete o perfil da plataforma e tente novamente.";
+      actionUrl = "https://dashboard.stripe.com/settings/connect/platform-profile";
+    }
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: userMessage, action_url: actionUrl }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
