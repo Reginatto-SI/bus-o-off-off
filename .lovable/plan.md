@@ -1,122 +1,207 @@
 
 
-# Ajustes Finais — QR Code, Vendedor, Pos-Confirmacao e /consultar-passagens
+# Taxas Adicionais por Evento
 
 ## Resumo
 
-Quatro melhorias no modulo /admin/vendas: (1) acoes de gerar passagem PDF/Imagem no menu "...", (2) campo Vendedor opcional na Nova Venda, (3) tela de sucesso pos-confirmacao com QR Code e botoes de download, (4) garantir que vendas admin aparecam em /consultar-passagens.
+Criar sistema de taxas adicionais configuradas por evento (ex: Taxa de Embarque, Taxa Operacional). As taxas impactam o valor final em todos os fluxos: checkout publico (Stripe), venda manual admin, passagem virtual/PDF e relatorios.
 
 ---
 
-## Arquivos a modificar
+## 1. Banco de Dados — Nova tabela `event_fees`
 
-### 1. `src/pages/admin/Sales.tsx`
+Criar tabela `event_fees` com:
 
-**1a) Acoes "Gerar Passagem (PDF)" e "Gerar Passagem (Imagem)" no menu "..."**
+| Coluna | Tipo | Obrigatorio | Default |
+|--------|------|-------------|---------|
+| id | uuid | Sim | gen_random_uuid() |
+| event_id | uuid (FK events) | Sim | - |
+| company_id | uuid | Sim | - |
+| name | text | Sim | - |
+| fee_type | text | Sim | 'fixed' | ('fixed' ou 'percent') |
+| value | numeric | Sim | 0 |
+| is_active | boolean | Sim | true |
+| sort_order | integer | Sim | 0 |
+| created_at | timestamptz | Sim | now() |
+| updated_at | timestamptz | Sim | now() |
 
-Na funcao `getSaleActions`, adicionar duas novas acoes para vendas com `status !== 'cancelado'` e `customer_name !== 'BLOQUEIO'`:
-- "Gerar Passagem (PDF)" — abre um modal/dialog seletor de passageiro
-- "Gerar Passagem (Imagem)" — abre o mesmo seletor mas para imagem
+RLS:
+- Admins da empresa: ALL (usando `is_admin` + `user_belongs_to_company`)
+- Publico: SELECT onde evento esta `a_venda`
+- Usuarios da empresa: SELECT
 
-Logica do seletor de passageiro:
-- Ao clicar na acao, buscar tickets da venda (`supabase.from('tickets').select('*').eq('sale_id', sale.id)`)
-- Se 1 ticket: gerar diretamente sem seletor
-- Se multiplos: exibir dialog simples com lista (Nome + Poltrona) + opcao "Baixar todos (PDF)"
-- Para gerar, montar `TicketCardData` com dados da venda + empresa (mesma logica de Confirmation.tsx), renderizar QR invisivel com `QRCodeCanvas` offscreen, extrair base64 e chamar `generateTicketPdf` (PDF) ou reproduzir a logica de `handleDownloadImage` do `TicketCard` (Imagem)
-
-Novo state necessario:
-- `ticketGenSale: Sale | null` — venda selecionada para gerar passagem
-- `ticketGenMode: 'pdf' | 'image'` — modo selecionado
-- `ticketGenTickets: TicketRecord[]` — tickets da venda carregados
-- `ticketGenLoading: boolean`
-
-Novo componente inline (ou dialog dentro do mesmo arquivo):
-- Dialog "Gerar Passagem" com lista de passageiros e botoes de acao
-
-Para construir `TicketCardData` de cada ticket, buscar dados da empresa via `activeCompany` (ja disponivel no contexto) e dados do evento/embarque da venda (ja carregados no `sale` com joins). Para `boardingDepartureTime`, buscar de `event_boarding_locations` (mesma query do detail modal).
-
-**1b) Vendedor no modal de detalhes**
-
-Ja existe `InfoRow label="Vendedor"` no detalhe — esta OK. Nenhuma alteracao necessaria aqui.
+Trigger `update_updated_at_column` na tabela.
 
 ---
 
-### 2. `src/components/admin/NewSaleModal.tsx`
+## 2. Aba "Passagens" do Evento (`src/pages/admin/Events.tsx`)
 
-**2a) Campo Vendedor (opcional) na aba Venda Manual**
+Abaixo da secao "Configuracoes de Venda" (depois do grid com Preco e Limite), adicionar nova secao:
+
+**"Taxas Adicionais"**
+
+- Listagem das taxas do evento em cards compactos (nome, tipo, valor, status ativo/inativo)
+- Botao "+ Adicionar Taxa"
+- Cada taxa com acoes: editar, remover, toggle ativo/inativo
+- Dialog inline para adicionar/editar taxa com campos:
+  - Nome da taxa (text, obrigatorio)
+  - Tipo: Select com "Valor Fixo (R$)" ou "Percentual (%)"
+  - Valor (numerico)
+  - Status ativo/inativo (Switch)
+- Ao salvar evento, taxas ja sao persistidas diretamente (insert/update/delete em `event_fees`)
+- Disponivel apenas para eventos existentes (editingId), similar a embarques e frotas
+- Preview do calculo: "Para uma passagem de R$ X, as taxas totais serao R$ Y"
+
+---
+
+## 3. Funcao utilitaria de calculo (`src/lib/feeCalculator.ts` — novo)
+
+```typescript
+interface EventFee {
+  name: string;
+  fee_type: 'fixed' | 'percent';
+  value: number;
+  is_active: boolean;
+}
+
+interface FeeBreakdown {
+  fees: { name: string; amount: number }[];
+  totalFees: number;
+  unitPriceWithFees: number;
+}
+
+function calculateFees(unitPrice: number, fees: EventFee[]): FeeBreakdown
+```
+
+- Taxa percentual: `unitPrice * (fee.value / 100)`
+- Taxa fixa: `fee.value`
+- Apenas fees com `is_active === true`
+- Arredondamento para 2 casas decimais
+- Reutilizada em todos os fluxos (publico, admin, relatorios)
+
+---
+
+## 4. Checkout Publico (`src/pages/public/Checkout.tsx`)
+
+**Buscar taxas:**
+- Ao carregar dados do evento, buscar `event_fees` filtrado por `event_id` e `is_active = true`
+
+**Calculo:**
+- Usar `calculateFees(event.unit_price, fees)` para obter o preco unitario com taxas
+- `unit_price` da sale continua sendo o preco base (passagem)
+- Novo campo `gross_amount` = `(unitPriceWithFees * quantity)` — ja existe na tabela `sales`
+
+**Exibicao antes do pagamento:**
+- Abaixo do bloco de resumo (local + horario + quantidade), adicionar card de resumo financeiro:
+  - Passagem: R$ X × N = R$ total_base
+  - Taxa de Embarque: R$ Y × N = R$ total_taxa1
+  - Taxa Operacional: Z% = R$ total_taxa2
+  - **Total: R$ total_final**
+
+**Envio ao Stripe:**
+- No insert da sale: `unit_price` = preco base, `gross_amount` = total com taxas
+- Na edge function `create-checkout-session`: usar `gross_amount / quantity` como `unit_amount` na line_item do Stripe (ou calcular o total correto)
+- `application_fee_amount` calculado sobre o `gross_amount` (valor total pago)
+
+---
+
+## 5. Edge Function `create-checkout-session`
+
+Ajustar para considerar taxas:
+
+- Buscar `event_fees` ativas do evento
+- Calcular valor total incluindo taxas
+- Usar esse valor total no `line_items` do Stripe (price_data.unit_amount)
+- Comissao da plataforma: calcular sobre valor total final (como ja esta)
+- Sem alterar logica de split — apenas o valor base muda
+
+Alternativa mais simples: como o frontend ja grava `gross_amount` na sale, a edge function pode usar `sale.gross_amount` para calcular o total em vez de `unit_price * quantity`. Isso evita duplicar a busca de taxas na edge function.
+
+**Abordagem escolhida:** Usar `gross_amount` da sale (ja calculado com taxas pelo frontend). A edge function so precisa:
+- `totalAmountCents = Math.round(sale.gross_amount * 100)` (em vez de `sale.unit_price * sale.quantity * 100`)
+- `unit_amount` da line_item = `Math.round((sale.gross_amount / sale.quantity) * 100)`
+- Descricao da line_item incluir "(com taxas)" se houver taxas
+
+---
+
+## 6. Webhook (`stripe-webhook/index.ts`)
+
+- Na funcao `processPaymentConfirmed`, o `grossAmount` ja vem da sale: usar `sale.gross_amount` diretamente (ja foi calculado com taxas)
+- Ajustar para nao recalcular: `const grossAmount = sale.gross_amount || (sale.unit_price * sale.quantity)`
+
+---
+
+## 7. Venda Manual Admin (`src/components/admin/NewSaleModal.tsx`)
+
+**Buscar taxas:**
+- Ao selecionar evento, buscar `event_fees` ativas
+
+**Calculo:**
+- Usar `calculateFees()` com o `unitPrice` digitado (pode ser diferente do preco do evento na venda manual)
+- Exibir breakdown no Step 3:
+  - Valor da passagem: R$ X
+  - Taxa de Embarque: R$ Y
+  - Total por passageiro: R$ Z
+  - Total geral (× N assentos): R$ W
+
+**Gravacao:**
+- `unit_price` = preco base da passagem
+- `gross_amount` = total com taxas × quantidade
+
+---
+
+## 8. Passagem Virtual e PDF
+
+**TicketCardData** — adicionar campo opcional:
+- `fees?: { name: string; amount: number }[]`
+- `totalPaid?: number`
+
+**TicketCard (`src/components/public/TicketCard.tsx`):**
+- Se `fees` existir e nao estiver vazio, exibir abaixo das infos do evento:
+  - Passagem: R$ X
+  - Cada taxa listada: R$ Y
+  - Total: R$ Z
+
+**ticketVisualRenderer.ts:**
+- Adicionar secao de taxas no canvas renderizado (entre info do evento e rodape)
+- Mesmo layout: label + valor alinhado a direita
+
+**Telas que montam TicketCardData:**
+- `Confirmation.tsx` — buscar fees do evento e incluir no TicketCardData
+- `TicketLookup.tsx` — buscar fees do evento e incluir
+- `Sales.tsx` (geracao de passagem) — buscar fees e incluir
+- `NewSaleModal.tsx` (pos-confirmacao) — ja tem fees carregadas, incluir
+
+---
+
+## 9. Relatorios (`src/pages/admin/SalesReport.tsx`)
+
+- Receita Bruta (`gross_amount`) ja inclui taxas — nao precisa de ajuste no calculo dos KPIs
+- Comissao da plataforma calculada sobre `gross_amount` — ja esta correto
+- Nenhuma mudanca necessaria se `gross_amount` ja esta sendo usado como base
+
+Verificar: se os KPIs usam `unit_price * quantity` em vez de `gross_amount`, ajustar para usar `gross_amount`.
+
+---
+
+## 10. Type updates (`src/types/database.ts`)
 
 Adicionar:
-- State `sellers` (lista de vendedores ativos da empresa) — fetch ao abrir modal
-- State `selectedSellerId` (string, vazio por padrao)
-- No step 3, aba `manual`, adicionar Select "Vendedor (opcional)" na mesma grid da forma de recebimento e valor unitario (3 colunas: Recebimento / Valor / Vendedor)
-- No `handleConfirm`, incluir `seller_id: selectedSellerId || null` no insert de `sales`
-- Reset `selectedSellerId` ao abrir/fechar modal
 
-Fetch de vendedores:
+```typescript
+export interface EventFee {
+  id: string;
+  event_id: string;
+  company_id: string;
+  name: string;
+  fee_type: 'fixed' | 'percent';
+  value: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
 ```
-supabase.from('sellers').select('id, name')
-  .eq('company_id', activeCompanyId)
-  .eq('status', 'ativo')
-  .order('name')
-```
-
-**2b) Tela de sucesso pos-confirmacao com QR Code**
-
-Apos `handleConfirm` com sucesso, em vez de fechar o modal imediatamente:
-- Adicionar state `confirmationData: { saleId: string; tickets: TicketRecord[]; event: Event; boardingName: string; departureTime: string | null } | null`
-- Apos insert de tickets, re-buscar os tickets recem-criados (para pegar `qr_code_token` gerado pelo banco)
-- Setar `confirmationData` com os dados
-- Exibir step 4 (sucesso) no modal:
-  - Icone de sucesso
-  - Para cada ticket: QR Code renderizado via `QRCodeCanvas`, nome, poltrona, evento
-  - Botoes: "Baixar PDF" e "Baixar Imagem" (reutilizando `generateTicketPdf` e logica do `TicketCard`)
-  - Botao "Fechar" que chama `onSuccess()`
-- Se multiplos tickets: navegacao por passageiro (tabs ou scroll)
-- Construir `TicketCardData` para cada ticket usando dados da empresa via `activeCompany` (precisara receber como prop ou buscar)
-
-Prop adicional necessaria: `company` (dados da empresa ativa, para montar TicketCardData com branding).
-Alterar em `Sales.tsx`: passar `company={activeCompany}` para `NewSaleModal`.
-
-**2c) Nao fechar modal no onSuccess atual**
-
-Alterar fluxo: `onSuccess` so e chamado ao clicar "Fechar" no step de sucesso. O `toast.success` continua, mas o modal permanece aberto mostrando as passagens.
-
----
-
-### 3. Verificacao — /consultar-passagens (TicketLookup.tsx)
-
-Analisando o codigo atual de `TicketLookup.tsx`:
-- A busca e feita por `tickets.passenger_cpf` com join em `sales` e filtro por `trip.event_id`
-- **Nao ha filtro por status** — retorna todos os tickets (pago, reservado, cancelado)
-- **Nao ha filtro por origem** — qualquer ticket criado (admin ou publico) aparece
-
-**Conclusao: a query atual ja funciona corretamente para vendas admin.** O unico requisito e que os dados estejam corretamente inseridos (passenger_cpf limpo, trip_id correto, event_id via trip). A insercao no `NewSaleModal` ja faz isso corretamente:
-- `passenger_cpf` e salvo limpo (`.replace(/\D/g, '')`)
-- `trip_id` e setado
-- `sale_id` aponta para sale com `event_id`
-- `qr_code_token` e gerado pelo default do banco
-
-**Nenhuma alteracao necessaria em TicketLookup.tsx.**
-
-Porem, ha um detalhe: o `TicketLookup` busca eventos que possuem tickets, usando uma cadeia `tickets -> trips -> events`. Para vendas admin, os tickets possuem `trip_id` valido, entao o evento aparecera no dropdown. Tudo OK.
-
----
-
-## Detalhes tecnicos
-
-**Dependencia para gerar QR offscreen no Admin:**
-Para gerar PDF/Imagem no menu "...", sera necessario renderizar um `QRCodeCanvas` invisivel (offscreen) para extrair o base64. Abordagem: renderizar dentro do dialog de selecao de passageiro com `style={{ display: 'none' }}` e usar ref para capturar.
-
-**TicketCardData no Admin:**
-Para montar o objeto completo para o gerador de PDF, os dados da empresa vem de `activeCompany` (ja disponivel em Sales.tsx via `useAuth`). Os dados do evento e embarque vem do `sale` (ja com joins). O `boardingDepartureTime` precisa de fetch extra (mesma query usada no openDetail).
-
-**Fluxo resumido do Step 4 (sucesso):**
-1. Insert sale + tickets
-2. Re-fetch tickets recem-criados (para pegar qr_code_token)
-3. Fetch boarding departure time
-4. Montar array de TicketCardData
-5. Exibir no modal com QR + botoes de download
-6. Ao clicar "Fechar", chamar onSuccess()
 
 ---
 
@@ -124,10 +209,26 @@ Para montar o objeto completo para o gerador de PDF, os dados da empresa vem de 
 
 | Arquivo | Tipo |
 |---------|------|
+| Migracao SQL (event_fees + RLS) | Novo |
+| `src/types/database.ts` | Modificado |
+| `src/lib/feeCalculator.ts` | Novo |
+| `src/pages/admin/Events.tsx` | Modificado |
+| `src/pages/public/Checkout.tsx` | Modificado |
 | `src/components/admin/NewSaleModal.tsx` | Modificado |
+| `src/components/public/TicketCard.tsx` | Modificado |
+| `src/lib/ticketVisualRenderer.ts` | Modificado |
+| `supabase/functions/create-checkout-session/index.ts` | Modificado |
+| `supabase/functions/stripe-webhook/index.ts` | Modificado |
+| `src/pages/public/Confirmation.tsx` | Modificado |
+| `src/pages/public/TicketLookup.tsx` | Modificado |
 | `src/pages/admin/Sales.tsx` | Modificado |
+| `src/pages/admin/SalesReport.tsx` | Verificar/Modificar |
 
-## Sem alteracoes de banco
+## Regras de seguranca
 
-Dados e tabelas existentes sao suficientes. TicketLookup.tsx nao precisa de ajuste.
+- Taxas nao afetam vendas ja concluidas (retroatividade zero)
+- Stripe recebe valor final correto via `gross_amount`
+- Split e comissao da plataforma calculados sobre valor final — sem alteracao na logica existente
+- Venda manual nao chama Stripe — apenas calculo interno
+- RLS garante que apenas admins da empresa gerenciam taxas
 
