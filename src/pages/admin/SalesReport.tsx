@@ -67,7 +67,8 @@ interface EventSummaryRow {
   paidSales: number;
   cancelledSales: number;
   grossRevenue: number;
-  platformNetAmount: number;
+  platformFee: number;
+  sellersCommission: number;
 }
 
 const vehicleTypeLabels: Record<string, string> = {
@@ -250,14 +251,18 @@ export default function SalesReport() {
         paidSales: 0,
         cancelledSales: 0,
         grossRevenue: 0,
-        platformNetAmount: 0,
+        platformFee: 0,
+        sellersCommission: 0,
       };
 
       existing.totalSales += 1;
       existing.grossRevenue += sale.quantity * sale.unit_price;
       if (sale.status === 'pago') {
         existing.paidSales += 1;
-        existing.platformNetAmount += sale.platform_net_amount ?? 0;
+        existing.platformFee += sale.platform_fee_total ?? 0;
+        // Mantém a mesma regra dos KPIs para garantir consistência entre cards e tabela.
+        const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
+        existing.sellersCommission += ((sale.quantity * sale.unit_price) * sellerCommissionPercent) / 100;
       }
       if (sale.status === 'cancelado') existing.cancelledSales += 1;
 
@@ -299,7 +304,8 @@ export default function SalesReport() {
       paid_sales: row.paidSales,
       cancelled_sales: row.cancelledSales,
       gross_revenue: row.grossRevenue,
-      platform_net: row.platformNetAmount,
+      platform_fee: row.platformFee,
+      sellers_commission: row.sellersCommission,
     }));
   }, [eventSummary]);
 
@@ -328,7 +334,8 @@ export default function SalesReport() {
     ...(canViewFinancials
       ? [
           { key: 'gross_revenue', label: 'Receita Bruta', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
-          { key: 'platform_net', label: 'Receita Líq. Plataforma', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'platform_fee', label: 'Custo da Plataforma', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
         ]
       : []),
   ];
@@ -505,7 +512,8 @@ export default function SalesReport() {
                         <TableHead className="text-center">Pagas</TableHead>
                         <TableHead className="text-center">Canceladas</TableHead>
                         {canViewFinancials && <TableHead className="text-right">Receita Bruta</TableHead>}
-                        {canViewFinancials && <TableHead className="text-right">Receita Líq. Plataforma</TableHead>}
+                        {canViewFinancials && <TableHead className="text-right">Custo da Plataforma</TableHead>}
+                        {canViewFinancials && <TableHead className="text-right">Comissão dos Vendedores</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -519,7 +527,10 @@ export default function SalesReport() {
                             <TableCell className="text-right font-medium">R$ {row.grossRevenue.toFixed(2)}</TableCell>
                           )}
                           {canViewFinancials && (
-                            <TableCell className="text-right">R$ {row.platformNetAmount.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">R$ {row.platformFee.toFixed(2)}</TableCell>
+                          )}
+                          {canViewFinancials && (
+                            <TableCell className="text-right">R$ {row.sellersCommission.toFixed(2)}</TableCell>
                           )}
                         </TableRow>
                       ))}
