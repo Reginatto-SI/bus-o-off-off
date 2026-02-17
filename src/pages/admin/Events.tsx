@@ -12,7 +12,7 @@ import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
-import { parseCityLabel, formatCityLabel } from '@/data/brazilian-cities';
+import { parseCityLabel, formatCityLabel } from '@/lib/cityUtils';
 import {
   Dialog,
   DialogContent,

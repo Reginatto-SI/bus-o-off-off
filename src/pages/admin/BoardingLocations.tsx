@@ -14,7 +14,7 @@ import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown'
 import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelModal';
 import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
-import { formatCityLabel } from '@/data/brazilian-cities';
+import { formatCityLabel } from '@/lib/cityUtils';
 import {
   Dialog,
   DialogClose,
