@@ -41,7 +41,7 @@ import {
   List,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, parseISO, subDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -84,16 +84,15 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado',
 };
 
-const today = format(new Date(), 'yyyy-MM-dd');
-const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-
 const initialFilters: ReportFilters = {
   search: '',
   status: 'all',
   eventId: 'all',
   sellerId: 'all',
-  dateFrom: thirtyDaysAgo,
-  dateTo: today,
+  // Mantém o mesmo comportamento de /admin/vendas:
+  // sem recorte temporal implícito para evitar divergência de contagem/KPI.
+  dateFrom: '',
+  dateTo: '',
 };
 
 
@@ -213,8 +212,8 @@ export default function SalesReport() {
       filters.status !== 'all' ||
       filters.eventId !== 'all' ||
       filters.sellerId !== 'all' ||
-      filters.dateFrom !== thirtyDaysAgo ||
-      filters.dateTo !== today
+      filters.dateFrom !== '' ||
+      filters.dateTo !== ''
     );
   }, [filters]);
 
@@ -386,7 +385,8 @@ export default function SalesReport() {
           <StatsCard label="Total de Vendas" value={stats.total} icon={ShoppingCart} />
           <StatsCard label="Vendas Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
           <StatsCard label="Ticket Médio" value={`R$ ${stats.ticketMedio.toFixed(2)}`} icon={TrendingUp} />
-          <StatsCard label="Cancelamentos" value={`${stats.cancelPercent.toFixed(1)}%`} icon={Percent} variant={stats.cancelPercent > 10 ? 'destructive' : 'warning'} />
+          {/* Exibimos quantidade para manter semântica igual à tela /admin/vendas. */}
+          <StatsCard label="Cancelamentos" value={stats.canceladas} icon={Percent} variant={stats.cancelPercent > 10 ? 'destructive' : 'warning'} />
         </div>
 
         {canViewFinancials && (
