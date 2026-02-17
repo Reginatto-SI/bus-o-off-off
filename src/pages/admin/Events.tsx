@@ -164,8 +164,8 @@ export default function Events() {
   const [activeTab, setActiveTab] = useState('geral');
 
   // Post-create dialog
-  const [postCreateDialogOpen, setPostCreateDialogOpen] = useState(false);
-  const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+  const [isCreateWizardMode, setIsCreateWizardMode] = useState(false);
+  const [publishDecisionDialogOpen, setPublishDecisionDialogOpen] = useState(false);
 
   // Quick status change
   const [closeEventDialogOpen, setCloseEventDialogOpen] = useState(false);
@@ -282,14 +282,15 @@ export default function Events() {
   const hasValidBoarding = eventBoardingLocations.some((boarding) => Boolean(boarding.trip_id));
   const hasTicketsRequirements = parseFloat(form.unit_price || '0') > 0;
 
-  const getTabLockMessage = (tabValue: string): string | null => {
+  const getTabLockMessage = (tabValue: string, persistedEventId?: string | null): string | null => {
+    const effectiveEventId = persistedEventId ?? editingId;
     if (tabValue === 'geral') return null;
 
     if (tabValue === 'viagens') {
       if (!isGeralComplete) {
         return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Frotas.`;
       }
-      if (!editingId) {
+      if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Frotas.';
       }
       return null;
@@ -299,7 +300,7 @@ export default function Events() {
       if (!isGeralComplete) {
         return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Embarques.`;
       }
-      if (!editingId) {
+      if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Embarques.';
       }
       if (!hasAtLeastOneFleet) {
@@ -312,7 +313,7 @@ export default function Events() {
       if (!isGeralComplete) {
         return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Passagens.`;
       }
-      if (!editingId) {
+      if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Passagens.';
       }
       if (!hasAtLeastOneFleet) {
@@ -328,7 +329,7 @@ export default function Events() {
       if (!isGeralComplete) {
         return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Publicação.`;
       }
-      if (!editingId) {
+      if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Publicação.';
       }
       if (!hasAtLeastOneFleet) {
@@ -353,6 +354,13 @@ export default function Events() {
       return;
     }
     setActiveTab(nextTab);
+  };
+
+  const getNextWizardTab = (currentTab: string): string | null => {
+    const tabsOrder = ['geral', 'viagens', 'embarques', 'passagens', 'publicacao'];
+    const currentIndex = tabsOrder.indexOf(currentTab);
+    if (currentIndex < 0 || currentIndex === tabsOrder.length - 1) return null;
+    return tabsOrder[currentIndex + 1];
   };
 
   // Computed: can publish checklist - only requires IDA with boarding
@@ -706,22 +714,17 @@ export default function Events() {
   };
 
   // Handlers
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-
+  const persistEvent = async (targetStatus: Event['status']) => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
-      setSaving(false);
-      return;
+      return { error: true, eventId: editingId, isNew: false };
     }
 
-    // Validate if trying to publish
-    if (form.status === 'a_venda' && !publishChecklist.valid) {
+    // Status oficial "à venda" só pode ser definido quando checklist estiver válido.
+    if (targetStatus === 'a_venda' && !publishChecklist.valid) {
       toast.error('Corrija os itens pendentes antes de publicar o evento');
       setActiveTab('publicacao');
-      setSaving(false);
-      return;
+      return { error: true, eventId: editingId, isNew: false };
     }
 
     const eventData = {
@@ -731,7 +734,7 @@ export default function Events() {
       description: form.description || null,
       // Salva o conteúdo que será mostrado no bottom sheet do app público.
       public_info: form.public_info || null,
-      status: form.status,
+      status: targetStatus,
       unit_price: parseFloat(form.unit_price || '0'),
       max_tickets_per_purchase: parseInt(form.max_tickets_per_purchase || '5', 10),
       allow_online_sale: form.allow_online_sale,
@@ -741,6 +744,7 @@ export default function Events() {
 
     let error;
     let newEventId = editingId;
+    const isCreating = !editingId;
 
     if (editingId) {
       const { company_id: _companyId, ...updateData } = eventData;
@@ -797,27 +801,78 @@ export default function Events() {
           context: { action: editingId ? 'update' : 'insert', table: 'events', companyId: activeCompanyId, userId: user?.id },
         })
       );
-    } else {
-      toast.success(editingId ? 'Evento atualizado com sucesso' : 'Evento criado com sucesso');
-      
-      // If new event, switch to edit mode and show post-create dialog
-      if (!editingId && newEventId) {
-        setEditingId(newEventId);
-        loadEventData(newEventId);
-        setActiveTab('viagens');
-        setNewlyCreatedEventId(newEventId);
-        setPostCreateDialogOpen(true);
-      } else {
-        setDialogOpen(false);
-        resetForm();
-      }
-      fetchEvents();
-      fetchSalesData();
+      return { error: true, eventId: newEventId, isNew: false };
     }
+
+    if (isCreating && newEventId) {
+      setEditingId(newEventId);
+      await loadEventData(newEventId);
+    }
+
+    fetchEvents();
+    fetchSalesData();
+    return { error: false, eventId: newEventId, isNew: isCreating };
+  };
+
+  const handleWizardAdvance = async () => {
+    const nextTab = getNextWizardTab(activeTab);
+    if (!nextTab) return;
+
+    setSaving(true);
+    // Fluxo wizard: salva progresso técnico como rascunho sem pedir status ao usuário.
+    const result = await persistEvent('rascunho');
     setSaving(false);
+
+    if (result.error) return;
+
+    const lockMessage = getTabLockMessage(nextTab, result.eventId ?? null);
+    if (lockMessage) {
+      toast.error(lockMessage);
+      return;
+    }
+
+    setActiveTab(nextTab);
+  };
+
+  const handleFinalizeWizard = async (targetStatus: Event['status']) => {
+    setPublishDecisionDialogOpen(false);
+    setSaving(true);
+    const result = await persistEvent(targetStatus);
+    setSaving(false);
+
+    if (result.error) return;
+
+    toast.success(targetStatus === 'a_venda' ? 'Evento publicado com sucesso' : 'Evento salvo como rascunho');
+    setDialogOpen(false);
+    resetForm();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // No modo wizard de criação, o submit final é sempre mediado pelo popup de decisão de status.
+    if (isCreateWizardMode) {
+      if (activeTab !== 'publicacao') {
+        await handleWizardAdvance();
+        return;
+      }
+      setPublishDecisionDialogOpen(true);
+      return;
+    }
+
+    setSaving(true);
+    const result = await persistEvent(form.status);
+    setSaving(false);
+
+    if (result.error) return;
+
+    toast.success(editingId ? 'Evento atualizado com sucesso' : 'Evento criado com sucesso');
+    setDialogOpen(false);
+    resetForm();
   };
 
   const handleEdit = async (event: EventWithTrips) => {
+    setIsCreateWizardMode(false);
     setEditingId(event.id);
     setForm({
       name: event.name,
@@ -834,6 +889,7 @@ export default function Events() {
     });
     setActiveTab('geral');
     loadEventData(event.id);
+    setPublishDecisionDialogOpen(false);
     setDialogOpen(true);
   };
 
@@ -1378,6 +1434,8 @@ export default function Events() {
     // Limpamos o preview local pendente ao fechar para evitar manter arquivo órfão em memória.
     clearPendingImage();
     setEditingId(null);
+    setIsCreateWizardMode(false);
+    setPublishDecisionDialogOpen(false);
     setEventTrips([]);
     setEventBoardingLocations([]);
     setActiveTab('geral');
@@ -1519,16 +1577,6 @@ export default function Events() {
     setEventToClose(null);
   };
 
-  // Post-create: activate for sale
-  const handlePostCreateActivate = async () => {
-    if (!newlyCreatedEventId) return;
-    
-    // Since event was just created, it won't have trips/boardings yet
-    // So we just inform and keep as draft
-    toast.info('Complete as frotas e embarques para poder publicar o evento', { duration: 4000 });
-    setPostCreateDialogOpen(false);
-  };
-
   const getEventActions = (event: EventWithTrips): ActionItem[] => {
     const actions: ActionItem[] = [];
 
@@ -1615,7 +1663,7 @@ export default function Events() {
           title="Eventos"
           description="Gerencie os eventos e viagens"
           actions={
-            <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+            <Button onClick={() => { resetForm(); setIsCreateWizardMode(true); setDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-2" />
               Criar Evento
             </Button>
@@ -1832,7 +1880,7 @@ export default function Events() {
             title={filters.archiveState === 'archived' ? 'Nenhum evento arquivado' : 'Nenhum evento cadastrado'}
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
-              <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+              <Button onClick={() => { resetForm(); setIsCreateWizardMode(true); setDialogOpen(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar Evento
               </Button>
@@ -2940,12 +2988,18 @@ export default function Events() {
                     {isReadOnly ? 'Fechar' : 'Cancelar'}
                   </Button>
                   {!isReadOnly && (
-                    <Button type="submit" disabled={saving}>
+                    <Button
+                      type={isCreateWizardMode && activeTab !== 'publicacao' ? 'button' : 'submit'}
+                      disabled={saving}
+                      onClick={isCreateWizardMode && activeTab !== 'publicacao' ? () => { void handleWizardAdvance(); } : undefined}
+                    >
                       {saving ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Salvando...
                         </>
+                      ) : isCreateWizardMode ? (
+                        activeTab === 'publicacao' ? 'Salvar Evento' : 'Avançar'
                       ) : (
                         'Salvar'
                       )}
@@ -3478,24 +3532,21 @@ export default function Events() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Post-Create Decision Dialog */}
-        <AlertDialog open={postCreateDialogOpen} onOpenChange={setPostCreateDialogOpen}>
+        {/* Decisão final de status no wizard: só aparece na etapa Publicação. */}
+        <AlertDialog open={publishDecisionDialogOpen} onOpenChange={setPublishDecisionDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Evento criado com sucesso! 🎉</AlertDialogTitle>
+              <AlertDialogTitle>Salvar Evento</AlertDialogTitle>
               <AlertDialogDescription>
-                Deseja já colocar este evento à venda? Você precisará primeiro adicionar frotas e locais de embarque.
+                Deseja deixar este evento como rascunho ou colocar à venda agora?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setPostCreateDialogOpen(false);
-                toast.info('Continue configurando o evento nas abas de Frotas e Embarques');
-              }}>
-                Manter como Rascunho
+              <AlertDialogCancel onClick={() => { void handleFinalizeWizard('rascunho'); }}>
+                Salvar como Rascunho
               </AlertDialogCancel>
-              <AlertDialogAction onClick={handlePostCreateActivate}>
-                Configurar para Venda
+              <AlertDialogAction onClick={() => { void handleFinalizeWizard('a_venda'); }}>
+                Colocar À Venda
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
