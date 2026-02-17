@@ -63,12 +63,34 @@ import {
   History,
   Calendar,
   User,
+  Armchair,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+function formatCpfMask(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.slice(0, 3) + '.' + d.slice(3);
+  if (d.length <= 9) return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6);
+  return d.slice(0, 3) + '.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-' + d.slice(9);
+}
+
+function formatSeatLabels(labels: string[]): { display: string; full: string } {
+  if (!labels || labels.length === 0) return { display: '-', full: '-' };
+  const sorted = [...labels].sort((a, b) => {
+    const na = parseInt(a, 10);
+    const nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+  if (sorted.length <= 3) return { display: sorted.join(', '), full: sorted.join(', ') };
+  return { display: `${sorted.slice(0, 3).join(', ')} +${sorted.length - 3}`, full: sorted.join(', ') };
+}
 
 // ── Types ──
 interface SalesFilters {
@@ -119,6 +141,7 @@ export default function Sales() {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
+  const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
@@ -177,6 +200,21 @@ export default function Sales() {
     } else {
       setSales((data ?? []) as Sale[]);
     }
+
+    // Fetch seat labels for all sales
+    if (activeCompanyId) {
+      const { data: ticketData } = await supabase
+        .from('tickets')
+        .select('sale_id, seat_label')
+        .eq('company_id', activeCompanyId);
+      const map: Record<string, string[]> = {};
+      (ticketData ?? []).forEach((t: any) => {
+        if (!map[t.sale_id]) map[t.sale_id] = [];
+        map[t.sale_id].push(t.seat_label);
+      });
+      setSeatLabelsMap(map);
+    }
+
     setLoading(false);
   };
 
@@ -317,7 +355,7 @@ export default function Sales() {
   const openEditPassenger = (ticket: TicketRecord) => {
     setEditingTicket(ticket);
     setEditPassengerName(ticket.passenger_name);
-    setEditPassengerCpf(ticket.passenger_cpf);
+    setEditPassengerCpf(formatCpfMask(ticket.passenger_cpf));
   };
 
   const handleSavePassenger = async () => {
@@ -643,6 +681,7 @@ export default function Sales() {
                     <TableHead>Veículo</TableHead>
                     <TableHead>Local Embarque</TableHead>
                      <TableHead>Qtd</TableHead>
+                     <TableHead>Poltrona(s)</TableHead>
                      {canViewFinancials && <TableHead>Valor</TableHead>}
                      {isGerente && <TableHead title="Comissão = Valor Bruto × Taxa da Empresa. Parceiro recebe X% da comissão. Plataforma retém o restante.">Comissão</TableHead>}
                      {isGerente && <TableHead>Parceiro</TableHead>}
@@ -679,6 +718,23 @@ export default function Sales() {
                         </TableCell>
                         <TableCell>{sale.boarding_location?.name ?? '-'}</TableCell>
                         <TableCell>{sale.quantity}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const labels = seatLabelsMap[sale.id];
+                            const { display, full } = formatSeatLabels(labels ?? []);
+                            if (!labels || labels.length <= 3) return <span className="text-sm">{display}</span>;
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-sm cursor-help">{display}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p>{full}</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
+                        </TableCell>
                         {canViewFinancials && (
                           <TableCell className="font-medium">
                             R$ {(sale.quantity * sale.unit_price).toFixed(2)}
@@ -799,6 +855,14 @@ export default function Sales() {
                             value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
                           />
                           <InfoRow label="Quantidade" value={String(detailSale.quantity)} />
+                          <InfoRow
+                            label="Poltrona(s)"
+                            value={detailTickets.length > 0 ? detailTickets.map(t => t.seat_label).sort((a, b) => {
+                              const na = parseInt(a, 10); const nb = parseInt(b, 10);
+                              if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                              return a.localeCompare(b);
+                            }).join(', ') : '-'}
+                          />
                           {canViewFinancials && (
                             <>
                               <InfoRow label="Valor Unitário" value={`R$ ${Number(detailSale.unit_price).toFixed(2)}`} />
@@ -912,7 +976,7 @@ export default function Sales() {
               </div>
               <div className="space-y-2">
                 <Label>CPF</Label>
-                <Input value={editPassengerCpf} onChange={(e) => setEditPassengerCpf(e.target.value)} maxLength={14} />
+                <Input value={editPassengerCpf} onChange={(e) => setEditPassengerCpf(formatCpfMask(e.target.value))} maxLength={14} />
               </div>
             </div>
             <DialogFooter>
