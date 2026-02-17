@@ -197,7 +197,7 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper, userCompanies, activeCompany, switchCompany } = useAuth();
+  const { profile, userRole, signOut, isDeveloper } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
@@ -276,23 +276,7 @@ export function AdminSidebar() {
         </Accordion>
       </nav>
 
-      {/* Seletor de empresa exclusivo para developer */}
-      {isDeveloper && userCompanies.length > 1 && (
-        <div className="border-t border-sidebar-border bg-sidebar px-4 py-3">
-          <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
-            Empresa ativa
-          </label>
-          <select
-            value={activeCompany?.id ?? ''}
-            onChange={(e) => switchCompany(e.target.value)}
-            className="w-full rounded-md border border-sidebar-border bg-[#1E293B] px-2 py-1.5 text-xs text-sidebar-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            {userCompanies.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* A troca de empresa permanece centralizada no header para evitar duplicidade de controles. */}
 
       <div className="border-t border-sidebar-border bg-sidebar p-4">
         <div className="mb-3">
