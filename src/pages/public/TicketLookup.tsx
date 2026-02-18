@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
@@ -39,14 +39,8 @@ function formatEventDate(date: string): string {
 
 
 function formatCityState(city: string): string {
-  // Comentário: em alguns cadastros o campo cidade já vem como "Cidade — UF".
-  // Normalizamos para "Cidade/UF" para manter o padrão visual solicitado no dropdown.
   const cityStateMatch = city.match(/^(.*)\s[-–—]\s([A-Za-z]{2})$/);
-
-  if (!cityStateMatch) {
-    return city;
-  }
-
+  if (!cityStateMatch) return city;
   const [, cityName, state] = cityStateMatch;
   return `${cityName}/${state.toUpperCase()}`;
 }
@@ -73,6 +67,8 @@ export default function TicketLookup() {
   const [tickets, setTickets] = useState<TicketCardData[]>([]);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
+  // Controla quais saleIds estão sendo verificados no Stripe
+  const [refreshingSaleIds, setRefreshingSaleIds] = useState<Set<string>>(new Set());
 
   const { data: events, isLoading: eventsLoading } = useQuery({
     queryKey: ['ticket-lookup-events'],
@@ -104,9 +100,7 @@ export default function TicketLookup() {
       const { data: publicEvents } = await supabase
         .from('events')
         .select('id, name, date, city, status, is_archived')
-        // Comentário: no público mostramos somente eventos à venda.
         .eq('status', 'a_venda')
-        // Comentário: não mostrar eventos arquivados em listas públicas.
         .eq('is_archived', false)
         .in('id', eventIds);
 
@@ -115,13 +109,9 @@ export default function TicketLookup() {
 
       const availableEvents = (publicEvents || []).filter((event) => {
         const eventDeadline = getEventDeadlineDate(event, latestDepartureByEvent.get(event.id));
-
-        // Comentário: somente eventos dentro do prazo para consulta pública.
         return eventDeadline ? eventDeadline >= today : true;
       });
 
-      // Comentário: ordenação principal por data crescente (evento mais próximo primeiro)
-      // e desempate por nome para manter previsibilidade na listagem.
       return availableEvents.sort((a, b) => {
         const dateA = parseDateOnlyAsLocal(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
         const dateB = parseDateOnlyAsLocal(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
@@ -131,6 +121,75 @@ export default function TicketLookup() {
       });
     },
   });
+
+  // Verificação on-demand de status de pagamento no Stripe
+  const handleRefreshStatus = useCallback(async (saleId: string) => {
+    setRefreshingSaleIds((prev) => new Set(prev).add(saleId));
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-payment-status', {
+        body: { sale_id: saleId },
+      });
+      if (error) throw error;
+
+      const newStatus = data?.paymentStatus;
+      if (newStatus === 'pago') {
+        // Atualizar o status do ticket na lista
+        setTickets((prev) =>
+          prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus } : t))
+        );
+        toast({ title: 'Pagamento confirmado ✅' });
+      } else if (newStatus === 'processando') {
+        toast({ title: 'Pagamento ainda em processamento' });
+      } else if (newStatus === 'expirado') {
+        toast({ title: 'Sessão de pagamento expirada', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Erro ao verificar status', variant: 'destructive' });
+    } finally {
+      setRefreshingSaleIds((prev) => {
+        const next = new Set(prev);
+        next.delete(saleId);
+        return next;
+      });
+    }
+  }, [toast]);
+
+  // Verificação automática de vendas pendentes com checkout Stripe
+  const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[]) => {
+    // Coleta saleIds únicos que estão pendentes e têm checkout session
+    const pendingSaleIds = [...new Set(
+      cards
+        .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && t.stripeCheckoutSessionId && t.saleId)
+        .map((t) => t.saleId!)
+    )].slice(0, 3); // Máximo 3 verificações por busca
+
+    if (pendingSaleIds.length === 0) return;
+
+    // Verificar em paralelo
+    const results = await Promise.allSettled(
+      pendingSaleIds.map(async (saleId) => {
+        const { data } = await supabase.functions.invoke('verify-payment-status', {
+          body: { sale_id: saleId },
+        });
+        return { saleId, status: data?.paymentStatus };
+      })
+    );
+
+    // Atualizar tickets cujo status mudou para "pago"
+    const paidSaleIds = new Set<string>();
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.status === 'pago') {
+        paidSaleIds.add(result.value.saleId);
+      }
+    }
+
+    if (paidSaleIds.size > 0) {
+      setTickets((prev) =>
+        prev.map((t) => (t.saleId && paidSaleIds.has(t.saleId) ? { ...t, saleStatus: 'pago' as SaleStatus } : t))
+      );
+      toast({ title: 'Status de pagamento atualizado ✅' });
+    }
+  }, [toast]);
 
   const handleSearch = async () => {
     const cpfDigits = cpf.replace(/\D/g, '');
@@ -176,6 +235,8 @@ export default function TicketLookup() {
           boardingDepartureTime: t.boardingDepartureTime,
           boardingDepartureDate: t.boardingDepartureDate,
           saleStatus: (t.saleStatus || 'reservado') as SaleStatus,
+          saleId: t.saleId || undefined,
+          stripeCheckoutSessionId: t.stripeCheckoutSessionId || null,
           companyName: t.companyName,
           companyLogoUrl: t.companyLogoUrl,
           companyCity: t.companyCity,
@@ -192,6 +253,9 @@ export default function TicketLookup() {
       });
 
       setTickets(cards);
+
+      // Verificação automática de vendas pendentes (sem bloquear UI)
+      autoVerifyPendingSales(cards);
     } catch {
       toast({ title: 'Erro ao buscar passagens', variant: 'destructive' });
     }
@@ -205,7 +269,6 @@ export default function TicketLookup() {
   return (
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Comentário: ação de retorno destacada para o fluxo mobile entre consulta e compra. */}
         <div className="mb-4">
           <Button asChild variant="ghost" className="h-10 px-3 text-sm">
             <Link to="/eventos">
@@ -296,7 +359,11 @@ export default function TicketLookup() {
                           Empresa: {t.companyName}
                         </p>
                       )}
-                      <TicketCard ticket={t} />
+                      <TicketCard
+                        ticket={t}
+                        onRefreshStatus={handleRefreshStatus}
+                        isRefreshing={!!(t.saleId && refreshingSaleIds.has(t.saleId))}
+                      />
                     </div>
                   );
                 })}

@@ -162,6 +162,14 @@ export async function renderTicketVisual(
   ctx.font = '400 24px Inter, Arial, sans-serif';
   ctx.fillText(`CPF: ${maskCpf(ticket.passengerCpf)}`, cardX + 34, y);
 
+  // Código curto da venda (para suporte rápido)
+  if ((ticket as any).saleId) {
+    y += 30;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '400 18px monospace, Courier, sans-serif';
+    ctx.fillText(`Código: ${((ticket as any).saleId as string).slice(0, 8)}`, cardX + 34, y);
+  }
+
   y += 28;
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 2;
