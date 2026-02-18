@@ -1,108 +1,96 @@
 
-# Migrar Cidades para Base de Dados Global
+# Auto-atualizar status do Stripe apos retorno do onboarding
 
 ## Resumo
 
-Criar uma tabela global `cities` no banco de dados, migrar todas as cidades do arquivo estatico para ela via seed, e atualizar o componente `CityAutocomplete` para buscar do banco em vez do arquivo local. Usuarios autenticados (admin/operador) poderao cadastrar cidades novas diretamente pelo autocomplete quando nao encontrarem a desejada.
+Implementar atualizacao automatica do status da conexao Stripe na guia Pagamentos da tela /admin/empresa. Quando o usuario retorna do onboarding do Stripe, o sistema detecta o retorno e inicia um polling curto para atualizar o status sem necessidade de cliques adicionais.
 
 ---
 
-## Etapas de Implementacao
+## Mudancas
 
-### 1. Criar tabela `cities` (migration)
+Todas as mudancas serao feitas em um unico arquivo: `src/pages/admin/Company.tsx`
 
-```text
-Tabela: public.cities (global, sem company_id)
+### 1. Funcao centralizada `refreshStripeStatus`
 
-Colunas:
-- id (uuid, PK, default gen_random_uuid())
-- name (text, NOT NULL) — nome da cidade
-- state (char(2), NOT NULL) — UF
-- normalized_name (text, NOT NULL) — nome sem acentos, lowercase, para busca
-- is_active (boolean, default true)
-- source (text, default 'seed') — origem: 'seed', 'admin', 'user'
-- created_by (uuid, nullable) — quem criou
-- created_at (timestamptz, default now())
-- updated_at (timestamptz, default now())
+Extrair a logica de verificacao de status (hoje em `handleCheckStripeStatus`) para uma funcao reutilizavel que:
+- Chama a edge function `create-connect-account` com o `company_id`
+- Atualiza `capabilitiesReady` e `capabilitiesDetail`
+- Recarrega os dados da empresa (`fetchCompany`)
+- Retorna `true` se capabilities estiverem ativas
 
-Indice unico: (normalized_name, state) — evita duplicatas
-Indice de busca: GIN trigram em normalized_name (para buscas parciais rapidas)
-```
+### 2. Auto-refresh ao retornar do Stripe
 
-**Politicas RLS:**
-- SELECT: qualquer pessoa (incluindo anon) pode ler cidades ativas
-- INSERT: apenas usuarios autenticados com role admin (gerente/operador/developer)
-- UPDATE/DELETE: apenas developer
+O `useEffect` que ja detecta `?stripe=complete` nos searchParams (linha 125) sera expandido para:
+- Chamar `refreshStripeStatus()` imediatamente ao detectar o parametro
+- Iniciar polling automatico (descrito abaixo) se o status ainda nao estiver ativo
 
-### 2. Seed — popular com cidades do arquivo atual (migration)
+### 3. Polling com limite enquanto status pendente
 
-Inserir todas as ~430 cidades do arquivo `brazilian-cities.ts` como registros com `source = 'seed'`. A funcao de normalizacao (remover acentos) sera criada como funcao SQL auxiliar para gerar o `normalized_name` automaticamente.
+Novo `useEffect` que:
+- Ativa quando a empresa tem `stripe_account_id` mas `stripe_onboarding_complete` e `false` (ou `capabilitiesReady` e `false`)
+- Executa `refreshStripeStatus()` a cada 3 segundos
+- Para automaticamente apos 30 segundos (10 tentativas) ou quando o status mudar para conectado
+- Usa `clearInterval` no cleanup para nao vazar ao sair da tela
+- Mostra estado visual "Verificando conexao..." durante o polling
 
-### 3. Atualizar componente `CityAutocomplete`
+### 4. Estado de polling na UI
 
-**Mudancas:**
-- Remover import de `searchCities` do arquivo local
-- Buscar cidades via query no banco: `supabase.from('cities').select('*').ilike('normalized_name', '%termo%').eq('is_active', true).limit(15)`
-- Adicionar debounce de ~300ms na busca para nao sobrecarregar
-- Quando nao encontrar resultado e usuario for admin, mostrar botao "Cadastrar cidade" que faz INSERT direto na tabela
-- Manter `formatCityLabel` e `parseCityLabel` como helpers utilitarios (podem ficar no proprio componente ou em utils)
+Novo estado `isPolling` (boolean) para controlar a exibicao visual:
+- Quando `isPolling = true`: mostrar spinner + texto "Verificando vinculo com o Stripe..." no lugar do badge de status
+- Desabilitar o botao "Conectar Stripe" durante o polling
+- Ao terminar o polling (com ou sem sucesso): restaurar UI normal
 
-**Fluxo do componente atualizado:**
-1. Usuario digita no campo
-2. Apos 300ms sem digitar, busca no banco por `normalized_name`
-3. Exibe resultados
-4. Se nao encontrar: 
-   - Admin ve botao "Cadastrar 'Cidade — UF'"
-   - Nao-admin ve mensagem "Cidade nao encontrada, contate o administrador"
-5. Ao selecionar, retorna `{ city, state }` como hoje (sem quebrar interface)
+### 5. Botao manual de fallback
 
-### 4. Funcao SQL de normalizacao
+O botao "Verificar status" ja existe (linha 792 e 827). Ajustar para:
+- Aparecer tambem quando o status e "Pendente" (nao apenas quando capabilities estao falsas)
+- Usar a mesma funcao centralizada `refreshStripeStatus`
+- Label: "Atualizar status" quando pendente
 
-Criar funcao `normalize_city_name(text)` que:
-- Remove acentos (usando `unaccent` extension)
-- Converte para lowercase
-- Remove espacos extras
+### 6. Textos de status atualizados
 
-Usada como coluna gerada ou via trigger para manter `normalized_name` sempre atualizado.
-
-### 5. Atualizar telas consumidoras
-
-Nenhuma mudanca necessaria nas telas `Events.tsx`, `BoardingLocations.tsx`, `Company.tsx`, `MyAccount.tsx` — elas continuam usando o mesmo contrato `{ city, state }` do `CityAutocomplete`. As funcoes `formatCityLabel` e `parseCityLabel` serao mantidas.
-
-### 6. Limpar arquivo estatico
-
-Remover o arquivo `src/data/brazilian-cities.ts` e todos os imports dele. As funcoes utilitarias `formatCityLabel`, `parseCityLabel` e `brazilianStates` serao movidas para um arquivo utilitario (`src/lib/cityUtils.ts`).
-
----
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Acao |
-|---------|------|
-| Migration SQL | Criar tabela `cities` + extension unaccent + funcao normalize + seed + RLS |
-| `src/components/ui/city-autocomplete.tsx` | Reescrever para buscar do banco com debounce + cadastro inline |
-| `src/lib/cityUtils.ts` | Novo: mover `formatCityLabel`, `parseCityLabel`, `brazilianStates` |
-| `src/pages/admin/Events.tsx` | Atualizar imports de `brazilian-cities` para `cityUtils` |
-| `src/pages/admin/BoardingLocations.tsx` | Atualizar imports |
-| `src/pages/admin/Company.tsx` | Atualizar imports (se usar formatCityLabel) |
-| `src/pages/admin/MyAccount.tsx` | Atualizar imports (se usar formatCityLabel) |
-| `src/data/brazilian-cities.ts` | Remover |
+- Pendente: badge "Pendente" + texto "Estamos aguardando confirmacao do Stripe"
+- Conectado: badge "Conectado e Ativo" + texto "Conta Stripe vinculada com sucesso" (ja existe, manter)
 
 ---
 
 ## Detalhes Tecnicos
 
-### Performance
-- Indice trigram (`pg_trgm`) garante busca rapida mesmo com 5000+ cidades
-- Debounce no frontend evita queries excessivas
-- Limite de 15 resultados por busca
+### Polling seguro
 
-### Seguranca
-- RLS impede que usuarios nao-admin criem cidades arbitrarias
-- Indice unico impede duplicatas
-- Normalizacao impede variantes como "Sao Paulo" vs "São Paulo"
+```text
+useEffect:
+  - Condicao: company?.stripe_account_id && !capabilitiesReady && editingId
+  - Intervalo: 3000ms
+  - Maximo: 10 iteracoes (30s)
+  - Cleanup: clearInterval ao desmontar ou quando condicao mudar
+  - Nao dispara se ja estiver fazendo request (guard com ref)
+```
 
-### Compatibilidade
-- Interface do componente (`value`, `onChange`) nao muda
-- Eventos e locais existentes no banco nao sao afetados (continuam com texto livre)
-- Migracao e transparente para o usuario final
+### Funcao centralizada
+
+```text
+refreshStripeStatus(companyId: string): Promise<boolean>
+  - Chama supabase.functions.invoke('create-connect-account', { body: { company_id } })
+  - Atualiza estados: capabilitiesReady, capabilitiesDetail
+  - Chama fetchCompany()
+  - Retorna capabilities_ready (boolean)
+```
+
+### Fluxo completo
+
+```text
+1. Usuario clica "Conectar Stripe" -> abre aba do Stripe
+2. Usuario completa onboarding -> volta para /admin/empresa?stripe=complete
+3. useEffect detecta parametro -> chama refreshStripeStatus()
+4. Se ainda pendente -> inicia polling (3s x 10)
+5. Polling detecta capabilities ativas -> para polling, atualiza UI
+6. Se polling esgotar -> para, mostra botao "Atualizar status" como fallback
+```
+
+## Arquivos afetados
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/pages/admin/Company.tsx` | Adicionar funcao centralizada, polling com useEffect, estado isPolling, ajustar textos de UI |
