@@ -1,147 +1,171 @@
 
-# Ticket ID na Passagem + Sincronizacao do Status de Pagamento Stripe
+
+# Evolucao do Wizard de Criacao de Evento
 
 ## Resumo
 
-Duas melhorias criticas: (1) exibir um ID curto e copiavel em cada passagem para facilitar suporte, e (2) criar uma edge function `verify-payment-status` que consulta o Stripe e sincroniza o status real do pagamento, com polling automatico e botao de fallback manual.
+Transformar o modal de criacao/edicao de evento em um wizard guiado e profissional, adicionando indicador de progresso visual, rodape padronizado com navegacao (Voltar/Proximo/Salvar rascunho), validacao persistente por etapa, e popup celebrativo de conclusao. Tudo dentro do arquivo `src/pages/admin/Events.tsx`, sem criar telas ou entidades novas.
 
 ---
 
-## Parte 1: Ticket ID no Card da Passagem
+## O que ja existe (base solida)
 
-Exibir o `sale_id` (UUID) de forma amigavel: primeiros 8 caracteres com botao de copiar o UUID completo.
+O sistema ja possui:
+- Modal com 5 abas (Geral, Frotas, Embarques, Passagens, Publicacao)
+- `isCreateWizardMode` que ativa o modo wizard na criacao
+- `handleWizardAdvance()` que salva como rascunho e avanca
+- `getTabLockMessage()` que bloqueia abas sem pre-requisitos
+- `publishChecklist` com validacao consolidada
+- `publishDecisionDialogOpen` com popup de decisao final (simples)
 
-### Arquivos afetados
+---
+
+## Mudancas Planejadas
+
+### 1. Indicador de Progresso no Topo do Modal
+
+Acima das abas, adicionar uma barra de progresso e texto "Etapa X de 5":
+
+- Calcular o indice da aba atual (1 a 5)
+- Barra de progresso (`Progress`) com valor percentual (20% a 100%)
+- Texto: "Etapa 2 de 5 - Frotas"
+- Visivel apenas no modo wizard (`isCreateWizardMode`) e tambem na edicao
+
+Cada aba tera um indicador visual no TabsTrigger:
+- Concluida: icone de check verde
+- Atual: destaque azul (ja existe via `data-[state=active]`)
+- Bloqueada: opacidade reduzida + icone de cadeado (ja existe parcialmente)
+
+A logica de "concluida" sera:
+- Geral: `isGeralComplete`
+- Frotas: `hasAtLeastOneFleet`
+- Embarques: `hasValidBoarding`
+- Passagens: `hasTicketsRequirements`
+- Publicacao: `publishChecklist.valid`
+
+### 2. Rodape Padronizado do Modal
+
+Substituir o rodape atual por um layout com 3 acoes:
+
+**Lado esquerdo:**
+- Botao "Salvar rascunho" (discreto, variant `ghost`) - visivel quando nao esta na primeira etapa e nao e read-only. Salva como rascunho sem fechar o modal.
+
+**Lado direito:**
+- Botao "Voltar" (variant `outline`) - visivel a partir da segunda etapa. Volta para a aba anterior sem salvar.
+- Botao "Proximo" (variant `default`) - em todas as etapas exceto a ultima. Valida, salva e avanca.
+- Na ultima etapa (Publicacao): substituir "Proximo" por "Finalizar" que abre o popup celebrativo.
+
+No modo edicao (nao wizard): manter o botao "Salvar" existente.
+
+### 3. Validacao Persistente por Etapa
+
+Ao clicar "Proximo", se a validacao falhar:
+- Nao mostrar apenas um toast temporario
+- Exibir um bloco de alerta persistente (componente `Alert`) dentro da propria aba, listando os campos faltantes
+- O alerta desaparece automaticamente quando todos os campos forem preenchidos (reativo via estado)
+
+Estado novo: `showStepErrors: boolean` - ativado ao clicar "Proximo" com erros, desativado ao corrigir ou ao mudar de aba manualmente.
+
+Mensagens por etapa:
+- Geral: "Preencha: Nome, Data, Cidade" (conforme `geralMissingFields`)
+- Frotas: "Adicione pelo menos 1 frota/transporte"
+- Embarques: "Crie pelo menos 1 embarque vinculado a uma frota"
+- Passagens: "Defina o preco da passagem (maior que zero)"
+
+### 4. Popup Celebrativo de Conclusao
+
+Substituir o `AlertDialog` atual de decisao (`publishDecisionDialogOpen`) por um `Dialog` mais elaborado:
+
+- Icone grande de celebracao (confetti/rocket)
+- Titulo: "Parabens! Seu evento foi criado com sucesso."
+- Subtitulo: "Agora voce pode colocar seu evento online e comecar a vender."
+- 3 botoes empilhados:
+  1. **Publicar evento agora** (botao primario, destaque) - muda status para `a_venda`, fecha modal, toast de sucesso com icone de foguete
+  2. **Manter como rascunho** (botao outline) - salva como rascunho, fecha modal
+  3. **Ir para lista de eventos** (link discreto) - salva como rascunho e fecha
+
+A validacao de publicacao (checklist + Stripe) continua sendo aplicada ao clicar "Publicar evento agora". Se falhar, mostra mensagem de pendencia dentro do popup sem fechar.
+
+### 5. Ajustes na Navegacao entre Abas
+
+- Botao "Voltar" navega para a aba anterior na ordem do wizard
+- Novo helper: `getPreviousWizardTab(currentTab)` (inverso do `getNextWizardTab` existente)
+- O clique direto nas abas continua funcionando (com validacao de lock), mas o fluxo principal e pelo rodape
+
+### 6. Checklist na Aba Publicacao (evolucao)
+
+O checklist existente sera mantido e expandido:
+- Adicionar verificacao de Stripe (quando venda online ativa)
+- Item: "Conta de pagamento conectada" com icone check/x
+- Se Stripe nao conectado, mostrar botao inline para conectar (reutiliza `handleConnectStripeFromGate`)
+
+---
+
+## Detalhes Tecnicos
+
+### Novos estados
+
+```text
+showStepErrors: boolean       - Mostra erros persistentes na aba atual
+```
+
+### Novos helpers
+
+```text
+getPreviousWizardTab(currentTab: string): string | null
+getStepNumber(tab: string): number           - Retorna 1-5
+getStepLabel(tab: string): string            - "Geral", "Frotas", etc.
+isStepComplete(tab: string): boolean         - Verifica se a etapa esta concluida
+```
+
+### Fluxo do botao "Proximo"
+
+```text
+1. Ativar showStepErrors = true
+2. Verificar validacao da etapa atual
+3. Se invalido: mostrar alert persistente (showStepErrors ja ativo)
+4. Se valido: chamar handleWizardAdvance() (salva + avanca)
+5. Desativar showStepErrors ao avancar
+```
+
+### Fluxo do botao "Finalizar"
+
+```text
+1. Verificar publishChecklist.valid
+2. Se invalido: mostrar pendencias na aba Publicacao
+3. Se valido: salvar como rascunho e abrir popup celebrativo
+```
+
+---
+
+## Arquivo Afetado
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/ticket-lookup/index.ts` | Retornar `saleId: t.sale_id` e `stripeCheckoutSessionId: t.sale?.stripe_checkout_session_id` no resultado |
-| `src/components/public/TicketCard.tsx` | Adicionar `saleId` e `stripeCheckoutSessionId` na interface `TicketCardData`. Exibir "Codigo: XXXXXXXX" com icone copiar abaixo do CPF. Adicionar botao "Atualizar status" quando status nao for "pago" e existir `stripeCheckoutSessionId` |
-| `src/pages/public/TicketLookup.tsx` | Mapear `saleId` e `stripeCheckoutSessionId` do endpoint. Adicionar logica de verificacao automatica de status para tickets pendentes. Implementar callback `onStatusRefresh` para atualizar a UI |
-| `src/pages/public/Confirmation.tsx` | Passar `saleId` nos ticketCards. Integrar chamada a `verify-payment-status` apos 15s de polling sem sucesso. Adicionar botao fallback quando polling expirar |
-| `src/lib/ticketVisualRenderer.ts` | Exibir codigo curto na imagem renderizada |
-| `src/lib/ticketPdfGenerator.ts` | Nenhuma mudanca necessaria (usa renderTicketVisual que ja sera atualizado) |
+| `src/pages/admin/Events.tsx` | Adicionar indicador de progresso, rodape com navegacao, validacao persistente, popup celebrativo, helpers de navegacao |
 
-### UI do Ticket ID
+Nenhum arquivo novo sera criado. Todas as mudancas sao dentro do componente existente, reutilizando componentes UI ja disponiveis (`Progress`, `Alert`, `Dialog`, `Button`).
+
+---
+
+## Resultado Visual Esperado
 
 ```text
-CPF: ***.456.789-**
-Codigo: 23114cc2  [icone copiar]
++--------------------------------------------------+
+|  Novo Evento                                      |
++--------------------------------------------------+
+|  Etapa 2 de 5 - Frotas                            |
+|  [============================............] 40%   |
++--------------------------------------------------+
+|  [v Geral] [> Frotas] [x Embarques] [x Passag.]  |
++--------------------------------------------------+
+|                                                    |
+|  (conteudo da aba atual)                           |
+|                                                    |
+|  [!] Adicione pelo menos 1 frota  <- erro persist.|
+|                                                    |
++--------------------------------------------------+
+|  [Salvar rascunho]          [Voltar]  [Proximo]   |
++--------------------------------------------------+
 ```
 
-O botao copiar copia o UUID completo para a area de transferencia com feedback via toast ("Codigo copiado!").
-
----
-
-## Parte 2: Edge Function `verify-payment-status`
-
-### Logica
-
-Nova edge function publica que recebe `{ sale_id }` e:
-
-1. Busca a venda no banco (precisa ter `stripe_checkout_session_id`)
-2. Se status ja for "pago", retorna `{ paymentStatus: 'pago' }` sem consultar Stripe
-3. Busca a empresa para obter `stripe_account_id`
-4. Consulta a Checkout Session no Stripe (na conta conectada, usando header `stripeAccount`)
-5. Mapeia o status:
-   - `payment_status === 'paid'` => chama a mesma logica do webhook (`processPaymentConfirmed`) para marcar como pago, calcular comissao e fazer transfer. Retorna `{ paymentStatus: 'pago' }`
-   - `payment_status === 'unpaid'` e session nao expirada => retorna `{ paymentStatus: 'processando' }`
-   - Session expirada => retorna `{ paymentStatus: 'expirado' }`
-6. Guard de idempotencia: `.eq('status', 'reservado')` no update para nao processar duplicado
-
-### config.toml
-
-Adicionar entrada:
-```text
-[functions.verify-payment-status]
-verify_jwt = false
-```
-
-### Seguranca
-
-- Usa `SUPABASE_SERVICE_ROLE_KEY` e `STRIPE_SECRET_KEY` (ambos ja configurados)
-- `verify_jwt = false` porque consulta de passagens e publica (mesmo padrao do `ticket-lookup`)
-- Idempotencia garantida pelo guard `.eq('status', 'reservado')`
-- Rate limiting natural: frontend limita chamadas (maximo 3 vendas por busca, cooldown de 10s no botao manual)
-
----
-
-## Parte 3: Integracao no Frontend
-
-### TicketLookup.tsx (consultar passagens)
-
-Apos receber os tickets do `ticket-lookup`:
-- Para cada ticket com `saleStatus !== 'pago'` e que tenha `stripeCheckoutSessionId`, chamar `verify-payment-status` automaticamente (maximo 3 vendas distintas, em paralelo)
-- Se o status retornado mudar, atualizar o card na lista
-- Cada TicketCard com status nao-pago tera um botao "Atualizar status" que chama a verificacao on-demand com cooldown de 10s
-
-### Confirmation.tsx (tela de confirmacao)
-
-O polling atual (a cada 3s por 60 tentativas) consulta apenas o banco local. Ajustar para:
-- Apos 15s (5 tentativas) sem confirmar, chamar `verify-payment-status` uma vez para forcar sincronizacao
-- Quando polling expirar, mostrar botao "Atualizar status do pagamento" em vez de apenas texto generico
-- O botao chama `verify-payment-status` e atualiza a UI conforme resultado
-
-### TicketCard.tsx
-
-- Novo campo `saleId: string` na interface
-- Novo campo opcional `stripeCheckoutSessionId: string | null`
-- Novo callback opcional `onRefreshStatus?: (saleId: string) => Promise<void>`
-- Novo prop opcional `isRefreshing?: boolean`
-- Exibir "Codigo: XXXXXXXX" com botao copiar
-- Quando status nao for "pago" e existir `stripeCheckoutSessionId`: mostrar botao discreto "Atualizar status" que chama `onRefreshStatus`
-
----
-
-## Parte 4: Status Visual "Processando"
-
-Nao criar novo enum no banco. O banco continua com `reservado/pago/cancelado`. O status "processando" e apenas uma variante visual no frontend.
-
-### StatusBadge.tsx
-
-Adicionar entrada `processando` no `statusConfig` como uma string literal adicional no tipo (nao muda o enum do banco):
-- Label: "Processando"
-- Classe: badge azul/amber para diferenciar visualmente de "Reservado"
-
-### TicketCard.tsx
-
-Quando `saleStatus === 'reservado'` e `stripeCheckoutSessionId` existe, exibir badge "Processando" em vez de "Reservado" (indica que houve tentativa de pagamento mas ainda nao confirmou).
-
----
-
-## Parte 5: Ticket Visual Renderer
-
-### ticketVisualRenderer.ts
-
-Adicionar o codigo curto (`saleId.slice(0, 8)`) na imagem renderizada, abaixo do CPF, mantendo o mesmo padrao visual dos outros campos.
-
----
-
-## Fluxo Completo
-
-```text
-1. Usuario paga no Stripe -> volta para /confirmacao/{id}?payment=success
-2. Polling local (3s) verifica status no banco
-3. Se apos 15s ainda "reservado" -> chama verify-payment-status (forca sync com Stripe)
-4. Se Stripe confirma pago -> edge function atualiza banco -> polling local detecta -> UI atualiza
-5. Se Stripe ainda processando -> mostra badge "Processando" + botao manual
-6. Na tela /consultar-passagens -> ao buscar, verifica automaticamente vendas pendentes
-7. Botao "Atualizar status" sempre disponivel como fallback quando nao pago
-```
-
-## Arquivos a Criar/Modificar (resumo)
-
-| Arquivo | Acao |
-|---------|---------|
-| `supabase/functions/verify-payment-status/index.ts` | **Criar** — edge function que consulta Stripe e sincroniza status |
-| `supabase/config.toml` | Adicionar `[functions.verify-payment-status]` com `verify_jwt = false` |
-| `src/components/public/TicketCard.tsx` | Adicionar `saleId`, `stripeCheckoutSessionId`, codigo curto com copiar, botao "Atualizar status", badge "Processando" |
-| `src/components/ui/StatusBadge.tsx` | Adicionar variante visual "processando" |
-| `src/pages/public/TicketLookup.tsx` | Mapear novos campos, verificacao automatica de vendas pendentes, callback de refresh |
-| `src/pages/public/Confirmation.tsx` | Integrar `verify-payment-status` no polling (apos 15s), botao fallback, passar `saleId` |
-| `supabase/functions/ticket-lookup/index.ts` | Retornar `saleId` e `stripeCheckoutSessionId` |
-| `src/lib/ticketVisualRenderer.ts` | Exibir codigo curto na imagem |
-
-## Logica de Comissao na Edge Function
-
-A edge function `verify-payment-status` reutilizara a mesma logica do webhook (`processPaymentConfirmed`) para calcular comissao da plataforma e fazer transfer ao parceiro. Isso garante que mesmo quando o webhook falhar, a verificacao on-demand produza o mesmo resultado financeiro.
