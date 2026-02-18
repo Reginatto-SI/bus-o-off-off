@@ -101,6 +101,12 @@ function formatSeatLabels(labels: string[]): { display: string; full: string } {
   return { display: `${sorted.slice(0, 3).join(', ')} +${sorted.length - 3}`, full: sorted.join(', ') };
 }
 
+function formatEventDisplayName(event?: { name?: string | null; date?: string | null } | null): string {
+  const eventName = event?.name ?? '';
+  const eventDate = event?.date ? formatDateOnlyBR(event.date) : '';
+  return eventDate ? `${eventDate} - ${eventName}` : eventName;
+}
+
 // ── Types ──
 interface SalesFilters {
   search: string;
@@ -231,7 +237,7 @@ export default function Sales() {
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [
-    { key: 'created_at', label: 'Data', format: (v) => v ? format(parseISO(v), 'dd/MM/yy HH:mm', { locale: ptBR }) : '' },
+    { key: 'created_at', label: 'Data da Compra', format: (v) => v ? format(parseISO(v), 'dd/MM/yy HH:mm', { locale: ptBR }) : '' },
     { key: 'event_name', label: 'Evento' },
     { key: 'customer_name', label: 'Cliente' },
     { key: 'customer_cpf', label: 'CPF' },
@@ -447,7 +453,8 @@ export default function Sales() {
       const vehicle = (s.trip as any)?.vehicle;
       return {
         created_at: s.created_at,
-        event_name: s.event?.name ?? '',
+        // Mantém o mesmo padrão da tela/exportação: data do evento + nome.
+        event_name: formatEventDisplayName(s.event),
         customer_name: s.customer_name,
         customer_cpf: s.customer_cpf,
         customer_phone: s.customer_phone,
@@ -909,7 +916,7 @@ export default function Sales() {
                         <TableCell className="text-sm whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
-                        <TableCell>{sale.event?.name ?? '-'}</TableCell>
+                        <TableCell>{formatEventDisplayName(sale.event) || '-'}</TableCell>
                         <TableCell>
                           <div>
                             <div className="flex items-center gap-1.5">

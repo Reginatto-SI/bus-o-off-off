@@ -64,12 +64,19 @@ interface EventFilterOption {
 interface EventSummaryRow {
   eventId: string;
   eventName: string;
+  eventDisplayName: string;
   totalSales: number;
   paidSales: number;
   cancelledSales: number;
   grossRevenue: number;
   platformFee: number;
   sellersCommission: number;
+}
+
+function formatEventDisplayName(event?: { name?: string | null; date?: string | null } | null): string {
+  const eventName = event?.name ?? '';
+  const eventDate = event?.date ? formatDateOnlyBR(event.date) : '';
+  return eventDate ? `${eventDate} - ${eventName}` : eventName;
 }
 
 const vehicleTypeLabels: Record<string, string> = {
@@ -293,9 +300,11 @@ export default function SalesReport() {
     filteredSales.forEach((sale) => {
       const eventId = sale.event_id;
       const eventName = sale.event?.name ?? 'Evento desconhecido';
+      const eventDisplayName = formatEventDisplayName(sale.event) || eventName;
       const existing = map.get(eventId) ?? {
         eventId,
         eventName,
+        eventDisplayName,
         totalSales: 0,
         paidSales: 0,
         cancelledSales: 0,
@@ -326,7 +335,8 @@ export default function SalesReport() {
       const vehicle = (s.trip as any)?.vehicle;
       return {
         created_at: s.created_at,
-        event_name: s.event?.name ?? '',
+        // Exportações seguem o mesmo padrão visual da tabela para evitar divergência.
+        event_name: formatEventDisplayName(s.event),
         vehicle_info: vehicle
           ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
           : '-',
@@ -348,7 +358,7 @@ export default function SalesReport() {
   // ── Summary flat data for PDF ──
   const summaryFlatData = useMemo(() => {
     return eventSummary.map((row) => ({
-      event_name: row.eventName,
+      event_name: row.eventDisplayName,
       total_sales: row.totalSales,
       paid_sales: row.paidSales,
       cancelled_sales: row.cancelledSales,
@@ -360,7 +370,7 @@ export default function SalesReport() {
 
   // ── Export columns ──
   const detailedExportColumns: ExportColumn[] = [
-    { key: 'created_at', label: 'Data/Hora', format: (v) => v ? format(parseISO(v), 'dd/MM/yy HH:mm', { locale: ptBR }) : '' },
+    { key: 'created_at', label: 'Data da Compra', format: (v) => v ? format(parseISO(v), 'dd/MM/yy HH:mm', { locale: ptBR }) : '' },
     { key: 'event_name', label: 'Evento' },
     { key: 'vehicle_info', label: 'Veículo' },
     { key: 'boarding_location_name', label: 'Local Embarque' },
@@ -569,7 +579,7 @@ export default function SalesReport() {
                     <TableBody>
                       {eventSummary.map((row) => (
                         <TableRow key={row.eventId}>
-                          <TableCell className="font-medium">{row.eventName}</TableCell>
+                          <TableCell className="font-medium">{row.eventDisplayName}</TableCell>
                           <TableCell className="text-center">{row.totalSales}</TableCell>
                           <TableCell className="text-center">{row.paidSales}</TableCell>
                           <TableCell className="text-center">{row.cancelledSales}</TableCell>
@@ -597,7 +607,7 @@ export default function SalesReport() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data/Hora</TableHead>
+                        <TableHead>Data da Compra</TableHead>
                         <TableHead>Evento</TableHead>
                         <TableHead>Veículo</TableHead>
                         <TableHead>Local Embarque</TableHead>
@@ -618,7 +628,7 @@ export default function SalesReport() {
                             <TableCell className="text-sm whitespace-nowrap">
                               {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                             </TableCell>
-                            <TableCell>{sale.event?.name ?? '-'}</TableCell>
+                            <TableCell>{formatEventDisplayName(sale.event) || '-'}</TableCell>
                             <TableCell>
                               {vehicle
                                 ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
