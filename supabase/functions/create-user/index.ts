@@ -38,7 +38,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Create client with user's token to verify permissions
+    // Validate JWT using getClaims (compatible with signing-keys)
+    const token = authHeader.replace("Bearer ", "");
     const supabasePublicKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseUser = createClient(supabaseUrl, supabasePublicKey, {
       global: {
@@ -46,14 +47,16 @@ serve(async (req) => {
       },
     });
 
-    // Get requesting user
-    const { data: { user: requestingUser }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !requestingUser) {
+    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      console.error("getClaims error:", claimsError);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const requestingUser = { id: claimsData.claims.sub as string };
 
     // Verify requesting user is a gerente
     const { data: roles, error: rolesError } = await supabaseAdmin
