@@ -107,6 +107,7 @@ type SalesReportTab = (typeof SALES_REPORT_TABS)[keyof typeof SALES_REPORT_TABS]
 export default function SalesReport() {
   const { canViewFinancials, activeCompanyId, activeCompany } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
+  const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
   const [events, setEvents] = useState<EventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +175,53 @@ export default function SalesReport() {
     fetchSales();
     fetchFiltersData();
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    const fetchSeatLabels = async () => {
+      const saleIds = sales.map((sale) => sale.id);
+      if (saleIds.length === 0) {
+        setSeatLabelsMap({});
+        return;
+      }
+
+      let ticketQuery = supabase
+        .from('tickets')
+        .select('sale_id, seat_label')
+        .in('sale_id', saleIds);
+
+      if (activeCompanyId) {
+        ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
+      }
+
+      const { data: ticketData, error } = await ticketQuery;
+      if (error) {
+        console.error('Erro ao carregar poltronas para o relatório de vendas:', error);
+        setSeatLabelsMap({});
+        return;
+      }
+
+      const map: Record<string, string[]> = {};
+      (ticketData ?? []).forEach((ticket: { sale_id: string; seat_label: string | null }) => {
+        if (!ticket.seat_label) return;
+        if (!map[ticket.sale_id]) map[ticket.sale_id] = [];
+        map[ticket.sale_id].push(ticket.seat_label);
+      });
+      setSeatLabelsMap(map);
+    };
+
+    fetchSeatLabels();
+  }, [sales, activeCompanyId]);
+
+  const formatSeatLabels = (saleId: string) => {
+    const labels = seatLabelsMap[saleId];
+    if (!labels || labels.length === 0) return '—';
+
+    // Ordena e remove duplicidade para manter saída estável entre tabela e exportações.
+    const normalizedLabels = Array.from(new Set(labels)).sort((a, b) =>
+      a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }),
+    );
+    return normalizedLabels.join(', ');
+  };
 
   const formatEventFilterLabel = (event: EventFilterOption) => {
     // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
@@ -287,6 +335,7 @@ export default function SalesReport() {
         customer_cpf: s.customer_cpf,
         seller_name: s.seller?.name ?? '-',
         quantity: s.quantity,
+        seat_labels: formatSeatLabels(s.id),
         unit_price: s.unit_price,
         total_value: s.gross_amount ?? s.quantity * s.unit_price,
         status: s.status,
@@ -294,7 +343,7 @@ export default function SalesReport() {
         payment_id: s.stripe_payment_intent_id ?? '',
       };
     });
-  }, [filteredSales]);
+  }, [filteredSales, seatLabelsMap]);
 
   // ── Summary flat data for PDF ──
   const summaryFlatData = useMemo(() => {
@@ -319,6 +368,7 @@ export default function SalesReport() {
     { key: 'customer_cpf', label: 'CPF' },
     { key: 'seller_name', label: 'Vendedor' },
     { key: 'quantity', label: 'Qtd' },
+    { key: 'seat_labels', label: 'Poltrona' },
     { key: 'unit_price', label: 'Valor Unit.', format: (v) => `R$ ${Number(v).toFixed(2)}` },
     { key: 'total_value', label: 'Valor Total', format: (v) => `R$ ${Number(v).toFixed(2)}` },
     { key: 'status', label: 'Status', format: (v) => statusLabels[v] ?? v },
@@ -554,7 +604,7 @@ export default function SalesReport() {
                         <TableHead>Cliente</TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead className="text-center">Qtd</TableHead>
-                        {canViewFinancials && <TableHead className="text-right">Valor Unit.</TableHead>}
+                        <TableHead className="w-[140px]">Poltrona</TableHead>
                         {canViewFinancials && <TableHead className="text-right">Valor Total</TableHead>}
                         <TableHead>Status</TableHead>
                         <TableHead className="w-[60px]">Ações</TableHead>
@@ -583,9 +633,7 @@ export default function SalesReport() {
                             </TableCell>
                             <TableCell>{sale.seller?.name ?? '-'}</TableCell>
                             <TableCell className="text-center">{sale.quantity}</TableCell>
-                            {canViewFinancials && (
-                              <TableCell className="text-right">R$ {Number(sale.unit_price).toFixed(2)}</TableCell>
-                            )}
+                            <TableCell>{formatSeatLabels(sale.id)}</TableCell>
                             {canViewFinancials && (
                               <TableCell className="text-right font-medium">
                                 R$ {(sale.quantity * sale.unit_price).toFixed(2)}
