@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { VersionUpdateBanner } from "@/components/system/VersionUpdateBanner";
 
 // Auth
 import Login from "./pages/Login";
@@ -45,6 +46,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          {/* Banner global para avisar nova versão sem depender de PWA/service worker */}
+          <VersionUpdateBanner />
           <Routes>
             {/* Redirect root to public events */}
             <Route path="/" element={<Navigate to="/eventos" replace />} />
