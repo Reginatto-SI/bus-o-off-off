@@ -3,11 +3,12 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle } from 'lucide-react';
+import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, RefreshCw, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
 import { formatBoardingDateTime } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 
 export interface TicketCardData {
@@ -25,6 +26,10 @@ export interface TicketCardData {
   boardingDepartureTime: string | null;
   boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
+  // Identificador único da venda para suporte
+  saleId?: string;
+  // Checkout session do Stripe para verificação de status
+  stripeCheckoutSessionId?: string | null;
   // Company branding
   companyName: string;
   companyLogoUrl: string | null;
@@ -59,9 +64,13 @@ function formatCnpjDisplay(cnpj: string | null): string | null {
 interface TicketCardProps {
   ticket: TicketCardData;
   allowReservedDownloads?: boolean;
+  // Callback para verificar status de pagamento no Stripe (on-demand)
+  onRefreshStatus?: (saleId: string) => Promise<void>;
+  isRefreshing?: boolean;
 }
 
-export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCardProps) {
+export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshStatus, isRefreshing }: TicketCardProps) {
+  const { toast } = useToast();
   const qrRef = useRef<HTMLCanvasElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
   const canDownload = isPaid || (allowReservedDownloads && ticket.saleStatus === 'reservado');
@@ -69,6 +78,24 @@ export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCar
   const accentColor = ticket.companyPrimaryColor || '#F97316';
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
+
+  // Status visual: "processando" quando reservado mas com checkout Stripe em andamento
+  const displayStatus = (ticket.saleStatus === 'reservado' && ticket.stripeCheckoutSessionId)
+    ? 'processando'
+    : ticket.saleStatus;
+
+  // Mostrar botão de atualizar status quando não está pago e existe checkout session
+  const showRefreshButton = !isPaid && !isCancelled && ticket.stripeCheckoutSessionId && onRefreshStatus && ticket.saleId;
+
+  const handleCopySaleId = async () => {
+    if (!ticket.saleId) return;
+    try {
+      await navigator.clipboard.writeText(ticket.saleId);
+      toast({ title: 'Código copiado!' });
+    } catch {
+      toast({ title: 'Erro ao copiar', variant: 'destructive' });
+    }
+  };
 
   const handleDownloadPdf = async () => {
     const canvas = qrRef.current;
@@ -152,10 +179,24 @@ export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCar
                 <Armchair className="h-4 w-4" style={{ color: accentColor }} />
                 Assento {ticket.seatLabel}
               </div>
-              <StatusBadge status={ticket.saleStatus} />
+              <StatusBadge status={displayStatus} />
             </div>
             <p className="font-medium">{ticket.passengerName}</p>
             <p className="text-muted-foreground">CPF: {maskCpf(ticket.passengerCpf)}</p>
+
+            {/* ID da Passagem — para suporte rápido */}
+            {ticket.saleId && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="text-xs">Código: <span className="font-mono">{ticket.saleId.slice(0, 8)}</span></span>
+                <button
+                  onClick={handleCopySaleId}
+                  className="p-0.5 rounded hover:bg-muted transition-colors"
+                  title="Copiar código completo"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+            )}
 
             <div className="border-t pt-2 mt-2 space-y-1 text-muted-foreground">
               <div className="flex items-center gap-2">
@@ -198,6 +239,24 @@ export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCar
               </div>
             )}
           </div>
+
+          {/* Botão de atualizar status — fallback para sync com Stripe */}
+          {showRefreshButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground"
+              onClick={() => onRefreshStatus!(ticket.saleId!)}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Atualizar status do pagamento
+            </Button>
+          )}
 
           {/* Actions */}
           {canDownload && (

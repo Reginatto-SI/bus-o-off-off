@@ -125,8 +125,12 @@ serve(async (req) => {
       const company = companyId ? companyMap.get(companyId) ?? null : null;
 
       // Return only the fields the frontend needs — no raw sale record
+      // saleId e stripeCheckoutSessionId retornados para o frontend poder
+      // exibir o ID da passagem e verificar o status de pagamento no Stripe.
       results.push({
         ticketId: t.id,
+        saleId: t.sale_id,
+        stripeCheckoutSessionId: t.sale?.stripe_checkout_session_id || null,
         qrCodeToken: t.qr_code_token,
         passengerName: t.passenger_name,
         passengerCpf: t.passenger_cpf,
