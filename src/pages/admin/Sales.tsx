@@ -73,7 +73,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
