@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatBoardingDateTime } from '@/lib/utils';
 
@@ -179,7 +179,8 @@ export async function renderTicketVisual(
   ctx.stroke();
 
   const details = [
-    `${ticket.eventName} — ${format(new Date(ticket.eventDate), 'dd/MM/yyyy')}`,
+    // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+    `${ticket.eventName} — ${formatDateOnlyBR(ticket.eventDate)}`,
     ticket.boardingLocationName,
     (ticket.boardingDepartureDate || ticket.boardingDepartureTime)
       ? formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)

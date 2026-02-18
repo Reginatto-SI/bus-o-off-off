@@ -13,6 +13,7 @@ import { ArrowLeft, Loader2, Search, Ticket } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 
 type TicketLookupEvent = {
   id: string;
@@ -32,10 +33,10 @@ function formatCpfInput(value: string): string {
 }
 
 function formatEventDate(date: string): string {
-  const parsedDate = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsedDate.getTime())) return date;
-  return parsedDate.toLocaleDateString('pt-BR');
+  // Padronização de formatação de datas no sistema sem conversão de timezone para campos DATE.
+  return formatDateOnlyBR(date);
 }
+
 
 function formatCityState(city: string): string {
   const cityStateMatch = city.match(/^(.*)\s[-–—]\s([A-Za-z]{2})$/);
@@ -51,8 +52,12 @@ function formatEventOptionLabel(event: { name: string; city: string; date: strin
 function getEventDeadlineDate(event: TicketLookupEvent, departureDate?: string | null): Date | null {
   const eventDeadline = departureDate || event.date;
   if (!eventDeadline) return null;
-  const parsedDate = new Date(`${eventDeadline}T23:59:59`);
-  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+
+  // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+  const parsedDate = parseDateOnlyAsLocal(eventDeadline);
+  if (!parsedDate) return null;
+  parsedDate.setHours(23, 59, 59, 999);
+  return parsedDate;
 }
 
 export default function TicketLookup() {
@@ -108,7 +113,9 @@ export default function TicketLookup() {
       });
 
       return availableEvents.sort((a, b) => {
-        const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+        const dateA = parseDateOnlyAsLocal(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const dateB = parseDateOnlyAsLocal(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const dateComparison = dateA - dateB;
         if (dateComparison !== 0) return dateComparison;
         return a.name.localeCompare(b.name, 'pt-BR');
       });

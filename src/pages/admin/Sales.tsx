@@ -73,8 +73,9 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatDateOnlyBR } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -379,7 +380,8 @@ export default function Sales() {
   }, [filters, rowsPerPage]);
 
   const formatEventFilterLabel = (event: SalesEventFilterOption) => {
-    const eventDate = event.date ? format(parseISO(event.date), 'dd/MM/yyyy') : '';
+    // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+    const eventDate = event.date ? formatDateOnlyBR(event.date) : '';
     return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
 

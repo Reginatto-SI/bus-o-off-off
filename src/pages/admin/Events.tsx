@@ -77,10 +77,11 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { addMonths, format, isAfter, isBefore, parseISO } from 'date-fns';
+import { addMonths, format, isAfter, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { cn } from '@/lib/utils';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
@@ -551,7 +552,8 @@ export default function Events() {
   // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
-      const eventDate = event.date ? parseISO(event.date) : null;
+      // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+      const eventDate = event.date ? parseDateOnlyAsLocal(event.date) : null;
 
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -571,14 +573,14 @@ export default function Events() {
 
       // Regra: evento só aparece se estiver dentro do período filtrado.
       if (filters.startDate) {
-        const startDate = parseISO(filters.startDate);
+        const startDate = parseDateOnlyAsLocal(filters.startDate);
         if (!eventDate || isBefore(eventDate, startDate)) {
           return false;
         }
       }
 
       if (filters.endDate) {
-        const endDate = parseISO(filters.endDate);
+        const endDate = parseDateOnlyAsLocal(filters.endDate);
         if (!eventDate || isAfter(eventDate, endDate)) {
           return false;
         }
@@ -2091,9 +2093,8 @@ export default function Events() {
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 shrink-0" />
                       <span>
-                        {format(new Date(event.date), "dd 'de' MMMM 'de' yyyy", {
-                          locale: ptBR,
-                        })}
+                        {/* Padronização de formatação de datas no sistema sem conversão UTC para DATE-only. */}
+                        {formatDateOnlyBR(event.date, "dd 'de' MMMM 'de' yyyy")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

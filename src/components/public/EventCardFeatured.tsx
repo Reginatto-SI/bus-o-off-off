@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
@@ -79,9 +78,13 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             <div className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
               <span>
-                {format(new Date(event.date), "dd 'de' MMM", {
-                  locale: ptBR,
-                })}
+                {(() => {
+                  // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+                  const localDate = parseDateOnlyAsLocal(event.date);
+                  return localDate
+                    ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(localDate)
+                    : formatDateOnlyBR(event.date, 'dd/MM');
+                })()}
               </span>
             </div>
             <div className="flex items-center gap-1.5">

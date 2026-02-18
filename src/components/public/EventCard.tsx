@@ -1,13 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Building2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { EventWithCompany } from '@/types/database';
 
 interface EventCardProps {
@@ -83,9 +82,13 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 flex-shrink-0" />
             <span>
-              {format(new Date(event.date), "EEEE, dd 'de' MMMM", {
-                locale: ptBR,
-              })}
+              {(() => {
+                // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+                const localDate = parseDateOnlyAsLocal(event.date);
+                return localDate
+                  ? new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(localDate)
+                  : formatDateOnlyBR(event.date);
+              })()}
             </span>
           </div>
           <div className="flex items-center gap-2">

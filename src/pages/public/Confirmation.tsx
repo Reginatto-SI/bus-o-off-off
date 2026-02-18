@@ -13,8 +13,7 @@ import {
   CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
   User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle, RefreshCw,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
@@ -357,7 +356,13 @@ export default function Confirmation() {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  {sale.event && format(new Date(sale.event.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  {sale.event && (() => {
+                    // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+                    const localDate = parseDateOnlyAsLocal(sale.event.date);
+                    return localDate
+                      ? new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(localDate)
+                      : formatDateOnlyBR(sale.event.date);
+                  })()}
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
