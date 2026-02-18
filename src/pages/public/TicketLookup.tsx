@@ -14,6 +14,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 
+type TicketLookupEvent = {
+  id: string;
+  name: string;
+  date: string;
+  city: string;
+  status: string;
+  is_archived: boolean;
+};
+
 function formatCpfInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
   if (digits.length <= 3) return digits;
@@ -49,6 +58,14 @@ function formatEventOptionLabel(event: { name: string; city: string; date: strin
   return `${event.name} — ${formatCityState(event.city)} • ${formatEventDate(event.date)}`;
 }
 
+function getEventDeadlineDate(event: TicketLookupEvent, departureDate?: string | null): Date | null {
+  const eventDeadline = departureDate || event.date;
+  if (!eventDeadline) return null;
+
+  const parsedDate = new Date(`${eventDeadline}T23:59:59`);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
 export default function TicketLookup() {
   const { toast } = useToast();
   const [selectedEventId, setSelectedEventId] = useState('');
@@ -68,14 +85,44 @@ export default function TicketLookup() {
       if (!trips) return [];
 
       const eventIds = [...new Set(trips.map(t => t.event_id))];
+
+      const { data: boardingLocations } = await supabase
+        .from('event_boarding_locations')
+        .select('event_id, departure_date')
+        .in('event_id', eventIds)
+        .not('departure_date', 'is', null);
+
+      const latestDepartureByEvent = new Map<string, string>();
+      (boardingLocations || []).forEach((boarding) => {
+        if (!boarding.departure_date) return;
+        const currentLatestDate = latestDepartureByEvent.get(boarding.event_id);
+        if (!currentLatestDate || boarding.departure_date > currentLatestDate) {
+          latestDepartureByEvent.set(boarding.event_id, boarding.departure_date);
+        }
+      });
+
       const { data: publicEvents } = await supabase
         .from('events')
-        .select('id, name, date, city, status')
+        .select('id, name, date, city, status, is_archived')
+        // Comentário: no público mostramos somente eventos à venda.
+        .eq('status', 'a_venda')
+        // Comentário: não mostrar eventos arquivados em listas públicas.
+        .eq('is_archived', false)
         .in('id', eventIds);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const availableEvents = (publicEvents || []).filter((event) => {
+        const eventDeadline = getEventDeadlineDate(event, latestDepartureByEvent.get(event.id));
+
+        // Comentário: somente eventos dentro do prazo para consulta pública.
+        return eventDeadline ? eventDeadline >= today : true;
+      });
 
       // Comentário: ordenação principal por data crescente (evento mais próximo primeiro)
       // e desempate por nome para manter previsibilidade na listagem.
-      return (publicEvents || []).sort((a, b) => {
+      return availableEvents.sort((a, b) => {
         const dateComparison = new Date(a.date).getTime() - new Date(b.date).getTime();
         if (dateComparison !== 0) return dateComparison;
         return a.name.localeCompare(b.name, 'pt-BR');
@@ -185,6 +232,11 @@ export default function TicketLookup() {
                 <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Carregando eventos...
+                </div>
+              ) : events && events.length === 0 ? (
+                <div className="space-y-1 py-2 text-sm text-muted-foreground">
+                  <p>Nenhum evento disponível para consulta no momento.</p>
+                  <p>Se você precisa consultar um evento antigo, fale com o organizador.</p>
                 </div>
               ) : (
                 <Select value={selectedEventId} onValueChange={setSelectedEventId}>
