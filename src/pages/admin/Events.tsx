@@ -366,6 +366,7 @@ export default function Events() {
       // Continuidade automática: se estava tentando criar evento, abre modal de cadastro.
       if (stripeGatePendingAction === 'create_event') {
         resetForm();
+        setIsCreateWizardMode(true);
         setDialogOpen(true);
       }
 
@@ -1893,6 +1894,7 @@ export default function Events() {
               }
 
               resetForm();
+              setIsCreateWizardMode(true);
               setDialogOpen(true);
             }}>
               <Plus className="h-4 w-4 mr-2" />
@@ -2120,6 +2122,7 @@ export default function Events() {
                 }
 
                 resetForm();
+                setIsCreateWizardMode(true);
                 setDialogOpen(true);
               }}>
                 <Plus className="h-4 w-4 mr-2" />
