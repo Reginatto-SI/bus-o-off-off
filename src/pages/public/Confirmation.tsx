@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput, type FeeLineItem } from '@/lib/feeCalculator';
@@ -11,11 +11,12 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import {
   CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
-  User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle,
+  User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle, RefreshCw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatBoardingDateTime } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 
 interface CompanyInfo {
@@ -42,6 +43,7 @@ function formatCnpjDisplay(cnpj: string | null): string | null {
 export default function Confirmation() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
+  const { toast } = useToast();
   const paymentSuccess = searchParams.get('payment') === 'success';
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
@@ -51,6 +53,9 @@ export default function Confirmation() {
   const [loading, setLoading] = useState(true);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  // Ref para evitar chamada dupla ao verify-payment-status durante polling
+  const verifyCalledRef = useRef(false);
 
   useEffect(() => {
     const fetchSale = async () => {
@@ -72,7 +77,6 @@ export default function Confirmation() {
       if (saleRes.data) {
         setSale(saleRes.data as Sale);
 
-        // Fetch full company data
         const companyId = (saleRes.data as any).event?.company_id;
         if (companyId) {
           const { data: companyData } = await supabase
@@ -83,7 +87,6 @@ export default function Confirmation() {
           if (companyData) setCompany(companyData as CompanyInfo);
         }
 
-        // Fetch boarding departure time and date
         const { data: selectedBoarding } = await supabase
           .from('event_boarding_locations')
           .select('departure_time, departure_date')
@@ -94,7 +97,6 @@ export default function Confirmation() {
         setBoardingDepartureTime(selectedBoarding?.departure_time ?? null);
         setBoardingDepartureDate((selectedBoarding as any)?.departure_date ?? null);
 
-        // Fetch event fees for ticket display
         const { data: feesData } = await supabase
           .from('event_fees')
           .select('name, fee_type, value, is_active')
@@ -113,7 +115,36 @@ export default function Confirmation() {
     fetchSale();
   }, [id]);
 
-  // Polling for payment confirmation
+  // Chamada on-demand ao verify-payment-status (fallback manual + auto após 15s)
+  const verifyPaymentStatus = useCallback(async () => {
+    if (!id) return;
+    setIsVerifyingPayment(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-payment-status', {
+        body: { sale_id: id },
+      });
+      if (error) throw error;
+
+      if (data?.paymentStatus === 'pago') {
+        // Recarregar tickets e atualizar status local
+        const { data: freshTickets } = await supabase
+          .from('tickets').select('*').eq('sale_id', id).order('seat_label', { ascending: true });
+        if (freshTickets) setTickets(freshTickets as TicketRecord[]);
+        setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
+        toast({ title: 'Pagamento confirmado ✅' });
+      } else if (data?.paymentStatus === 'processando') {
+        toast({ title: 'Pagamento ainda em processamento' });
+      } else if (data?.paymentStatus === 'expirado') {
+        toast({ title: 'Sessão de pagamento expirada', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Erro ao verificar pagamento', variant: 'destructive' });
+    } finally {
+      setIsVerifyingPayment(false);
+    }
+  }, [id, toast]);
+
+  // Polling para confirmação de pagamento
   useEffect(() => {
     if (!paymentSuccess || !id || !sale || sale.status === 'pago') return;
 
@@ -122,6 +153,14 @@ export default function Confirmation() {
 
     const interval = setInterval(async () => {
       attempts++;
+
+      // Após 15s (5 tentativas), forçar sync com Stripe uma vez
+      if (attempts === 5 && !verifyCalledRef.current) {
+        verifyCalledRef.current = true;
+        supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
+          .catch(() => {}); // fire-and-forget, o polling local vai pegar o resultado
+      }
+
       const { data } = await supabase.from('sales').select('status').eq('id', id).maybeSingle();
 
       if (data?.status === 'pago') {
@@ -164,6 +203,8 @@ export default function Confirmation() {
       boardingDepartureTime: boardingDepartureTime,
       boardingDepartureDate: boardingDepartureDate,
       saleStatus: (sale?.status || 'reservado') as SaleStatus,
+      saleId: sale?.id,
+      stripeCheckoutSessionId: sale?.stripe_checkout_session_id || null,
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,
@@ -229,7 +270,22 @@ export default function Confirmation() {
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento em Processamento</h1>
-              <p className="text-muted-foreground">Seu pagamento está sendo processado. Atualize a página em alguns minutos.</p>
+              <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco.</p>
+              {/* Botão fallback para forçar verificação com Stripe */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={verifyPaymentStatus}
+                disabled={isVerifyingPayment}
+              >
+                {isVerifyingPayment ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Atualizar status do pagamento
+              </Button>
             </>
           ) : (
             <>
@@ -245,7 +301,6 @@ export default function Confirmation() {
         {/* Company identity + ticket cards when paid/cancelled */}
         {(isPaid || sale.status === 'cancelado') && ticketCards.length > 0 && (
           <div className="space-y-4 mb-6">
-            {/* Company identity block */}
             {company && (
               <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
                 {company.logo_url && (

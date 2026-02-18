@@ -1,7 +1,9 @@
 import { cn } from '@/lib/utils';
 import { DriverStatus, EventStatus, SaleStatus, SellerStatus, VehicleStatus } from '@/types/database';
 
-type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus;
+// "processando" é um status visual-only usado no frontend quando a venda está
+// "reservado" no banco mas existe um checkout Stripe em andamento.
+type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus | 'processando';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -13,6 +15,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   a_venda: { label: 'À Venda', className: 'status-badge-available' },
   encerrado: { label: 'Encerrado', className: 'status-badge-closed' },
   reservado: { label: 'Reservado', className: 'status-badge-reserved' },
+  processando: { label: 'Processando', className: 'status-badge-reserved' },
   pago: { label: 'Pago', className: 'status-badge-paid' },
   cancelado: { label: 'Cancelado', className: 'status-badge-cancelled' },
   ativo: { label: 'Ativo', className: 'status-badge-available' },
@@ -20,7 +23,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? statusConfig['reservado'];
 
   return (
     <span className={cn('status-badge', config.className, className)}>
