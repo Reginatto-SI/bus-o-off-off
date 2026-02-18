@@ -75,6 +75,11 @@ import {
   ArchiveRestore,
   DollarSign,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  Rocket,
+  PartyPopper,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
@@ -84,6 +89,7 @@ import { cn } from '@/lib/utils';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Types
 interface EventFilters {
@@ -167,7 +173,10 @@ export default function Events() {
 
   // Post-create dialog
   const [isCreateWizardMode, setIsCreateWizardMode] = useState(false);
-  const [publishDecisionDialogOpen, setPublishDecisionDialogOpen] = useState(false);
+  const [_publishDecisionDialogOpen, setPublishDecisionDialogOpen] = useState(false);
+  const [showStepErrors, setShowStepErrors] = useState(false);
+  const [celebrationDialogOpen, setCelebrationDialogOpen] = useState(false);
+  const [publishErrorInCelebration, setPublishErrorInCelebration] = useState<string | null>(null);
 
   // Quick status change
   const [closeEventDialogOpen, setCloseEventDialogOpen] = useState(false);
@@ -451,14 +460,51 @@ export default function Events() {
       toast.error(lockMessage);
       return;
     }
+    setShowStepErrors(false);
     setActiveTab(nextTab);
   };
 
+  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'publicacao'] as const;
+  const WIZARD_TAB_LABELS: Record<string, string> = {
+    geral: 'Geral',
+    viagens: 'Frotas',
+    embarques: 'Embarques',
+    passagens: 'Passagens',
+    publicacao: 'Publicação',
+  };
+
   const getNextWizardTab = (currentTab: string): string | null => {
-    const tabsOrder = ['geral', 'viagens', 'embarques', 'passagens', 'publicacao'];
-    const currentIndex = tabsOrder.indexOf(currentTab);
-    if (currentIndex < 0 || currentIndex === tabsOrder.length - 1) return null;
-    return tabsOrder[currentIndex + 1];
+    const currentIndex = WIZARD_TABS_ORDER.indexOf(currentTab as any);
+    if (currentIndex < 0 || currentIndex === WIZARD_TABS_ORDER.length - 1) return null;
+    return WIZARD_TABS_ORDER[currentIndex + 1];
+  };
+
+  const getPreviousWizardTab = (currentTab: string): string | null => {
+    const currentIndex = WIZARD_TABS_ORDER.indexOf(currentTab as any);
+    if (currentIndex <= 0) return null;
+    return WIZARD_TABS_ORDER[currentIndex - 1];
+  };
+
+  const getStepNumber = (tab: string): number => {
+    const idx = WIZARD_TABS_ORDER.indexOf(tab as any);
+    return idx >= 0 ? idx + 1 : 1;
+  };
+
+  const isStepComplete = (tab: string): boolean => {
+    if (tab === 'geral') return isGeralComplete;
+    if (tab === 'viagens') return hasAtLeastOneFleet;
+    if (tab === 'embarques') return hasValidBoarding;
+    if (tab === 'passagens') return hasTicketsRequirements;
+    if (tab === 'publicacao') return publishChecklist.valid;
+    return false;
+  };
+
+  const getCurrentStepErrors = (tab: string): string[] => {
+    if (tab === 'geral') return geralMissingFields.length > 0 ? [`Preencha: ${geralMissingFields.join(', ')}`] : [];
+    if (tab === 'viagens') return !hasAtLeastOneFleet ? ['Adicione pelo menos 1 frota/transporte'] : [];
+    if (tab === 'embarques') return !hasValidBoarding ? ['Crie pelo menos 1 embarque vinculado a uma frota'] : [];
+    if (tab === 'passagens') return !hasTicketsRequirements ? ['Defina o preço da passagem (maior que zero)'] : [];
+    return [];
   };
 
   // Computed: can publish checklist - only requires IDA with boarding
@@ -926,7 +972,15 @@ export default function Events() {
     const nextTab = getNextWizardTab(activeTab);
     if (!nextTab) return;
 
+    // Validate current step
+    const errors = getCurrentStepErrors(activeTab);
+    if (errors.length > 0) {
+      setShowStepErrors(true);
+      return;
+    }
+
     setSaving(true);
+    setShowStepErrors(false);
     // Fluxo wizard: salva progresso técnico como rascunho sem pedir status ao usuário.
     const result = await persistEvent('rascunho');
     setSaving(false);
@@ -942,7 +996,58 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const handleFinalizeWizard = async (targetStatus: Event['status']) => {
+  const handleWizardFinalize = async () => {
+    // Check if all checklist items are valid
+    if (!publishChecklist.valid) {
+      setShowStepErrors(true);
+      return;
+    }
+
+    // Save as draft first
+    setSaving(true);
+    const result = await persistEvent('rascunho');
+    setSaving(false);
+
+    if (result.error) return;
+
+    // Open celebration dialog
+    setPublishErrorInCelebration(null);
+    setCelebrationDialogOpen(true);
+  };
+
+  const handleCelebrationPublish = async () => {
+    setSaving(true);
+    const result = await persistEvent('a_venda');
+    setSaving(false);
+
+    if (result.error) {
+      setPublishErrorInCelebration('Não foi possível publicar. Verifique as pendências e tente novamente.');
+      return;
+    }
+
+    setCelebrationDialogOpen(false);
+    setDialogOpen(false);
+    resetForm();
+    toast.success('Evento publicado com sucesso! Já está visível no portal.', {
+      duration: 4000,
+      icon: '🚀',
+    });
+  };
+
+  const handleCelebrationDraft = () => {
+    setCelebrationDialogOpen(false);
+    setDialogOpen(false);
+    resetForm();
+    toast.success('Evento salvo como rascunho');
+  };
+
+  const handleCelebrationGoToList = () => {
+    setCelebrationDialogOpen(false);
+    setDialogOpen(false);
+    resetForm();
+  };
+
+  const _handleFinalizeWizard = async (targetStatus: Event['status']) => {
     setPublishDecisionDialogOpen(false);
     setSaving(true);
     const result = await persistEvent(targetStatus);
@@ -958,13 +1063,13 @@ export default function Events() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // No modo wizard de criação, o submit final é sempre mediado pelo popup de decisão de status.
+    // No modo wizard de criação, o submit final é sempre mediado pelo popup celebrativo.
     if (isCreateWizardMode) {
       if (activeTab !== 'publicacao') {
         await handleWizardAdvance();
         return;
       }
-      setPublishDecisionDialogOpen(true);
+      await handleWizardFinalize();
       return;
     }
 
@@ -1538,12 +1643,13 @@ export default function Events() {
   };
 
   const resetForm = () => {
-    // Antes, o upload dependia do editingId e só existia depois de criar rascunho.
-    // Limpamos o preview local pendente ao fechar para evitar manter arquivo órfão em memória.
     clearPendingImage();
     setEditingId(null);
     setIsCreateWizardMode(false);
     setPublishDecisionDialogOpen(false);
+    setCelebrationDialogOpen(false);
+    setShowStepErrors(false);
+    setPublishErrorInCelebration(null);
     setEventTrips([]);
     setEventBoardingLocations([]);
     setActiveTab('geral');
@@ -2166,6 +2272,21 @@ export default function Events() {
             
             <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
               <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
+                {/* Wizard Progress Indicator */}
+                {!isReadOnly && (
+                  <div className="px-6 pt-4 pb-2 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-foreground">
+                        Etapa {getStepNumber(activeTab)} de 5 — {WIZARD_TAB_LABELS[activeTab] || 'Geral'}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {Math.round((getStepNumber(activeTab) / 5) * 100)}%
+                      </span>
+                    </div>
+                    <Progress value={(getStepNumber(activeTab) / 5) * 100} className="h-2" />
+                  </div>
+                )}
+
                 <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2 border-b bg-muted/30">
                   {[
                     { value: 'geral', label: 'Geral', icon: FileText, count: null },
@@ -2176,19 +2297,27 @@ export default function Events() {
                   ].map((tab) => {
                     const lockMessage = getTabLockMessage(tab.value);
                     const TabIcon = tab.icon;
+                    const stepComplete = isStepComplete(tab.value);
+                    const isCurrentTab = activeTab === tab.value;
 
                     return (
                       <TabsTrigger
                         key={tab.value}
                         value={tab.value}
                         aria-disabled={Boolean(lockMessage)}
-                        // UX simplificada: aba bloqueada fica apenas mais fosca para seguir o padrão visual da tela.
                         className={cn(
-                          'inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80',
+                          'inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80',
                           lockMessage && 'opacity-45 text-muted-foreground'
                         )}
                       >
-                        <TabIcon className="h-4 w-4 shrink-0" />
+                        {/* Step status indicator */}
+                        {lockMessage ? (
+                          <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ) : stepComplete && !isCurrentTab ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                        ) : (
+                          <TabIcon className="h-4 w-4 shrink-0" />
+                        )}
                         <span className="min-w-0 truncate">{tab.label}</span>
                         {tab.count !== null && (
                           <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{tab.count}</span>
@@ -2216,6 +2345,14 @@ export default function Events() {
 
                   {/* Tab Geral */}
                   <TabsContent value="geral" className="mt-0 space-y-4">
+                    {showStepErrors && activeTab === 'geral' && geralMissingFields.length > 0 && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Preencha os campos obrigatórios: <strong>{geralMissingFields.join(', ')}</strong>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     {/* Layout 2 colunas para banner + nome (UX mais profissional e evita espaço vazio ao lado do banner). */}
                     <div className="grid gap-4 lg:grid-cols-[200px,1fr] items-start">
                       <div className="space-y-2">
@@ -2412,6 +2549,14 @@ export default function Events() {
 
                   {/* Tab Viagens */}
                   <TabsContent value="viagens" className="mt-0 space-y-4">
+                    {showStepErrors && activeTab === 'viagens' && !hasAtLeastOneFleet && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Adicione pelo menos <strong>1 frota/transporte</strong> para avançar.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     {!editingId ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Info className="h-8 w-8 mx-auto mb-2" />
@@ -2532,6 +2677,14 @@ export default function Events() {
 
                   {/* Tab Embarques - with trip selector and copy feature */}
                   <TabsContent value="embarques" className="mt-0 space-y-4">
+                    {showStepErrors && activeTab === 'embarques' && !hasValidBoarding && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Crie pelo menos <strong>1 embarque vinculado a uma frota</strong> para avançar.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     {!editingId ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Info className="h-8 w-8 mx-auto mb-2" />
@@ -2757,6 +2910,14 @@ export default function Events() {
 
                   {/* Tab Passagens / Venda */}
                   <TabsContent value="passagens" className="mt-0 space-y-6">
+                    {showStepErrors && activeTab === 'passagens' && !hasTicketsRequirements && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Defina o <strong>preço da passagem</strong> (maior que zero) para avançar.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <div className="space-y-4">
                       <h3 className="font-medium">Configurações de Venda</h3>
                       
@@ -3113,31 +3274,93 @@ export default function Events() {
                   </TabsContent>
                 </div>
 
-                <div className="admin-modal__footer px-6 py-4 border-t flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialogOpen(false)}
-                  >
-                    {isReadOnly ? 'Fechar' : 'Cancelar'}
-                  </Button>
-                  {!isReadOnly && (
-                    <Button
-                      type={isCreateWizardMode && activeTab !== 'publicacao' ? 'button' : 'submit'}
-                      disabled={saving}
-                      onClick={isCreateWizardMode && activeTab !== 'publicacao' ? () => { void handleWizardAdvance(); } : undefined}
-                    >
-                      {saving ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Salvando...
-                        </>
-                      ) : isCreateWizardMode ? (
-                        activeTab === 'publicacao' ? 'Salvar Evento' : 'Avançar'
-                      ) : (
-                        'Salvar'
-                      )}
-                    </Button>
+                <div className="admin-modal__footer px-6 py-4 border-t">
+                  {isReadOnly ? (
+                    <div className="flex justify-end">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                        Fechar
+                      </Button>
+                    </div>
+                  ) : !isCreateWizardMode ? (
+                    /* Modo edição: manter botões existentes */
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button type="submit" disabled={saving}>
+                        {saving ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</>
+                        ) : 'Salvar'}
+                      </Button>
+                    </div>
+                  ) : (
+                    /* Modo wizard: rodapé padronizado */
+                    <div className="flex items-center justify-between">
+                      {/* Lado esquerdo: Salvar rascunho */}
+                      <div>
+                        {getStepNumber(activeTab) > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={saving}
+                            onClick={async () => {
+                              setSaving(true);
+                              await persistEvent('rascunho');
+                              setSaving(false);
+                              toast.success('Rascunho salvo');
+                            }}
+                          >
+                            <Save className="h-4 w-4 mr-1.5" />
+                            Salvar rascunho
+                          </Button>
+                        )}
+                      </div>
+                      {/* Lado direito: Voltar + Próximo/Finalizar */}
+                      <div className="flex items-center gap-2">
+                        {getPreviousWizardTab(activeTab) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={saving}
+                            onClick={() => {
+                              const prev = getPreviousWizardTab(activeTab);
+                              if (prev) {
+                                setShowStepErrors(false);
+                                setActiveTab(prev);
+                              }
+                            }}
+                          >
+                            <ChevronLeft className="h-4 w-4 mr-1" />
+                            Voltar
+                          </Button>
+                        )}
+                        {activeTab === 'publicacao' ? (
+                          <Button
+                            type="submit"
+                            disabled={saving}
+                          >
+                            {saving ? (
+                              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</>
+                            ) : (
+                              <><PartyPopper className="h-4 w-4 mr-1.5" />Finalizar</>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => { void handleWizardAdvance(); }}
+                          >
+                            {saving ? (
+                              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</>
+                            ) : (
+                              <>Próximo<ChevronRight className="h-4 w-4 ml-1" /></>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               </Tabs>
@@ -3713,25 +3936,59 @@ export default function Events() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Decisão final de status no wizard: só aparece na etapa Publicação. */}
-        <AlertDialog open={publishDecisionDialogOpen} onOpenChange={setPublishDecisionDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Salvar Evento</AlertDialogTitle>
-              <AlertDialogDescription>
-                Deseja deixar este evento como rascunho ou colocar à venda agora?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { void handleFinalizeWizard('rascunho'); }}>
-                Salvar como Rascunho
-              </AlertDialogCancel>
-              <AlertDialogAction onClick={() => { void handleFinalizeWizard('a_venda'); }}>
-                Colocar À Venda
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Popup celebrativo de conclusão do wizard */}
+        <Dialog open={celebrationDialogOpen} onOpenChange={setCelebrationDialogOpen}>
+          <DialogContent className="sm:max-w-md text-center">
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <Rocket className="h-8 w-8 text-primary" />
+              </div>
+              <DialogTitle className="text-xl">
+                Parabéns! Seu evento foi criado com sucesso.
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Agora você pode colocar seu evento online e começar a vender.
+              </p>
+
+              {publishErrorInCelebration && (
+                <Alert variant="destructive" className="text-left">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{publishErrorInCelebration}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="flex flex-col gap-2 w-full pt-2">
+                <Button
+                  onClick={handleCelebrationPublish}
+                  disabled={saving}
+                  className="w-full"
+                >
+                  {saving ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Publicando...</>
+                  ) : (
+                    <><Rocket className="h-4 w-4 mr-2" />Publicar evento agora</>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCelebrationDraft}
+                  disabled={saving}
+                  className="w-full"
+                >
+                  Manter como rascunho
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleCelebrationGoToList}
+                  disabled={saving}
+                  className="w-full text-muted-foreground"
+                >
+                  Ir para lista de eventos
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
