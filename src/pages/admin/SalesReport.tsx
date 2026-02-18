@@ -14,6 +14,13 @@ import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelMo
 import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -29,7 +36,6 @@ import {
   RefreshCw,
   DollarSign,
   CheckCircle,
-  XCircle,
   TrendingUp,
   Percent,
   Users,
@@ -44,7 +50,6 @@ import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
 
-// ── Types ──
 interface ReportFilters {
   search: string;
   status: 'all' | SaleStatus;
@@ -71,6 +76,28 @@ interface EventSummaryRow {
   grossRevenue: number;
   platformFee: number;
   sellersCommission: number;
+}
+
+interface SalesReportKpis {
+  totalSales: number;
+  grossRevenue: number;
+  paidSales: number;
+  cancelledSales: number;
+  platformFee: number;
+  sellersCommission: number;
+}
+
+interface SummaryPaginatedRow {
+  event_id: string;
+  event_name: string;
+  event_date: string | null;
+  total_sales: number;
+  paid_sales: number;
+  cancelled_sales: number;
+  gross_revenue: number;
+  platform_fee: number;
+  sellers_commission: number;
+  total_count: number;
 }
 
 function formatEventDisplayName(event?: { name?: string | null; date?: string | null } | null): string {
@@ -102,7 +129,6 @@ const initialFilters: ReportFilters = {
   dateTo: '',
 };
 
-
 const SALES_REPORT_TABS = {
   resumo: 'resumo',
   detalhado: 'detalhado',
@@ -110,24 +136,89 @@ const SALES_REPORT_TABS = {
 
 type SalesReportTab = (typeof SALES_REPORT_TABS)[keyof typeof SALES_REPORT_TABS];
 
-// ── Component ──
 export default function SalesReport() {
   const { canViewFinancials, activeCompanyId, activeCompany } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
+  const [summaryRows, setSummaryRows] = useState<EventSummaryRow[]>([]);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
   const [events, setEvents] = useState<EventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ReportFilters>(initialFilters);
   const [activeTab, setActiveTab] = useState<SalesReportTab>(SALES_REPORT_TABS.resumo);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalResultsCount, setTotalResultsCount] = useState(0);
+  const [stats, setStats] = useState<SalesReportKpis>({
+    totalSales: 0,
+    grossRevenue: 0,
+    paidSales: 0,
+    cancelledSales: 0,
+    platformFee: 0,
+    sellersCommission: 0,
+  });
 
-  // Export modals
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
-  // ── Fetch ──
-  const fetchSales = async () => {
-    setLoading(true);
+  const normalizeDateToIso = (dateInput: string, endOfDay = false) => {
+    if (!dateInput) return null;
+    const date = new Date(dateInput);
+    if (endOfDay) {
+      date.setHours(23, 59, 59, 999);
+    }
+    return date.toISOString();
+  };
+
+  const buildReportRpcParams = () => ({
+    p_company_id: activeCompanyId,
+    p_search: filters.search.trim() || null,
+    p_status: filters.status === 'all' ? null : filters.status,
+    p_event_id: filters.eventId === 'all' ? null : filters.eventId,
+    p_seller_id: filters.sellerId === 'all' ? null : filters.sellerId,
+    p_date_from: normalizeDateToIso(filters.dateFrom),
+    p_date_to: normalizeDateToIso(filters.dateTo, true),
+  });
+
+  const applySalesFilters = <T,>(query: T): T => {
+    let nextQuery: any = query;
+
+    if (activeCompanyId) {
+      nextQuery = nextQuery.eq('company_id', activeCompanyId);
+    }
+
+    if (filters.search.trim()) {
+      const searchTerm = filters.search.trim();
+      nextQuery = nextQuery.or(`customer_name.ilike.%${searchTerm}%,customer_cpf.ilike.%${searchTerm}%`);
+    }
+
+    if (filters.status !== 'all') {
+      nextQuery = nextQuery.eq('status', filters.status);
+    }
+
+    if (filters.eventId !== 'all') {
+      nextQuery = nextQuery.eq('event_id', filters.eventId);
+    }
+
+    if (filters.sellerId !== 'all') {
+      nextQuery = nextQuery.eq('seller_id', filters.sellerId);
+    }
+
+    if (filters.dateFrom) {
+      nextQuery = nextQuery.gte('created_at', normalizeDateToIso(filters.dateFrom));
+    }
+
+    if (filters.dateTo) {
+      nextQuery = nextQuery.lte('created_at', normalizeDateToIso(filters.dateTo, true));
+    }
+
+    return nextQuery;
+  };
+
+  const fetchDetailedPage = async () => {
+    const rangeFrom = (currentPage - 1) * rowsPerPage;
+    const rangeTo = rangeFrom + rowsPerPage - 1;
+
     let query = supabase
       .from('sales')
       .select(`
@@ -136,20 +227,120 @@ export default function SalesReport() {
         trip:trips(*, vehicle:vehicles(*)),
         boarding_location:boarding_locations(*),
         seller:sellers(*)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
-    if (activeCompanyId) {
-      query = query.eq('company_id', activeCompanyId);
-    }
+    query = applySalesFilters(query);
+    query = query.range(rangeFrom, rangeTo);
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       toast.error('Erro ao carregar vendas');
-    } else {
-      setSales((data ?? []) as Sale[]);
+      setSales([]);
+      setSeatLabelsMap({});
+      setTotalResultsCount(0);
+      return;
     }
+
+    const paginatedSales = (data ?? []) as Sale[];
+    setSales(paginatedSales);
+    setTotalResultsCount(count ?? 0);
+
+    const saleIds = paginatedSales.map((sale) => sale.id);
+    if (saleIds.length === 0) {
+      setSeatLabelsMap({});
+      return;
+    }
+
+    let ticketQuery = supabase
+      .from('tickets')
+      .select('sale_id, seat_label')
+      .in('sale_id', saleIds);
+
+    if (activeCompanyId) {
+      ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
+    }
+
+    const { data: ticketData, error: ticketError } = await ticketQuery;
+    if (ticketError) {
+      console.error('Erro ao carregar poltronas para o relatório de vendas:', ticketError);
+      setSeatLabelsMap({});
+      return;
+    }
+
+    const map: Record<string, string[]> = {};
+    (ticketData ?? []).forEach((ticket: { sale_id: string; seat_label: string | null }) => {
+      if (!ticket.seat_label) return;
+      if (!map[ticket.sale_id]) map[ticket.sale_id] = [];
+      map[ticket.sale_id].push(ticket.seat_label);
+    });
+    setSeatLabelsMap(map);
+  };
+
+  const fetchSummaryPage = async () => {
+    const offset = (currentPage - 1) * rowsPerPage;
+    const { data, error } = await supabase.rpc('get_sales_report_summary_paginated', {
+      ...buildReportRpcParams(),
+      p_limit: rowsPerPage,
+      p_offset: offset,
+    });
+
+    if (error) {
+      toast.error('Erro ao carregar resumo por evento');
+      setSummaryRows([]);
+      setTotalResultsCount(0);
+      return;
+    }
+
+    const rawRows = (data ?? []) as SummaryPaginatedRow[];
+    const parsedRows = rawRows.map((row) => ({
+      eventId: row.event_id,
+      eventName: row.event_name,
+      eventDisplayName: formatEventDisplayName({ name: row.event_name, date: row.event_date }),
+      totalSales: Number(row.total_sales ?? 0),
+      paidSales: Number(row.paid_sales ?? 0),
+      cancelledSales: Number(row.cancelled_sales ?? 0),
+      grossRevenue: Number(row.gross_revenue ?? 0),
+      platformFee: Number(row.platform_fee ?? 0),
+      sellersCommission: Number(row.sellers_commission ?? 0),
+    }));
+
+    setSummaryRows(parsedRows);
+    setTotalResultsCount(Number(rawRows[0]?.total_count ?? 0));
+  };
+
+  const fetchKpis = async () => {
+    const { data, error } = await supabase.rpc('get_sales_report_kpis', buildReportRpcParams());
+
+    if (error) {
+      toast.error('Erro ao calcular indicadores do relatório');
+      return;
+    }
+
+    const payload = (data?.[0] ?? {}) as Record<string, number>;
+    setStats({
+      totalSales: Number(payload.total_sales ?? 0),
+      grossRevenue: Number(payload.gross_revenue ?? 0),
+      paidSales: Number(payload.paid_sales ?? 0),
+      cancelledSales: Number(payload.cancelled_sales ?? 0),
+      platformFee: Number(payload.platform_fee ?? 0),
+      sellersCommission: Number(payload.sellers_commission ?? 0),
+    });
+  };
+
+  const fetchSales = async () => {
+    setLoading(true);
+
+    if (activeTab === SALES_REPORT_TABS.resumo) {
+      setSales([]);
+      setSeatLabelsMap({});
+      await fetchSummaryPage();
+    } else {
+      setSummaryRows([]);
+      await fetchDetailedPage();
+    }
+
     setLoading(false);
   };
 
@@ -179,45 +370,21 @@ export default function SalesReport() {
   };
 
   useEffect(() => {
-    fetchSales();
     fetchFiltersData();
   }, [activeCompanyId]);
 
   useEffect(() => {
-    const fetchSeatLabels = async () => {
-      const saleIds = sales.map((sale) => sale.id);
-      if (saleIds.length === 0) {
-        setSeatLabelsMap({});
-        return;
-      }
+    fetchSales();
+  }, [activeCompanyId, activeTab, currentPage, rowsPerPage, filters]);
 
-      let ticketQuery = supabase
-        .from('tickets')
-        .select('sale_id, seat_label')
-        .in('sale_id', saleIds);
+  useEffect(() => {
+    fetchKpis();
+  }, [activeCompanyId, filters]);
 
-      if (activeCompanyId) {
-        ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
-      }
-
-      const { data: ticketData, error } = await ticketQuery;
-      if (error) {
-        console.error('Erro ao carregar poltronas para o relatório de vendas:', error);
-        setSeatLabelsMap({});
-        return;
-      }
-
-      const map: Record<string, string[]> = {};
-      (ticketData ?? []).forEach((ticket: { sale_id: string; seat_label: string | null }) => {
-        if (!ticket.seat_label) return;
-        if (!map[ticket.sale_id]) map[ticket.sale_id] = [];
-        map[ticket.sale_id].push(ticket.seat_label);
-      });
-      setSeatLabelsMap(map);
-    };
-
-    fetchSeatLabels();
-  }, [sales, activeCompanyId]);
+  useEffect(() => {
+    // Sempre volta para a primeira página ao trocar filtros, tamanho da página ou tipo de visualização.
+    setCurrentPage(1);
+  }, [filters, rowsPerPage, activeTab]);
 
   const formatSeatLabels = (saleId: string) => {
     const labels = seatLabelsMap[saleId];
@@ -236,32 +403,6 @@ export default function SalesReport() {
     return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
 
-  // ── Filtered ──
-  const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
-      if (filters.search) {
-        const s = filters.search.toLowerCase();
-        const match =
-          sale.customer_name.toLowerCase().includes(s) ||
-          sale.customer_cpf.toLowerCase().includes(s);
-        if (!match) return false;
-      }
-      if (filters.status !== 'all' && sale.status !== filters.status) return false;
-      if (filters.eventId !== 'all' && sale.event_id !== filters.eventId) return false;
-      if (filters.sellerId !== 'all' && sale.seller_id !== filters.sellerId) return false;
-      if (filters.dateFrom) {
-        const from = new Date(filters.dateFrom);
-        if (new Date(sale.created_at) < from) return false;
-      }
-      if (filters.dateTo) {
-        const to = new Date(filters.dateTo);
-        to.setHours(23, 59, 59, 999);
-        if (new Date(sale.created_at) > to) return false;
-      }
-      return true;
-    });
-  }, [sales, filters]);
-
   const hasActiveFilters = useMemo(() => {
     return (
       filters.search !== '' ||
@@ -273,65 +414,11 @@ export default function SalesReport() {
     );
   }, [filters]);
 
-  // ── KPIs ──
-  const stats = useMemo(() => {
-    const total = filteredSales.length;
-    const grossRevenue = filteredSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
-    const pagas = filteredSales.filter((s) => s.status === 'pago').length;
-    const canceladas = filteredSales.filter((s) => s.status === 'cancelado').length;
-    const ticketMedio = total > 0 ? grossRevenue / total : 0;
-    const cancelPercent = total > 0 ? (canceladas / total) * 100 : 0;
+  const ticketMedio = stats.totalSales > 0 ? stats.grossRevenue / stats.totalSales : 0;
+  const cancelPercent = stats.totalSales > 0 ? (stats.cancelledSales / stats.totalSales) * 100 : 0;
 
-    const paidSales = filteredSales.filter((s) => s.status === 'pago');
-    const platformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
-    const sellersCommission = paidSales.reduce((sum, sale) => {
-      const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
-      const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
-      return sum + (saleGross * sellerCommissionPercent) / 100;
-    }, 0);
-
-    return { total, grossRevenue, pagas, canceladas, ticketMedio, cancelPercent, platformFee, sellersCommission };
-  }, [filteredSales]);
-
-  // ── Event summary ──
-  const eventSummary = useMemo((): EventSummaryRow[] => {
-    const map = new Map<string, EventSummaryRow>();
-
-    filteredSales.forEach((sale) => {
-      const eventId = sale.event_id;
-      const eventName = sale.event?.name ?? 'Evento desconhecido';
-      const eventDisplayName = formatEventDisplayName(sale.event) || eventName;
-      const existing = map.get(eventId) ?? {
-        eventId,
-        eventName,
-        eventDisplayName,
-        totalSales: 0,
-        paidSales: 0,
-        cancelledSales: 0,
-        grossRevenue: 0,
-        platformFee: 0,
-        sellersCommission: 0,
-      };
-
-      existing.totalSales += 1;
-      existing.grossRevenue += sale.gross_amount ?? sale.quantity * sale.unit_price;
-      if (sale.status === 'pago') {
-        existing.paidSales += 1;
-        existing.platformFee += sale.platform_fee_total ?? 0;
-        const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
-        existing.sellersCommission += ((sale.gross_amount ?? sale.quantity * sale.unit_price) * sellerCommissionPercent) / 100;
-      }
-      if (sale.status === 'cancelado') existing.cancelledSales += 1;
-
-      map.set(eventId, existing);
-    });
-
-    return Array.from(map.values()).sort((a, b) => b.grossRevenue - a.grossRevenue);
-  }, [filteredSales]);
-
-  // ── Flat data for detailed export ──
   const detailedFlatData = useMemo(() => {
-    return filteredSales.map((s) => {
+    return sales.map((s) => {
       const vehicle = (s.trip as any)?.vehicle;
       return {
         created_at: s.created_at,
@@ -353,11 +440,10 @@ export default function SalesReport() {
         payment_id: s.stripe_payment_intent_id ?? '',
       };
     });
-  }, [filteredSales, seatLabelsMap]);
+  }, [sales, seatLabelsMap]);
 
-  // ── Summary flat data for PDF ──
   const summaryFlatData = useMemo(() => {
-    return eventSummary.map((row) => ({
+    return summaryRows.map((row) => ({
       event_name: row.eventDisplayName,
       total_sales: row.totalSales,
       paid_sales: row.paidSales,
@@ -366,9 +452,8 @@ export default function SalesReport() {
       platform_fee: row.platformFee,
       sellers_commission: row.sellersCommission,
     }));
-  }, [eventSummary]);
+  }, [summaryRows]);
 
-  // ── Export columns ──
   const detailedExportColumns: ExportColumn[] = [
     { key: 'created_at', label: 'Data da Compra', format: (v) => v ? format(parseISO(v), 'dd/MM/yy HH:mm', { locale: ptBR }) : '' },
     { key: 'event_name', label: 'Evento' },
@@ -400,16 +485,23 @@ export default function SalesReport() {
       : []),
   ];
 
-
   // Exporta conforme a aba ativa para manter consistência com a visualização atual.
   const isSummaryView = activeTab === SALES_REPORT_TABS.resumo;
   const exportColumns = isSummaryView ? summaryExportColumns : detailedExportColumns;
   const exportData = isSummaryView ? summaryFlatData : detailedFlatData;
   const exportStorageSuffix = isSummaryView ? 'resumo' : 'detalhado';
   const exportFileNameSuffix = isSummaryView ? 'resumo-evento' : 'detalhado-venda';
-  const exportRecordCount = exportData.length;
+  const exportRecordCount = totalResultsCount;
+  const totalPages = Math.max(1, Math.ceil(totalResultsCount / rowsPerPage));
+  const rangeStart = totalResultsCount === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const rangeEnd = totalResultsCount === 0 ? 0 : Math.min(currentPage * rowsPerPage, totalResultsCount);
 
-  // ── Copy link ──
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const handleCopyLink = (saleId: string) => {
     const url = `${window.location.origin}/confirmacao/${saleId}`;
     navigator.clipboard.writeText(url);
@@ -420,11 +512,54 @@ export default function SalesReport() {
     { label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) },
   ];
 
-  // ── Render ──
+  const renderPagination = () => (
+    <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+        <span>Exibindo {rangeStart}–{rangeEnd} de {totalResultsCount} resultados</span>
+        <div className="flex items-center gap-2">
+          <span>Linhas por página</span>
+          <Select
+            value={String(rowsPerPage)}
+            onValueChange={(value) => setRowsPerPage(Number(value))}
+          >
+            <SelectTrigger className="h-8 w-[80px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+          disabled={currentPage === 1 || loading}
+        >
+          Anterior
+        </Button>
+        <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+          disabled={currentPage >= totalPages || loading}
+        >
+          Próxima
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <AdminLayout>
       <div className="page-container">
-        {/* Header */}
         <PageHeader
           title="Relatório de Vendas"
           description="Visão executiva e analítica das vendas do período"
@@ -446,16 +581,15 @@ export default function SalesReport() {
           }
         />
 
-        {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           {canViewFinancials && (
             <StatsCard label="Receita Bruta" value={`R$ ${stats.grossRevenue.toFixed(2)}`} icon={DollarSign} variant="success" />
           )}
-          <StatsCard label="Total de Vendas" value={stats.total} icon={ShoppingCart} />
-          <StatsCard label="Vendas Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
-          <StatsCard label="Ticket Médio" value={`R$ ${stats.ticketMedio.toFixed(2)}`} icon={TrendingUp} />
+          <StatsCard label="Total de Vendas" value={stats.totalSales} icon={ShoppingCart} />
+          <StatsCard label="Vendas Pagas" value={stats.paidSales} icon={CheckCircle} variant="success" />
+          <StatsCard label="Ticket Médio" value={`R$ ${ticketMedio.toFixed(2)}`} icon={TrendingUp} />
           {/* Exibimos quantidade para manter semântica igual à tela /admin/vendas. */}
-          <StatsCard label="Cancelamentos" value={stats.canceladas} icon={Percent} variant={stats.cancelPercent > 10 ? 'destructive' : 'warning'} />
+          <StatsCard label="Cancelamentos" value={stats.cancelledSales} icon={Percent} variant={cancelPercent > 10 ? 'destructive' : 'warning'} />
         </div>
 
         {canViewFinancials && (
@@ -465,7 +599,6 @@ export default function SalesReport() {
           </div>
         )}
 
-        {/* Filters */}
         <div className="mb-6">
           <FilterCard
             searchValue={filters.search}
@@ -536,12 +669,11 @@ export default function SalesReport() {
           />
         </div>
 
-        {/* Content Tabs */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : filteredSales.length === 0 ? (
+        ) : totalResultsCount === 0 ? (
           <EmptyState
             icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
@@ -560,7 +692,6 @@ export default function SalesReport() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab: Resumo por Evento */}
             <TabsContent value={SALES_REPORT_TABS.resumo}>
               <Card>
                 <CardContent className="p-0">
@@ -577,7 +708,7 @@ export default function SalesReport() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {eventSummary.map((row) => (
+                      {summaryRows.map((row) => (
                         <TableRow key={row.eventId}>
                           <TableCell className="font-medium">{row.eventDisplayName}</TableCell>
                           <TableCell className="text-center">{row.totalSales}</TableCell>
@@ -596,11 +727,11 @@ export default function SalesReport() {
                       ))}
                     </TableBody>
                   </Table>
+                  {renderPagination()}
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* Tab: Detalhado por Venda */}
             <TabsContent value={SALES_REPORT_TABS.detalhado}>
               <Card>
                 <CardContent className="p-0">
@@ -621,7 +752,7 @@ export default function SalesReport() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredSales.map((sale) => {
+                      {sales.map((sale) => {
                         const vehicle = (sale.trip as any)?.vehicle;
                         return (
                           <TableRow key={sale.id}>
@@ -660,13 +791,13 @@ export default function SalesReport() {
                       })}
                     </TableBody>
                   </Table>
+                  {renderPagination()}
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
         )}
 
-        {/* Export Modals */}
         <ExportExcelModal
           open={excelModalOpen}
           onOpenChange={setExcelModalOpen}

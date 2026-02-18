@@ -1138,6 +1138,50 @@ export type Database = {
         Args: { trip_uuid: string }
         Returns: number
       }
+      get_sales_report_kpis: {
+        Args: {
+          p_company_id?: string | null
+          p_date_from?: string | null
+          p_date_to?: string | null
+          p_event_id?: string | null
+          p_search?: string | null
+          p_seller_id?: string | null
+          p_status?: Database["public"]["Enums"]["sale_status"] | null
+        }
+        Returns: {
+          cancelled_sales: number
+          gross_revenue: number
+          paid_sales: number
+          platform_fee: number
+          sellers_commission: number
+          total_sales: number
+        }[]
+      }
+      get_sales_report_summary_paginated: {
+        Args: {
+          p_company_id?: string | null
+          p_date_from?: string | null
+          p_date_to?: string | null
+          p_event_id?: string | null
+          p_limit?: number
+          p_offset?: number
+          p_search?: string | null
+          p_seller_id?: string | null
+          p_status?: Database["public"]["Enums"]["sale_status"] | null
+        }
+        Returns: {
+          cancelled_sales: number
+          event_date: string | null
+          event_id: string
+          event_name: string
+          gross_revenue: number
+          paid_sales: number
+          platform_fee: number
+          sellers_commission: number
+          total_count: number
+          total_sales: number
+        }[]
+      }
       get_user_active_company: { Args: { _user_id: string }; Returns: string }
       get_user_seller_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
