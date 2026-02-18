@@ -22,7 +22,8 @@ import { SeatMap } from '@/components/public/SeatMap';
 import { TicketCard } from '@/components/public/TicketCard';
 import { Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 
 // ── Types ──
@@ -624,7 +625,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           <SelectContent>
                             {events.map((e) => (
                               <SelectItem key={e.id} value={e.id}>
-                                {format(parseISO(e.date), 'dd/MM/yyyy')} — {e.name} ({e.city})
+                                {formatDateOnlyBR(e.date)} — {e.name} ({e.city})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -669,7 +670,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <SelectItem key={b.id} value={b.id}>
                                 {b.name}
                                 {b.departure_time ? ` — ${b.departure_time.slice(0, 5)}` : ''}
-                                {b.departure_date ? ` (${format(parseISO(b.departure_date), 'dd/MM')})` : ''}
+                                {b.departure_date ? ` (${formatDateOnlyBR(b.departure_date, 'dd/MM')})` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>

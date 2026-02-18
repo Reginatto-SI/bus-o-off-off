@@ -46,8 +46,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
@@ -255,7 +254,13 @@ export default function EventDetail() {
                 <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
-                    {format(new Date(event.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    {(() => {
+                      // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+                      const localDate = parseDateOnlyAsLocal(event.date);
+                      return localDate
+                        ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(localDate)
+                        : formatDateOnlyBR(event.date);
+                    })()}
                   </div>
                   <div className="flex items-center gap-1">
                     <MapPin className="h-4 w-4" />
@@ -507,7 +512,8 @@ export default function EventDetail() {
                           </p>
                           {(el.departure_date || el.departure_time) && (
                             <p className="text-sm text-primary font-medium mt-1">
-                              {el.departure_date && new Date(el.departure_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              {/* Padronização de formatação de datas no sistema sem conversão UTC para DATE-only. */}
+                              {el.departure_date && formatDateOnlyBR(el.departure_date)}
                               {el.departure_date && el.departure_time && ' às '}
                               {el.departure_time && el.departure_time.slice(0, 5)}
                             </p>

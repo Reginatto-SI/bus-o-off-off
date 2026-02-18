@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatDateOnlyBR } from '@/lib/date';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
 import { formatBoardingDateTime } from '@/lib/utils';
@@ -160,7 +160,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false }: TicketCar
             <div className="border-t pt-2 mt-2 space-y-1 text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Calendar className="h-3.5 w-3.5" />
-                {ticket.eventName} — {format(new Date(ticket.eventDate), "dd/MM/yyyy")}
+                {ticket.eventName} — {formatDateOnlyBR(ticket.eventDate)}
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-3.5 w-3.5" />

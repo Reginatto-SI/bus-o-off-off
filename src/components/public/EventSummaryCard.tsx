@@ -1,8 +1,7 @@
 import { Event } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, MapPin } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 
 interface EventSummaryCardProps {
   event: Event;
@@ -18,7 +17,13 @@ export function EventSummaryCard({ event }: EventSummaryCardProps) {
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Calendar className="h-4 w-4" />
-            {format(new Date(event.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+            {(() => {
+              // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+              const localDate = parseDateOnlyAsLocal(event.date);
+              return localDate
+                ? new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(localDate)
+                : formatDateOnlyBR(event.date);
+            })()}
           </span>
           <span className="flex items-center gap-1.5">
             <MapPin className="h-4 w-4" />
