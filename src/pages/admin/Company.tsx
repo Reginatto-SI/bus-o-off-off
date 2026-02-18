@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
@@ -117,23 +117,89 @@ export default function CompanyPage() {
     setLoading(false);
   };
 
+  const [capabilitiesReady, setCapabilitiesReady] = useState<boolean | null>(null);
+  const [capabilitiesDetail, setCapabilitiesDetail] = useState<{ transfers: string; card_payments: string } | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingRef = useRef(false);
+
+  // Centralized function to refresh Stripe status
+  const refreshStripeStatus = useCallback(async (companyId: string): Promise<boolean> => {
+    if (pollingRef.current) return false;
+    pollingRef.current = true;
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { company_id: companyId },
+      });
+      if (error) {
+        console.warn('refreshStripeStatus error:', error);
+        return false;
+      }
+      if (data?.capabilities_ready !== undefined) {
+        setCapabilitiesReady(data.capabilities_ready);
+      }
+      if (data?.capabilities) {
+        setCapabilitiesDetail(data.capabilities);
+      }
+      await fetchCompany();
+      return !!data?.capabilities_ready;
+    } catch (err) {
+      console.warn('refreshStripeStatus exception:', err);
+      return false;
+    } finally {
+      pollingRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     fetchCompany();
   }, [activeCompanyId]);
 
-  // Handle Stripe return from onboarding
+  // Handle Stripe return from onboarding — trigger immediate refresh + start polling
   useEffect(() => {
     const stripeParam = searchParams.get('stripe');
     if (stripeParam === 'complete') {
-      toast.success('Onboarding Stripe concluído! Os dados serão atualizados.');
-      fetchCompany();
+      toast.success('Onboarding Stripe concluído! Verificando status...');
+      if (editingId) {
+        setIsPolling(true);
+        refreshStripeStatus(editingId);
+      } else {
+        fetchCompany();
+      }
     } else if (stripeParam === 'refresh') {
       toast.info('O onboarding Stripe precisa ser retomado.');
     }
   }, [searchParams]);
 
-  const [capabilitiesReady, setCapabilitiesReady] = useState<boolean | null>(null);
-  const [capabilitiesDetail, setCapabilitiesDetail] = useState<{ transfers: string; card_payments: string } | null>(null);
+  // Polling: auto-refresh while stripe_account_id exists but capabilities not ready
+  useEffect(() => {
+    if (!editingId || !company?.stripe_account_id || capabilitiesReady === true) {
+      setIsPolling(false);
+      return;
+    }
+    if (!isPolling) return;
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10;
+    const INTERVAL_MS = 3000;
+
+    const interval = setInterval(async () => {
+      attempts++;
+      const ready = await refreshStripeStatus(editingId);
+      if (ready || attempts >= MAX_ATTEMPTS) {
+        clearInterval(interval);
+        setIsPolling(false);
+        if (ready) {
+          toast.success('Stripe conectado e ativo!');
+        } else {
+          toast.info('Status ainda pendente. Use o botão "Atualizar status" para verificar novamente.');
+        }
+      }
+    }, INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isPolling, editingId, company?.stripe_account_id, capabilitiesReady]);
 
   const handleConnectStripe = async () => {
     if (!editingId) {
@@ -195,18 +261,8 @@ export default function CompanyPage() {
     if (!editingId) return;
     setStripeConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-connect-account', {
-        body: { company_id: editingId },
-      });
-      if (error) throw error;
-      if (data?.capabilities_ready !== undefined) {
-        setCapabilitiesReady(data.capabilities_ready);
-      }
-      if (data?.capabilities) {
-        setCapabilitiesDetail(data.capabilities);
-      }
-      fetchCompany();
-      if (data?.capabilities_ready) {
+      const ready = await refreshStripeStatus(editingId);
+      if (ready) {
         toast.success('Capabilities ativas! Pagamentos online prontos.');
       } else {
         toast.info('Capabilities ainda pendentes. Aguarde a aprovação do Stripe.');
@@ -752,7 +808,7 @@ export default function CompanyPage() {
                         </div>
                       )}
 
-                      {/* Integração Stripe (existente) */}
+                      {/* Integração Stripe */}
                       <div className="flex items-center justify-between">
                         <div>
                           <h3 className="font-medium">Integração Stripe</h3>
@@ -760,7 +816,12 @@ export default function CompanyPage() {
                             Conecte sua conta Stripe para receber pagamentos online.
                           </p>
                         </div>
-                        {company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
+                        {isPolling ? (
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            Verificando...
+                          </Badge>
+                        ) : company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
                           <Badge className="bg-green-100 text-green-700 border-green-200">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             Conectado e ativo
@@ -768,34 +829,64 @@ export default function CompanyPage() {
                         ) : company?.stripe_account_id ? (
                           <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200">
                             <AlertCircle className="h-3 w-3 mr-1" />
-                            {company?.stripe_onboarding_complete || capabilitiesReady === false
-                              ? 'Aguardando ativação'
-                              : 'Pendente'}
+                            Pendente
                           </Badge>
                         ) : (
                           <Badge variant="secondary">Não conectado</Badge>
                         )}
                       </div>
 
-                      {capabilitiesReady === false && company?.stripe_account_id && (
+                      {/* Polling indicator */}
+                      {isPolling && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          <p className="text-blue-700">
+                            Verificando vínculo com o Stripe... Aguarde até 30 segundos.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Capabilities warning */}
+                      {!isPolling && capabilitiesReady === false && company?.stripe_account_id && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
                           <p className="text-amber-800 font-medium">
                             ⚠️ Capabilities ainda não ativas
                           </p>
                           <p className="text-amber-700 text-xs">
-                            A conta Stripe foi conectada, mas as capabilities de pagamento ({capabilitiesDetail?.transfers || 'transfers'}: {capabilitiesDetail?.transfers || '?'}, {capabilitiesDetail?.card_payments || 'card_payments'}: {capabilitiesDetail?.card_payments || '?'}) ainda não foram ativadas pelo Stripe. Em contas de teste, pode ser necessário ativar manualmente no dashboard da plataforma Stripe.
+                            A conta Stripe foi conectada, mas as capabilities de pagamento ({capabilitiesDetail?.transfers || 'transfers'}: {capabilitiesDetail?.transfers || '?'}, {capabilitiesDetail?.card_payments || 'card_payments'}: {capabilitiesDetail?.card_payments || '?'}) ainda não foram ativadas pelo Stripe.
                           </p>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={handleCheckStripeStatus}
-                            disabled={stripeConnecting}
+                            disabled={stripeConnecting || isPolling}
                           >
                             {stripeConnecting ? (
                               <Loader2 className="h-3 w-3 animate-spin mr-1" />
                             ) : null}
-                            Verificar status
+                            Atualizar status
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Pending status — fallback button */}
+                      {!isPolling && company?.stripe_account_id && !company?.stripe_onboarding_complete && capabilitiesReady !== false && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+                          <p className="text-amber-700">
+                            Estamos aguardando confirmação do Stripe. Se você já concluiu o cadastro, clique abaixo para verificar.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCheckStripeStatus}
+                            disabled={stripeConnecting || isPolling}
+                          >
+                            {stripeConnecting ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            ) : null}
+                            Atualizar status
                           </Button>
                         </div>
                       )}
@@ -841,7 +932,7 @@ export default function CompanyPage() {
                           <Button
                             type="button"
                             onClick={handleConnectStripe}
-                            disabled={stripeConnecting}
+                            disabled={stripeConnecting || isPolling}
                           >
                             {stripeConnecting ? (
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
