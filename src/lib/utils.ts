@@ -37,3 +37,16 @@ export function formatBoardingDateTime(
 
   return `${capitalizedDay}, ${dayMonth} às ${time.slice(0, 5)}`;
 }
+
+/**
+ * Padroniza a visualização do local de embarque no formato "HH:MM - Nome do Local".
+ * Quando não há horário vinculado, usa "--:--" para manter consistência visual sem quebrar a tela.
+ */
+export function formatBoardingLocationLabel(
+  locationName: string | null | undefined,
+  departureTime: string | null | undefined,
+): string {
+  const safeName = locationName?.trim() || '-';
+  const safeTime = departureTime?.slice(0, 5) || '--:--';
+  return `${safeTime} - ${safeName}`;
+}

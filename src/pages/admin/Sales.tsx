@@ -76,6 +76,7 @@ import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
+import { formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -204,6 +205,7 @@ export default function Sales() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
+  const [boardingTimeMap, setBoardingTimeMap] = useState<Record<string, string | null>>({});
   // Estado único de ordenação para manter o comportamento de apenas 1 coluna ativa por vez.
   const [sortField, setSortField] = useState<SalesSortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SalesSortDirection>('desc');
@@ -316,6 +318,7 @@ export default function Sales() {
 
     if (error) {
       toast.error('Erro ao carregar vendas');
+      setBoardingTimeMap({});
     } else {
       setSales((data ?? []) as Sale[]);
       setTotalSalesCount(count ?? 0);
@@ -340,8 +343,38 @@ export default function Sales() {
         map[ticket.sale_id].push(ticket.seat_label);
       });
       setSeatLabelsMap(map);
+
+      const boardingKeys = Array.from(new Set((data ?? []).map((sale: any) => `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`)));
+      const eventIds = Array.from(new Set((data ?? []).map((sale: any) => sale.event_id)));
+      const tripIds = Array.from(new Set((data ?? []).map((sale: any) => sale.trip_id)));
+      const boardingLocationIds = Array.from(new Set((data ?? []).map((sale: any) => sale.boarding_location_id)));
+
+      let boardingQuery = supabase
+        .from('event_boarding_locations')
+        .select('event_id, trip_id, boarding_location_id, departure_time')
+        .in('event_id', eventIds)
+        .in('trip_id', tripIds)
+        .in('boarding_location_id', boardingLocationIds);
+
+      if (activeCompanyId) {
+        boardingQuery = boardingQuery.eq('company_id', activeCompanyId);
+      }
+
+      const { data: boardingData } = await boardingQuery;
+      const nextBoardingMap: Record<string, string | null> = {};
+      (boardingData ?? []).forEach((boarding: any) => {
+        const key = `${boarding.event_id}::${boarding.trip_id}::${boarding.boarding_location_id}`;
+        // Evita sobrescrever chaves repetidas mantendo a primeira ocorrência válida.
+        if (!(key in nextBoardingMap)) nextBoardingMap[key] = boarding.departure_time ?? null;
+      });
+      // Mantém fallback local para linhas sem correspondência de embarque.
+      boardingKeys.forEach((key) => {
+        if (!(key in nextBoardingMap)) nextBoardingMap[key] = null;
+      });
+      setBoardingTimeMap(nextBoardingMap);
     } else {
       setSeatLabelsMap({});
+      setBoardingTimeMap({});
     }
 
     setLoading(false);
@@ -430,6 +463,12 @@ export default function Sales() {
     );
   };
 
+  const getSaleBoardingLabel = (sale: Sale) => {
+    // Sempre prioriza o horário do embarque vinculado à venda (evento + viagem + local).
+    const key = `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`;
+    return formatBoardingLocationLabel(sale.boarding_location?.name, boardingTimeMap[key]);
+  };
+
   // ── Stats ──
   const stats = useMemo(() => {
     const total = totalSalesCount;
@@ -461,14 +500,14 @@ export default function Sales() {
         vehicle_info: vehicle
           ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
           : '-',
-        boarding_location_name: s.boarding_location?.name ?? '',
+        boarding_location_name: getSaleBoardingLabel(s),
         quantity: s.quantity,
         total_value: s.gross_amount ?? s.quantity * s.unit_price,
         seller_name: s.seller?.name ?? '-',
         status: s.status,
       };
     });
-  }, [sales]);
+  }, [sales, boardingTimeMap]);
 
   const totalPages = Math.max(1, Math.ceil(totalSalesCount / rowsPerPage));
   const rangeStart = totalSalesCount === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
@@ -933,7 +972,7 @@ export default function Sales() {
                             ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
                             : '-'}
                         </TableCell>
-                        <TableCell>{sale.boarding_location?.name ?? '-'}</TableCell>
+                        <TableCell>{getSaleBoardingLabel(sale)}</TableCell>
                         <TableCell>{sale.quantity}</TableCell>
                         <TableCell>
                           {(() => {
