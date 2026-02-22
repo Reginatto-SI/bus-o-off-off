@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, Bus, CalendarCheck2, Loader2, QrCode, ShieldCheck, WalletCards } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +44,15 @@ export default function CompanyRegistration() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Comentário: conteúdo institucional fixo para reforçar credibilidade sem alterar fluxo do cadastro.
+  const benefits = [
+    { icon: Bus, text: 'Controle de frota por veículo' },
+    { icon: CalendarCheck2, text: 'Gestão de eventos e viagens' },
+    { icon: QrCode, text: 'Controle de embarque via QR Code' },
+    { icon: ShieldCheck, text: 'Comissão automática para vendedores' },
+    { icon: WalletCards, text: 'Estrutura pronta para pagamentos online' },
+  ];
 
   const validate = () => {
     if (!companyName || !cnpj || !responsibleName || !email || !phone || !password || !confirmPassword) {
@@ -109,115 +118,153 @@ export default function CompanyRegistration() {
 
   return (
     <PublicLayout>
-      <div className="flex items-center justify-center py-8 px-4">
-        <Card className="w-full max-w-lg">
-          <CardHeader className="text-center space-y-2">
-            <div className="mx-auto bg-primary/10 rounded-full p-3 w-fit">
-              <Building2 className="h-8 w-8 text-primary" />
-            </div>
-            <CardTitle className="text-2xl">Cadastre sua empresa gratuitamente</CardTitle>
-            <CardDescription className="text-base">
-              Comece a vender passagens para seus eventos em minutos.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Nome da empresa *</Label>
-                <Input
-                  id="companyName"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Ex: Viação Rápida"
-                  maxLength={100}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cnpj">CNPJ *</Label>
-                <Input
-                  id="cnpj"
-                  value={cnpj}
-                  onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
-                  placeholder="00.000.000/0000-00"
-                  maxLength={18}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="responsibleName">Nome do responsável *</Label>
-                <Input
-                  id="responsibleName"
-                  value={responsibleName}
-                  onChange={(e) => setResponsibleName(e.target.value)}
-                  placeholder="Seu nome completo"
-                  maxLength={100}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="email@suaempresa.com"
-                  maxLength={255}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone *</Label>
-                <Input
-                  id="phone"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  placeholder="(00) 00000-0000"
-                  maxLength={15}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">Senha *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    maxLength={72}
-                  />
+      <div className="py-6 px-4 md:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-7xl">
+          {/* Comentário: desktop/tablet com layout dividido para melhorar percepção de produto SaaS. */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+            <aside className="hidden md:flex md:col-span-5 lg:col-span-4 rounded-2xl border bg-muted/35 p-6 lg:p-8">
+              <div className="flex h-full flex-col justify-between gap-8">
+                <div className="space-y-4">
+                  <div className="bg-primary/10 rounded-full p-3 w-fit">
+                    <Building2 className="h-7 w-7 text-primary" />
+                  </div>
+                  <h1 className="text-2xl lg:text-3xl font-semibold leading-tight text-foreground">
+                    Venda passagens com controle total da sua operação.
+                  </h1>
+                  <p className="text-sm lg:text-base text-muted-foreground">
+                    Plataforma completa para gestão de eventos, frota e embarque.
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirmar senha *</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repita a senha"
-                    maxLength={72}
-                  />
-                </div>
+
+                <ul className="space-y-3">
+                  {benefits.map(({ icon: Icon, text }) => (
+                    <li key={text} className="flex items-start gap-3">
+                      <span className="mt-0.5 rounded-md border bg-background p-1.5 text-primary">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-sm text-foreground/90">{text}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <Button type="submit" className="w-full" size="lg" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Criando sua conta...
-                  </>
-                ) : (
-                  'Criar conta gratuita'
+            </aside>
+
+            <Card className="md:col-span-7 lg:col-span-8 w-full">
+              <CardHeader className="text-center space-y-2">
+                <div className="mx-auto bg-primary/10 rounded-full p-3 w-fit md:hidden">
+                  <Building2 className="h-8 w-8 text-primary" />
+                </div>
+                <CardTitle className="text-2xl">Cadastre sua empresa gratuitamente</CardTitle>
+                <CardDescription className="text-base">
+                  Comece a vender passagens para seus eventos em minutos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {error && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Sem cartão de crédito. Sem cobrança. Comece agora.
-              </p>
-            </form>
-          </CardContent>
-        </Card>
+                {/* Comentário: mantém validações/submit originais e apenas reorganiza campos para reduzir rolagem no desktop. */}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="companyName">Nome da empresa *</Label>
+                      <Input
+                        id="companyName"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="Ex: Viação Rápida"
+                        maxLength={100}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cnpj">CNPJ *</Label>
+                      <Input
+                        id="cnpj"
+                        value={cnpj}
+                        onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
+                        placeholder="00.000.000/0000-00"
+                        maxLength={18}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="responsibleName">Nome do responsável *</Label>
+                      <Input
+                        id="responsibleName"
+                        value={responsibleName}
+                        onChange={(e) => setResponsibleName(e.target.value)}
+                        placeholder="Seu nome completo"
+                        maxLength={100}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Telefone *</Label>
+                      <Input
+                        id="phone"
+                        value={phone}
+                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        placeholder="(00) 00000-0000"
+                        maxLength={15}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="email@suaempresa.com"
+                      maxLength={255}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Senha *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        maxLength={72}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirmar senha *</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Repita a senha"
+                        maxLength={72}
+                      />
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Criando sua conta...
+                      </>
+                    ) : (
+                      'Criar conta gratuita'
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Sem cartão de crédito. Sem cobrança. Comece agora.
+                  </p>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </PublicLayout>
   );
