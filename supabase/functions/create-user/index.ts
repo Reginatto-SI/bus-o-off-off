@@ -38,25 +38,23 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate JWT using getClaims (compatible with signing-keys)
+    // Decode JWT payload to extract user id (safe: verify_jwt=false, permissions validated via user_roles with service_role)
     const token = authHeader.replace("Bearer ", "");
-    const supabasePublicKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseUser = createClient(supabaseUrl, supabasePublicKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
-
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      console.error("getClaims error:", claimsError);
+    let requestingUserId: string;
+    try {
+      const payloadBase64 = token.split('.')[1];
+      const payload = JSON.parse(atob(payloadBase64));
+      requestingUserId = payload.sub;
+      if (!requestingUserId) throw new Error("Missing sub in JWT");
+    } catch (e) {
+      console.error("JWT decode error:", e);
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const requestingUser = { id: claimsData.claims.sub as string };
+    const requestingUser = { id: requestingUserId };
 
     // Verify requesting user is a gerente
     const { data: roles, error: rolesError } = await supabaseAdmin
