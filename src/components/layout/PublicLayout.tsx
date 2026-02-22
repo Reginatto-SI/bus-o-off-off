@@ -21,7 +21,8 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   const mobileLinks = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
-    { to: '/login', label: 'Área Administrativa', icon: Building2 },
+    { to: '/cadastro-empresa', label: 'Quero vender passagens', icon: Building2 },
+    { to: '/login', label: 'Área Administrativa', icon: Settings },
   ];
 
   // Comentário: usamos `end` apenas quando necessário para evitar múltiplos itens ativos em rotas aninhadas.
@@ -30,6 +31,8 @@ export function PublicLayout({ children }: PublicLayoutProps) {
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Ticket, end: false },
     { to: '/login', label: 'Área Administrativa', icon: Settings, end: true },
   ];
+
+  const ctaLink = { to: '/cadastro-empresa', label: 'Quero vender passagens' };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -59,6 +62,13 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                   <span>{item.label}</span>
                 </NavLink>
               ))}
+              <Link
+                to={ctaLink.to}
+                className="inline-flex items-center gap-2 rounded-md border border-primary px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
+              >
+                <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{ctaLink.label}</span>
+              </Link>
             </div>
 
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

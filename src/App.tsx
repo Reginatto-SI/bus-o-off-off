@@ -34,6 +34,7 @@ import Checkout from "./pages/public/Checkout";
 import Confirmation from "./pages/public/Confirmation";
 import TicketLookup from "./pages/public/TicketLookup";
 import SellerRedirect from "./pages/public/SellerRedirect";
+import CompanyRegistration from "./pages/public/CompanyRegistration";
 
 import NotFound from "./pages/NotFound";
 
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/confirmacao/:id" element={<Confirmation />} />
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             <Route path="/v/:code" element={<SellerRedirect />} />
+            <Route path="/cadastro-empresa" element={<CompanyRegistration />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />

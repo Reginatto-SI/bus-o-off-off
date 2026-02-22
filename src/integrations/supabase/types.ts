@@ -1134,19 +1134,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_trip_available_capacity: {
-        Args: { trip_uuid: string }
-        Returns: number
-      }
       get_sales_report_kpis: {
         Args: {
-          p_company_id?: string | null
-          p_date_from?: string | null
-          p_date_to?: string | null
-          p_event_id?: string | null
-          p_search?: string | null
-          p_seller_id?: string | null
-          p_status?: Database["public"]["Enums"]["sale_status"] | null
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
         }
         Returns: {
           cancelled_sales: number
@@ -1159,19 +1155,19 @@ export type Database = {
       }
       get_sales_report_summary_paginated: {
         Args: {
-          p_company_id?: string | null
-          p_date_from?: string | null
-          p_date_to?: string | null
-          p_event_id?: string | null
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
           p_limit?: number
           p_offset?: number
-          p_search?: string | null
-          p_seller_id?: string | null
-          p_status?: Database["public"]["Enums"]["sale_status"] | null
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
         }
         Returns: {
           cancelled_sales: number
-          event_date: string | null
+          event_date: string
           event_id: string
           event_name: string
           gross_revenue: number
@@ -1181,6 +1177,10 @@ export type Database = {
           total_count: number
           total_sales: number
         }[]
+      }
+      get_trip_available_capacity: {
+        Args: { trip_uuid: string }
+        Returns: number
       }
       get_user_active_company: { Args: { _user_id: string }; Returns: string }
       get_user_seller_id: { Args: { _user_id: string }; Returns: string }
