@@ -121,45 +121,46 @@ export default function CompanyRegistration() {
       <div className="py-6 px-4 md:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-7xl">
           {/* Comentário: desktop/tablet com layout dividido para melhorar percepção de produto SaaS. */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8 items-stretch">
-            <aside className="hidden md:flex md:col-span-5 lg:col-span-4 rounded-2xl border bg-muted/35 p-6 lg:p-8">
-              <div className="flex h-full flex-col justify-between gap-8">
-                <div className="space-y-4">
-                  <div className="bg-primary/10 rounded-full p-3 w-fit">
-                    <Building2 className="h-7 w-7 text-primary" />
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 lg:gap-7 items-stretch">
+            <aside className="hidden md:flex md:col-span-4 lg:col-span-4 rounded-2xl border border-border/60 bg-muted/20 p-5 lg:p-6">
+              <div className="flex h-full flex-col justify-between gap-7">
+                <div className="space-y-3.5">
+                  <div className="bg-primary/10 rounded-full p-2.5 w-fit">
+                    <Building2 className="h-5 w-5 text-primary/80" />
                   </div>
-                  <h1 className="text-2xl lg:text-3xl font-semibold leading-tight text-foreground">
-                    Venda passagens com controle total da sua operação.
+                  <h1 className="text-xl lg:text-2xl font-semibold leading-tight text-foreground/95">
+                    Venda passagens com total controle da sua operação.
                   </h1>
-                  <p className="text-sm lg:text-base text-muted-foreground">
+                  <p className="text-xs lg:text-sm text-muted-foreground/90">
                     Plataforma completa para gestão de eventos, frota e embarque.
                   </p>
                 </div>
 
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {benefits.map(({ icon: Icon, text }) => (
-                    <li key={text} className="flex items-start gap-3">
-                      <span className="mt-0.5 rounded-md border bg-background p-1.5 text-primary">
-                        <Icon className="h-4 w-4" />
+                    <li key={text} className="flex items-start gap-2.5">
+                      <span className="mt-0.5 rounded-md border border-border/50 bg-background/80 p-1 text-muted-foreground">
+                        <Icon className="h-3.5 w-3.5" />
                       </span>
-                      <span className="text-sm text-foreground/90">{text}</span>
+                      <span className="text-sm text-foreground/80">{text}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             </aside>
 
-            <Card className="md:col-span-7 lg:col-span-8 w-full">
-              <CardHeader className="text-center space-y-2">
+            {/* Comentário: card principal recebe maior destaque visual para manter foco no formulário (65%). */}
+            <Card className="md:col-span-8 lg:col-span-8 w-full rounded-2xl border-border/80 bg-background shadow-[0_8px_24px_-20px_rgba(2,6,23,0.45)]">
+              <CardHeader className="space-y-2 px-6 pt-7 md:px-8 md:pt-8">
                 <div className="mx-auto bg-primary/10 rounded-full p-3 w-fit md:hidden">
                   <Building2 className="h-8 w-8 text-primary" />
                 </div>
-                <CardTitle className="text-2xl">Cadastre sua empresa gratuitamente</CardTitle>
-                <CardDescription className="text-base">
-                  Comece a vender passagens para seus eventos em minutos.
+                <CardTitle className="text-2xl md:text-[1.75rem] leading-tight">Comece a vender passagens em minutos</CardTitle>
+                <CardDescription className="text-sm md:text-base text-muted-foreground/85">
+                  Configure sua empresa e publique suas primeiras viagens rapidamente.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-6 pb-7 md:px-8 md:pb-8">
                 {error && (
                   <Alert variant="destructive" className="mb-4">
                     <AlertDescription>{error}</AlertDescription>
@@ -176,6 +177,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setCompanyName(e.target.value)}
                         placeholder="Ex: Viação Rápida"
                         maxLength={100}
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
@@ -186,6 +188,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
                         placeholder="00.000.000/0000-00"
                         maxLength={18}
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
@@ -196,6 +199,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setResponsibleName(e.target.value)}
                         placeholder="Seu nome completo"
                         maxLength={100}
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
@@ -206,6 +210,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(00) 00000-0000"
                         maxLength={15}
+                        className="h-11"
                       />
                     </div>
                   </div>
@@ -219,6 +224,7 @@ export default function CompanyRegistration() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="email@suaempresa.com"
                       maxLength={255}
+                      className="h-11"
                     />
                   </div>
 
@@ -232,6 +238,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
                         maxLength={72}
+                        className="h-11"
                       />
                     </div>
                     <div className="space-y-2">
@@ -243,11 +250,18 @@ export default function CompanyRegistration() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Repita a senha"
                         maxLength={72}
+                        className="h-11"
                       />
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                  <p className="text-xs text-muted-foreground/90 text-center md:text-left">Leva menos de 1 minuto para começar.</p>
+                  <Button
+                    type="submit"
+                    className="w-full rounded-xl transition-all duration-200 hover:opacity-95"
+                    size="lg"
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -258,7 +272,7 @@ export default function CompanyRegistration() {
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">
-                    Sem cartão de crédito. Sem cobrança. Comece agora.
+                    Sem cartão de crédito. Sem cobrança. Seus dados protegidos.
                   </p>
                 </form>
               </CardContent>
