@@ -48,6 +48,7 @@ import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
+import { formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface ReportFilters {
@@ -141,6 +142,7 @@ export default function SalesReport() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [summaryRows, setSummaryRows] = useState<EventSummaryRow[]>([]);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
+  const [boardingTimeMap, setBoardingTimeMap] = useState<Record<string, string | null>>({});
   const [events, setEvents] = useState<EventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,6 +217,12 @@ export default function SalesReport() {
     return nextQuery;
   };
 
+  const getSaleBoardingLabel = (sale: Sale) => {
+    // Usa a combinação evento + viagem + local para buscar o horário correto daquele embarque vendido.
+    const key = `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`;
+    return formatBoardingLocationLabel(sale.boarding_location?.name, boardingTimeMap[key]);
+  };
+
   const fetchDetailedPage = async () => {
     const rangeFrom = (currentPage - 1) * rowsPerPage;
     const rangeTo = rangeFrom + rowsPerPage - 1;
@@ -239,6 +247,7 @@ export default function SalesReport() {
       toast.error('Erro ao carregar vendas');
       setSales([]);
       setSeatLabelsMap({});
+      setBoardingTimeMap({});
       setTotalResultsCount(0);
       return;
     }
@@ -250,6 +259,7 @@ export default function SalesReport() {
     const saleIds = paginatedSales.map((sale) => sale.id);
     if (saleIds.length === 0) {
       setSeatLabelsMap({});
+      setBoardingTimeMap({});
       return;
     }
 
@@ -266,6 +276,7 @@ export default function SalesReport() {
     if (ticketError) {
       console.error('Erro ao carregar poltronas para o relatório de vendas:', ticketError);
       setSeatLabelsMap({});
+      setBoardingTimeMap({});
       return;
     }
 
@@ -276,6 +287,42 @@ export default function SalesReport() {
       map[ticket.sale_id].push(ticket.seat_label);
     });
     setSeatLabelsMap(map);
+
+    const eventIds = Array.from(new Set(paginatedSales.map((sale) => sale.event_id)));
+    const tripIds = Array.from(new Set(paginatedSales.map((sale) => sale.trip_id)));
+    const boardingLocationIds = Array.from(new Set(paginatedSales.map((sale) => sale.boarding_location_id)));
+
+    let boardingQuery = supabase
+      .from('event_boarding_locations')
+      .select('event_id, trip_id, boarding_location_id, departure_time')
+      .in('event_id', eventIds)
+      .in('trip_id', tripIds)
+      .in('boarding_location_id', boardingLocationIds);
+
+    if (activeCompanyId) {
+      boardingQuery = boardingQuery.eq('company_id', activeCompanyId);
+    }
+
+    const { data: boardingData, error: boardingError } = await boardingQuery;
+    if (boardingError) {
+      console.error('Erro ao carregar horários de embarque para o relatório de vendas:', boardingError);
+      setBoardingTimeMap({});
+      return;
+    }
+
+    const nextBoardingMap: Record<string, string | null> = {};
+    (boardingData ?? []).forEach((boarding: { event_id: string; trip_id: string | null; boarding_location_id: string; departure_time: string | null }) => {
+      const key = `${boarding.event_id}::${boarding.trip_id}::${boarding.boarding_location_id}`;
+      // Mantém a primeira ocorrência para evitar sobrescrita desnecessária.
+      if (!(key in nextBoardingMap)) nextBoardingMap[key] = boarding.departure_time ?? null;
+    });
+
+    paginatedSales.forEach((sale) => {
+      const key = `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`;
+      if (!(key in nextBoardingMap)) nextBoardingMap[key] = null;
+    });
+
+    setBoardingTimeMap(nextBoardingMap);
   };
 
   const fetchSummaryPage = async () => {
@@ -427,7 +474,7 @@ export default function SalesReport() {
         vehicle_info: vehicle
           ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
           : '-',
-        boarding_location_name: s.boarding_location?.name ?? '',
+        boarding_location_name: getSaleBoardingLabel(s),
         customer_name: s.customer_name,
         customer_cpf: s.customer_cpf,
         seller_name: s.seller?.name ?? '-',
@@ -440,7 +487,7 @@ export default function SalesReport() {
         payment_id: s.stripe_payment_intent_id ?? '',
       };
     });
-  }, [sales, seatLabelsMap]);
+  }, [sales, seatLabelsMap, boardingTimeMap]);
 
   const summaryFlatData = useMemo(() => {
     return summaryRows.map((row) => ({
@@ -765,7 +812,7 @@ export default function SalesReport() {
                                 ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
                                 : '-'}
                             </TableCell>
-                            <TableCell>{sale.boarding_location?.name ?? '-'}</TableCell>
+                            <TableCell>{getSaleBoardingLabel(sale)}</TableCell>
                             <TableCell>
                               <div>
                                 <p className="font-medium">{sale.customer_name}</p>
