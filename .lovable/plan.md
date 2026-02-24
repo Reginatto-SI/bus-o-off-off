@@ -1,165 +1,50 @@
 
 
-# Fluxo Publico de Cadastro de Empresas + Correcao de Build
+# Ajuste UX — Tela /cadastro-empresa (Slim Desktop)
 
 ## Resumo
 
-Duas entregas neste plano:
-1. Corrigir o erro de build no edge function `create-user` (getClaims nao existe no SDK)
-2. Criar fluxo publico completo para empresas se cadastrarem e usarem o sistema
+Compactar a tela de cadastro de empresa para caber 100% na viewport desktop (1366x768+) sem scroll, mantendo visual SaaS profissional.
 
 ---
 
-## Parte 1 — Correcao do Build Error
+## Mudancas
 
-O metodo `getClaims()` nao existe na versao do SDK usada. A solucao e usar `supabase.auth.getUser()` com o token passado via header (que funciona quando o client e criado com o header Authorization). Como alternativa comprovada no ambiente signing-keys, decodificar o JWT manualmente para extrair o `sub`.
+### 1. Remover icone decorativo do card esquerdo
+- Remover o bloco `<div className="bg-primary/10 rounded-full p-2.5 w-fit">` (linhas 128-130)
+- Titulo sobe diretamente para o topo do aside
 
-**Abordagem:** Decodificar o payload do JWT (base64) para extrair o `sub` (user_id), sem depender de metodos do SDK que podem nao existir. Isso e seguro porque a edge function ja usa `verify_jwt = false` e valida permissoes via `user_roles` com service_role.
+### 2. Compactar espacamento do aside (card esquerdo)
+- Reduzir `gap-7` para `gap-4` no flex column
+- Reduzir `space-y-3.5` para `space-y-2` no bloco titulo/subtitulo
+- Reduzir `space-y-4` para `space-y-2.5` na lista de beneficios
+- Reduzir padding: `p-5 lg:p-6` para `p-4 lg:p-5`
 
-```text
-// Pseudocodigo
-const payload = JSON.parse(atob(token.split('.')[1]));
-const requestingUserId = payload.sub;
-```
+### 3. Compactar formulario (card direito)
+- Reduzir padding do CardHeader: `pt-7 md:pt-8` para `pt-5 md:pt-5`
+- Reduzir `space-y-2` do header para `space-y-1`
+- Reduzir padding do CardContent: `pb-7 md:pb-8` para `pb-5 md:pb-5`
+- Reduzir `space-y-4` do form para `space-y-3`
+- Reduzir `gap-4` dos grids para `gap-3`
+- Reduzir `space-y-2` de cada campo para `space-y-1.5`
+- Reduzir altura dos inputs: `h-11` para `h-9`
+- Reduzir tamanho do titulo: `text-2xl md:text-[1.75rem]` para `text-xl md:text-2xl`
 
-Arquivo: `supabase/functions/create-user/index.ts`
+### 4. Compactar container externo
+- Reduzir `py-6` para `py-4`
+- Reduzir `gap-5 lg:gap-7` para `gap-4 lg:gap-5`
 
----
-
-## Parte 2 — Novo Edge Function: register-company
-
-Uma edge function publica (sem JWT) que:
-1. Recebe: nome da empresa, CNPJ, nome do responsavel, email, telefone, senha
-2. Valida campos obrigatorios e formato de email
-3. Cria o usuario via `auth.admin.createUser` com `email_confirm: true` (email pre-confirmado para acesso imediato no MVP)
-4. Cria a empresa na tabela `companies`
-5. Cria o perfil na tabela `profiles` (ou atualiza o criado pelo trigger `handle_new_user`)
-6. Cria/atualiza o `user_role` como `gerente` vinculado a nova empresa
-7. Retorna sucesso com o ID da empresa
-
-**Importante:** O trigger `handle_new_user` ja cria perfil e role automaticamente para a empresa padrao (`a0000000-...`). A edge function precisara sobrescrever esses dados para apontar para a nova empresa.
-
-Arquivo: `supabase/functions/register-company/index.ts`
-
-Config: `verify_jwt = false` (registro publico)
+### 5. Texto inferior (prova social)
+- Manter inline, reduzir margem com o botao
+- Usar separadores visuais: "Sem cartao de credito · Sem cobranca · Seus dados protegidos"
 
 ---
 
-## Parte 3 — Pagina /cadastro-empresa
+## Arquivo afetado
 
-Nova pagina publica com formulario limpo e profissional.
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/pages/public/CompanyRegistration.tsx` | Reducao de padding, gaps, alturas de input e remocao do icone decorativo |
 
-**Layout:**
-- Usa `PublicLayout` (mesmo header/footer do portal publico)
-- Card centralizado com formulario
-- Titulo: "Cadastre sua empresa gratuitamente"
-- Subtitulo: "Comece a vender passagens para seus eventos em minutos."
-
-**Campos:**
-- Nome da empresa (obrigatorio)
-- CNPJ (obrigatorio, com mascara)
-- Nome do responsavel (obrigatorio)
-- Email (obrigatorio)
-- Telefone (obrigatorio, com mascara)
-- Senha (obrigatorio, minimo 6 caracteres)
-- Confirmar senha
-
-**Validacao client-side:**
-- Todos os campos obrigatorios preenchidos
-- Email valido
-- CNPJ com mascara (14 digitos)
-- Senhas coincidem
-- Senha minima 6 caracteres
-
-**Ao submeter:**
-1. Chamar edge function `register-company`
-2. Se sucesso: fazer `signIn` automatico com email/senha
-3. Redirecionar para `/admin/eventos`
-4. Toast de boas-vindas
-
-**Ao falhar:**
-- Mostrar erro persistente (Alert) no formulario
-
-Arquivo: `src/pages/public/CompanyRegistration.tsx`
-
----
-
-## Parte 4 — Botao "Quero vender passagens" no Header
-
-Adicionar link no `PublicLayout`:
-- Desktop: botao no header ao lado dos links existentes, com variante `outline` e icone `Building2`
-- Mobile: item adicional no menu lateral
-
-Texto: "Quero vender passagens"
-Destino: `/cadastro-empresa`
-
-Arquivo: `src/components/layout/PublicLayout.tsx`
-
----
-
-## Parte 5 — Rota no App.tsx
-
-Adicionar rota publica:
-
-```text
-/cadastro-empresa -> CompanyRegistration
-```
-
-Arquivo: `src/App.tsx`
-
----
-
-## Detalhes Tecnicos
-
-### Edge Function register-company
-
-```text
-POST /register-company
-Body: {
-  company_name: string,
-  cnpj: string,
-  responsible_name: string,
-  email: string,
-  phone: string,
-  password: string
-}
-
-Fluxo:
-1. Validar campos
-2. Verificar se email ja existe (listUsers)
-3. Criar usuario auth (email_confirm: true para acesso imediato)
-4. Criar empresa em companies (name, cnpj, phone, email)
-5. Aguardar trigger (500ms)
-6. Atualizar profile: company_id -> nova empresa, name -> responsible_name
-7. Atualizar/inserir user_role: company_id -> nova empresa, role -> gerente
-8. Deletar role da empresa padrao se existir
-9. Retornar { success: true, company_id, user_id }
-```
-
-### Seguranca
-
-- Registro publico sem autenticacao (como qualquer SaaS)
-- Rate limiting nao implementado agora (futuro)
-- CNPJ armazenado mas nao validado contra Receita (futuro)
-- Dados da nova empresa isolados via RLS existente (company_id em todas as tabelas)
-
-### Isolamento Multi-empresa
-
-O RLS existente ja garante isolamento:
-- Todas as tabelas filtram por `company_id`
-- `user_belongs_to_company()` verifica vinculo
-- O novo usuario so vera dados da sua propria empresa
-
----
-
-## Arquivos Afetados
-
-| Arquivo | Acao |
-|---------|------|
-| `supabase/functions/create-user/index.ts` | Corrigir getClaims -> decodificacao manual JWT |
-| `supabase/functions/register-company/index.ts` | Novo — edge function de registro |
-| `supabase/config.toml` | Adicionar `[functions.register-company] verify_jwt = false` |
-| `src/pages/public/CompanyRegistration.tsx` | Novo — pagina de cadastro |
-| `src/components/layout/PublicLayout.tsx` | Adicionar botao "Quero vender passagens" |
-| `src/App.tsx` | Adicionar rota `/cadastro-empresa` |
+Nenhuma logica, validacao ou campo e alterado. Apenas espacamento e proporções visuais.
 
