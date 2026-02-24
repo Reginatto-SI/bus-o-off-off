@@ -90,6 +90,7 @@ import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
 
 // Types
 interface EventFilters {
@@ -3788,23 +3789,54 @@ export default function Events() {
         }
         setStripeGateOpen(open);
       }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#635BFF]/10">
-              <ShieldCheck className="h-6 w-6 text-[#635BFF]" />
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+          <div className="p-6 pb-0">
+            <DialogHeader className="space-y-3">
+              <div className="mx-auto mb-1 inline-flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#635BFF] to-[#7C3AED] shadow-lg shadow-[#635BFF]/20">
+                <ShieldCheck className="h-7 w-7 text-white" />
+              </div>
+              <div className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
+                <Lock className="h-3 w-3" />
+                Conexão Segura SSL
+              </div>
+              <DialogTitle className="text-center text-xl">Conecte sua conta Stripe para começar a vender</DialogTitle>
+              <p className="text-sm text-center font-medium text-muted-foreground">
+                Receba pagamentos de forma segura e automática diretamente na sua conta bancária.
+              </p>
+            </DialogHeader>
+          </div>
+
+          <div className="px-6 py-4 space-y-4">
+            <div className="space-y-2.5">
+              {[
+                'Receba pagamentos via Pix e Cartão',
+                'Valores transferidos direto para sua conta',
+                'Processo 100% seguro e criptografado',
+              ].map((text) => (
+                <div key={text} className="flex items-center gap-2.5">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                    <Check className="h-3 w-3 text-emerald-600" />
+                  </div>
+                  <span className="text-sm text-foreground">{text}</span>
+                </div>
+              ))}
             </div>
-            <DialogTitle className="text-center text-xl">Conecte sua conta Stripe para começar a vender</DialogTitle>
-          </DialogHeader>
 
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
-              Para receber os valores das passagens diretamente na sua conta bancária, é necessário conectar sua empresa ao Stripe. O processo é rápido e seguro.
-            </p>
+            <div className="rounded-lg bg-muted/50 border p-3">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Após conectar, você poderá criar eventos, definir preços e começar a vender passagens imediatamente.
+              </p>
+            </div>
+          </div>
 
+          <Separator />
+
+          <div className="px-6 pb-5 pt-4 space-y-3">
             <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
+                className="h-11"
                 onClick={() => {
                   setStripeGateOpen(false);
                   setStripeGatePendingAction(null);
@@ -3814,7 +3846,7 @@ export default function Events() {
               </Button>
               <Button
                 type="button"
-                className="bg-[#635BFF] hover:bg-[#5A54E6] text-white"
+                className="h-11 bg-gradient-to-r from-[#635BFF] to-[#7C3AED] hover:from-[#5A54E6] hover:to-[#6D2ED8] text-white shadow-md shadow-[#635BFF]/25"
                 onClick={handleConnectStripeFromGate}
                 disabled={stripeConnecting}
               >
@@ -3822,6 +3854,9 @@ export default function Events() {
                 Conectar com Stripe
               </Button>
             </div>
+            <p className="text-[11px] text-muted-foreground text-center">
+              Protegido por Stripe · Criptografia de ponta a ponta
+            </p>
           </div>
         </DialogContent>
       </Dialog>
