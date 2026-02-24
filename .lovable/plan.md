@@ -1,42 +1,42 @@
 
 
-# Ajuste UX — Tela /cadastro-empresa (Slim Desktop)
+# Refinamento do Popup de Conexao Stripe
 
 ## Resumo
 
-Compactar a tela de cadastro de empresa para caber 100% na viewport desktop (1366x768+) sem scroll, mantendo visual SaaS profissional.
+Redesenhar o modal de conexao Stripe na tela `/admin/eventos` para ter visual mais profissional, inspirado no estilo do proprio Stripe (limpo, confiavel, premium). Adicionar texto complementar sobre o que acontece apos a conexao.
 
 ---
 
-## Mudancas
+## Mudancas no modal (linhas ~3791-3826)
 
-### 1. Remover icone decorativo do card esquerdo
-- Remover o bloco `<div className="bg-primary/10 rounded-full p-2.5 w-fit">` (linhas 128-130)
-- Titulo sobe diretamente para o topo do aside
+### 1. Icone e header
+- Trocar `ShieldCheck` por icone de `CreditCard` ou manter `ShieldCheck` mas com fundo mais elegante (gradiente sutil roxo-para-azul ao inves de flat)
+- Aumentar levemente o icone container para `h-14 w-14`
+- Adicionar um badge "Seguro" ou "SSL" pequeno abaixo do icone
 
-### 2. Compactar espacamento do aside (card esquerdo)
-- Reduzir `gap-7` para `gap-4` no flex column
-- Reduzir `space-y-3.5` para `space-y-2` no bloco titulo/subtitulo
-- Reduzir `space-y-4` para `space-y-2.5` na lista de beneficios
-- Reduzir padding: `p-5 lg:p-6` para `p-4 lg:p-5`
+### 2. Titulo
+- Manter: "Conecte sua conta Stripe para comecar a vender"
+- Adicionar subtitulo mais forte com `font-medium` ao inves de `text-muted-foreground`
 
-### 3. Compactar formulario (card direito)
-- Reduzir padding do CardHeader: `pt-7 md:pt-8` para `pt-5 md:pt-5`
-- Reduzir `space-y-2` do header para `space-y-1`
-- Reduzir padding do CardContent: `pb-7 md:pb-8` para `pb-5 md:pb-5`
-- Reduzir `space-y-4` do form para `space-y-3`
-- Reduzir `gap-4` dos grids para `gap-3`
-- Reduzir `space-y-2` de cada campo para `space-y-1.5`
-- Reduzir altura dos inputs: `h-11` para `h-9`
-- Reduzir tamanho do titulo: `text-2xl md:text-[1.75rem]` para `text-xl md:text-2xl`
+### 3. Corpo do modal - layout tipo Stripe
+- Adicionar lista de beneficios com checkmarks verdes:
+  - "Receba pagamentos via Pix e Cartao"
+  - "Valores transferidos direto para sua conta"
+  - "Processo 100% seguro e criptografado"
+- Adicionar bloco de texto complementar:
+  - "Apos conectar, voce podera criar eventos, definir precos e comecar a vender passagens imediatamente."
+- Separador visual (linha sutil) antes dos botoes
+- Texto de confianca no rodape: "Protegido por Stripe · Criptografia de ponta a ponta"
 
-### 4. Compactar container externo
-- Reduzir `py-6` para `py-4`
-- Reduzir `gap-5 lg:gap-7` para `gap-4 lg:gap-5`
+### 4. Botoes
+- Manter "Cancelar" e "Conectar com Stripe"
+- Botao principal com gradiente sutil `bg-gradient-to-r from-[#635BFF] to-[#7C3AED]`
+- Botao maior: `h-11` ao inves de default
 
-### 5. Texto inferior (prova social)
-- Manter inline, reduzir margem com o botao
-- Usar separadores visuais: "Sem cartao de credito · Sem cobranca · Seus dados protegidos"
+### 5. Container
+- Aumentar largura maxima: `sm:max-w-lg` (de `sm:max-w-md`)
+- Adicionar `p-6` extra no conteudo
 
 ---
 
@@ -44,7 +44,6 @@ Compactar a tela de cadastro de empresa para caber 100% na viewport desktop (136
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/pages/public/CompanyRegistration.tsx` | Reducao de padding, gaps, alturas de input e remocao do icone decorativo |
+| `src/pages/admin/Events.tsx` | Redesenhar bloco do modal Stripe (linhas 3791-3826) |
 
-Nenhuma logica, validacao ou campo e alterado. Apenas espacamento e proporções visuais.
-
+Nenhuma logica e alterada. Apenas visual e textos do modal.
