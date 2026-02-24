@@ -118,16 +118,12 @@ export default function CompanyRegistration() {
 
   return (
     <PublicLayout>
-      <div className="py-6 px-4 md:px-6 lg:px-8">
+      <div className="py-4 px-4 md:px-6 lg:px-8">
         <div className="mx-auto w-full max-w-7xl">
-          {/* Comentário: desktop/tablet com layout dividido para melhorar percepção de produto SaaS. */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 lg:gap-7 items-stretch">
-            <aside className="hidden md:flex md:col-span-4 lg:col-span-4 rounded-2xl border border-border/60 bg-muted/20 p-5 lg:p-6">
-              <div className="flex h-full flex-col justify-between gap-7">
-                <div className="space-y-3.5">
-                  <div className="bg-primary/10 rounded-full p-2.5 w-fit">
-                    <Building2 className="h-5 w-5 text-primary/80" />
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-5 items-stretch">
+            <aside className="hidden md:flex md:col-span-4 lg:col-span-4 rounded-2xl border border-border/60 bg-muted/20 p-4 lg:p-5">
+              <div className="flex h-full flex-col justify-between gap-4">
+                <div className="space-y-2">
                   <h1 className="text-xl lg:text-2xl font-semibold leading-tight text-foreground/95">
                     Venda passagens com total controle da sua operação.
                   </h1>
@@ -136,7 +132,7 @@ export default function CompanyRegistration() {
                   </p>
                 </div>
 
-                <ul className="space-y-4">
+                <ul className="space-y-2.5">
                   {benefits.map(({ icon: Icon, text }) => (
                     <li key={text} className="flex items-start gap-2.5">
                       <span className="mt-0.5 rounded-md border border-border/50 bg-background/80 p-1 text-muted-foreground">
@@ -151,25 +147,25 @@ export default function CompanyRegistration() {
 
             {/* Comentário: card principal recebe maior destaque visual para manter foco no formulário (65%). */}
             <Card className="md:col-span-8 lg:col-span-8 w-full rounded-2xl border-border/80 bg-background shadow-[0_8px_24px_-20px_rgba(2,6,23,0.45)]">
-              <CardHeader className="space-y-2 px-6 pt-7 md:px-8 md:pt-8">
+              <CardHeader className="space-y-1 px-6 pt-5 md:px-8 md:pt-5">
                 <div className="mx-auto bg-primary/10 rounded-full p-3 w-fit md:hidden">
                   <Building2 className="h-8 w-8 text-primary" />
                 </div>
-                <CardTitle className="text-2xl md:text-[1.75rem] leading-tight">Comece a vender passagens em minutos</CardTitle>
+                <CardTitle className="text-xl md:text-2xl leading-tight">Comece a vender passagens em minutos</CardTitle>
                 <CardDescription className="text-sm md:text-base text-muted-foreground/85">
                   Configure sua empresa e publique suas primeiras viagens rapidamente.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-6 pb-7 md:px-8 md:pb-8">
+              <CardContent className="px-6 pb-5 md:px-8 md:pb-5">
                 {error && (
                   <Alert variant="destructive" className="mb-4">
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
                 {/* Comentário: mantém validações/submit originais e apenas reorganiza campos para reduzir rolagem no desktop. */}
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
                       <Label htmlFor="companyName">Nome da empresa *</Label>
                       <Input
                         id="companyName"
@@ -177,10 +173,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setCompanyName(e.target.value)}
                         placeholder="Ex: Viação Rápida"
                         maxLength={100}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="cnpj">CNPJ *</Label>
                       <Input
                         id="cnpj"
@@ -188,10 +184,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
                         placeholder="00.000.000/0000-00"
                         maxLength={18}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="responsibleName">Nome do responsável *</Label>
                       <Input
                         id="responsibleName"
@@ -199,10 +195,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setResponsibleName(e.target.value)}
                         placeholder="Seu nome completo"
                         maxLength={100}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="phone">Telefone *</Label>
                       <Input
                         id="phone"
@@ -210,12 +206,12 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPhone(formatPhone(e.target.value))}
                         placeholder="(00) 00000-0000"
                         maxLength={15}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="email">Email *</Label>
                     <Input
                       id="email"
@@ -224,12 +220,12 @@ export default function CompanyRegistration() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="email@suaempresa.com"
                       maxLength={255}
-                      className="h-11"
+                      className="h-9"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
                       <Label htmlFor="password">Senha *</Label>
                       <Input
                         id="password"
@@ -238,10 +234,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
                         maxLength={72}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="confirmPassword">Confirmar senha *</Label>
                       <Input
                         id="confirmPassword"
@@ -250,7 +246,7 @@ export default function CompanyRegistration() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Repita a senha"
                         maxLength={72}
-                        className="h-11"
+                        className="h-9"
                       />
                     </div>
                   </div>
@@ -272,7 +268,7 @@ export default function CompanyRegistration() {
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">
-                    Sem cartão de crédito. Sem cobrança. Seus dados protegidos.
+                    Sem cartão de crédito · Sem cobrança · Seus dados protegidos
                   </p>
                 </form>
               </CardContent>
