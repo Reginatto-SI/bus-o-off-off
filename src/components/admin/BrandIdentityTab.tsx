@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Company } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -78,15 +77,10 @@ function ColorSwatch({
 }
 
 export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdentityTabProps) {
-  const [primaryColor, setPrimaryColor] = useState(DEFAULTS.primary);
-  const [accentColor, setAccentColor] = useState(DEFAULTS.accent);
-  const [ticketColor, setTicketColor] = useState(DEFAULTS.ticket);
-
-  useEffect(() => {
-    setPrimaryColor(colors.primary || company?.primary_color || DEFAULTS.primary);
-    setAccentColor(colors.accent || company?.accent_color || DEFAULTS.accent);
-    setTicketColor(colors.ticket || company?.ticket_color || DEFAULTS.ticket);
-  }, [colors.primary, colors.accent, colors.ticket, company]);
+  // Comentário: a aba é 100% controlada pelo formulário pai para evitar loops visuais de sincronização.
+  const primaryColor = colors.primary || company?.primary_color || DEFAULTS.primary;
+  const accentColor = colors.accent || company?.accent_color || DEFAULTS.accent;
+  const ticketColor = colors.ticket || company?.ticket_color || DEFAULTS.ticket;
 
   const sameWarning = primaryColor === accentColor;
 
@@ -100,9 +94,19 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
   }, [primaryColor, accentColor, ticketColor, onColorsChange]);
 
   const handleRestore = () => {
-    setPrimaryColor(DEFAULTS.primary);
-    setAccentColor(DEFAULTS.accent);
-    setTicketColor(DEFAULTS.ticket);
+    onColorsChange({
+      primary: DEFAULTS.primary,
+      accent: DEFAULTS.accent,
+      ticket: DEFAULTS.ticket,
+    });
+  };
+
+  const updateColors = (next: Partial<{ primary: string; accent: string; ticket: string }>) => {
+    onColorsChange({
+      primary: next.primary ?? primaryColor,
+      accent: next.accent ?? accentColor,
+      ticket: next.ticket ?? ticketColor,
+    });
   };
 
   return (
@@ -131,7 +135,7 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                     hex={color.hex}
                     name={color.name}
                     selected={primaryColor === color.hex}
-                    onClick={() => setPrimaryColor(color.hex)}
+                    onClick={() => updateColors({ primary: color.hex })}
                   />
                 ))}
               </div>
@@ -149,7 +153,7 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                     hex={color.hex}
                     name={color.name}
                     selected={accentColor === color.hex}
-                    onClick={() => setAccentColor(color.hex)}
+                    onClick={() => updateColors({ accent: color.hex })}
                   />
                 ))}
               </div>
@@ -185,7 +189,7 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                   hex={color.hex}
                   name={color.name}
                   selected={ticketColor === color.hex}
-                  onClick={() => setTicketColor(color.hex)}
+                  onClick={() => updateColors({ ticket: color.hex })}
                 />
               ))}
             </div>
