@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette } from 'lucide-react';
+import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
@@ -560,6 +561,13 @@ export default function CompanyPage() {
                       <span className="min-w-0 truncate">Observações</span>
                     </TabsTrigger>
                     <TabsTrigger
+                      value="identidade"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Palette className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Identidade Visual</span>
+                    </TabsTrigger>
+                    <TabsTrigger
                       value="pagamentos"
                       className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
                     >
@@ -747,6 +755,10 @@ export default function CompanyPage() {
                         />
                       </div>
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="identidade" className="mt-0">
+                    <BrandIdentityTab company={company} editingId={editingId} onUpdate={fetchCompany} />
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">

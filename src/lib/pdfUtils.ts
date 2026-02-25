@@ -53,6 +53,13 @@ export function getCompanyPrimaryColor(company: Company | null): string {
 }
 
 /**
+ * Obtém a cor do ticket da empresa com fallback para cor primária e depois padrão
+ */
+export function getCompanyTicketColor(company: Company | null): string {
+  return company?.ticket_color || company?.primary_color || BRAND_ORANGE;
+}
+
+/**
  * Converte cor hex para RGB
  */
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {

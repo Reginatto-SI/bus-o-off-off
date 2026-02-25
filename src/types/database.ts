@@ -21,6 +21,8 @@ export interface Company {
   state: string | null;
   logo_url: string | null;
   primary_color: string | null;
+  accent_color: string | null;
+  ticket_color: string | null;
   slogan: string | null;
   document: string | null;
   phone: string | null;
