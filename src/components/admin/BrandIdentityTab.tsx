@@ -84,6 +84,15 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
 
   const sameWarning = primaryColor === accentColor;
 
+  useEffect(() => {
+    // Comentário: sincroniza a aba com o formulário principal para salvar tudo no botão global do rodapé.
+    onColorsChange({
+      primary: primaryColor,
+      accent: accentColor,
+      ticket: ticketColor,
+    });
+  }, [primaryColor, accentColor, ticketColor, onColorsChange]);
+
   const handleRestore = () => {
     onColorsChange({
       primary: DEFAULTS.primary,
