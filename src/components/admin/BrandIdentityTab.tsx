@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Check, RotateCcw, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const COLOR_PALETTE = [
@@ -30,8 +27,12 @@ const DEFAULTS = {
 
 interface BrandIdentityTabProps {
   company: Company | null;
-  editingId: string | null;
-  onUpdate: () => void;
+  colors: {
+    primary: string;
+    accent: string;
+    ticket: string;
+  };
+  onColorsChange: (colors: { primary: string; accent: string; ticket: string }) => void;
 }
 
 function ColorSwatch({
@@ -75,55 +76,28 @@ function ColorSwatch({
   );
 }
 
-export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentityTabProps) {
-  const [primaryColor, setPrimaryColor] = useState(DEFAULTS.primary);
-  const [accentColor, setAccentColor] = useState(DEFAULTS.accent);
-  const [ticketColor, setTicketColor] = useState(DEFAULTS.ticket);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (company) {
-      setPrimaryColor(company.primary_color || DEFAULTS.primary);
-      setAccentColor(company.accent_color || DEFAULTS.accent);
-      setTicketColor(company.ticket_color || DEFAULTS.ticket);
-    }
-  }, [company]);
-
-  const isDirty =
-    primaryColor !== (company?.primary_color || DEFAULTS.primary) ||
-    accentColor !== (company?.accent_color || DEFAULTS.accent) ||
-    ticketColor !== (company?.ticket_color || DEFAULTS.ticket);
+export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdentityTabProps) {
+  // Comentário: a aba é 100% controlada pelo formulário pai para evitar loops visuais de sincronização.
+  const primaryColor = colors.primary || company?.primary_color || DEFAULTS.primary;
+  const accentColor = colors.accent || company?.accent_color || DEFAULTS.accent;
+  const ticketColor = colors.ticket || company?.ticket_color || DEFAULTS.ticket;
 
   const sameWarning = primaryColor === accentColor;
 
   const handleRestore = () => {
-    setPrimaryColor(DEFAULTS.primary);
-    setAccentColor(DEFAULTS.accent);
-    setTicketColor(DEFAULTS.ticket);
+    onColorsChange({
+      primary: DEFAULTS.primary,
+      accent: DEFAULTS.accent,
+      ticket: DEFAULTS.ticket,
+    });
   };
 
-  const handleSave = async () => {
-    if (!editingId) {
-      toast.error('Salve a empresa antes de personalizar cores');
-      return;
-    }
-    setSaving(true);
-    const { error } = await supabase
-      .from('companies')
-      .update({
-        primary_color: primaryColor,
-        accent_color: accentColor,
-        ticket_color: ticketColor,
-      } as any)
-      .eq('id', editingId);
-
-    if (error) {
-      toast.error('Erro ao salvar cores');
-    } else {
-      toast.success('Identidade visual atualizada');
-      onUpdate();
-    }
-    setSaving(false);
+  const updateColors = (next: Partial<{ primary: string; accent: string; ticket: string }>) => {
+    onColorsChange({
+      primary: next.primary ?? primaryColor,
+      accent: next.accent ?? accentColor,
+      ticket: next.ticket ?? ticketColor,
+    });
   };
 
   return (
@@ -152,7 +126,7 @@ export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentity
                     hex={color.hex}
                     name={color.name}
                     selected={primaryColor === color.hex}
-                    onClick={() => setPrimaryColor(color.hex)}
+                    onClick={() => updateColors({ primary: color.hex })}
                   />
                 ))}
               </div>
@@ -170,7 +144,7 @@ export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentity
                     hex={color.hex}
                     name={color.name}
                     selected={accentColor === color.hex}
-                    onClick={() => setAccentColor(color.hex)}
+                    onClick={() => updateColors({ accent: color.hex })}
                   />
                 ))}
               </div>
@@ -206,7 +180,7 @@ export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentity
                   hex={color.hex}
                   name={color.name}
                   selected={ticketColor === color.hex}
-                  onClick={() => setTicketColor(color.hex)}
+                  onClick={() => updateColors({ ticket: color.hex })}
                 />
               ))}
             </div>
@@ -216,7 +190,7 @@ export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentity
         <Separator />
 
         {/* Actions */}
-        <div className="flex items-center justify-between gap-2 pt-2">
+        <div className="flex items-center justify-start gap-2 pt-2">
           <Button
             type="button"
             variant="ghost"
@@ -226,13 +200,6 @@ export function BrandIdentityTab({ company, editingId, onUpdate }: BrandIdentity
           >
             <RotateCcw className="h-4 w-4 mr-1.5" />
             Restaurar padrão
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !isDirty}
-          >
-            {saving ? 'Salvando...' : 'Salvar cores'}
           </Button>
         </div>
       </div>
