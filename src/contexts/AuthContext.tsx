@@ -26,6 +26,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // Usuário multiempresa com permissão especial: deve permanecer developer em qualquer empresa ativa.
+  const FORCED_DEVELOPER_USER_ID = '27add21e-ade9-436a-9ec2-185a3d7819cc';
+
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -35,6 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const resolveEffectiveRole = (userId: string, role: UserRole): UserRole => {
+    // Regra de negócio obrigatória: este usuário nunca pode assumir gerente/operador.
+    if (userId === FORCED_DEVELOPER_USER_ID) return 'developer';
+    return role;
+  };
 
   const fetchUserData = async (userId: string) => {
     // Fetch profile
@@ -82,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[AuthContext] Nenhum company_id válido encontrado em user_roles. Usando fallback.');
         const firstRole = rolesData[0];
         if (firstRole) {
-          setUserRole(firstRole.role as UserRole);
+          setUserRole(resolveEffectiveRole(userId, firstRole.role as UserRole));
           setSellerId(firstRole.seller_id);
         }
         setUserCompanies([]);
@@ -112,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Fallback: usar role/sellerId mesmo sem empresa
           const firstRole = rolesData[0];
           if (firstRole) {
-            setUserRole(firstRole.role as UserRole);
+            setUserRole(resolveEffectiveRole(userId, firstRole.role as UserRole));
             setSellerId(firstRole.seller_id);
           }
           setUserCompanies([]);
@@ -154,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const roleForCompany = rolesData.find((r: any) => r.company_id === validCompanyId);
           if (roleForCompany) {
-            setUserRole(roleForCompany.role as UserRole);
+            setUserRole(resolveEffectiveRole(userId, roleForCompany.role as UserRole));
             setSellerId(roleForCompany.seller_id);
           }
         } else {
@@ -162,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('[AuthContext] Nenhuma empresa ativa disponível. Usando role do primeiro vínculo.');
           const firstRole = rolesData[0];
           if (firstRole) {
-            setUserRole(firstRole.role as UserRole);
+            setUserRole(resolveEffectiveRole(userId, firstRole.role as UserRole));
             setSellerId(firstRole.seller_id);
           }
           setActiveCompanyId(null);
@@ -173,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Fallback de emergência
         const firstRole = rolesData[0];
         if (firstRole) {
-          setUserRole(firstRole.role as UserRole);
+          setUserRole(resolveEffectiveRole(userId, firstRole.role as UserRole));
           setSellerId(firstRole.seller_id);
         }
         setUserCompanies([]);
@@ -251,7 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
         .then(({ data }) => {
           if (data) {
-            setUserRole(data.role as UserRole);
+            setUserRole(resolveEffectiveRole(user.id, data.role as UserRole));
             setSellerId(data.seller_id);
           }
         });
