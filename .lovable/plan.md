@@ -1,49 +1,123 @@
 
 
-# Refinamento do Popup de Conexao Stripe
+# Aba "Identidade Visual" com Paleta de Cores Predefinidas
 
 ## Resumo
 
-Redesenhar o modal de conexao Stripe na tela `/admin/eventos` para ter visual mais profissional, inspirado no estilo do proprio Stripe (limpo, confiavel, premium). Adicionar texto complementar sobre o que acontece apos a conexao.
+Adicionar nova aba "Identidade Visual" na tela `/admin/empresa` com seletor de cores predefinidas (swatches), preview em tempo real, e aplicacao automatica das cores no sistema administrativo e nos tickets.
 
 ---
 
-## Mudancas no modal (linhas ~3791-3826)
+## Parte 1 — Migracao de Banco
 
-### 1. Icone e header
-- Trocar `ShieldCheck` por icone de `CreditCard` ou manter `ShieldCheck` mas com fundo mais elegante (gradiente sutil roxo-para-azul ao inves de flat)
-- Aumentar levemente o icone container para `h-14 w-14`
-- Adicionar um badge "Seguro" ou "SSL" pequeno abaixo do icone
+A tabela `companies` ja tem `primary_color` (default `#F97316`). Adicionar duas colunas novas:
 
-### 2. Titulo
-- Manter: "Conecte sua conta Stripe para comecar a vender"
-- Adicionar subtitulo mais forte com `font-medium` ao inves de `text-muted-foreground`
+```sql
+ALTER TABLE public.companies ADD COLUMN accent_color text DEFAULT '#1D4ED8';
+ALTER TABLE public.companies ADD COLUMN ticket_color text DEFAULT '#F97316';
+```
 
-### 3. Corpo do modal - layout tipo Stripe
-- Adicionar lista de beneficios com checkmarks verdes:
-  - "Receba pagamentos via Pix e Cartao"
-  - "Valores transferidos direto para sua conta"
-  - "Processo 100% seguro e criptografado"
-- Adicionar bloco de texto complementar:
-  - "Apos conectar, voce podera criar eventos, definir precos e comecar a vender passagens imediatamente."
-- Separador visual (linha sutil) antes dos botoes
-- Texto de confianca no rodape: "Protegido por Stripe · Criptografia de ponta a ponta"
-
-### 4. Botoes
-- Manter "Cancelar" e "Conectar com Stripe"
-- Botao principal com gradiente sutil `bg-gradient-to-r from-[#635BFF] to-[#7C3AED]`
-- Botao maior: `h-11` ao inves de default
-
-### 5. Container
-- Aumentar largura maxima: `sm:max-w-lg` (de `sm:max-w-md`)
-- Adicionar `p-6` extra no conteudo
+Nenhuma RLS adicional necessaria — as politicas existentes ja cobrem ALL para gerentes e SELECT para usuarios da empresa.
 
 ---
 
-## Arquivo afetado
+## Parte 2 — Atualizar tipo Company no frontend
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/pages/admin/Events.tsx` | Redesenhar bloco do modal Stripe (linhas 3791-3826) |
+Adicionar em `src/types/database.ts`:
+- `accent_color: string | null;`
+- `ticket_color: string | null;`
 
-Nenhuma logica e alterada. Apenas visual e textos do modal.
+---
+
+## Parte 3 — Nova aba no Company.tsx
+
+Adicionar uma nova `TabsTrigger` "Identidade Visual" com icone `Palette` entre "Observacoes" e "Pagamentos".
+
+### Conteudo da aba
+
+**(A) Secao "Cores do Sistema"**
+
+Dois seletores de swatches:
+- **Cor Primaria** (botoes principais, destaques) — usa `primary_color`
+- **Cor de Destaque** (accent, detalhes menores) — usa `accent_color`
+
+**(B) Secao "Cores da Passagem"**
+
+Um seletor de swatch:
+- **Cor principal da passagem** — usa `ticket_color`
+
+### Paleta predefinida (10 cores)
+
+```text
+Laranja (padrao)  #F97316
+Azul Royal        #2563EB
+Azul Marinho      #1E3A5F
+Verde             #16A34A
+Verde Escuro      #15803D
+Roxo              #7C3AED
+Vermelho          #DC2626
+Turquesa          #0891B2
+Cinza Grafite     #4B5563
+Preto             #18181B
+```
+
+Cada swatch: circulo de 32px com borda, nome abaixo, ring de selecao quando ativo.
+
+### UX
+
+- Label clara acima de cada seletor
+- Indicacao visual do swatch selecionado (ring + checkmark)
+- Validacao: se primaria === destaque, exibir aviso (nao bloquear)
+- Botao "Restaurar padrao" que reseta para Laranja/Azul Royal/Laranja
+- O botao "Salvar alteracoes" do formulario principal ja cobre o salvamento
+
+### Preview em tempo real
+
+Bloco de preview compacto abaixo dos seletores:
+- Um botao ficticio (mostrando cor primaria)
+- Um badge/chip (mostrando cor de destaque)
+- Um mini-card simulando passagem (faixa colorida com `ticket_color`)
+
+---
+
+## Parte 4 — Aplicacao automatica das cores
+
+No `AuthContext.tsx` ou no `AdminLayout.tsx`, ao carregar `activeCompany`:
+- Setar CSS custom properties no `document.documentElement`:
+  - `--primary` com HSL da `primary_color`
+  - `--ring` com HSL da `primary_color`
+- Isso faz com que todos os botoes `bg-primary` e elementos que usam `--primary` reflitam a cor da empresa automaticamente.
+- Ao deslogar ou sem config, restaurar os valores padrao.
+
+Para o accent, setar `--accent-foreground` com a cor de destaque.
+
+Para o ticket, a cor ja e passada via `companyPrimaryColor` nos renderers — atualizar para usar `ticket_color` quando disponivel.
+
+---
+
+## Parte 5 — Atualizar renderers de ticket
+
+Nos arquivos que usam `companyPrimaryColor`:
+- `src/pages/public/Confirmation.tsx`
+- `src/pages/admin/Sales.tsx`
+- `src/components/admin/NewSaleModal.tsx`
+
+Adicionar fallback: `company.ticket_color || company.primary_color || '#F97316'`
+
+---
+
+## Arquivos afetados
+
+| Arquivo | Acao |
+|---------|------|
+| Migracao SQL | Adicionar `accent_color` e `ticket_color` |
+| `src/types/database.ts` | Adicionar campos |
+| `src/pages/admin/Company.tsx` | Nova aba + seletores + preview |
+| `src/components/layout/AdminLayout.tsx` | Aplicar CSS custom properties |
+| `src/pages/public/Confirmation.tsx` | Usar `ticket_color` |
+| `src/pages/admin/Sales.tsx` | Usar `ticket_color` |
+| `src/components/admin/NewSaleModal.tsx` | Usar `ticket_color` |
+| `src/lib/pdfUtils.ts` | Adicionar helper para ticket_color |
+
+Nenhuma logica de CRUD, RLS ou estrutura multiempresa e alterada. Apenas visual e persistencia de preferencias.
+
