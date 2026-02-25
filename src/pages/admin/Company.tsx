@@ -70,6 +70,11 @@ export default function CompanyPage() {
     notes: '',
     logo_url: '',
   });
+  const [brandColors, setBrandColors] = useState({
+    primary: '#F97316',
+    accent: '#2563EB',
+    ticket: '#F97316',
+  });
 
   const hydrateFormFromCompany = (data: Company | null) => {
     // Comentário: mantém o formulário consistente com o registro único da empresa ativa.
@@ -87,6 +92,12 @@ export default function CompanyPage() {
       state: (data?.state ?? '').toUpperCase(),
       notes: data?.notes ?? '',
       logo_url: data?.logo_url ?? '',
+    });
+    // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
+    setBrandColors({
+      primary: data?.primary_color ?? '#F97316',
+      accent: data?.accent_color ?? '#2563EB',
+      ticket: data?.ticket_color ?? '#F97316',
     });
   };
 
@@ -355,6 +366,9 @@ export default function CompanyPage() {
       state: form.state.trim().toUpperCase() || null,
       notes: form.notes.trim() || null,
       logo_url: form.logo_url?.trim() || null,
+      primary_color: brandColors.primary || null,
+      accent_color: brandColors.accent || null,
+      ticket_color: brandColors.ticket || null,
     };
 
     let error;
@@ -758,7 +772,11 @@ export default function CompanyPage() {
                   </TabsContent>
 
                   <TabsContent value="identidade" className="mt-0">
-                    <BrandIdentityTab company={company} editingId={editingId} onUpdate={fetchCompany} />
+                    <BrandIdentityTab
+                      company={company}
+                      colors={brandColors}
+                      onColorsChange={setBrandColors}
+                    />
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">
