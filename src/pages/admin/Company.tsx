@@ -47,7 +47,7 @@ const formatCnpjInput = (value: string) => {
 };
 
 export default function CompanyPage() {
-  const { activeCompanyId, user, isGerente, isOperador, isDeveloper } = useAuth();
+  const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
   const [searchParams] = useSearchParams();
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -372,10 +372,24 @@ export default function CompanyPage() {
     };
 
     let error;
+    let savedCompany: Company | null = null;
     if (editingId) {
-      ({ error } = await supabase.from('companies').update(payload).eq('id', editingId));
+      const response = await supabase
+        .from('companies')
+        .update(payload)
+        .eq('id', editingId)
+        .select('*')
+        .single();
+      error = response.error;
+      savedCompany = (response.data as Company | null) ?? null;
     } else {
-      ({ error } = await supabase.from('companies').insert([payload]));
+      const response = await supabase
+        .from('companies')
+        .insert([payload])
+        .select('*')
+        .single();
+      error = response.error;
+      savedCompany = (response.data as Company | null) ?? null;
     }
 
     if (error) {
@@ -406,8 +420,19 @@ export default function CompanyPage() {
       );
     } else {
       toast.success(editingId ? 'Empresa atualizada' : 'Empresa cadastrada');
-      resetForm();
-      fetchCompany();
+
+      // Comentário: sincroniza imediatamente a empresa ativa para reaplicar as cores sem refresh manual.
+      if (savedCompany?.id && savedCompany.id === activeCompanyId) {
+        updateActiveCompany(savedCompany);
+      }
+
+      if (savedCompany) {
+        setCompany(savedCompany);
+        hydrateFormFromCompany(savedCompany);
+      } else {
+        resetForm();
+        fetchCompany();
+      }
     }
     setSaving(false);
   };

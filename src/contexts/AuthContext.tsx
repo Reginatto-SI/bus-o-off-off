@@ -16,6 +16,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   switchCompany: (companyId: string) => void;
+  updateActiveCompany: (company: Company) => void;
   isGerente: boolean;
   isOperador: boolean;
   isVendedor: boolean;
@@ -267,6 +268,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateActiveCompany = (company: Company) => {
+    // Comentário: mantém o tema e os dados de contexto sincronizados após salvar edição da empresa ativa.
+    setActiveCompany((prev) => (prev?.id === company.id ? company : prev));
+    setUserCompanies((prevCompanies) =>
+      prevCompanies.map((existingCompany) =>
+        existingCompany.id === company.id ? company : existingCompany
+      )
+    );
+  };
+
   // Developer herda acesso de gerente automaticamente
   const isDeveloper = userRole === 'developer';
   const isGerente = userRole === 'gerente' || isDeveloper;
@@ -289,6 +300,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signOut,
         switchCompany,
+        updateActiveCompany,
         isGerente,
         isOperador,
         isVendedor,
