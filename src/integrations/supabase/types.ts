@@ -102,6 +102,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          accent_color: string | null
           address: string | null
           city: string | null
           cnpj: string | null
@@ -122,12 +123,14 @@ export type Database = {
           state: string | null
           stripe_account_id: string | null
           stripe_onboarding_complete: boolean
+          ticket_color: string | null
           trade_name: string | null
           updated_at: string
           website: string | null
           whatsapp: string | null
         }
         Insert: {
+          accent_color?: string | null
           address?: string | null
           city?: string | null
           cnpj?: string | null
@@ -148,12 +151,14 @@ export type Database = {
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
+          ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
           website?: string | null
           whatsapp?: string | null
         }
         Update: {
+          accent_color?: string | null
           address?: string | null
           city?: string | null
           cnpj?: string | null
@@ -174,6 +179,7 @@ export type Database = {
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
+          ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
           website?: string | null

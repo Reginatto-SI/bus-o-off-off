@@ -25,6 +25,7 @@ interface CompanyInfo {
   city: string | null;
   state: string | null;
   primary_color: string | null;
+  ticket_color: string | null;
   cnpj: string | null;
   phone: string | null;
   whatsapp: string | null;
@@ -80,7 +81,7 @@ export default function Confirmation() {
         if (companyId) {
           const { data: companyData } = await supabase
             .from('companies')
-            .select('name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan')
+            .select('name, trade_name, logo_url, city, state, primary_color, ticket_color, cnpj, phone, whatsapp, address, slogan')
             .eq('id', companyId)
             .maybeSingle();
           if (companyData) setCompany(companyData as CompanyInfo);
@@ -208,7 +209,7 @@ export default function Confirmation() {
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,
       companyState: company?.state || null,
-      companyPrimaryColor: company?.primary_color || null,
+      companyPrimaryColor: company?.ticket_color || company?.primary_color || null,
       companyCnpj: company?.cnpj || null,
       companyPhone: company?.phone || null,
       companyWhatsapp: company?.whatsapp || null,

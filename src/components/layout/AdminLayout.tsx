@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useRef, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminSidebar } from './AdminSidebar';
@@ -8,14 +8,65 @@ import { toast } from '@/hooks/use-toast';
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
 import { cn } from '@/lib/utils';
 
+/** Converte cor hex para string HSL (apenas valores, sem "hsl()") */
+function hexToHsl(hex: string): string | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return null;
+  let r = parseInt(result[1], 16) / 255;
+  let g = parseInt(result[2], 16) / 255;
+  let b = parseInt(result[3], 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
+// Valores padrão do tema (do index.css)
+const DEFAULT_PRIMARY_HSL = '25 95% 53%';
+const DEFAULT_RING_HSL = '25 95% 53%';
+
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 export function AdminLayout({ children }: AdminLayoutProps) {
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, activeCompany } = useAuth();
   const { collapsed } = useSidebarCollapsed();
   const toastShownRef = useRef(false);
+
+  // Aplica cores da empresa como CSS custom properties
+  const applyCompanyColors = useCallback(() => {
+    const root = document.documentElement;
+    const primaryHex = activeCompany?.primary_color;
+    const primaryHsl = primaryHex ? hexToHsl(primaryHex) : null;
+
+    if (primaryHsl) {
+      root.style.setProperty('--primary', primaryHsl);
+      root.style.setProperty('--ring', primaryHsl);
+    } else {
+      root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
+      root.style.setProperty('--ring', DEFAULT_RING_HSL);
+    }
+  }, [activeCompany?.primary_color]);
+
+  useEffect(() => {
+    applyCompanyColors();
+    return () => {
+      // Restaurar padrões ao desmontar
+      const root = document.documentElement;
+      root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
+      root.style.setProperty('--ring', DEFAULT_RING_HSL);
+    };
+  }, [applyCompanyColors]);
 
   useEffect(() => {
     if (userRole === 'vendedor' && !toastShownRef.current) {
