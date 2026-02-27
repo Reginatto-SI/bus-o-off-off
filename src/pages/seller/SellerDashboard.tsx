@@ -74,6 +74,13 @@ const EVENT_STORAGE_KEY = 'seller-dashboard-selected-event';
 export default function SellerDashboard() {
   const { user, loading: authLoading, sellerId, profile, signOut, isVendedor, isDeveloper } = useAuth();
 
+  // Extrai apenas o primeiro nome para personalizar o cumprimento no mobile sem alterar regras de autenticação.
+  const firstName = useMemo(() => {
+    const fullName = profile?.name || user?.user_metadata?.name || '';
+    const [name] = fullName.trim().split(/\s+/);
+    return name || 'Vendedor';
+  }, [profile?.name, user?.user_metadata?.name]);
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [seller, setSeller] = useState<Seller | null>(null);
   const [loading, setLoading] = useState(true);
@@ -271,7 +278,7 @@ export default function SellerDashboard() {
       <header className="bg-card border-b px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2">
           <Logo size="sm" />
-          <span className="text-sm font-medium text-muted-foreground truncate max-w-[150px]">
+          <span className="hidden sm:inline text-sm font-medium text-muted-foreground truncate max-w-[150px]">
             {profile?.name}
           </span>
         </div>
@@ -282,7 +289,8 @@ export default function SellerDashboard() {
       </header>
 
       <main className="flex-1 p-4 pb-24 max-w-2xl mx-auto w-full">
-        <h1 className="text-xl font-bold text-foreground mb-1">Minhas Vendas</h1>
+        <h1 className="text-xl font-bold text-foreground mb-1 sm:hidden">Olá, {firstName} 👋</h1>
+        <h1 className="text-xl font-bold text-foreground mb-1 hidden sm:block">Minhas Vendas</h1>
         <p className="text-sm text-muted-foreground mb-4">
           Acompanhe suas vendas rastreadas via link
         </p>
