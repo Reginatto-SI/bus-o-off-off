@@ -9,7 +9,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -118,7 +117,6 @@ export default function Login() {
             <div className="mx-auto mb-4">
               <Logo size="xl" />
             </div>
-            <CardTitle className="text-2xl">Smartbus BR</CardTitle>
             <CardDescription>
               Entre com suas credenciais para acessar o painel
             </CardDescription>
