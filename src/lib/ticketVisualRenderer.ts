@@ -155,24 +155,6 @@ export async function renderTicketVisual(
   ctx.fillText(statusLabel, cardX + cardW - badgeW - 30 + 24, y + 6);
 
   y += 46;
-  ctx.fillStyle = '#0f172a';
-  ctx.font = '600 32px Inter, Arial, sans-serif';
-  ctx.fillText(ticket.passengerName.toUpperCase(), cardX + 34, y);
-
-  y += 42;
-  ctx.fillStyle = '#64748b';
-  ctx.font = '400 24px Inter, Arial, sans-serif';
-  ctx.fillText(`CPF: ${maskCpf(ticket.passengerCpf)}`, cardX + 34, y);
-
-  // Código curto da venda (para suporte rápido)
-  if ((ticket as any).saleId) {
-    y += 30;
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '400 18px monospace, Courier, sans-serif';
-    ctx.fillText(`Código: ${((ticket as any).saleId as string).slice(0, 8)}`, cardX + 34, y);
-  }
-
-  y += 28;
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -181,9 +163,40 @@ export async function renderTicketVisual(
   ctx.stroke();
 
   y += 20;
+  // Estrutura oficial: inicia com os dados do titular para leitura rápida no embarque.
   ctx.fillStyle = '#0f172a';
   ctx.font = '600 24px Inter, Arial, sans-serif';
-  ctx.fillText('🎟 Evento', cardX + 34, y);
+  ctx.fillText('Dados do Passageiro', cardX + 34, y);
+  y += 34;
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '400 21px Inter, Arial, sans-serif';
+  ctx.fillText(ticket.passengerName, cardX + 34, y);
+  y += 30;
+  ctx.fillText(`CPF: ${maskCpf(ticket.passengerCpf)}`, cardX + 34, y);
+  y += 30;
+  ctx.fillText(`Assento ${ticket.seatLabel}`, cardX + 34, y);
+
+  // Código curto da venda (para suporte rápido)
+  if ((ticket as any).saleId) {
+    y += 28;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '400 18px monospace, Courier, sans-serif';
+    ctx.fillText(`Código: ${((ticket as any).saleId as string).slice(0, 8)}`, cardX + 34, y);
+  }
+
+  y += 32;
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 30, y);
+  ctx.lineTo(cardX + cardW - 30, y);
+  ctx.stroke();
+
+  y += 20;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 24px Inter, Arial, sans-serif';
+  ctx.fillText('Evento', cardX + 34, y);
   y += 34;
 
   ctx.fillStyle = '#475569';
@@ -196,7 +209,7 @@ export async function renderTicketVisual(
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '600 24px Inter, Arial, sans-serif';
-  ctx.fillText('📍 Embarque', cardX + 34, y);
+  ctx.fillText('Embarque', cardX + 34, y);
   y += 34;
 
   ctx.fillStyle = '#475569';
@@ -258,7 +271,7 @@ export async function renderTicketVisual(
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '600 20px Inter, Arial, sans-serif';
-  ctx.fillText('📄 Observações Operacionais', cardX + 34, y);
+  ctx.fillText('Observações Operacionais', cardX + 34, y);
   y += 30;
 
   ctx.fillStyle = '#475569';
