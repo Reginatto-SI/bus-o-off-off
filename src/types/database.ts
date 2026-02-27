@@ -210,6 +210,7 @@ export interface Event {
   name: string;
   date: string;
   city: string;
+  boarding_tolerance_minutes: number | null;
   description: string | null;
   public_info: string | null;
   status: EventStatus;
