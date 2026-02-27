@@ -185,6 +185,9 @@ function buildTicketCardData(
     companyWhatsapp: company?.whatsapp || null,
     companyAddress: company?.address || null,
     companySlogan: company?.slogan || null,
+    vehicleType: (sale.trip as any)?.vehicle?.type || null,
+    vehiclePlate: (sale.trip as any)?.vehicle?.plate || null,
+    driverName: (sale.trip as any)?.driver?.name || null,
     fees,
     totalPaid,
   };
@@ -262,7 +265,7 @@ export default function Sales() {
       .select(`
         *,
         event:events(*),
-        trip:trips(*, vehicle:vehicles(*)),
+        trip:trips(*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(name)),
         boarding_location:boarding_locations(*),
         seller:sellers(*)
       `, { count: 'exact' });
@@ -320,7 +323,7 @@ export default function Sales() {
       toast.error('Erro ao carregar vendas');
       setBoardingTimeMap({});
     } else {
-      setSales((data ?? []) as Sale[]);
+      setSales((data ?? []) as unknown as Sale[]);
       setTotalSalesCount(count ?? 0);
     }
 
