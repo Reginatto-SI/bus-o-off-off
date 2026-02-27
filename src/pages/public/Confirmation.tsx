@@ -64,7 +64,7 @@ export default function Confirmation() {
       const [saleRes, ticketsRes] = await Promise.all([
         supabase
           .from('sales')
-          .select('*, event:events(*), trip:trips(*, vehicle:vehicles(*)), boarding_location:boarding_locations(*)')
+          .select('*, event:events(*), trip:trips(*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(name)), boarding_location:boarding_locations(*)')
           .eq('id', id)
           .single(),
         supabase
@@ -75,7 +75,7 @@ export default function Confirmation() {
       ]);
 
       if (saleRes.data) {
-        setSale(saleRes.data as Sale);
+        setSale(saleRes.data as unknown as Sale);
 
         const companyId = (saleRes.data as any).event?.company_id;
         if (companyId) {
@@ -215,6 +215,9 @@ export default function Confirmation() {
       companyWhatsapp: company?.whatsapp || null,
       companyAddress: company?.address || null,
       companySlogan: company?.slogan || null,
+      vehicleType: (sale?.trip as any)?.vehicle?.type || null,
+      vehiclePlate: (sale?.trip as any)?.vehicle?.plate || null,
+      driverName: (sale?.trip as any)?.driver?.name || null,
       fees: feeLines.length > 0 ? feeLines : undefined,
       unitPrice: feeLines.length > 0 ? unitPrice : undefined,
       totalPaid: totalPaidPerTicket,

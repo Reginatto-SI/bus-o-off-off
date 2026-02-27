@@ -39,7 +39,7 @@ serve(async (req) => {
     // 1. Fetch tickets by CPF, joining sales + event + boarding_location + trip
     const { data: ticketRows, error: ticketError } = await supabaseAdmin
       .from("tickets")
-      .select("*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*)")
+      .select("*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*, vehicle:vehicles(type, plate), driver:drivers!trips_driver_id_fkey(name))")
       .eq("passenger_cpf", cpfDigits);
 
     if (ticketError) {
@@ -155,6 +155,9 @@ serve(async (req) => {
         companyWhatsapp: company?.whatsapp || null,
         companyAddress: company?.address || null,
         companySlogan: company?.slogan || null,
+        vehicleType: t.trip?.vehicle?.type || null,
+        vehiclePlate: t.trip?.vehicle?.plate || null,
+        driverName: t.trip?.driver?.name || null,
       });
     }
 

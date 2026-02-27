@@ -3,7 +3,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw } from 'lucide-react';
+import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User } from 'lucide-react';
 import { formatDateOnlyBR } from '@/lib/date';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
@@ -42,6 +42,10 @@ export interface TicketCardData {
   companyWhatsapp: string | null;
   companyAddress: string | null;
   companySlogan: string | null;
+  // Vehicle/driver operational info
+  vehicleType?: string | null;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
   // Fees breakdown (optional)
   fees?: { name: string; amount: number }[];
   totalPaid?: number;
@@ -214,6 +218,29 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 </div>
               )}
             </div>
+
+            {/* Vehicle/Driver info */}
+            {(ticket.vehicleType || ticket.vehiclePlate || ticket.driverName) && (
+              <div className="border-t pt-2 mt-2 space-y-1 text-muted-foreground text-xs">
+                <p className="font-medium text-foreground text-sm mb-1">Informações do Veículo</p>
+                {ticket.vehicleType && (
+                  <div className="flex items-center gap-2">
+                    <Bus className="h-3.5 w-3.5" />
+                    {{ onibus: 'Ônibus', micro_onibus: 'Micro-ônibus', van: 'Van' }[ticket.vehicleType] || ticket.vehicleType}
+                  </div>
+                )}
+                {ticket.vehiclePlate && (
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-3.5 w-3.5" />
+                    {ticket.vehiclePlate}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5" />
+                  {ticket.driverName || 'A definir'}
+                </div>
+              </div>
+            )}
 
             {/* Fee breakdown */}
             {ticket.fees && ticket.fees.length > 0 && (

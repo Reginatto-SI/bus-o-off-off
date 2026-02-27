@@ -57,7 +57,9 @@ export async function renderTicketVisual(
   // Dynamic height: base + extra for fees
   const hasFees = ticket.fees && ticket.fees.length > 0;
   const feeRows = hasFees ? ticket.fees!.length + (ticket.unitPrice != null ? 1 : 0) + (ticket.totalPaid != null ? 1 : 0) : 0;
-  const height = 760 + (feeRows * 26) + (hasFees ? 40 : 0);
+  const hasVehicleInfo = !!(ticket.vehicleType || ticket.vehiclePlate || ticket.driverName);
+  const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
+  const height = 760 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -194,6 +196,37 @@ export async function renderTicketVisual(
     ctx.fillText(line, cardX + 34, y);
     y += 34;
   });
+
+  // Vehicle/Driver info section
+  if (hasVehicleInfo) {
+    y += 10;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 20px Inter, Arial, sans-serif';
+    ctx.fillText('Informações do Veículo', cardX + 34, y);
+    y += 32;
+
+    const vehicleTypeLabels: Record<string, string> = { onibus: 'Ônibus', micro_onibus: 'Micro-ônibus', van: 'Van' };
+    ctx.fillStyle = '#475569';
+    ctx.font = '400 20px Inter, Arial, sans-serif';
+    if (ticket.vehicleType) {
+      ctx.fillText(`🚍  ${vehicleTypeLabels[ticket.vehicleType] || ticket.vehicleType}`, cardX + 34, y);
+      y += 30;
+    }
+    if (ticket.vehiclePlate) {
+      ctx.fillText(`🔢  ${ticket.vehiclePlate}`, cardX + 34, y);
+      y += 30;
+    }
+    ctx.fillText(`👤  ${ticket.driverName || 'A definir'}`, cardX + 34, y);
+    y += 10;
+  }
 
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {

@@ -247,6 +247,9 @@ export default function TicketLookup() {
           companyWhatsapp: t.companyWhatsapp,
           companyAddress: t.companyAddress,
           companySlogan: t.companySlogan,
+          vehicleType: t.vehicleType || null,
+          vehiclePlate: t.vehiclePlate || null,
+          driverName: t.driverName || null,
           fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
           totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
         };
