@@ -59,7 +59,7 @@ const navigationGroups: NavigationGroup[] = [{
   }]
 }, {
   id: 'cadastros',
-  label: 'Cadastros Base',
+  label: 'Cadastros',
   items: [{
     name: 'Frota (Veículos)',
     href: '/admin/frota',
@@ -69,11 +69,6 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/motoristas',
     icon: Users
   }, {
-    name: 'Patrocinadores',
-    href: '/admin/patrocinadores',
-    icon: Image,
-    roles: ['gerente']
-  }, {
     name: 'Locais de Embarque',
     href: '/admin/locais',
     icon: MapPin
@@ -81,15 +76,17 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Vendedores',
     href: '/admin/vendedores',
     icon: UserCheck
-  }]
-}, {
-  id: 'vendas-comissao',
-  label: 'Vendas & Comissão',
-  items: [{
-    name: 'Minhas Vendas',
-    href: '/vendedor/minhas-vendas',
-    icon: BadgePercent,
-    roles: ['vendedor']
+  }, {
+    name: 'Patrocinadores',
+    href: '/admin/patrocinadores',
+    icon: Image,
+    roles: ['gerente']
+  }, {
+    name: 'Parceiros',
+    href: '/admin/parceiros',
+    icon: Handshake,
+    // Tela restrita: somente usuários developer podem visualizar o menu de Parceiros.
+    roles: ['developer']
   }]
 }, {
   id: 'relatorios',
@@ -110,8 +107,8 @@ const navigationGroups: NavigationGroup[] = [{
     statusLabel: 'Em breve'
   }]
 }, {
-  id: 'configuracoes',
-  label: 'Configurações',
+  id: 'administracao',
+  label: 'Administração',
   items: [{
     name: 'Usuários',
     href: '/admin/usuarios',
@@ -121,18 +118,11 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Settings
-  }, {
-    name: 'Patrocinadores',
-    href: '/admin/patrocinadores',
-    icon: Image,
-    roles: ['gerente']
-  }, {
-    name: 'Parceiros',
-    href: '/admin/parceiros',
-    icon: Handshake,
-    // Tela restrita: somente usuários developer podem visualizar o menu de Parceiros.
-    roles: ['developer']
-  }, {
+  }]
+}, {
+  id: 'conta',
+  label: 'Conta',
+  items: [{
     name: 'Minha Conta',
     href: '/admin/minha-conta',
     icon: User
@@ -242,8 +232,53 @@ export function AdminSidebar() {
       </div>
 
       <nav className="sidebar-scroll-hidden flex-1 bg-sidebar px-3 py-5 overflow-y-auto">
-        <div className="space-y-1">
-          {visibleItems.map((item, index) => {
+        {showToggle ? (
+          <div className="space-y-4">
+            {visibleGroups.map(group => (
+              <div key={group.id} className="space-y-1">
+                {/* Agrupamento visual aplicado somente no desktop expandido do painel administrativo. */}
+                <p className="px-3 pb-1 text-[11px] font-medium text-[#94A3B8]">{group.label}</p>
+                {group.items.map((item, index) => {
+                  const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
+                  const itemKey = `${group.id}-${item.href ?? item.name}-${index}`;
+
+                  if (item.href && !item.disabled) {
+                    return (
+                      <NavLink
+                        key={itemKey}
+                        to={item.href}
+                        onClick={onClose}
+                        className={cn(
+                          'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-[#243B63] text-white before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-r before:bg-primary'
+                            : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        )}
+                      >
+                        <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
+                        <span className="flex-1">{item.name}</span>
+                      </NavLink>
+                    );
+                  }
+
+                  return (
+                    <button key={itemKey} type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#64748B] opacity-60" disabled>
+                      <item.icon className="h-4 w-4" />
+                      <span className="flex-1 text-left">{item.name}</span>
+                      {item.statusLabel && (
+                        <span className="rounded-full bg-[#1E293B] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+                          {item.statusLabel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {visibleItems.map((item, index) => {
             const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
             const itemKey = `${item.href ?? item.name}-${index}`;
 
@@ -277,8 +312,9 @@ export function AdminSidebar() {
                 )}
               </button>
             );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </nav>
 
       {/* A troca de empresa permanece centralizada no header para evitar duplicidade de controles. */}
