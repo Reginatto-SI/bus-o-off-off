@@ -1,123 +1,78 @@
 
 
-# Aba "Identidade Visual" com Paleta de Cores Predefinidas
+# Inclusão de Dados Operacionais na Passagem
 
 ## Resumo
 
-Adicionar nova aba "Identidade Visual" na tela `/admin/empresa` com seletor de cores predefinidas (swatches), preview em tempo real, e aplicacao automatica das cores no sistema administrativo e nos tickets.
+Adicionar tipo do veículo, placa e nome do motorista ao modelo único de passagem (virtual, imagem, PDF), propagando para todos os consumers.
 
 ---
 
-## Parte 1 — Migracao de Banco
+## Mudanças
 
-A tabela `companies` ja tem `primary_color` (default `#F97316`). Adicionar duas colunas novas:
+### 1. TicketCardData — 3 novos campos opcionais
 
-```sql
-ALTER TABLE public.companies ADD COLUMN accent_color text DEFAULT '#1D4ED8';
-ALTER TABLE public.companies ADD COLUMN ticket_color text DEFAULT '#F97316';
+Arquivo: `src/components/public/TicketCard.tsx` (interface)
+
+```ts
+vehicleType?: string | null;    // 'onibus' | 'van' | 'micro_onibus'
+vehiclePlate?: string | null;
+driverName?: string | null;
 ```
 
-Nenhuma RLS adicional necessaria — as politicas existentes ja cobrem ALL para gerentes e SELECT para usuarios da empresa.
+### 2. TicketCard.tsx — nova seção "Informações do Veículo"
 
----
+Após o bloco de evento/embarque (após `</div>` do `border-t pt-2`), antes do fee breakdown:
 
-## Parte 2 — Atualizar tipo Company no frontend
+- Ícone `Bus` + tipo traduzido (Ônibus/Van/Micro-ônibus)
+- Ícone `Hash` + placa
+- Ícone `User` + nome do motorista (ou "A definir")
+- Seção com `border-t pt-2 mt-2`
 
-Adicionar em `src/types/database.ts`:
-- `accent_color: string | null;`
-- `ticket_color: string | null;`
+### 3. ticketVisualRenderer.ts — mesma seção no canvas
 
----
+Após o bloco de detalhes do evento, antes dos fees:
+- Linha separadora + 3 linhas de texto (tipo, placa, motorista)
+- Ajustar cálculo dinâmico de altura do canvas (+3 linhas × 34px)
 
-## Parte 3 — Nova aba no Company.tsx
+### 4. Confirmation.tsx — popular novos campos
 
-Adicionar uma nova `TabsTrigger` "Identidade Visual" com icone `Palette` entre "Observacoes" e "Pagamentos".
+A query já faz `trip:trips(*, vehicle:vehicles(*))`. Falta o driver.
+- Alterar select para incluir `driver:drivers(name)` no join de trips
+- Mapear `vehicleType`, `vehiclePlate`, `driverName` no ticketCards
 
-### Conteudo da aba
+### 5. Sales.tsx — popular novos campos
 
-**(A) Secao "Cores do Sistema"**
+- A query de sales já inclui trip + vehicle. Adicionar join com driver
+- Mapear os 3 campos no `buildTicketCardData`
 
-Dois seletores de swatches:
-- **Cor Primaria** (botoes principais, destaques) — usa `primary_color`
-- **Cor de Destaque** (accent, detalhes menores) — usa `accent_color`
+### 6. NewSaleModal.tsx — popular novos campos
 
-**(B) Secao "Cores da Passagem"**
+- Já tem acesso a trips/vehicles. Adicionar fetch de driver name
+- Mapear no `buildTicketCardData`
 
-Um seletor de swatch:
-- **Cor principal da passagem** — usa `ticket_color`
+### 7. ticket-lookup edge function — retornar dados do veículo/motorista
 
-### Paleta predefinida (10 cores)
+- A query já faz `trip:trips(*)`. Alterar para `trip:trips(*, vehicle:vehicles(type, plate), driver:drivers(name))`
+- Adicionar `vehicleType`, `vehiclePlate`, `driverName` no resultado
 
-```text
-Laranja (padrao)  #F97316
-Azul Royal        #2563EB
-Azul Marinho      #1E3A5F
-Verde             #16A34A
-Verde Escuro      #15803D
-Roxo              #7C3AED
-Vermelho          #DC2626
-Turquesa          #0891B2
-Cinza Grafite     #4B5563
-Preto             #18181B
-```
+### 8. TicketLookup.tsx — mapear novos campos
 
-Cada swatch: circulo de 32px com borda, nome abaixo, ring de selecao quando ativo.
-
-### UX
-
-- Label clara acima de cada seletor
-- Indicacao visual do swatch selecionado (ring + checkmark)
-- Validacao: se primaria === destaque, exibir aviso (nao bloquear)
-- Botao "Restaurar padrao" que reseta para Laranja/Azul Royal/Laranja
-- O botao "Salvar alteracoes" do formulario principal ja cobre o salvamento
-
-### Preview em tempo real
-
-Bloco de preview compacto abaixo dos seletores:
-- Um botao ficticio (mostrando cor primaria)
-- Um badge/chip (mostrando cor de destaque)
-- Um mini-card simulando passagem (faixa colorida com `ticket_color`)
-
----
-
-## Parte 4 — Aplicacao automatica das cores
-
-No `AuthContext.tsx` ou no `AdminLayout.tsx`, ao carregar `activeCompany`:
-- Setar CSS custom properties no `document.documentElement`:
-  - `--primary` com HSL da `primary_color`
-  - `--ring` com HSL da `primary_color`
-- Isso faz com que todos os botoes `bg-primary` e elementos que usam `--primary` reflitam a cor da empresa automaticamente.
-- Ao deslogar ou sem config, restaurar os valores padrao.
-
-Para o accent, setar `--accent-foreground` com a cor de destaque.
-
-Para o ticket, a cor ja e passada via `companyPrimaryColor` nos renderers — atualizar para usar `ticket_color` quando disponivel.
-
----
-
-## Parte 5 — Atualizar renderers de ticket
-
-Nos arquivos que usam `companyPrimaryColor`:
-- `src/pages/public/Confirmation.tsx`
-- `src/pages/admin/Sales.tsx`
-- `src/components/admin/NewSaleModal.tsx`
-
-Adicionar fallback: `company.ticket_color || company.primary_color || '#F97316'`
+- Mapear `t.vehicleType`, `t.vehiclePlate`, `t.driverName` do resultado da edge function
 
 ---
 
 ## Arquivos afetados
 
-| Arquivo | Acao |
+| Arquivo | Ação |
 |---------|------|
-| Migracao SQL | Adicionar `accent_color` e `ticket_color` |
-| `src/types/database.ts` | Adicionar campos |
-| `src/pages/admin/Company.tsx` | Nova aba + seletores + preview |
-| `src/components/layout/AdminLayout.tsx` | Aplicar CSS custom properties |
-| `src/pages/public/Confirmation.tsx` | Usar `ticket_color` |
-| `src/pages/admin/Sales.tsx` | Usar `ticket_color` |
-| `src/components/admin/NewSaleModal.tsx` | Usar `ticket_color` |
-| `src/lib/pdfUtils.ts` | Adicionar helper para ticket_color |
+| `src/components/public/TicketCard.tsx` | +3 campos na interface + seção visual |
+| `src/lib/ticketVisualRenderer.ts` | +seção canvas + altura dinâmica |
+| `src/pages/public/Confirmation.tsx` | Join driver + mapear campos |
+| `src/pages/admin/Sales.tsx` | Join driver + mapear campos |
+| `src/components/admin/NewSaleModal.tsx` | Mapear campos |
+| `src/pages/public/TicketLookup.tsx` | Mapear campos da edge function |
+| `supabase/functions/ticket-lookup/index.ts` | Join vehicle+driver + retornar dados |
 
-Nenhuma logica de CRUD, RLS ou estrutura multiempresa e alterada. Apenas visual e persistencia de preferencias.
+Nenhuma migração de banco necessária — os dados já existem nas tabelas `vehicles` e `drivers`.
 
