@@ -50,12 +50,13 @@ import {
   DollarSign,
   CheckCircle2,
   Share2,
-  Copy,
-  Download,
+  Check,
   Filter,
   ChevronDown,
   ChevronsUpDown,
   LinkIcon,
+  Copy,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
