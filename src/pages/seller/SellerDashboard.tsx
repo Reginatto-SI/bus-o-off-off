@@ -50,7 +50,8 @@ import {
   DollarSign,
   CheckCircle2,
   Share2,
-  Check,
+  Copy,
+  Download,
   Filter,
   ChevronDown,
   ChevronsUpDown,
@@ -60,6 +61,14 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { QRCodeCanvas } from 'qrcode.react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface EventOption {
   id: string;
@@ -84,9 +93,10 @@ export default function SellerDashboard() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [seller, setSeller] = useState<Seller | null>(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
+  const [copyingLink, setCopyingLink] = useState(false);
 
   // Filters
   const [eventSearch, setEventSearch] = useState('');
@@ -215,28 +225,59 @@ export default function SellerDashboard() {
   // Comissão agregada usa apenas vendas pagas e o percentual já configurado para o vendedor.
   const sellerCommission = seller ? paidValue * (seller.commission_percent / 100) : 0;
 
+  // Mantém a mesma URL já usada para rastrear vendas por ref (sem criar nova regra de link).
+  const sellerLink = sellerId ? `${window.location.origin}/eventos?ref=${sellerId}` : '';
+
+  const qrDownloadName = useMemo(() => {
+    const sellerSlug = (seller?.name || 'vendedor').replace(/\s+/g, '-').toLowerCase();
+    return `qrcode-${sellerSlug}.png`;
+  }, [seller?.name]);
+
   const shareLink = () => {
-    const link = `${window.location.origin}/eventos?ref=${sellerId}`;
+    if (!sellerLink) return;
 
     if (navigator.share) {
       navigator.share({
         title: 'Compre sua passagem!',
         text: 'Garanta sua passagem para o próximo evento:',
-        url: link,
+        url: sellerLink,
       }).catch(() => {
         // fallback to copy
-        copyLink(link);
+        copyLink();
       });
     } else {
-      copyLink(link);
+      copyLink();
     }
   };
 
-  const copyLink = (link: string) => {
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    toast.success('Link copiado!');
-    setTimeout(() => setCopied(false), 2000);
+  const copyLink = async () => {
+    if (!sellerLink) return;
+
+    try {
+      await navigator.clipboard.writeText(sellerLink);
+      setCopyingLink(true);
+      toast.success('Link copiado!');
+      setTimeout(() => setCopyingLink(false), 1800);
+    } catch {
+      toast.error('Não foi possível copiar o link');
+    }
+  };
+
+  const downloadQrCode = () => {
+    const canvas = document.getElementById('seller-share-qr') as HTMLCanvasElement | null;
+    if (!canvas) {
+      toast.error('Erro ao gerar QR Code');
+      return;
+    }
+
+    const pngUrl = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = pngUrl;
+    link.download = qrDownloadName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('QR Code baixado!');
   };
 
   // Auth guard
@@ -512,21 +553,56 @@ export default function SellerDashboard() {
       {/* Fixed share button */}
       {sellerId && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-card border-t z-30">
-          <Button onClick={shareLink} className="w-full" size="lg">
-            {copied ? (
-              <>
-                <Check className="h-5 w-5 mr-2" />
-                Link Copiado!
-              </>
-            ) : (
-              <>
-                <Share2 className="h-5 w-5 mr-2" />
-                Compartilhar Link de Venda
-              </>
-            )}
+          <Button onClick={() => setShareModalOpen(true)} className="w-full" size="lg">
+            <Share2 className="h-5 w-5 mr-2" />
+            Divulgar Link
           </Button>
         </div>
       )}
+
+      {/* Modal de divulgação focado em ações rápidas para o vendedor em mobile. */}
+      <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Divulgar Link</DialogTitle>
+            <DialogDescription>
+              Copie, compartilhe ou use o QR Code para divulgar suas vendas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-2">
+            <section className="space-y-3">
+              <p className="text-sm font-semibold">Link do vendedor</p>
+              <code className="block w-full rounded bg-muted px-3 py-2 text-xs sm:text-sm break-all">
+                {sellerLink}
+              </code>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={copyLink}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  {copyingLink ? 'Copiado!' : 'Copiar link'}
+                </Button>
+                <Button type="button" variant="outline" onClick={shareLink}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Compartilhar link
+                </Button>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <p className="text-sm font-semibold">QR Code</p>
+              <div className="flex justify-center rounded-lg border bg-white p-4">
+                <QRCodeCanvas id="seller-share-qr" value={sellerLink} size={220} includeMargin level="H" />
+              </div>
+
+              <Button type="button" className="w-full" variant="outline" onClick={downloadQrCode}>
+                <Download className="h-4 w-4 mr-2" />
+                Baixar QR Code
+              </Button>
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
