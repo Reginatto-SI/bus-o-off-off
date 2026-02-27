@@ -17,7 +17,8 @@ import {
   Image,
   Handshake,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -212,6 +213,24 @@ export function AdminSidebar() {
   // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
   const visibleItems = visibleGroups.flatMap(group => group.items);
 
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    // Por padrão os grupos iniciam fechados; apenas o grupo da rota ativa nasce aberto para manter contexto.
+    const activeGroup = visibleGroups.find(group =>
+      group.items.some(item => item.href && (location.pathname === item.href || location.pathname.startsWith(`${item.href}/`)))
+    );
+
+    return activeGroup ? {
+      [activeGroup.id]: true
+    } : {};
+  });
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
+
   /* ── Expanded sidebar content (used for both mobile overlay and desktop expanded) ── */
   const expandedContent = (showToggle: boolean, onClose?: () => void) => (
     <>
@@ -236,9 +255,18 @@ export function AdminSidebar() {
           <div className="space-y-4">
             {visibleGroups.map(group => (
               <div key={group.id} className="space-y-1">
-                {/* Agrupamento visual aplicado somente no desktop expandido do painel administrativo. */}
-                <p className="px-3 pb-1 text-[11px] font-medium text-[#94A3B8]">{group.label}</p>
-                {group.items.map((item, index) => {
+                {/* Cabeçalho funciona como accordion somente no menu expandido. */}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-[11px] font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  aria-expanded={Boolean(openGroups[group.id])}
+                >
+                  <span>{group.label}</span>
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openGroups[group.id] ? 'rotate-0' : '-rotate-90')} />
+                </button>
+
+                {openGroups[group.id] && group.items.map((item, index) => {
                   const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
                   const itemKey = `${group.id}-${item.href ?? item.name}-${index}`;
 
