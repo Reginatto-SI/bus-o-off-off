@@ -260,6 +260,8 @@ export default function Events() {
     name: '',
     date: '',
     city: '',
+    // Tolerância opcional em minutos para regras operacionais da passagem.
+    boarding_tolerance_minutes: '10',
     description: '',
     // Campo público exibido no app mobile em 'Informações e regras'.
     public_info: '',
@@ -884,10 +886,21 @@ export default function Events() {
       return { error: true, eventId: editingId, isNew: false };
     }
 
+    const parsedBoardingTolerance = form.boarding_tolerance_minutes === ''
+      ? null
+      : parseInt(form.boarding_tolerance_minutes, 10);
+
+    if (parsedBoardingTolerance !== null && (Number.isNaN(parsedBoardingTolerance) || parsedBoardingTolerance <= 0)) {
+      toast.error('A tolerância de embarque deve ser um número inteiro positivo');
+      return { error: true, eventId: editingId, isNew: false };
+    }
+
     const eventData = {
       name: form.name.trim(),
       date: form.date,
       city: form.city.trim(),
+      // Campo opcional: vazio vira null, valor preenchido deve ser inteiro positivo.
+      boarding_tolerance_minutes: parsedBoardingTolerance,
       description: form.description || null,
       public_info: form.public_info || null,
       status: targetStatus,
@@ -1093,6 +1106,7 @@ export default function Events() {
       name: event.name,
       date: event.date,
       city: event.city,
+      boarding_tolerance_minutes: event.boarding_tolerance_minutes != null ? event.boarding_tolerance_minutes.toString() : '',
       description: event.description ?? '',
       public_info: event.public_info ?? '',
       status: event.status,
@@ -1660,6 +1674,7 @@ export default function Events() {
       name: '',
       date: '',
       city: '',
+      boarding_tolerance_minutes: '10',
       description: '',
       public_info: '',
       status: 'rascunho',
@@ -2521,6 +2536,30 @@ export default function Events() {
                           </div>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="boarding_tolerance_minutes">Tolerância de embarque (minutos)</Label>
+                      <Input
+                        id="boarding_tolerance_minutes"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={form.boarding_tolerance_minutes}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Permite vazio (opcional) e bloqueia valores não positivos.
+                          if (value === '') {
+                            setForm({ ...form, boarding_tolerance_minutes: '' });
+                            return;
+                          }
+                          const parsed = parseInt(value, 10);
+                          if (Number.isNaN(parsed) || parsed <= 0) return;
+                          setForm({ ...form, boarding_tolerance_minutes: parsed.toString() });
+                        }}
+                        placeholder="Ex: 10"
+                        disabled={isReadOnly}
+                      />
                     </div>
 
                     <div className="space-y-2">

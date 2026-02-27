@@ -360,6 +360,7 @@ export type Database = {
         Row: {
           allow_online_sale: boolean
           allow_seller_sale: boolean
+          boarding_tolerance_minutes: number | null
           city: string
           company_id: string
           created_at: string
@@ -378,6 +379,7 @@ export type Database = {
         Insert: {
           allow_online_sale?: boolean
           allow_seller_sale?: boolean
+          boarding_tolerance_minutes?: number | null
           city: string
           company_id: string
           created_at?: string
@@ -396,6 +398,7 @@ export type Database = {
         Update: {
           allow_online_sale?: boolean
           allow_seller_sale?: boolean
+          boarding_tolerance_minutes?: number | null
           city?: string
           company_id?: string
           created_at?: string

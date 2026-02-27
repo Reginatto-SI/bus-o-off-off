@@ -59,7 +59,7 @@ export async function renderTicketVisual(
   const feeRows = hasFees ? ticket.fees!.length + (ticket.unitPrice != null ? 1 : 0) + (ticket.totalPaid != null ? 1 : 0) : 0;
   const hasVehicleInfo = !!(ticket.vehicleType || ticket.vehiclePlate || ticket.driverName);
   const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
-  const height = 760 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight;
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -180,22 +180,41 @@ export async function renderTicketVisual(
   ctx.lineTo(cardX + cardW - 30, y);
   ctx.stroke();
 
-  const details = [
-    // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
-    `${ticket.eventName} — ${formatDateOnlyBR(ticket.eventDate)}`,
-    ticket.boardingLocationName,
-    (ticket.boardingDepartureDate || ticket.boardingDepartureTime)
-      ? formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)
-      : null,
-  ].filter(Boolean) as string[];
-
   y += 20;
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 24px Inter, Arial, sans-serif';
+  ctx.fillText('🎟 Evento', cardX + 34, y);
+  y += 34;
+
   ctx.fillStyle = '#475569';
-  ctx.font = '400 22px Inter, Arial, sans-serif';
-  details.forEach((line) => {
-    ctx.fillText(line, cardX + 34, y);
-    y += 34;
-  });
+  ctx.font = '400 21px Inter, Arial, sans-serif';
+  ctx.fillText(ticket.eventName, cardX + 34, y);
+  y += 30;
+  // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
+  ctx.fillText(formatDateOnlyBR(ticket.eventDate), cardX + 34, y);
+  y += 40;
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 24px Inter, Arial, sans-serif';
+  ctx.fillText('📍 Embarque', cardX + 34, y);
+  y += 34;
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '400 21px Inter, Arial, sans-serif';
+  ctx.fillText(ticket.boardingLocationName, cardX + 34, y);
+  y += 30;
+  if (ticket.boardingDepartureDate || ticket.boardingDepartureTime) {
+    ctx.fillText(formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate), cardX + 34, y);
+    y += 30;
+  }
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '400 19px Inter, Arial, sans-serif';
+  const toleranceText = ticket.boardingToleranceMinutes != null
+    ? `Tolerância máxima de embarque: ${ticket.boardingToleranceMinutes} minutos após o horário informado.`
+    : 'Embarque pontual no horário informado.';
+  ctx.fillText(toleranceText, cardX + 34, y);
+  y += 28;
 
   // Vehicle/Driver info section
   if (hasVehicleInfo) {
@@ -227,6 +246,26 @@ export async function renderTicketVisual(
     ctx.fillText(`👤  ${ticket.driverName || 'A definir'}`, cardX + 34, y);
     y += 10;
   }
+
+  y += 16;
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 30, y);
+  ctx.lineTo(cardX + cardW - 30, y);
+  ctx.stroke();
+  y += 18;
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '600 20px Inter, Arial, sans-serif';
+  ctx.fillText('📄 Observações Operacionais', cardX + 34, y);
+  y += 30;
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '400 18px Inter, Arial, sans-serif';
+  ctx.fillText('• É obrigatório apresentar documento oficial com foto no momento do embarque.', cardX + 34, y);
+  y += 26;
+  ctx.fillText('• Recomenda-se chegar com antecedência mínima de 10 minutos.', cardX + 34, y);
 
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {
