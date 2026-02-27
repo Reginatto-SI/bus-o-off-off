@@ -316,9 +316,11 @@ export function AdminSidebar() {
       <nav className="sidebar-scroll-hidden flex-1 bg-sidebar py-4 overflow-y-auto">
         <div className="flex flex-col items-center gap-1">
           {visibleGroups.flatMap(group =>
-            group.items.map(item => {
+            group.items.map((item, index) => {
               const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
-              return <CollapsedNavItem key={item.name} item={item} isActive={isActive} />;
+              // Chave estável/única evita artefatos visuais ao alternar expandido/colapsado com itens duplicados por nome.
+              const collapsedItemKey = `${group.id}-${item.href ?? item.name}-${index}`;
+              return <CollapsedNavItem key={collapsedItemKey} item={item} isActive={isActive} />;
             })
           )}
         </div>
