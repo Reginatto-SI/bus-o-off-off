@@ -23,10 +23,10 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
+import logoAdmin from '@/assets/logo_admin.png';
 
 type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 
@@ -156,6 +156,18 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function ExpandedBrandHeader() {
+  return (
+    <div className="flex h-12 w-full items-center">
+      <img
+        src={logoAdmin}
+        alt="Smartbus BR Admin"
+        className="h-full w-full object-contain object-left"
+      />
+    </div>
+  );
+}
+
 /* ── Collapsed nav item with tooltip ── */
 function CollapsedNavItem({ item, isActive, onClick }: {
   item: NavigationItem;
@@ -207,13 +219,14 @@ export function AdminSidebar() {
     items: group.items.filter(item => isDeveloper || !item.roles || (userRole && item.roles.includes(userRole)))
   })).filter(group => group.items.length > 0);
 
-  const defaultOpenGroups: string[] = [];
+  // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
+  const visibleItems = visibleGroups.flatMap(group => group.items);
 
   /* ── Expanded sidebar content (used for both mobile overlay and desktop expanded) ── */
   const expandedContent = (showToggle: boolean, onClose?: () => void) => (
     <>
       <div className="flex items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-4">
-        <BrandHeader />
+        <ExpandedBrandHeader />
         <div className="flex items-center gap-1">
           {showToggle && (
             <Button variant="ghost" size="icon" className="hidden lg:flex text-sidebar-foreground hover:bg-[#1E293B]" onClick={toggleCollapsed}>
@@ -229,51 +242,43 @@ export function AdminSidebar() {
       </div>
 
       <nav className="sidebar-scroll-hidden flex-1 bg-sidebar px-3 py-5 overflow-y-auto">
-        <Accordion type="multiple" defaultValue={defaultOpenGroups} className="space-y-2">
-          {visibleGroups.map(group => (
-            <AccordionItem key={group.id} value={group.id} className="border-0">
-              <AccordionTrigger className="mt-3 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8] hover:bg-[#1E293B] hover:text-white hover:no-underline">
-                {group.label}
-              </AccordionTrigger>
-              <AccordionContent className="pb-1 pt-0">
-                <div className="space-y-1">
-                  {group.items.map(item => {
-                    const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
-                    if (item.href && !item.disabled) {
-                      return (
-                        <NavLink
-                          key={item.name}
-                          to={item.href}
-                          onClick={onClose}
-                          className={cn(
-                            'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                            isActive
-                              ? 'bg-[#243B63] text-white before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-r before:bg-primary'
-                              : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
-                          )}
-                        >
-                          <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
-                          <span className="flex-1">{item.name}</span>
-                        </NavLink>
-                      );
-                    }
-                    return (
-                      <button key={item.name} type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#64748B] opacity-60" disabled>
-                        <item.icon className="h-4 w-4" />
-                        <span className="flex-1 text-left">{item.name}</span>
-                        {item.statusLabel && (
-                          <span className="rounded-full bg-[#1E293B] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
-                            {item.statusLabel}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <div className="space-y-1">
+          {visibleItems.map((item, index) => {
+            const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
+            const itemKey = `${item.href ?? item.name}-${index}`;
+
+            if (item.href && !item.disabled) {
+              return (
+                <NavLink
+                  key={itemKey}
+                  to={item.href}
+                  onClick={onClose}
+                  className={cn(
+                    'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-[#243B63] text-white before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-r before:bg-primary'
+                      : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                  )}
+                >
+                  <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
+                  <span className="flex-1">{item.name}</span>
+                </NavLink>
+              );
+            }
+
+            return (
+              <button key={itemKey} type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#64748B] opacity-60" disabled>
+                <item.icon className="h-4 w-4" />
+                <span className="flex-1 text-left">{item.name}</span>
+                {item.statusLabel && (
+                  <span className="rounded-full bg-[#1E293B] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+                    {item.statusLabel}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       {/* A troca de empresa permanece centralizada no header para evitar duplicidade de controles. */}
