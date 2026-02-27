@@ -198,6 +198,7 @@ export default function Confirmation() {
       eventName: sale?.event?.name || '',
       eventDate: sale?.event?.date || '',
       eventCity: sale?.event?.city || '',
+      boardingToleranceMinutes: sale?.event?.boarding_tolerance_minutes ?? null,
       boardingLocationName: sale?.boarding_location?.name || '',
       boardingLocationAddress: sale?.boarding_location?.address || '',
       boardingDepartureTime: boardingDepartureTime,

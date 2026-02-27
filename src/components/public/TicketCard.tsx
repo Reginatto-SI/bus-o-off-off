@@ -21,6 +21,7 @@ export interface TicketCardData {
   eventName: string;
   eventDate: string;
   eventCity: string;
+  boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
   boardingLocationAddress: string;
   boardingDepartureTime: string | null;
@@ -185,38 +186,68 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
               </div>
               <StatusBadge status={displayStatus} />
             </div>
-            <p className="font-medium">{ticket.passengerName}</p>
-            <p className="text-muted-foreground">CPF: {maskCpf(ticket.passengerCpf)}</p>
-
-            {/* ID da Passagem — para suporte rápido */}
-            {ticket.saleId && (
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="text-xs">Código: <span className="font-mono">{ticket.saleId.slice(0, 8)}</span></span>
-                <button
-                  onClick={handleCopySaleId}
-                  className="p-0.5 rounded hover:bg-muted transition-colors"
-                  title="Copiar código completo"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-
-            <div className="border-t pt-2 mt-2 space-y-1 text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3.5 w-3.5" />
-                {ticket.eventName} — {formatDateOnlyBR(ticket.eventDate)}
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-3.5 w-3.5" />
-                {ticket.boardingLocationName}
-              </div>
-              {(ticket.boardingDepartureTime || ticket.boardingDepartureDate) && (
+            {/* Estrutura oficial: bloco do titular antes dos dados operacionais do evento. */}
+            <div className="border-t pt-3 mt-2 space-y-3 text-muted-foreground">
+              <div className="space-y-1">
+                <p className="font-medium text-foreground text-sm">Dados do Passageiro</p>
                 <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  {formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)}
+                  <User className="h-3.5 w-3.5" />
+                  {ticket.passengerName}
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <User className="h-3.5 w-3.5" />
+                  CPF: {maskCpf(ticket.passengerCpf)}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Armchair className="h-3.5 w-3.5" />
+                  Assento {ticket.seatLabel}
+                </div>
+
+                {/* ID da Passagem — para suporte rápido */}
+                {ticket.saleId && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="text-xs">Código: <span className="font-mono">{ticket.saleId.slice(0, 8)}</span></span>
+                    <button
+                      onClick={handleCopySaleId}
+                      className="p-0.5 rounded hover:bg-muted transition-colors"
+                      title="Copiar código completo"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-medium text-foreground text-sm">Evento</p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {ticket.eventName}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {formatDateOnlyBR(ticket.eventDate)}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-medium text-foreground text-sm">Embarque</p>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {ticket.boardingLocationName}
+                </div>
+                {(ticket.boardingDepartureTime || ticket.boardingDepartureDate) && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)}
+                  </div>
+                )}
+                <p className="text-xs">
+                  {ticket.boardingToleranceMinutes != null
+                    ? `Tolerância máxima de embarque: ${ticket.boardingToleranceMinutes} minutos após o horário informado.`
+                    : 'Embarque pontual no horário informado.'}
+                </p>
+              </div>
             </div>
 
             {/* Vehicle/Driver info */}
@@ -241,6 +272,12 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 </div>
               </div>
             )}
+
+            <div className="border-t pt-2 mt-2 space-y-1 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground text-sm mb-1">Observações Operacionais</p>
+              <p>• É obrigatório apresentar documento oficial com foto no momento do embarque.</p>
+              <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
+            </div>
 
             {/* Fee breakdown */}
             {ticket.fees && ticket.fees.length > 0 && (

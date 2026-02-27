@@ -230,6 +230,7 @@ export default function TicketLookup() {
           eventName: t.eventName,
           eventDate: t.eventDate,
           eventCity: t.eventCity,
+          boardingToleranceMinutes: t.boardingToleranceMinutes ?? null,
           boardingLocationName: t.boardingLocationName,
           boardingLocationAddress: t.boardingLocationAddress,
           boardingDepartureTime: t.boardingDepartureTime,
