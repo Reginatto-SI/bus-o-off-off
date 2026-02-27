@@ -1,4 +1,4 @@
-import logo from "@/assets/logo.jpeg";
+import logo from "@/assets/logo.png";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg" | "xl";
