@@ -12,12 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy } from 'lucide-react';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
+import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -69,12 +70,20 @@ export default function CompanyPage() {
     state: '',
     notes: '',
     logo_url: '',
+    public_slug: '',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
     accent: '#2563EB',
     ticket: '#F97316',
   });
+  const [slugCheckLoading, setSlugCheckLoading] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+
+  const normalizedPublicSlug = normalizePublicSlug(form.public_slug);
+  const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
+  const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
+  const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
 
   const hydrateFormFromCompany = (data: Company | null) => {
     // Comentário: mantém o formulário consistente com o registro único da empresa ativa.
@@ -92,6 +101,7 @@ export default function CompanyPage() {
       state: (data?.state ?? '').toUpperCase(),
       notes: data?.notes ?? '',
       logo_url: data?.logo_url ?? '',
+      public_slug: data?.public_slug ?? '',
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -165,6 +175,39 @@ export default function CompanyPage() {
   useEffect(() => {
     fetchCompany();
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    // Comentário: valida disponibilidade do nick com debounce para reduzir chamadas ao banco.
+    const hasSlug = normalizedPublicSlug.length > 0;
+    if (!hasSlug) {
+      setSlugAvailable(null);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    if (isReservedSlug) {
+      setSlugAvailable(false);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    setSlugCheckLoading(true);
+    const timeoutId = window.setTimeout(async () => {
+      const { data, error } = await supabase.rpc('is_company_public_slug_available', {
+        input_slug: normalizedPublicSlug,
+        current_company_id: editingId,
+      });
+
+      if (error) {
+        setSlugAvailable(null);
+      } else {
+        setSlugAvailable(Boolean(data));
+      }
+      setSlugCheckLoading(false);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [normalizedPublicSlug, editingId, isReservedSlug]);
 
   // Handle Stripe return from onboarding — trigger immediate refresh + start polling
   useEffect(() => {
@@ -307,6 +350,7 @@ export default function CompanyPage() {
       state: '',
       notes: '',
       logo_url: '',
+      public_slug: '',
     });
   };
 
@@ -349,6 +393,18 @@ export default function CompanyPage() {
       return;
     }
 
+    if (form.public_slug && isReservedSlug) {
+      toast.error('Este nick é reservado e não pode ser utilizado');
+      setSaving(false);
+      return;
+    }
+
+    if (form.public_slug && slugAvailable === false) {
+      toast.error('Este nick já está em uso por outra empresa');
+      setSaving(false);
+      return;
+    }
+
     // Comentário: o campo `name` é obrigatório no schema, então usamos trade_name/legal_name como base.
     // Também mantemos `document` sincronizado com CNPJ para compatibilidade com dados legados.
     const payload = {
@@ -366,6 +422,7 @@ export default function CompanyPage() {
       state: form.state.trim().toUpperCase() || null,
       notes: form.notes.trim() || null,
       logo_url: form.logo_url?.trim() || null,
+      public_slug: normalizedPublicSlug || null,
       primary_color: brandColors.primary || null,
       accent_color: brandColors.accent || null,
       ticket_color: brandColors.ticket || null,
@@ -701,6 +758,77 @@ export default function CompanyPage() {
                       </div>
                       {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
                     </div>
+
+                    {/* Comentário: card de parâmetros da vitrine pública mantendo padrão visual já usado no admin. */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Vitrine Pública (Link curto)</CardTitle>
+                        <CardDescription>
+                          Configure o nick para divulgar sua vitrine com um link fácil de compartilhar.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="public_slug">Seu nick (link público)</Label>
+                          <Input
+                            id="public_slug"
+                            value={form.public_slug}
+                            onChange={(e) => setForm({ ...form, public_slug: e.target.value })}
+                            placeholder="Ex: Viagens São José"
+                          />
+                        </div>
+
+                        <div className="grid gap-2 rounded-md border p-3 text-sm">
+                          <div className="flex items-start gap-2">
+                            <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Curto: {shortLink}</p>
+                              <p className="text-muted-foreground">Canônico: {canonicalLink}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {slugCheckLoading ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Validando nick...
+                            </Badge>
+                          ) : isReservedSlug ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertCircle className="h-3 w-3" /> Indisponível (reservado)
+                            </Badge>
+                          ) : normalizedPublicSlug && slugAvailable === true ? (
+                            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+                              <CheckCircle2 className="h-3 w-3" /> Disponível
+                            </Badge>
+                          ) : normalizedPublicSlug && slugAvailable === false ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertCircle className="h-3 w-3" /> Indisponível (já em uso)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Digite um nick para validar</Badge>
+                          )}
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={!normalizedPublicSlug}
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(shortLink);
+                              toast.success('Link curto copiado!');
+                            }}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copiar link curto
+                          </Button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          Evite mudar depois para não quebrar links divulgados.
+                        </p>
+                      </CardContent>
+                    </Card>
                   </TabsContent>
 
                   <TabsContent value="endereco" className="mt-0">
