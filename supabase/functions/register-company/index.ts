@@ -7,8 +7,11 @@ const corsHeaders = {
 };
 
 interface RegisterCompanyRequest {
+  legal_type: "PF" | "PJ";
   company_name: string;
-  cnpj: string;
+  legal_name?: string | null;
+  trade_name?: string | null;
+  document_number: string;
   responsible_name: string;
   email: string;
   phone: string;
@@ -26,12 +29,29 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: RegisterCompanyRequest = await req.json();
-    const { company_name, cnpj, responsible_name, email, phone, password } = body;
+    const {
+      legal_type,
+      company_name,
+      legal_name,
+      trade_name,
+      document_number,
+      responsible_name,
+      email,
+      phone,
+      password,
+    } = body;
 
     // Validate required fields
-    if (!company_name || !cnpj || !responsible_name || !email || !phone || !password) {
+    if (!legal_type || !company_name || !document_number || !responsible_name || !email || !phone || !password) {
       return new Response(
         JSON.stringify({ error: "Todos os campos são obrigatórios" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (legal_type !== "PF" && legal_type !== "PJ") {
+      return new Response(
+        JSON.stringify({ error: "Tipo de cadastro inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -53,11 +73,28 @@ serve(async (req) => {
       );
     }
 
-    // Validate CNPJ (14 digits)
-    const cnpjDigits = cnpj.replace(/\D/g, "");
-    if (cnpjDigits.length !== 14) {
+    const normalizedDocument = document_number.replace(/\D/g, "");
+    if (legal_type === "PJ" && normalizedDocument.length !== 14) {
       return new Response(
         JSON.stringify({ error: "CNPJ deve ter 14 dígitos" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (legal_type === "PF" && normalizedDocument.length !== 11) {
+      return new Response(
+        JSON.stringify({ error: "CPF deve ter 11 dígitos" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Comentário de manutenção: regra explícita de nome evita fallback confuso entre PF/PJ.
+    const persistedName = legal_type === "PJ"
+      ? (trade_name?.trim() || legal_name?.trim() || company_name.trim())
+      : (trade_name?.trim() || company_name.trim());
+
+    if (!persistedName) {
+      return new Response(
+        JSON.stringify({ error: "Nome de exibição da empresa é obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -73,7 +110,7 @@ serve(async (req) => {
     }
 
     const existingUser = existingUsers?.users?.find(
-      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
     );
     if (existingUser) {
       return new Response(
@@ -104,8 +141,13 @@ serve(async (req) => {
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .insert({
-        name: company_name,
-        cnpj: cnpjDigits,
+        name: persistedName,
+        legal_type,
+        legal_name: legal_type === "PJ" ? (legal_name?.trim() || null) : null,
+        trade_name: trade_name?.trim() || null,
+        cnpj: legal_type === "PJ" ? normalizedDocument : null,
+        document: normalizedDocument,
+        document_number: normalizedDocument,
         phone,
         email,
       })
