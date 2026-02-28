@@ -46,6 +46,8 @@ const REASON_MESSAGES: Record<string, string> = {
 export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading } = useAuth();
+  // Normaliza acesso para perfis operacionais (sem depender exclusivamente de role motorista no v1).
+  const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
@@ -196,7 +198,15 @@ export default function DriverValidate() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (userRole !== 'motorista') return <Navigate to="/admin/eventos" replace />;
+  // Evita bounce para /admin quando a role ainda está carregando no AuthContext.
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
 
   return (
     <div className="min-h-screen bg-background px-4 py-4">

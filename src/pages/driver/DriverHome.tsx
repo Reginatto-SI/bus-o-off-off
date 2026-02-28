@@ -9,6 +9,9 @@ export default function DriverHome() {
   const navigate = useNavigate();
   const { user, loading, userRole, signOut, profile } = useAuth();
 
+  // Normaliza acesso: além do motorista, perfis operacionais também podem abrir o fluxo mobile.
+  const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -18,7 +21,15 @@ export default function DriverHome() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (userRole !== 'motorista') return <Navigate to="/admin/eventos" replace />;
+  // Enquanto role ainda não foi resolvida no contexto, evita redirecionar incorretamente.
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
 
   const firstName = (profile?.name || user.user_metadata?.name || 'Motorista').split(' ')[0];
 
