@@ -23,6 +23,7 @@ export interface Company {
   primary_color: string | null;
   accent_color: string | null;
   ticket_color: string | null;
+  public_slug: string | null;
   slogan: string | null;
   document: string | null;
   phone: string | null;

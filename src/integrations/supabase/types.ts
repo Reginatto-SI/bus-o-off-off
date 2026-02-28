@@ -116,6 +116,7 @@ export type Database = {
           name: string
           notes: string | null
           partner_split_percent: number
+          public_slug: string | null
           phone: string | null
           platform_fee_percent: number
           primary_color: string | null
@@ -144,6 +145,7 @@ export type Database = {
           name: string
           notes?: string | null
           partner_split_percent?: number
+          public_slug?: string | null
           phone?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
@@ -172,6 +174,7 @@ export type Database = {
           name?: string
           notes?: string | null
           partner_split_percent?: number
+          public_slug?: string | null
           phone?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
@@ -1202,6 +1205,10 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_developer: { Args: { _user_id: string }; Returns: boolean }
+      is_company_public_slug_available: {
+        Args: { current_company_id?: string; input_slug: string }
+        Returns: boolean
+      }
       normalize_city_name: { Args: { input: string }; Returns: string }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
