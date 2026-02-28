@@ -20,7 +20,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { SeatMap } from '@/components/public/SeatMap';
 import { TicketCard } from '@/components/public/TicketCard';
-import { Loader2, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import {
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  Bus,
+  Route,
+  CalendarClock,
+  Circle,
+  CircleCheck,
+  CheckCircle2,
+  Users,
+  CreditCard,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatDateOnlyBR } from '@/lib/date';
@@ -84,6 +97,29 @@ function formatPhoneMask(value: string): string {
   return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
 }
 
+function isValidCpf(value: string): boolean {
+  const cpf = value.replace(/\D/g, '');
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+  // Validação oficial do CPF por dígitos verificadores.
+  const calcDigit = (base: string, factor: number) => {
+    let total = 0;
+    for (let i = 0; i < base.length; i += 1) total += Number(base[i]) * (factor - i);
+    const result = (total * 10) % 11;
+    return result === 10 ? 0 : result;
+  };
+
+  const first = calcDigit(cpf.slice(0, 9), 10);
+  const second = calcDigit(cpf.slice(0, 10), 11);
+  return first === Number(cpf[9]) && second === Number(cpf[10]);
+}
+
+function getTripTypeLabel(tripType?: string) {
+  if (tripType === 'ida') return 'Ida';
+  if (tripType === 'volta') return 'Volta';
+  return 'Trajeto';
+}
+
 export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSaleModalProps) {
   const { activeCompanyId, user } = useAuth();
 
@@ -101,6 +137,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [loadingBoarding, setLoadingBoarding] = useState(false);
+  const [tripSoldSeats, setTripSoldSeats] = useState<Record<string, number>>({});
 
   // Step 2: Seats
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -129,6 +166,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const selectedEvent = events.find((e) => e.id === selectedEventId);
   const selectedTrip = trips.find((t) => t.id === selectedTripId);
   const selectedVehicle = selectedTrip?.vehicle;
+  const selectedTripSoldCount = selectedTripId ? (tripSoldSeats[selectedTripId] ?? 0) : 0;
+  const selectedTripRemainingSeats = selectedVehicle ? Math.max(selectedVehicle.capacity - selectedTripSoldCount, 0) : 0;
 
   // ── Reset on open/close ──
   useEffect(() => {
@@ -183,6 +222,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   useEffect(() => {
     if (!selectedEventId) {
       setTrips([]);
+      setTripSoldSeats({});
       setSelectedTripId('');
       setEventFees([]);
       return;
@@ -202,8 +242,28 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           .eq('is_active', true)
           .order('sort_order'),
       ]);
-      setTrips((tripsRes.data ?? []) as TripWithDetails[]);
+      const tripsData = (tripsRes.data ?? []) as TripWithDetails[];
+      setTrips(tripsData);
       setEventFees((feesRes.data ?? []) as EventFeeInput[]);
+
+      const tripIds = tripsData.map((trip) => trip.id);
+      if (tripIds.length > 0) {
+        const { data: soldSeatsData } = await supabase
+          .from('tickets')
+          .select('trip_id')
+          .in('trip_id', tripIds)
+          .eq('company_id', activeCompanyId!);
+
+        // Mapeia assentos vendidos por transporte para exibir vagas restantes no seletor.
+        const soldCount = (soldSeatsData ?? []).reduce<Record<string, number>>((acc, row: any) => {
+          const id = row.trip_id;
+          acc[id] = (acc[id] ?? 0) + 1;
+          return acc;
+        }, {});
+        setTripSoldSeats(soldCount);
+      } else {
+        setTripSoldSeats({});
+      }
       setSelectedTripId('');
       setSelectedBoardingId('');
       setLoadingTrips(false);
@@ -515,6 +575,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   };
 
   const availableCapacity = selectedVehicle ? selectedVehicle.capacity - occupiedSeatIds.length : 999;
+  const stepMeta = [
+    { value: 1, label: 'Evento', Icon: Bus },
+    { value: 2, label: 'Assentos', Icon: Users },
+    { value: 3, label: 'Pagamento', Icon: CreditCard },
+  ];
 
   const handleClose = () => {
     if (confirmationData) {
@@ -569,7 +634,19 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                   // Mantém o mesmo card/popup do ticket oficial para visualização + exportações (PDF/QR).
                   return (
-                    <div className="w-full max-w-2xl">
+                    <div className="w-full max-w-2xl space-y-3">
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Resumo da passagem</span>
+                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Pago</Badge>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                          <div><span className="font-medium text-foreground">Passageiro:</span> {item.ticket.passenger_name}</div>
+                          <div><span className="font-medium text-foreground">Evento:</span> {selectedEvent?.name ?? '-'}</div>
+                          <div><span className="font-medium text-foreground">Embarque:</span> {boardingOptions.find((b) => b.id === selectedBoardingId)?.name ?? '-'}</div>
+                          <div><span className="font-medium text-foreground">Assento:</span> {item.ticket.seat_label}</div>
+                        </div>
+                      </div>
                       <TicketCard ticket={item.ticketCardData} allowReservedDownloads />
                     </div>
                   );
@@ -591,35 +668,39 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
             <ScrollArea className="flex-1 px-6 py-4">
               {/* Step indicators */}
-              <div className="flex items-center gap-2 mb-4">
-                {[1, 2, 3].map((s) => (
-                  <div
-                    key={s}
-                    className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                      s === step
-                        ? 'bg-primary text-primary-foreground'
-                        : s < step
-                        ? 'bg-primary/20 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {s}
-                  </div>
-                ))}
-                <span className="text-sm text-muted-foreground ml-2">
-                  {step === 1 && 'Selecione evento, transporte e embarque'}
-                  {step === 2 && 'Selecione as poltronas'}
-                  {step === 3 && 'Dados dos passageiros'}
-                </span>
+              <div className="mb-5 rounded-xl border bg-muted/20 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  {stepMeta.map((item, index) => {
+                    const isCompleted = item.value < step;
+                    const isActive = item.value === step;
+                    return (
+                      <div key={item.value} className="flex flex-1 items-center gap-2">
+                        <div
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 ${
+                            isActive
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : isCompleted
+                              ? 'border-primary/30 bg-primary/5 text-primary'
+                              : 'border-border bg-background text-muted-foreground'
+                          }`}
+                        >
+                          {isCompleted ? <CircleCheck className="h-4 w-4" /> : <item.Icon className="h-4 w-4" />}
+                          <span className="text-sm font-medium">{item.label}</span>
+                        </div>
+                        {index < stepMeta.length - 1 && <div className="h-px w-4 bg-border" />}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* All tabs share the same wizard */}
               <TabsContent value={activeTab} className="mt-0" forceMount>
                 {/* STEP 1 — Context */}
                 {step === 1 && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     {/* Event */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Evento *</Label>
                       {loadingEvents ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -638,7 +719,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     </div>
 
                     {/* Trip/Vehicle */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Transporte *</Label>
                       {loadingTrips ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -648,21 +729,41 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           <SelectContent>
                             {trips.map((t) => {
                               const v = t.vehicle;
-                              const d = t.driver;
+                              const soldSeatsCount = tripSoldSeats[t.id] ?? 0;
+                              const remainingSeats = v ? Math.max(v.capacity - soldSeatsCount, 0) : 0;
+                              const eventDateLabel = selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date, 'dd/MM') : '--/--';
                               return (
                                 <SelectItem key={t.id} value={t.id}>
-                                  {v ? `${vehicleTypeLabels[v.type] ?? v.type} • ${v.plate} • ${v.capacity} lug.` : t.id.slice(0, 8)}
-                                  {d ? ` • ${d.name}` : ''}
+                                  {/* Mantém o trigger compacto e evita "estouro" visual ao selecionar o transporte. */}
+                                  {v
+                                    ? `${vehicleTypeLabels[v.type] ?? v.type} ${v.plate} — ${getTripTypeLabel(t.trip_type)} • ${eventDateLabel} ${t.departure_time?.slice(0, 5) || '--:--'} • ${remainingSeats} vagas`
+                                    : t.id.slice(0, 8)}
                                 </SelectItem>
                               );
                             })}
                           </SelectContent>
                         </Select>
                       )}
+                      {!!selectedTrip && (
+                        <div className="space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 font-medium text-foreground">
+                            <Route className="h-3.5 w-3.5" />
+                            {getTripTypeLabel(selectedTrip.trip_type)}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            Saída prevista: {selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date, 'dd/MM') : '--/--'} às {selectedTrip.departure_time?.slice(0, 5) || '--:--'}
+                          </div>
+                          <div className="flex items-center gap-2 text-primary">
+                            <Bus className="h-3.5 w-3.5" />
+                            Capacidade: {selectedVehicle?.capacity ?? 0} • Vagas restantes: {selectedTripRemainingSeats}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Boarding location */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
                       <Label>Local / Horário de Embarque *</Label>
                       {loadingBoarding ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
@@ -679,6 +780,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             ))}
                           </SelectContent>
                         </Select>
+                      )}
+                      {selectedBoardingId && (
+                        <p className="text-xs font-medium text-primary">Confira o horário de embarque para evitar atraso.</p>
                       )}
                     </div>
                   </div>
@@ -830,10 +934,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       <div className="space-y-4">
                         <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
                         {passengers.map((p, i) => (
-                          <div key={p.seatId} className="p-4 rounded-lg border space-y-3">
+                          <div key={p.seatId} className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
-                              <span className="text-sm text-muted-foreground">Passageiro {i + 1}</span>
+                              <span className="text-sm font-medium text-foreground">Passageiro {i + 1}</span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div className="space-y-1">
@@ -851,7 +955,20 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                   onChange={(e) => updatePassenger(i, 'cpf', e.target.value)}
                                   placeholder="000.000.000-00"
                                   maxLength={14}
+                                  className={
+                                    p.cpf.length >= 14
+                                      ? isValidCpf(p.cpf)
+                                        ? 'border-emerald-500/70 focus-visible:ring-emerald-500/30'
+                                        : 'border-destructive/70 focus-visible:ring-destructive/30'
+                                      : undefined
+                                  }
                                 />
+                                {p.cpf.length >= 14 && (
+                                  <p className={`flex items-center gap-1 text-[11px] ${isValidCpf(p.cpf) ? 'text-emerald-600' : 'text-destructive'}`}>
+                                    {isValidCpf(p.cpf) ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
+                                    {isValidCpf(p.cpf) ? 'CPF válido' : 'CPF inválido'}
+                                  </p>
+                                )}
                               </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Telefone</Label>
@@ -879,17 +996,21 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       </div>
                     )}
 
-                    {/* Summary */}
+                    {/* Summary (fixo no fluxo do formulário para não sobrepor os cards de passageiro) */}
                     {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
                       const price = parseFloat(unitPrice || '0');
                       const breakdown = calculateFees(price, eventFees);
                       const hasFees = breakdown.fees.length > 0;
                       const total = breakdown.unitPriceWithFees * passengers.length;
                       return (
-                        <div className="p-3 rounded-md bg-primary/10 border border-primary/20 space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span>Passagem × {passengers.length}</span>
-                            <span>R$ {(price * passengers.length).toFixed(2)}</span>
+                        <div className="mt-2 space-y-2 rounded-xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Quantidade de passagens</span>
+                            <span className="font-medium">{passengers.length}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Valor unitário</span>
+                            <span className="font-medium">R$ {price.toFixed(2)}</span>
                           </div>
                           {hasFees && breakdown.fees.map((fee, idx) => (
                             <div key={idx} className="flex justify-between text-sm text-muted-foreground">
@@ -897,7 +1018,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <span>R$ {(fee.amount * passengers.length).toFixed(2)}</span>
                             </div>
                           ))}
-                          <div className="flex justify-between text-sm font-semibold pt-1 border-t">
+                          <div className="flex justify-between border-t pt-2 text-base font-bold text-primary">
                             <span>Total</span>
                             <span>R$ {total.toFixed(2)}</span>
                           </div>
