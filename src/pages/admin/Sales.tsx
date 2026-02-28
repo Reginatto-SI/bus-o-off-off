@@ -43,6 +43,15 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
   Table,
   TableBody,
   TableCell,
@@ -68,6 +77,8 @@ import {
   Users,
   History,
   Calendar,
+  Check,
+  ChevronsUpDown,
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
@@ -76,7 +87,7 @@ import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
-import { formatBoardingLocationLabel } from '@/lib/utils';
+import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -213,6 +224,10 @@ export default function Sales() {
   // Estado único de ordenação para manter o comportamento de apenas 1 coluna ativa por vez.
   const [sortField, setSortField] = useState<SalesSortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SalesSortDirection>('desc');
+  const [eventFilterOpen, setEventFilterOpen] = useState(false);
+  const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
+  const [eventFilterSearch, setEventFilterSearch] = useState('');
+  const [sellerFilterSearch, setSellerFilterSearch] = useState('');
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
@@ -399,7 +414,7 @@ export default function Sales() {
         .order('date', { ascending: false }),
       supabase
         .from('sellers')
-        .select('id, name')
+        .select('id, name, short_code')
         .eq('company_id', activeCompanyId)
         .eq('status', 'ativo')
         .order('name'),
@@ -418,6 +433,14 @@ export default function Sales() {
   }, [activeCompanyId]);
 
   useEffect(() => {
+    if (!eventFilterOpen) setEventFilterSearch('');
+  }, [eventFilterOpen]);
+
+  useEffect(() => {
+    if (!sellerFilterOpen) setSellerFilterSearch('');
+  }, [sellerFilterOpen]);
+
+  useEffect(() => {
     // Sempre volta para a primeira página ao trocar filtros/tamanho da página.
     setCurrentPage(1);
   }, [filters, rowsPerPage]);
@@ -427,6 +450,39 @@ export default function Sales() {
     const eventDate = event.date ? formatDateOnlyBR(event.date) : '';
     return eventDate ? `${eventDate} - ${event.name}` : event.name;
   };
+
+  // Escalabilidade: Evento/Vendedor foram convertidos para Combobox com busca conforme padrão oficial da tela
+  // /admin/relatorios/comissao-vendedores. A lógica de filtros segue server-side; apenas a experiência do select foi aprimorada.
+  const eventFilterOptions = useMemo(
+    () => [{ value: 'all', label: 'Todos' }, ...events.map((event) => ({ value: event.id, label: formatEventFilterLabel(event) }))],
+    [events],
+  );
+
+  const sellerFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'Todos' },
+      ...sellers.map((seller) => ({
+        value: seller.id,
+        label: seller.short_code ? `${seller.name} (${seller.short_code})` : seller.name,
+      })),
+    ],
+    [sellers],
+  );
+
+  const filteredEventFilterOptions = useMemo(() => {
+    const term = eventFilterSearch.trim().toLowerCase();
+    if (!term) return eventFilterOptions;
+    return eventFilterOptions.filter((option) => option.label.toLowerCase().includes(term));
+  }, [eventFilterOptions, eventFilterSearch]);
+
+  const filteredSellerFilterOptions = useMemo(() => {
+    const term = sellerFilterSearch.trim().toLowerCase();
+    if (!term) return sellerFilterOptions;
+    return sellerFilterOptions.filter((option) => option.label.toLowerCase().includes(term));
+  }, [sellerFilterOptions, sellerFilterSearch]);
+
+  const selectedEventFilterLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
+  const selectedSellerFilterLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -871,29 +927,98 @@ export default function Sales() {
                   { value: 'cancelado', label: 'Cancelado' },
                 ],
               },
-              {
-                id: 'event',
-                label: 'Evento',
-                placeholder: 'Todos',
-                value: filters.eventId,
-                onChange: (v) => setFilters((f) => ({ ...f, eventId: v })),
-                options: [
-                  { value: 'all', label: 'Todos' },
-                  ...events.map((e) => ({ value: e.id, label: formatEventFilterLabel(e) })),
-                ],
-              },
-              {
-                id: 'seller',
-                label: 'Vendedor',
-                placeholder: 'Todos',
-                value: filters.sellerId,
-                onChange: (v) => setFilters((f) => ({ ...f, sellerId: v })),
-                options: [
-                  { value: 'all', label: 'Todos' },
-                  ...sellers.map((s) => ({ value: s.id, label: s.name })),
-                ],
-              },
             ]}
+            mainFilters={(
+              <>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Evento</label>
+                  <Popover open={eventFilterOpen} onOpenChange={setEventFilterOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={eventFilterOpen}
+                        className={cn('w-full justify-between font-normal', filters.eventId === 'all' && 'text-muted-foreground')}
+                      >
+                        <span className="truncate">{selectedEventFilterLabel}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar evento..."
+                          value={eventFilterSearch}
+                          onValueChange={setEventFilterSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredEventFilterOptions.map((option) => (
+                              <CommandItem
+                                key={option.value}
+                                value={option.label}
+                                onSelect={() => {
+                                  setFilters((f) => ({ ...f, eventId: option.value }));
+                                  setEventFilterOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filters.eventId === option.value ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{option.label}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Vendedor</label>
+                  <Popover open={sellerFilterOpen} onOpenChange={setSellerFilterOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={sellerFilterOpen}
+                        className={cn('w-full justify-between font-normal', filters.sellerId === 'all' && 'text-muted-foreground')}
+                      >
+                        <span className="truncate">{selectedSellerFilterLabel}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar vendedor..."
+                          value={sellerFilterSearch}
+                          onValueChange={setSellerFilterSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredSellerFilterOptions.map((option) => (
+                              <CommandItem
+                                key={option.value}
+                                value={option.label}
+                                onSelect={() => {
+                                  setFilters((f) => ({ ...f, sellerId: option.value }));
+                                  setSellerFilterOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filters.sellerId === option.value ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{option.label}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
             advancedFilters={
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FilterInput
