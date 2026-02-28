@@ -112,7 +112,9 @@ export type Database = {
           id: string
           is_active: boolean
           legal_name: string | null
+          legal_type: 'PF' | 'PJ'
           logo_url: string | null
+          document_number: string | null
           name: string
           notes: string | null
           partner_split_percent: number
@@ -141,7 +143,9 @@ export type Database = {
           id?: string
           is_active?: boolean
           legal_name?: string | null
+          legal_type?: 'PF' | 'PJ'
           logo_url?: string | null
+          document_number?: string | null
           name: string
           notes?: string | null
           partner_split_percent?: number
@@ -170,7 +174,9 @@ export type Database = {
           id?: string
           is_active?: boolean
           legal_name?: string | null
+          legal_type?: 'PF' | 'PJ'
           logo_url?: string | null
+          document_number?: string | null
           name?: string
           notes?: string | null
           partner_split_percent?: number

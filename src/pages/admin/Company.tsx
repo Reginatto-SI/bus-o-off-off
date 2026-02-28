@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ function isBucketMissingErrorMessage(message?: string | null) {
 }
 
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
+const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
 
 const formatCnpjInput = (value: string) => {
   const digits = getCnpjDigits(value);
@@ -45,6 +47,48 @@ const formatCnpjInput = (value: string) => {
     /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,
     (_, p1, p2, p3, p4, p5) => `${p1}.${p2}.${p3}/${p4}${p5 ? `-${p5}` : ''}`
   );
+};
+
+const formatCpfInput = (value: string) => {
+  const digits = getCpfDigits(value);
+  if (!digits) return '';
+  return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, p1, p2, p3, p4) =>
+    `${p1}.${p2}.${p3}${p4 ? `-${p4}` : ''}`
+  );
+};
+
+const isValidCpf = (value: string) => {
+  const cpf = getCpfDigits(value);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  const calcDigit = (base: string, factor: number) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * (factor - index), 0);
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  const digit1 = calcDigit(cpf.slice(0, 9), 10);
+  const digit2 = calcDigit(cpf.slice(0, 10), 11);
+  return digit1 === Number(cpf[9]) && digit2 === Number(cpf[10]);
+};
+
+const isValidCnpj = (value: string) => {
+  const cnpj = getCnpjDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+
+  const calcDigit = (base: string, weights: number[]) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * weights[index], 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const digit1 = calcDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const digit2 = calcDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return digit1 === Number(cnpj[12]) && digit2 === Number(cnpj[13]);
 };
 
 export default function CompanyPage() {
@@ -58,9 +102,11 @@ export default function CompanyPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [form, setForm] = useState({
+    legal_type: 'PJ' as 'PF' | 'PJ',
+    full_name: '',
     legal_name: '',
     trade_name: '',
-    cnpj: '',
+    document_number: '',
     email: '',
     phone: '',
     whatsapp: '',
@@ -86,12 +132,20 @@ export default function CompanyPage() {
   const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
 
   const hydrateFormFromCompany = (data: Company | null) => {
+    const legalType = data?.legal_type === 'PF' ? 'PF' : 'PJ';
+    const legacyDocument = data?.document_number ?? data?.cnpj ?? data?.document ?? '';
+    const normalizedDocument = legalType === 'PF'
+      ? formatCpfInput(legacyDocument)
+      : formatCnpjInput(legacyDocument);
+
     // Comentário: mantém o formulário consistente com o registro único da empresa ativa.
     setEditingId(data?.id ?? null);
     setForm({
+      legal_type: legalType,
+      full_name: legalType === 'PF' ? (data?.name ?? data?.legal_name ?? '') : '',
       legal_name: data?.legal_name ?? '',
       trade_name: data?.trade_name ?? data?.name ?? '',
-      cnpj: data?.cnpj ?? data?.document ?? '',
+      document_number: normalizedDocument,
       email: data?.email ?? '',
       phone: data?.phone ?? '',
       whatsapp: data?.whatsapp ?? '',
@@ -338,9 +392,11 @@ export default function CompanyPage() {
     }
     setEditingId(null);
     setForm({
+      legal_type: 'PJ',
+      full_name: '',
       legal_name: '',
       trade_name: '',
-      cnpj: '',
+      document_number: '',
       email: '',
       phone: '',
       whatsapp: '',
@@ -366,17 +422,40 @@ export default function CompanyPage() {
     }
 
     const legalName = form.legal_name.trim();
+    const fullName = form.full_name.trim();
     const tradeName = form.trade_name.trim();
+    const legalType = form.legal_type;
 
-    if (!legalName && !tradeName) {
-      toast.error('Informe a razão social ou o nome fantasia');
+    if (!legalType) {
+      toast.error('Selecione o tipo de cadastro');
       setSaving(false);
       return;
     }
 
-    const cnpjDigits = getCnpjDigits(form.cnpj);
-    if (form.cnpj && cnpjDigits.length !== 14) {
+    // Comentário de manutenção (PF/PJ):
+    // 1) O tipo jurídico explícito evita ambiguidade entre Empresa e Pessoa Física.
+    // 2) Campos obrigatórios mudam por tipo e essa validação mantém consistência para
+    //    vitrine pública, pagamentos e relatórios, que dependem de documento fiscal válido.
+    if (legalType === 'PJ' && (!legalName || !tradeName)) {
+      toast.error('Preencha Razão Social e Nome Fantasia');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PF' && !fullName) {
+      toast.error('Preencha o Nome Completo');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PJ' && !isValidCnpj(form.document_number)) {
       toast.error('CNPJ inválido');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PF' && !isValidCpf(form.document_number)) {
+      toast.error('CPF inválido');
       setSaving(false);
       return;
     }
@@ -405,14 +484,20 @@ export default function CompanyPage() {
       return;
     }
 
-    // Comentário: o campo `name` é obrigatório no schema, então usamos trade_name/legal_name como base.
-    // Também mantemos `document` sincronizado com CNPJ para compatibilidade com dados legados.
+    // Comentário de manutenção:
+    // - `document_number` unifica CPF/CNPJ para o sistema não depender só de CNPJ.
+    // - Mantemos `document` e `cnpj` para compatibilidade legada (migração gradual).
+    // - `name` alimenta vitrine pública: Empresa usa Nome Fantasia; Pessoa Física usa
+    //   Nome Público (trade_name) e fallback para Nome Completo.
+    const normalizedDocument = form.document_number.trim();
     const payload = {
-      name: tradeName || legalName,
-      legal_name: legalName || null,
+      name: legalType === 'PF' ? (tradeName || fullName) : (tradeName || legalName),
+      legal_type: legalType,
+      legal_name: legalType === 'PJ' ? (legalName || null) : null,
       trade_name: tradeName || null,
-      cnpj: form.cnpj.trim() || null,
-      document: cnpjDigits ? form.cnpj.trim() : null,
+      cnpj: legalType === 'PJ' ? normalizedDocument : null,
+      document: normalizedDocument || null,
+      document_number: normalizedDocument || null,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       whatsapp: form.whatsapp.trim() || null,
@@ -726,34 +811,97 @@ export default function CompanyPage() {
                       </div>
                     </div>
                     {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+                    <div className="space-y-3 rounded-md border p-4">
+                      <div className="space-y-1">
+                        <Label>Tipo de cadastro</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Escolha o tipo de cadastro para habilitar os campos corretos.
+                        </p>
+                      </div>
+                      <RadioGroup
+                        value={form.legal_type}
+                        onValueChange={(value: 'PF' | 'PJ') =>
+                          setForm((prev) => ({
+                            ...prev,
+                            legal_type: value,
+                            legal_name: value === 'PF' ? '' : prev.legal_name,
+                            document_number: value === 'PF'
+                              ? formatCpfInput(prev.document_number)
+                              : formatCnpjInput(prev.document_number),
+                          }))
+                        }
+                        className="grid gap-2 md:grid-cols-2"
+                      >
+                        <div className="flex items-center space-x-2 rounded-md border p-3">
+                          <RadioGroupItem value="PJ" id="legal_type_pj" />
+                          <Label htmlFor="legal_type_pj" className="cursor-pointer">Empresa (CNPJ)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-md border p-3">
+                          <RadioGroupItem value="PF" id="legal_type_pf" />
+                          <Label htmlFor="legal_type_pf" className="cursor-pointer">Pessoa Fisica (CPF)</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      {form.legal_type === 'PJ' ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="legal_name">Razão Social</Label>
+                            <Input
+                              id="legal_name"
+                              value={form.legal_name}
+                              onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
+                              placeholder="Empresa Exemplo LTDA"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trade_name">Nome Fantasia</Label>
+                            <Input
+                              id="trade_name"
+                              value={form.trade_name}
+                              onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
+                              placeholder="Empresa Exemplo"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="full_name">Nome Completo</Label>
+                            <Input
+                              id="full_name"
+                              value={form.full_name}
+                              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                              placeholder="Nome completo da pessoa"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trade_name">Nome público/Apelido da vitrine (opcional)</Label>
+                            <Input
+                              id="trade_name"
+                              value={form.trade_name}
+                              onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
+                              placeholder="Como deseja aparecer na vitrine"
+                            />
+                          </div>
+                        </>
+                      )}
+
                       <div className="space-y-2">
-                        <Label htmlFor="legal_name">Razão Social</Label>
+                        <Label htmlFor="document_number">{form.legal_type === 'PJ' ? 'CNPJ' : 'CPF'}</Label>
                         <Input
-                          id="legal_name"
-                          value={form.legal_name}
-                          onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
-                          placeholder="Empresa Exemplo LTDA"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="trade_name">Nome Fantasia</Label>
-                        <Input
-                          id="trade_name"
-                          value={form.trade_name}
-                          onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
-                          placeholder="Empresa Exemplo"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cnpj">CNPJ</Label>
-                        <Input
-                          id="cnpj"
-                          value={form.cnpj}
+                          id="document_number"
+                          value={form.document_number}
                           onChange={(e) =>
-                            setForm({ ...form, cnpj: formatCnpjInput(e.target.value) })
+                            setForm({
+                              ...form,
+                              document_number: form.legal_type === 'PJ'
+                                ? formatCnpjInput(e.target.value)
+                                : formatCpfInput(e.target.value),
+                            })
                           }
-                          placeholder="00.000.000/0000-00"
+                          placeholder={form.legal_type === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                         />
                       </div>
                       {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
