@@ -11,18 +11,23 @@ export type SponsorStatus = 'ativo' | 'inativo';
 export type SponsorLinkType = 'site' | 'whatsapp';
 export type PartnerStatus = 'ativo' | 'inativo';
 
+export type CompanyLegalType = 'PF' | 'PJ';
+
 export interface Company {
   id: string;
   name: string;
   trade_name: string | null;
   legal_name: string | null;
   cnpj: string | null;
+  legal_type: CompanyLegalType;
+  document_number: string | null;
   city: string | null;
   state: string | null;
   logo_url: string | null;
   primary_color: string | null;
   accent_color: string | null;
   ticket_color: string | null;
+  public_slug: string | null;
   slogan: string | null;
   document: string | null;
   phone: string | null;

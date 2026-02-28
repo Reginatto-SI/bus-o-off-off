@@ -9,15 +9,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy } from 'lucide-react';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
+import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -36,6 +38,7 @@ function isBucketMissingErrorMessage(message?: string | null) {
 }
 
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
+const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
 
 const formatCnpjInput = (value: string) => {
   const digits = getCnpjDigits(value);
@@ -44,6 +47,48 @@ const formatCnpjInput = (value: string) => {
     /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,
     (_, p1, p2, p3, p4, p5) => `${p1}.${p2}.${p3}/${p4}${p5 ? `-${p5}` : ''}`
   );
+};
+
+const formatCpfInput = (value: string) => {
+  const digits = getCpfDigits(value);
+  if (!digits) return '';
+  return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, p1, p2, p3, p4) =>
+    `${p1}.${p2}.${p3}${p4 ? `-${p4}` : ''}`
+  );
+};
+
+const isValidCpf = (value: string) => {
+  const cpf = getCpfDigits(value);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  const calcDigit = (base: string, factor: number) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * (factor - index), 0);
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  const digit1 = calcDigit(cpf.slice(0, 9), 10);
+  const digit2 = calcDigit(cpf.slice(0, 10), 11);
+  return digit1 === Number(cpf[9]) && digit2 === Number(cpf[10]);
+};
+
+const isValidCnpj = (value: string) => {
+  const cnpj = getCnpjDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+
+  const calcDigit = (base: string, weights: number[]) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * weights[index], 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const digit1 = calcDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const digit2 = calcDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return digit1 === Number(cnpj[12]) && digit2 === Number(cnpj[13]);
 };
 
 export default function CompanyPage() {
@@ -57,9 +102,11 @@ export default function CompanyPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [form, setForm] = useState({
+    legal_type: 'PJ' as 'PF' | 'PJ',
+    full_name: '',
     legal_name: '',
     trade_name: '',
-    cnpj: '',
+    document_number: '',
     email: '',
     phone: '',
     whatsapp: '',
@@ -69,20 +116,36 @@ export default function CompanyPage() {
     state: '',
     notes: '',
     logo_url: '',
+    public_slug: '',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
     accent: '#2563EB',
     ticket: '#F97316',
   });
+  const [slugCheckLoading, setSlugCheckLoading] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+
+  const normalizedPublicSlug = normalizePublicSlug(form.public_slug);
+  const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
+  const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
+  const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
 
   const hydrateFormFromCompany = (data: Company | null) => {
+    const legalType = data?.legal_type === 'PF' ? 'PF' : 'PJ';
+    const legacyDocument = data?.document_number ?? data?.cnpj ?? data?.document ?? '';
+    const normalizedDocument = legalType === 'PF'
+      ? formatCpfInput(legacyDocument)
+      : formatCnpjInput(legacyDocument);
+
     // Comentário: mantém o formulário consistente com o registro único da empresa ativa.
     setEditingId(data?.id ?? null);
     setForm({
+      legal_type: legalType,
+      full_name: legalType === 'PF' ? (data?.name ?? data?.legal_name ?? '') : '',
       legal_name: data?.legal_name ?? '',
       trade_name: data?.trade_name ?? data?.name ?? '',
-      cnpj: data?.cnpj ?? data?.document ?? '',
+      document_number: normalizedDocument,
       email: data?.email ?? '',
       phone: data?.phone ?? '',
       whatsapp: data?.whatsapp ?? '',
@@ -92,6 +155,7 @@ export default function CompanyPage() {
       state: (data?.state ?? '').toUpperCase(),
       notes: data?.notes ?? '',
       logo_url: data?.logo_url ?? '',
+      public_slug: data?.public_slug ?? '',
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -165,6 +229,39 @@ export default function CompanyPage() {
   useEffect(() => {
     fetchCompany();
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    // Comentário: valida disponibilidade do nick com debounce para reduzir chamadas ao banco.
+    const hasSlug = normalizedPublicSlug.length > 0;
+    if (!hasSlug) {
+      setSlugAvailable(null);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    if (isReservedSlug) {
+      setSlugAvailable(false);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    setSlugCheckLoading(true);
+    const timeoutId = window.setTimeout(async () => {
+      const { data, error } = await supabase.rpc('is_company_public_slug_available', {
+        input_slug: normalizedPublicSlug,
+        current_company_id: editingId,
+      });
+
+      if (error) {
+        setSlugAvailable(null);
+      } else {
+        setSlugAvailable(Boolean(data));
+      }
+      setSlugCheckLoading(false);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [normalizedPublicSlug, editingId, isReservedSlug]);
 
   // Handle Stripe return from onboarding — trigger immediate refresh + start polling
   useEffect(() => {
@@ -295,9 +392,11 @@ export default function CompanyPage() {
     }
     setEditingId(null);
     setForm({
+      legal_type: 'PJ',
+      full_name: '',
       legal_name: '',
       trade_name: '',
-      cnpj: '',
+      document_number: '',
       email: '',
       phone: '',
       whatsapp: '',
@@ -307,6 +406,7 @@ export default function CompanyPage() {
       state: '',
       notes: '',
       logo_url: '',
+      public_slug: '',
     });
   };
 
@@ -322,17 +422,40 @@ export default function CompanyPage() {
     }
 
     const legalName = form.legal_name.trim();
+    const fullName = form.full_name.trim();
     const tradeName = form.trade_name.trim();
+    const legalType = form.legal_type;
 
-    if (!legalName && !tradeName) {
-      toast.error('Informe a razão social ou o nome fantasia');
+    if (!legalType) {
+      toast.error('Selecione o tipo de cadastro');
       setSaving(false);
       return;
     }
 
-    const cnpjDigits = getCnpjDigits(form.cnpj);
-    if (form.cnpj && cnpjDigits.length !== 14) {
+    // Comentário de manutenção (PF/PJ):
+    // 1) O tipo jurídico explícito evita ambiguidade entre Empresa e Pessoa Física.
+    // 2) Campos obrigatórios mudam por tipo e essa validação mantém consistência para
+    //    vitrine pública, pagamentos e relatórios, que dependem de documento fiscal válido.
+    if (legalType === 'PJ' && (!legalName || !tradeName)) {
+      toast.error('Preencha Razão Social e Nome Fantasia');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PF' && !fullName) {
+      toast.error('Preencha o Nome Completo');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PJ' && !isValidCnpj(form.document_number)) {
       toast.error('CNPJ inválido');
+      setSaving(false);
+      return;
+    }
+
+    if (legalType === 'PF' && !isValidCpf(form.document_number)) {
+      toast.error('CPF inválido');
       setSaving(false);
       return;
     }
@@ -349,14 +472,32 @@ export default function CompanyPage() {
       return;
     }
 
-    // Comentário: o campo `name` é obrigatório no schema, então usamos trade_name/legal_name como base.
-    // Também mantemos `document` sincronizado com CNPJ para compatibilidade com dados legados.
+    if (form.public_slug && isReservedSlug) {
+      toast.error('Este nick é reservado e não pode ser utilizado');
+      setSaving(false);
+      return;
+    }
+
+    if (form.public_slug && slugAvailable === false) {
+      toast.error('Este nick já está em uso por outra empresa');
+      setSaving(false);
+      return;
+    }
+
+    // Comentário de manutenção:
+    // - `document_number` unifica CPF/CNPJ para o sistema não depender só de CNPJ.
+    // - Mantemos `document` e `cnpj` para compatibilidade legada (migração gradual).
+    // - `name` alimenta vitrine pública: Empresa usa Nome Fantasia; Pessoa Física usa
+    //   Nome Público (trade_name) e fallback para Nome Completo.
+    const normalizedDocument = form.document_number.trim();
     const payload = {
-      name: tradeName || legalName,
-      legal_name: legalName || null,
+      name: legalType === 'PF' ? (tradeName || fullName) : (tradeName || legalName),
+      legal_type: legalType,
+      legal_name: legalType === 'PJ' ? (legalName || null) : null,
       trade_name: tradeName || null,
-      cnpj: form.cnpj.trim() || null,
-      document: cnpjDigits ? form.cnpj.trim() : null,
+      cnpj: legalType === 'PJ' ? normalizedDocument : null,
+      document: normalizedDocument || null,
+      document_number: normalizedDocument || null,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       whatsapp: form.whatsapp.trim() || null,
@@ -366,6 +507,7 @@ export default function CompanyPage() {
       state: form.state.trim().toUpperCase() || null,
       notes: form.notes.trim() || null,
       logo_url: form.logo_url?.trim() || null,
+      public_slug: normalizedPublicSlug || null,
       primary_color: brandColors.primary || null,
       accent_color: brandColors.accent || null,
       ticket_color: brandColors.ticket || null,
@@ -669,38 +811,172 @@ export default function CompanyPage() {
                       </div>
                     </div>
                     {/* Comentário: layout responsivo compacto (1 col mobile, 2 col md, 3 col desktop). */}
+                    <div className="space-y-3 rounded-md border p-4">
+                      <div className="space-y-1">
+                        <Label>Tipo de cadastro</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Escolha o tipo de cadastro para habilitar os campos corretos.
+                        </p>
+                      </div>
+                      <RadioGroup
+                        value={form.legal_type}
+                        onValueChange={(value: 'PF' | 'PJ') =>
+                          setForm((prev) => ({
+                            ...prev,
+                            legal_type: value,
+                            legal_name: value === 'PF' ? '' : prev.legal_name,
+                            document_number: value === 'PF'
+                              ? formatCpfInput(prev.document_number)
+                              : formatCnpjInput(prev.document_number),
+                          }))
+                        }
+                        className="grid gap-2 md:grid-cols-2"
+                      >
+                        <div className="flex items-center space-x-2 rounded-md border p-3">
+                          <RadioGroupItem value="PJ" id="legal_type_pj" />
+                          <Label htmlFor="legal_type_pj" className="cursor-pointer">Empresa (CNPJ)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-md border p-3">
+                          <RadioGroupItem value="PF" id="legal_type_pf" />
+                          <Label htmlFor="legal_type_pf" className="cursor-pointer">Pessoa Fisica (CPF)</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      {form.legal_type === 'PJ' ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="legal_name">Razão Social</Label>
+                            <Input
+                              id="legal_name"
+                              value={form.legal_name}
+                              onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
+                              placeholder="Empresa Exemplo LTDA"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trade_name">Nome Fantasia</Label>
+                            <Input
+                              id="trade_name"
+                              value={form.trade_name}
+                              onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
+                              placeholder="Empresa Exemplo"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="full_name">Nome Completo</Label>
+                            <Input
+                              id="full_name"
+                              value={form.full_name}
+                              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                              placeholder="Nome completo da pessoa"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="trade_name">Nome público/Apelido da vitrine (opcional)</Label>
+                            <Input
+                              id="trade_name"
+                              value={form.trade_name}
+                              onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
+                              placeholder="Como deseja aparecer na vitrine"
+                            />
+                          </div>
+                        </>
+                      )}
+
                       <div className="space-y-2">
-                        <Label htmlFor="legal_name">Razão Social</Label>
+                        <Label htmlFor="document_number">{form.legal_type === 'PJ' ? 'CNPJ' : 'CPF'}</Label>
                         <Input
-                          id="legal_name"
-                          value={form.legal_name}
-                          onChange={(e) => setForm({ ...form, legal_name: e.target.value })}
-                          placeholder="Empresa Exemplo LTDA"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="trade_name">Nome Fantasia</Label>
-                        <Input
-                          id="trade_name"
-                          value={form.trade_name}
-                          onChange={(e) => setForm({ ...form, trade_name: e.target.value })}
-                          placeholder="Empresa Exemplo"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cnpj">CNPJ</Label>
-                        <Input
-                          id="cnpj"
-                          value={form.cnpj}
+                          id="document_number"
+                          value={form.document_number}
                           onChange={(e) =>
-                            setForm({ ...form, cnpj: formatCnpjInput(e.target.value) })
+                            setForm({
+                              ...form,
+                              document_number: form.legal_type === 'PJ'
+                                ? formatCnpjInput(e.target.value)
+                                : formatCpfInput(e.target.value),
+                            })
                           }
-                          placeholder="00.000.000/0000-00"
+                          placeholder={form.legal_type === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                         />
                       </div>
                       {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
                     </div>
+
+                    {/* Comentário: card de parâmetros da vitrine pública mantendo padrão visual já usado no admin. */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Vitrine Pública (Link curto)</CardTitle>
+                        <CardDescription>
+                          Configure o nick para divulgar sua vitrine com um link fácil de compartilhar.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="public_slug">Seu nick (link público)</Label>
+                          <Input
+                            id="public_slug"
+                            value={form.public_slug}
+                            onChange={(e) => setForm({ ...form, public_slug: e.target.value })}
+                            placeholder="Ex: Viagens São José"
+                          />
+                        </div>
+
+                        <div className="grid gap-2 rounded-md border p-3 text-sm">
+                          <div className="flex items-start gap-2">
+                            <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Curto: {shortLink}</p>
+                              <p className="text-muted-foreground">Canônico: {canonicalLink}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {slugCheckLoading ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" /> Validando nick...
+                            </Badge>
+                          ) : isReservedSlug ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertCircle className="h-3 w-3" /> Indisponível (reservado)
+                            </Badge>
+                          ) : normalizedPublicSlug && slugAvailable === true ? (
+                            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+                              <CheckCircle2 className="h-3 w-3" /> Disponível
+                            </Badge>
+                          ) : normalizedPublicSlug && slugAvailable === false ? (
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertCircle className="h-3 w-3" /> Indisponível (já em uso)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Digite um nick para validar</Badge>
+                          )}
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={!normalizedPublicSlug}
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(shortLink);
+                              toast.success('Link curto copiado!');
+                            }}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copiar link curto
+                          </Button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          Evite mudar depois para não quebrar links divulgados.
+                        </p>
+                      </CardContent>
+                    </Card>
                   </TabsContent>
 
                   <TabsContent value="endereco" className="mt-0">
