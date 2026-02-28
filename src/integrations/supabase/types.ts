@@ -365,6 +365,7 @@ export type Database = {
           allow_seller_sale: boolean
           boarding_tolerance_minutes: number | null
           city: string
+          enable_checkout_validation: boolean
           company_id: string
           created_at: string
           date: string
@@ -384,6 +385,7 @@ export type Database = {
           allow_seller_sale?: boolean
           boarding_tolerance_minutes?: number | null
           city: string
+          enable_checkout_validation?: boolean
           company_id: string
           created_at?: string
           date: string
@@ -403,6 +405,7 @@ export type Database = {
           allow_seller_sale?: boolean
           boarding_tolerance_minutes?: number | null
           city?: string
+          enable_checkout_validation?: boolean
           company_id?: string
           created_at?: string
           date?: string
@@ -850,6 +853,103 @@ export type Database = {
         }
         Relationships: []
       }
+      ticket_validations: {
+        Row: {
+          action: string
+          app_version: string | null
+          boarding_location_id: string | null
+          company_id: string
+          device_info: string | null
+          event_id: string | null
+          id: string
+          reason_code: string
+          result: string
+          sale_id: string | null
+          ticket_id: string | null
+          trip_id: string | null
+          validated_at: string
+          validated_by_driver_id: string | null
+          validated_by_user_id: string | null
+        }
+        Insert: {
+          action: string
+          app_version?: string | null
+          boarding_location_id?: string | null
+          company_id: string
+          device_info?: string | null
+          event_id?: string | null
+          id?: string
+          reason_code: string
+          result: string
+          sale_id?: string | null
+          ticket_id?: string | null
+          trip_id?: string | null
+          validated_at?: string
+          validated_by_driver_id?: string | null
+          validated_by_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          app_version?: string | null
+          boarding_location_id?: string | null
+          company_id?: string
+          device_info?: string | null
+          event_id?: string | null
+          id?: string
+          reason_code?: string
+          result?: string
+          sale_id?: string | null
+          ticket_id?: string | null
+          trip_id?: string | null
+          validated_at?: string
+          validated_by_driver_id?: string | null
+          validated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_validations_boarding_location_id_fkey"
+            columns: ["boarding_location_id"]
+            isOneToOne: false
+            referencedRelation: "boarding_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
           boarding_status: string
@@ -1214,6 +1314,25 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
+      validate_ticket_scan: {
+        Args: {
+          p_action: string
+          p_app_version?: string
+          p_device_info?: string
+          p_qr_code_token: string
+        }
+        Returns: {
+          boarding_label: string
+          boarding_status: string
+          checkout_enabled: boolean
+          event_name: string
+          passenger_cpf_masked: string
+          passenger_name: string
+          reason_code: string
+          result: string
+          seat_label: string
+        }[]
+      }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean

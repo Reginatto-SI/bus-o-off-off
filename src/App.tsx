@@ -26,6 +26,8 @@ import SalesReport from "./pages/admin/SalesReport";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
+import DriverHome from "./pages/driver/DriverHome";
+import DriverValidate from "./pages/driver/DriverValidate";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -72,6 +74,10 @@ const App = () => (
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
             {/* Redirect legado para manter bookmarks */}
             <Route path="/admin/minhas-vendas" element={<Navigate to="/vendedor/minhas-vendas" replace />} />
+
+            {/* Driver Portal (mobile-first, fora do admin) */}
+            <Route path="/motorista" element={<DriverHome />} />
+            <Route path="/motorista/validar" element={<DriverValidate />} />
 
             {/* Admin Panel */}
             <Route path="/admin/eventos" element={<Events />} />

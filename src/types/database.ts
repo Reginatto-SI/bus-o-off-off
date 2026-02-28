@@ -175,6 +175,29 @@ export interface TicketRecord {
   updated_at: string;
 }
 
+
+
+export type TicketValidationAction = 'checkin' | 'checkout';
+export type TicketValidationResult = 'success' | 'blocked';
+
+export interface TicketValidation {
+  id: string;
+  company_id: string;
+  ticket_id: string | null;
+  sale_id: string | null;
+  event_id: string | null;
+  trip_id: string | null;
+  boarding_location_id: string | null;
+  action: TicketValidationAction;
+  result: TicketValidationResult;
+  reason_code: string;
+  validated_by_user_id: string | null;
+  validated_by_driver_id: string | null;
+  validated_at: string;
+  device_info: string | null;
+  app_version: string | null;
+}
+
 export interface Driver {
   id: string;
   name: string;
@@ -219,6 +242,7 @@ export interface Event {
   max_tickets_per_purchase: number;
   allow_online_sale: boolean;
   allow_seller_sale: boolean;
+  enable_checkout_validation: boolean;
   is_archived: boolean;
   image_url: string | null;
   company_id: string;
