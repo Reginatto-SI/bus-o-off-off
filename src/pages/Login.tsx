@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 function getRedirectByRole(role: string | null): string {
   if (role === "vendedor") return "/vendedor/minhas-vendas";
+  if (role === "motorista") return "/motorista";
   return "/admin/eventos";
 }
 
