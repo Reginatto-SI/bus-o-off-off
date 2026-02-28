@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 function formatCNPJ(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -17,6 +18,14 @@ function formatCNPJ(value: string) {
     .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
     .replace(/\.(\d{3})(\d)/, '.$1/$2')
     .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+function formatCPF(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2');
 }
 
 function formatPhone(value: string) {
@@ -31,14 +40,55 @@ function formatPhone(value: string) {
     .replace(/(\d{5})(\d)/, '$1-$2');
 }
 
+const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
+const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
+
+const isValidCpf = (value: string) => {
+  const cpf = getCpfDigits(value);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  const calcDigit = (base: string, factor: number) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * (factor - index), 0);
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  const digit1 = calcDigit(cpf.slice(0, 9), 10);
+  const digit2 = calcDigit(cpf.slice(0, 10), 11);
+  return digit1 === Number(cpf[9]) && digit2 === Number(cpf[10]);
+};
+
+const isValidCnpj = (value: string) => {
+  const cnpj = getCnpjDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+
+  const calcDigit = (base: string, weights: number[]) => {
+    const total = base
+      .split('')
+      .reduce((sum, current, index) => sum + Number(current) * weights[index], 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const digit1 = calcDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const digit2 = calcDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return digit1 === Number(cnpj[12]) && digit2 === Number(cnpj[13]);
+};
+
 export default function CompanyRegistration() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [legalType, setLegalType] = useState<'PF' | 'PJ'>('PJ');
   const [companyName, setCompanyName] = useState('');
+  const [legalName, setLegalName] = useState('');
+  const [tradeName, setTradeName] = useState('');
   const [cnpj, setCnpj] = useState('');
+  const [cpf, setCpf] = useState('');
   const [responsibleName, setResponsibleName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -55,13 +105,25 @@ export default function CompanyRegistration() {
   ];
 
   const validate = () => {
-    if (!companyName || !cnpj || !responsibleName || !email || !phone || !password || !confirmPassword) {
+    const hasBaseRequired = companyName && responsibleName && email && phone && password && confirmPassword;
+    if (!hasBaseRequired) {
       return 'Preencha todos os campos obrigatórios.';
     }
+
+    if (legalType === 'PJ') {
+      if (!legalName || !tradeName || !cnpj) {
+        return 'Para Pessoa Jurídica, preencha Razão Social, Nome Fantasia e CNPJ.';
+      }
+      if (!isValidCnpj(cnpj)) return 'CNPJ inválido.';
+    }
+
+    if (legalType === 'PF') {
+      if (!cpf) return 'Para Pessoa Física, preencha o CPF.';
+      if (!isValidCpf(cpf)) return 'CPF inválido.';
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return 'Email inválido.';
-    const cnpjDigits = cnpj.replace(/\D/g, '');
-    if (cnpjDigits.length !== 14) return 'CNPJ deve ter 14 dígitos.';
     if (password.length < 6) return 'Senha deve ter pelo menos 6 caracteres.';
     if (password !== confirmPassword) return 'As senhas não coincidem.';
     return null;
@@ -79,10 +141,17 @@ export default function CompanyRegistration() {
 
     setLoading(true);
     try {
+      // Comentário de manutenção: enviamos CPF/CNPJ já normalizado (somente dígitos)
+      // para manter consistência com o cadastro interno e com validações no backend.
+      const normalizedDocument = legalType === 'PJ' ? getCnpjDigits(cnpj) : getCpfDigits(cpf);
+
       const { data, error: fnError } = await supabase.functions.invoke('register-company', {
         body: {
+          legal_type: legalType,
           company_name: companyName,
-          cnpj: cnpj.replace(/\D/g, ''),
+          legal_name: legalType === 'PJ' ? legalName : null,
+          trade_name: tradeName || null,
+          document_number: normalizedDocument,
           responsible_name: responsibleName,
           email,
           phone: phone.replace(/\D/g, ''),
@@ -109,8 +178,9 @@ export default function CompanyRegistration() {
         description: 'Sua empresa foi cadastrada com sucesso. Comece criando seu primeiro evento!',
       });
       navigate('/admin/eventos');
-    } catch (err: any) {
-      setError(err?.message || 'Erro inesperado. Tente novamente.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro inesperado. Tente novamente.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -162,11 +232,39 @@ export default function CompanyRegistration() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
-                {/* Comentário: mantém validações/submit originais e apenas reorganiza campos para reduzir rolagem no desktop. */}
+                {/* Comentário: mantém o mesmo padrão visual e adiciona apenas os campos mínimos para PF/PJ. */}
                 <form onSubmit={handleSubmit} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Tipo de cadastro *</Label>
+                    <RadioGroup
+                      value={legalType}
+                      onValueChange={(value: 'PF' | 'PJ') => {
+                        // Comentário de manutenção: limpeza explícita evita vazamento de campos
+                        // entre os tipos no payload do onboarding público.
+                        setLegalType(value);
+                        if (value === 'PF') {
+                          setLegalName('');
+                          setCnpj('');
+                        } else {
+                          setCpf('');
+                        }
+                      }}
+                      className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                    >
+                      <div className="flex items-center space-x-2 rounded-md border p-3">
+                        <RadioGroupItem value="PJ" id="register_legal_type_pj" />
+                        <Label htmlFor="register_legal_type_pj" className="cursor-pointer">Pessoa Jurídica (CNPJ)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 rounded-md border p-3">
+                        <RadioGroupItem value="PF" id="register_legal_type_pf" />
+                        <Label htmlFor="register_legal_type_pf" className="cursor-pointer">Pessoa Física (CPF)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="companyName">Nome da empresa *</Label>
+                      <Label htmlFor="companyName">Nome de exibição *</Label>
                       <Input
                         id="companyName"
                         value={companyName}
@@ -176,17 +274,31 @@ export default function CompanyRegistration() {
                         className="h-9"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cnpj">CNPJ *</Label>
-                      <Input
-                        id="cnpj"
-                        value={cnpj}
-                        onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
-                        placeholder="00.000.000/0000-00"
-                        maxLength={18}
-                        className="h-9"
-                      />
-                    </div>
+                    {legalType === 'PJ' ? (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cnpj">CNPJ *</Label>
+                        <Input
+                          id="cnpj"
+                          value={cnpj}
+                          onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
+                          placeholder="00.000.000/0000-00"
+                          maxLength={18}
+                          className="h-9"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cpf">CPF *</Label>
+                        <Input
+                          id="cpf"
+                          value={cpf}
+                          onChange={(e) => setCpf(formatCPF(e.target.value))}
+                          placeholder="000.000.000-00"
+                          maxLength={14}
+                          className="h-9"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       <Label htmlFor="responsibleName">Nome do responsável *</Label>
                       <Input
@@ -210,6 +322,42 @@ export default function CompanyRegistration() {
                       />
                     </div>
                   </div>
+
+                  {legalType === 'PJ' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="legalName">Razão Social *</Label>
+                        <Input
+                          id="legalName"
+                          value={legalName}
+                          onChange={(e) => setLegalName(e.target.value)}
+                          placeholder="Empresa Exemplo LTDA"
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tradeName">Nome Fantasia *</Label>
+                        <Input
+                          id="tradeName"
+                          value={tradeName}
+                          onChange={(e) => setTradeName(e.target.value)}
+                          placeholder="Empresa Exemplo"
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="tradeName">Nome público/Apelido (opcional)</Label>
+                      <Input
+                        id="tradeName"
+                        value={tradeName}
+                        onChange={(e) => setTradeName(e.target.value)}
+                        placeholder="Como deseja aparecer na vitrine"
+                        className="h-9"
+                      />
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label htmlFor="email">Email *</Label>

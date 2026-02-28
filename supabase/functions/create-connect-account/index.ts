@@ -73,7 +73,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, stripe_account_id, stripe_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, stripe_account_id, stripe_onboarding_complete")
       .eq("id", company_id)
       .single();
 
@@ -91,11 +91,70 @@ serve(async (req) => {
     let stripeAccountId = company.stripe_account_id;
 
     if (!stripeAccountId) {
+      const legalType = company.legal_type === "PF" ? "PF" : "PJ";
+      const documentDigits = (company.document_number || company.cnpj || "").replace(/\D/g, "");
+      const displayName = (company.trade_name || company.legal_name || company.name || "").trim();
+
+      // Comentário de manutenção: pré-validação garante mensagem amigável no admin,
+      // evitando erro genérico do Stripe quando dados cadastrais mínimos ainda faltam.
+      if (legalType === "PF") {
+        if (documentDigits.length !== 11) {
+          return new Response(
+            JSON.stringify({
+              error: "Para Pessoa Física, preencha um CPF válido em /admin/empresa antes de conectar pagamentos.",
+              reason_code: "missing_or_invalid_pf_document",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (!displayName) {
+          return new Response(
+            JSON.stringify({
+              error: "Para Pessoa Física, preencha o nome da empresa/pessoa em /admin/empresa antes de conectar pagamentos.",
+              reason_code: "missing_pf_name",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      if (legalType === "PJ") {
+        if (documentDigits.length !== 14) {
+          return new Response(
+            JSON.stringify({
+              error: "Para Pessoa Jurídica, preencha um CNPJ válido em /admin/empresa antes de conectar pagamentos.",
+              reason_code: "missing_or_invalid_pj_document",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (!displayName) {
+          return new Response(
+            JSON.stringify({
+              error: "Para Pessoa Jurídica, preencha Razão Social/Nome Fantasia em /admin/empresa antes de conectar pagamentos.",
+              reason_code: "missing_pj_name",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      const businessType = legalType === "PF" ? "individual" : "company";
+      console.log("[create-connect-account] creating stripe account", {
+        company_id,
+        legal_type: legalType,
+        business_type: businessType,
+      });
+
+      // Comentário de manutenção: só aplicamos PF/PJ no momento da criação.
+      // Contas já existentes não são recriadas para preservar histórico e onboarding atual.
       const account = await stripe.accounts.create({
         type: "express",
         country: "BR",
-        business_type: "company",
-        company: { name: company.name },
+        business_type: businessType,
+        ...(businessType === "company"
+          ? { company: { name: displayName } }
+          : { individual: { first_name: displayName } }),
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true },

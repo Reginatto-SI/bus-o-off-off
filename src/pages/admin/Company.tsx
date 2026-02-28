@@ -39,6 +39,8 @@ function isBucketMissingErrorMessage(message?: string | null) {
 
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
 const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
+const getDocumentDigits = (value: string, legalType: 'PF' | 'PJ') =>
+  legalType === 'PF' ? getCpfDigits(value) : getCnpjDigits(value);
 
 const formatCnpjInput = (value: string) => {
   const digits = getCnpjDigits(value);
@@ -89,6 +91,23 @@ const isValidCnpj = (value: string) => {
   const digit1 = calcDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   const digit2 = calcDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   return digit1 === Number(cnpj[12]) && digit2 === Number(cnpj[13]);
+};
+
+const getCompanyDisplayNameForPersistence = ({
+  legalType,
+  tradeName,
+  legalName,
+  fullName,
+}: {
+  legalType: 'PF' | 'PJ';
+  tradeName: string;
+  legalName: string;
+  fullName: string;
+}) => {
+  // Comentário de manutenção: mantemos uma regra única e explícita para `companies.name`
+  // e evitamos fallback implícito entre PF/PJ durante troca de tipo cadastral.
+  if (legalType === 'PJ') return tradeName || legalName;
+  return tradeName || fullName;
 };
 
 export default function CompanyPage() {
@@ -358,9 +377,10 @@ export default function CompanyPage() {
         window.open(data.onboarding_url, '_blank');
         toast.info('Complete o cadastro na aba do Stripe que foi aberta.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Stripe connect error:', err);
-      toast.error(err?.message || 'Erro ao conectar Stripe. Tente novamente.');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar Stripe. Tente novamente.';
+      toast.error(errorMessage);
     } finally {
       setStripeConnecting(false);
     }
@@ -448,13 +468,15 @@ export default function CompanyPage() {
       return;
     }
 
-    if (legalType === 'PJ' && !isValidCnpj(form.document_number)) {
+    const normalizedDocumentDigits = getDocumentDigits(form.document_number, legalType);
+
+    if (legalType === 'PJ' && !isValidCnpj(normalizedDocumentDigits)) {
       toast.error('CNPJ inválido');
       setSaving(false);
       return;
     }
 
-    if (legalType === 'PF' && !isValidCpf(form.document_number)) {
+    if (legalType === 'PF' && !isValidCpf(normalizedDocumentDigits)) {
       toast.error('CPF inválido');
       setSaving(false);
       return;
@@ -485,19 +507,30 @@ export default function CompanyPage() {
     }
 
     // Comentário de manutenção:
-    // - `document_number` unifica CPF/CNPJ para o sistema não depender só de CNPJ.
-    // - Mantemos `document` e `cnpj` para compatibilidade legada (migração gradual).
-    // - `name` alimenta vitrine pública: Empresa usa Nome Fantasia; Pessoa Física usa
-    //   Nome Público (trade_name) e fallback para Nome Completo.
-    const normalizedDocument = form.document_number.trim();
+    // - Persistimos documento sempre com apenas dígitos para evitar divergência entre máscara/UI e banco.
+    // - Mantemos `document` e `cnpj` por compatibilidade legada, mas no mesmo padrão normalizado.
+    // - `companies.name` segue regra explícita por tipo jurídico para evitar fallback incorreto em trocas PF/PJ.
+    const persistedDisplayName = getCompanyDisplayNameForPersistence({
+      legalType,
+      tradeName,
+      legalName,
+      fullName,
+    });
+
+    if (!persistedDisplayName) {
+      toast.error('Preencha um nome de exibição válido para a empresa');
+      setSaving(false);
+      return;
+    }
+
     const payload = {
-      name: legalType === 'PF' ? (tradeName || fullName) : (tradeName || legalName),
+      name: persistedDisplayName,
       legal_type: legalType,
       legal_name: legalType === 'PJ' ? (legalName || null) : null,
       trade_name: tradeName || null,
-      cnpj: legalType === 'PJ' ? normalizedDocument : null,
-      document: normalizedDocument || null,
-      document_number: normalizedDocument || null,
+      cnpj: legalType === 'PJ' ? normalizedDocumentDigits : null,
+      document: normalizedDocumentDigits || null,
+      document_number: normalizedDocumentDigits || null,
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       whatsapp: form.whatsapp.trim() || null,
@@ -823,8 +856,11 @@ export default function CompanyPage() {
                         onValueChange={(value: 'PF' | 'PJ') =>
                           setForm((prev) => ({
                             ...prev,
+                            // Comentário de manutenção: ao trocar o tipo limpamos campos exclusivos
+                            // do tipo anterior para evitar vazamento de contexto entre PF/PJ.
                             legal_type: value,
                             legal_name: value === 'PF' ? '' : prev.legal_name,
+                            full_name: value === 'PJ' ? '' : prev.full_name,
                             document_number: value === 'PF'
                               ? formatCpfInput(prev.document_number)
                               : formatCnpjInput(prev.document_number),
@@ -1144,7 +1180,7 @@ export default function CompanyPage() {
                         <div>
                           <h3 className="font-medium">Integração Stripe</h3>
                           <p className="text-sm text-muted-foreground">
-                            Conecte sua conta Stripe para receber pagamentos online.
+                            Conecte sua conta para receber pagamentos online. Para Pessoa Física usamos CPF; para Pessoa Jurídica usamos CNPJ.
                           </p>
                         </div>
                         {isPolling ? (
@@ -1258,7 +1294,9 @@ export default function CompanyPage() {
                           <p className="text-sm text-muted-foreground">
                             {company?.stripe_account_id
                               ? 'Seu cadastro no Stripe está incompleto. Clique abaixo para retomar.'
-                              : 'Conecte ao Stripe para receber pagamentos de passagens vendidas online.'}
+                              : form.legal_type === 'PF'
+                                ? 'Conecte ao Stripe usando seus dados de Pessoa Física (CPF) para receber pagamentos.'
+                                : 'Conecte ao Stripe usando os dados da Pessoa Jurídica (CNPJ) para receber pagamentos.'}
                           </p>
                           <Button
                             type="button"
