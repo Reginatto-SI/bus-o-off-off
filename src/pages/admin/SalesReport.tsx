@@ -43,13 +43,17 @@ import {
   Copy,
   BarChart3,
   List,
+  Check,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
-import { formatBoardingLocationLabel } from '@/lib/utils';
+import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 interface ReportFilters {
   search: string;
@@ -162,6 +166,10 @@ export default function SalesReport() {
 
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [eventFilterOpen, setEventFilterOpen] = useState(false);
+  const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
+  const [eventFilterSearch, setEventFilterSearch] = useState('');
+  const [sellerFilterSearch, setSellerFilterSearch] = useState('');
 
   const normalizeDateToIso = (dateInput: string, endOfDay = false) => {
     if (!dateInput) return null;
@@ -406,7 +414,7 @@ export default function SalesReport() {
         .order('date', { ascending: false }),
       supabase
         .from('sellers')
-        .select('id, name')
+        .select('id, name, short_code')
         .eq('company_id', activeCompanyId)
         .eq('status', 'ativo')
         .order('name'),
@@ -461,8 +469,50 @@ export default function SalesReport() {
     );
   }, [filters]);
 
+  // Conversão de select -> combobox com busca para escalar volume de dados,
+  // seguindo o padrão oficial já usado em /admin/relatorios/comissao-vendedores e /admin/vendas.
+  // A filtragem principal do relatório continua server-side; aqui aprimoramos apenas a seleção de filtros.
+  const eventFilterOptions = useMemo(() => [
+    { value: 'all', label: 'Todos' },
+    ...events.map((event) => ({
+      value: event.id,
+      label: formatEventFilterLabel(event),
+    })),
+  ], [events]);
+
+  const sellerFilterOptions = useMemo(() => [
+    { value: 'all', label: 'Todos' },
+    ...sellers.map((seller) => ({
+      value: seller.id,
+      label: seller.short_code ? `${seller.name} (${seller.short_code})` : seller.name,
+    })),
+  ], [sellers]);
+
+  const filteredEventFilterOptions = useMemo(() => {
+    const term = eventFilterSearch.trim().toLowerCase();
+    if (!term) return eventFilterOptions;
+    return eventFilterOptions.filter((option) => option.label.toLowerCase().includes(term));
+  }, [eventFilterOptions, eventFilterSearch]);
+
+  const filteredSellerFilterOptions = useMemo(() => {
+    const term = sellerFilterSearch.trim().toLowerCase();
+    if (!term) return sellerFilterOptions;
+    return sellerFilterOptions.filter((option) => option.label.toLowerCase().includes(term));
+  }, [sellerFilterOptions, sellerFilterSearch]);
+
+  const selectedEventFilterLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
+  const selectedSellerFilterLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
+
   const ticketMedio = stats.totalSales > 0 ? stats.grossRevenue / stats.totalSales : 0;
   const cancelPercent = stats.totalSales > 0 ? (stats.cancelledSales / stats.totalSales) * 100 : 0;
+
+  useEffect(() => {
+    if (!eventFilterOpen) setEventFilterSearch('');
+  }, [eventFilterOpen]);
+
+  useEffect(() => {
+    if (!sellerFilterOpen) setSellerFilterSearch('');
+  }, [sellerFilterOpen]);
 
   const detailedFlatData = useMemo(() => {
     return sales.map((s) => {
@@ -666,29 +716,98 @@ export default function SalesReport() {
                   { value: 'cancelado', label: 'Cancelado' },
                 ],
               },
-              {
-                id: 'event',
-                label: 'Evento',
-                placeholder: 'Todos',
-                value: filters.eventId,
-                onChange: (v) => setFilters((f) => ({ ...f, eventId: v })),
-                options: [
-                  { value: 'all', label: 'Todos' },
-                  ...events.map((e) => ({ value: e.id, label: formatEventFilterLabel(e) })),
-                ],
-              },
-              {
-                id: 'seller',
-                label: 'Vendedor',
-                placeholder: 'Todos',
-                value: filters.sellerId,
-                onChange: (v) => setFilters((f) => ({ ...f, sellerId: v })),
-                options: [
-                  { value: 'all', label: 'Todos' },
-                  ...sellers.map((s) => ({ value: s.id, label: s.name })),
-                ],
-              },
             ]}
+            mainFilters={(
+              <>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Evento</label>
+                  <Popover open={eventFilterOpen} onOpenChange={setEventFilterOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={eventFilterOpen}
+                        className={cn('w-full justify-between font-normal', filters.eventId === 'all' && 'text-muted-foreground')}
+                      >
+                        <span className="truncate">{selectedEventFilterLabel}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar evento..."
+                          value={eventFilterSearch}
+                          onValueChange={setEventFilterSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredEventFilterOptions.map((option) => (
+                              <CommandItem
+                                key={option.value}
+                                value={option.label}
+                                onSelect={() => {
+                                  setFilters((f) => ({ ...f, eventId: option.value }));
+                                  setEventFilterOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filters.eventId === option.value ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{option.label}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Vendedor</label>
+                  <Popover open={sellerFilterOpen} onOpenChange={setSellerFilterOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={sellerFilterOpen}
+                        className={cn('w-full justify-between font-normal', filters.sellerId === 'all' && 'text-muted-foreground')}
+                      >
+                        <span className="truncate">{selectedSellerFilterLabel}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Buscar vendedor..."
+                          value={sellerFilterSearch}
+                          onValueChange={setSellerFilterSearch}
+                        />
+                        <CommandList>
+                          <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredSellerFilterOptions.map((option) => (
+                              <CommandItem
+                                key={option.value}
+                                value={option.label}
+                                onSelect={() => {
+                                  setFilters((f) => ({ ...f, sellerId: option.value }));
+                                  setSellerFilterOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', filters.sellerId === option.value ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{option.label}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
             advancedFilters={
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FilterInput
