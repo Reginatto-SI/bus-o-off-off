@@ -276,6 +276,7 @@ export default function Events() {
     max_tickets_per_purchase: '0',
     allow_online_sale: true,
     allow_seller_sale: true,
+    enable_checkout_validation: false,
     image_url: '' as string | null,
   });
   
@@ -921,6 +922,7 @@ export default function Events() {
       max_tickets_per_purchase: parseInt(form.max_tickets_per_purchase || '5', 10),
       allow_online_sale: form.allow_online_sale,
       allow_seller_sale: form.allow_seller_sale,
+      enable_checkout_validation: form.enable_checkout_validation,
       company_id: activeCompanyId,
     };
 
@@ -1127,6 +1129,7 @@ export default function Events() {
       max_tickets_per_purchase: event.max_tickets_per_purchase?.toString() ?? '0',
       allow_online_sale: event.allow_online_sale ?? true,
       allow_seller_sale: event.allow_seller_sale ?? true,
+      enable_checkout_validation: event.enable_checkout_validation ?? false,
       image_url: (event as any).image_url ?? null,
     });
     setActiveTab('geral');
@@ -1697,6 +1700,7 @@ export default function Events() {
       max_tickets_per_purchase: '0',
       allow_online_sale: true,
       allow_seller_sale: true,
+      enable_checkout_validation: false,
       image_url: null,
     });
   };
@@ -3084,6 +3088,21 @@ export default function Events() {
                             id="allow_seller_sale"
                             checked={form.allow_seller_sale}
                             onCheckedChange={(checked) => setForm({ ...form, allow_seller_sale: checked })}
+                            disabled={isReadOnly}
+                          />
+                        </div>
+                        <Separator />
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="enable_checkout_validation">Registrar saída (checkout)</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Habilita o botão opcional de saída no app do motorista
+                            </p>
+                          </div>
+                          <Switch
+                            id="enable_checkout_validation"
+                            checked={form.enable_checkout_validation}
+                            onCheckedChange={(checked) => setForm({ ...form, enable_checkout_validation: checked })}
                             disabled={isReadOnly}
                           />
                         </div>
