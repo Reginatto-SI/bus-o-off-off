@@ -232,11 +232,8 @@ export default function DriverValidate() {
               )}
             </div>
 
-            {!scannerSupported && (
-              <p className="text-sm text-muted-foreground">
-                Este navegador não suporta leitura automática de QR. A câmera pode abrir normalmente, mas a leitura deve ser feita pelo token manual.
-              </p>
-            )}
+            {/* Mensagem informativa removida para manter a tela limpa.
+                Exibimos alerta apenas em falha real de câmera/permissão. */}
 
             {cameraError && (
               <p className="text-sm text-destructive">
