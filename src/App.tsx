@@ -35,6 +35,8 @@ import Confirmation from "./pages/public/Confirmation";
 import TicketLookup from "./pages/public/TicketLookup";
 import SellerRedirect from "./pages/public/SellerRedirect";
 import CompanyRegistration from "./pages/public/CompanyRegistration";
+import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
+import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 
 import NotFound from "./pages/NotFound";
 
@@ -64,6 +66,7 @@ const App = () => (
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             <Route path="/v/:code" element={<SellerRedirect />} />
             <Route path="/cadastro-empresa" element={<CompanyRegistration />} />
+            <Route path="/empresa/:nick" element={<PublicCompanyShowcase />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
@@ -85,6 +88,8 @@ const App = () => (
             <Route path="/admin/parceiros" element={<Partners />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             
+            <Route path="/:nick" element={<PublicCompanyShortLink />} />
+
             {/* Catch all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
