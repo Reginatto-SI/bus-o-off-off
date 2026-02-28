@@ -38,6 +38,10 @@ interface ExportPDFModalProps {
   title: string;
   company: Company | null;
   totalRecords?: number;
+  periodLabel?: string;
+  appliedFilters?: Array<{ label: string; value: string }>;
+  summaryTitle?: string;
+  summaryItems?: Array<{ label: string; value: string; emphasis?: 'default' | 'highlight' }>;
 }
 
 interface StoredPreferences {
@@ -54,6 +58,10 @@ export function ExportPDFModal({
   title,
   company,
   totalRecords,
+  periodLabel,
+  appliedFilters = [],
+  summaryTitle,
+  summaryItems = [],
 }: ExportPDFModalProps) {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -215,8 +223,23 @@ export function ExportPDFModal({
         doc.setTextColor(102, 102, 102);
         doc.text(`Gerado em: ${formatDateTime(new Date())}`, rightBlockX, leftY + 17, { align: 'right' });
 
+        const metaY = yPosition + 28;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(102, 102, 102);
+        doc.text(`Período: ${periodLabel || 'Todos os períodos'}`, margin, metaY);
+
+        const filtersText = appliedFilters.length > 0
+          ? appliedFilters.map((filter) => `${filter.label}: ${filter.value}`).join(' • ')
+          : 'Filtros: padrão do relatório';
+        doc.text(filtersText, margin, metaY + 4);
+
+        if (typeof totalRecords === 'number') {
+          doc.text(`Registros: ${totalRecords}`, pageWidth - margin, metaY, { align: 'right' });
+        }
+
         // Linha separadora
-        const separatorY = yPosition + 24;
+        const separatorY = yPosition + 36;
         doc.setDrawColor(220, 220, 220);
         doc.setLineWidth(0.5);
         doc.line(margin, separatorY, pageWidth - margin, separatorY);
@@ -227,8 +250,52 @@ export function ExportPDFModal({
         return separatorY + 6;
       };
 
-      // Posição inicial da tabela abaixo do bloco de cabeçalho (logo + textos + separador).
-      const tableStartY = margin + 30;
+      const addSummaryBlock = (startY: number) => {
+        if (!summaryTitle || summaryItems.length === 0) return startY;
+
+        const blockWidth = pageWidth - (margin * 2);
+        const columnsCount = 3;
+        const cardGap = 3;
+        const cardWidth = (blockWidth - (cardGap * (columnsCount - 1))) / columnsCount;
+        const cardHeight = 14;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(51, 51, 51);
+        doc.text(summaryTitle, margin, startY);
+
+        summaryItems.forEach((item, index) => {
+          const row = Math.floor(index / columnsCount);
+          const col = index % columnsCount;
+          const cardX = margin + (col * (cardWidth + cardGap));
+          const cardY = startY + 3 + (row * (cardHeight + cardGap));
+
+          doc.setFillColor(250, 250, 250);
+          doc.setDrawColor(225, 225, 225);
+          doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(120, 120, 120);
+          doc.text(item.label, cardX + 2, cardY + 4);
+
+          doc.setFontSize(item.emphasis === 'highlight' ? 10 : 9);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(51, 51, 51);
+          doc.text(item.value, cardX + 2, cardY + 10);
+        });
+
+        const rows = Math.ceil(summaryItems.length / columnsCount);
+        const blockEndY = startY + 3 + (rows * (cardHeight + cardGap));
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.4);
+        doc.line(margin, blockEndY + 1, pageWidth - margin, blockEndY + 1);
+
+        return blockEndY + 5;
+      };
+
+      // Posição inicial da tabela abaixo do cabeçalho institucional + metadados + resumo da apuração.
+      const firstPageContentStartY = addSummaryBlock(addHeader());
 
       const selectedColumnObjects = columns.filter((c) => selectedColumns.includes(c.key));
       const tableHeaders = selectedColumnObjects.map((c) => c.label);
@@ -242,9 +309,9 @@ export function ExportPDFModal({
       autoTable(doc, {
         head: [tableHeaders],
         body: tableData,
-        startY: tableStartY,
+        startY: firstPageContentStartY,
         // Reserva margem superior fixa para todas as páginas e evita sobreposição do cabeçalho.
-        margin: { top: tableStartY, left: margin, right: margin },
+        margin: { top: firstPageContentStartY, left: margin, right: margin },
         headStyles: {
           fillColor: [primaryColorRgb.r, primaryColorRgb.g, primaryColorRgb.b],
           textColor: [255, 255, 255],
@@ -264,9 +331,12 @@ export function ExportPDFModal({
           lineWidth: 0.1,
           cellPadding: 3,
         },
-        willDrawPage: () => {
+        willDrawPage: (pageData) => {
           // Desenha o cabeçalho antes do conteúdo da página para manter a hierarquia visual.
-          addHeader();
+          const headerEnd = addHeader();
+          if (pageData.pageNumber === 1) {
+            addSummaryBlock(headerEnd);
+          }
         },
         didDrawPage: (pageData) => {
           const pageCount = doc.getNumberOfPages();
