@@ -1,78 +1,117 @@
 
 
-# Inclusão de Dados Operacionais na Passagem
+# Ajustes de UX e Conformidade — Tela /admin/eventos
 
-## Resumo
-
-Adicionar tipo do veículo, placa e nome do motorista ao modelo único de passagem (virtual, imagem, PDF), propagando para todos os consumers.
+Este plano modifica exclusivamente o arquivo `src/pages/admin/Events.tsx` (4072 linhas). Nenhum outro arquivo é alterado. Nenhuma migração de banco necessária.
 
 ---
 
 ## Mudanças
 
-### 1. TicketCardData — 3 novos campos opcionais
+### 1. Etapa Geral — Redistribuir campos em colunas (desktop)
 
-Arquivo: `src/components/public/TicketCard.tsx` (interface)
+**Linhas ~2366-2591** — Reorganizar o `TabsContent value="geral"`:
 
+- **Linha 1**: Manter grid existente `lg:grid-cols-[200px,1fr]` (Banner + Nome do Evento) — já está assim.
+- **Linha 2**: Mover Data, Cidade e Tolerância para um grid de 3 colunas:
+  ```
+  <div className="grid gap-4 sm:grid-cols-3">
+    Data | Cidade | Tolerância
+  </div>
+  ```
+  Atualmente Data e Cidade estão em `sm:grid-cols-2` e Tolerância fica sozinha abaixo.
+- **Linha 3**: Colocar Descrição e Informações lado a lado:
+  ```
+  <div className="grid gap-4 lg:grid-cols-2">
+    Descrição | Informações e Regras
+  </div>
+  ```
+  Atualmente ficam empilhadas verticalmente.
+
+### 2. Etapa Frotas — Cards de viagem lado a lado
+
+**Linhas ~2648-2715** — No bloco que renderiza `sortedEventTrips.map(...)`:
+
+- Trocar container de `<div className="space-y-3">` para `<div className="grid gap-3 lg:grid-cols-2">`.
+- Os cards individuais já são `<Card>`, ficarão lado a lado automaticamente quando houver Ida + Volta.
+
+### 3. Etapa Embarques — Dropdown menor + resumo ao lado
+
+**Linhas ~2745-2763** — No bloco do "Trip Selector":
+
+- Envolver dropdown + resumo em grid:
+  ```
+  <div className="grid gap-4 lg:grid-cols-[40%,1fr] items-end">
+    <div> Select (Viagem Selecionada) </div>
+    <div> Resumo: Total de embarques | Horário base </div>
+  </div>
+  ```
+- O resumo exibirá contagem de `filteredBoardings.length` e horário do primeiro embarque (stop_order 1).
+
+### 4. Etapa Passagens — Reestruturar em 4 Cards
+
+**Linhas ~2954-3211** — Reescrever o `TabsContent value="passagens"`:
+
+Novo estado no componente:
 ```ts
-vehicleType?: string | null;    // 'onibus' | 'van' | 'micro_onibus'
-vehiclePlate?: string | null;
-driverName?: string | null;
+const [platformFeePassToClient, setPlatformFeePassToClient] = useState(false);
+const [platformFeeAccepted, setPlatformFeeAccepted] = useState(false);
 ```
 
-### 2. TicketCard.tsx — nova seção "Informações do Veículo"
+**Card 1 — Configuração da Passagem**:
+- Preço + Limite por compra (grid 2 colunas) — já existe, apenas envolver em Card com titulo.
 
-Após o bloco de evento/embarque (após `</div>` do `border-t pt-2`), antes do fee breakdown:
+**Card 2 — Canais de Venda**:
+- Venda Online + Venda por Vendedor — mover o bloco existente para dentro de um Card com titulo.
 
-- Ícone `Bus` + tipo traduzido (Ônibus/Van/Micro-ônibus)
-- Ícone `Hash` + placa
-- Ícone `User` + nome do motorista (ou "A definir")
-- Seção com `border-t pt-2 mt-2`
+**Card 3 — Taxa da Plataforma (6%)** (NOVO):
+- Titulo: "Taxa da Plataforma (6%)"
+- Texto fixo explicativo
+- Toggle: "Repassar taxa para o cliente" (`platformFeePassToClient`)
+- Simulação dinâmica usando `form.unit_price`:
+  - Preço base
+  - Taxa (6%)
+  - Preço final ao cliente (se repasse ativado: base + 6%)
+  - Valor líquido do organizador (base - 6% se não repassar, ou base inteiro se repassar)
 
-### 3. ticketVisualRenderer.ts — mesma seção no canvas
+**Card 4 — Aceite Obrigatório** (NOVO):
+- Checkbox: "Li e aceito a cobrança da taxa de 6% sobre vendas online."
+- Estado: `platformFeeAccepted`
 
-Após o bloco de detalhes do evento, antes dos fees:
-- Linha separadora + 3 linhas de texto (tipo, placa, motorista)
-- Ajustar cálculo dinâmico de altura do canvas (+3 linhas × 34px)
+Manter o bloco de **Taxas Adicionais** e **Resumo do Evento** existentes abaixo dos 4 cards.
 
-### 4. Confirmation.tsx — popular novos campos
+### 5. Etapa Publicação — Resumo Financeiro + bloqueio de aceite
 
-A query já faz `trip:trips(*, vehicle:vehicles(*))`. Falta o driver.
-- Alterar select para incluir `driver:drivers(name)` no join de trips
-- Mapear `vehicleType`, `vehiclePlate`, `driverName` no ticketCards
+**Linhas ~3214-3320** — No `TabsContent value="publicacao"`:
 
-### 5. Sales.tsx — popular novos campos
+Antes do checklist existente, adicionar Card "Resumo Financeiro do Evento":
+- Preço ao cliente (base ou base+6%)
+- Taxa da plataforma (6%)
+- Quem paga a taxa (organizador ou cliente)
+- Valor líquido estimado por ingresso
+- Canais ativos (Online / Vendedor)
 
-- A query de sales já inclui trip + vehicle. Adicionar join com driver
-- Mapear os 3 campos no `buildTicketCardData`
+**Bloqueio de publicação**:
+- Adicionar `platformFeeAccepted` como requisito no `publishChecklist`:
+  - Novo check: `hasFeeAcceptance: platformFeeAccepted`
+  - Incluir no `valid` condition
+- Se tentar publicar sem aceite: toast + redirecionar para aba passagens
+- Adicionar item visual no checklist: "Taxa da plataforma aceita"
 
-### 6. NewSaleModal.tsx — popular novos campos
+### 6. Estado e imports
 
-- Já tem acesso a trips/vehicles. Adicionar fetch de driver name
-- Mapear no `buildTicketCardData`
-
-### 7. ticket-lookup edge function — retornar dados do veículo/motorista
-
-- A query já faz `trip:trips(*)`. Alterar para `trip:trips(*, vehicle:vehicles(type, plate), driver:drivers(name))`
-- Adicionar `vehicleType`, `vehiclePlate`, `driverName` no resultado
-
-### 8. TicketLookup.tsx — mapear novos campos
-
-- Mapear `t.vehicleType`, `t.vehiclePlate`, `t.driverName` do resultado da edge function
+- Adicionar `Checkbox` import de `@/components/ui/checkbox`
+- Adicionar estados: `platformFeePassToClient`, `platformFeeAccepted`
+- No `resetForm()`, resetar ambos para `false`
+- No `loadEventData` ao editar, inicializar `platformFeeAccepted = false` (sempre exigir re-aceite por sessão)
 
 ---
 
 ## Arquivos afetados
 
-| Arquivo | Ação |
+| Arquivo | Tipo |
 |---------|------|
-| `src/components/public/TicketCard.tsx` | +3 campos na interface + seção visual |
-| `src/lib/ticketVisualRenderer.ts` | +seção canvas + altura dinâmica |
-| `src/pages/public/Confirmation.tsx` | Join driver + mapear campos |
-| `src/pages/admin/Sales.tsx` | Join driver + mapear campos |
-| `src/components/admin/NewSaleModal.tsx` | Mapear campos |
-| `src/pages/public/TicketLookup.tsx` | Mapear campos da edge function |
-| `supabase/functions/ticket-lookup/index.ts` | Join vehicle+driver + retornar dados |
+| `src/pages/admin/Events.tsx` | Modificação (layout + lógica de taxa/aceite) |
 
-Nenhuma migração de banco necessária — os dados já existem nas tabelas `vehicles` e `drivers`.
+Nenhuma migração. Nenhum novo componente. Nenhuma alteração em telas públicas ou fluxo de compra.
 
