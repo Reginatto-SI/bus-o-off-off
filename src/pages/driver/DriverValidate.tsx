@@ -58,6 +58,7 @@ export default function DriverValidate() {
   const [manualToken, setManualToken] = useState('');
   const [scannerSupported, setScannerSupported] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
 
   const reasonLabel = useMemo(() => {
@@ -119,16 +120,17 @@ export default function DriverValidate() {
   }, [lockScannerTemporarily, processing]);
 
   useEffect(() => {
+    // Importante: a câmera deve ser solicitada mesmo sem BarcodeDetector,
+    // para não bloquear teste/uso em navegadores que não têm leitura nativa de QR.
     const startScanner = async () => {
-      if (!window.BarcodeDetector) {
-        setScannerSupported(false);
-        return;
-      }
-
-      setScannerSupported(true);
+      const hasBarcodeDetector = Boolean(window.BarcodeDetector);
+      setScannerSupported(hasBarcodeDetector);
 
       try {
-        detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        if (hasBarcodeDetector && window.BarcodeDetector) {
+          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
@@ -141,9 +143,12 @@ export default function DriverValidate() {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           setCameraReady(true);
+          setCameraError(null);
         }
-      } catch {
+      } catch (error) {
         setCameraReady(false);
+        setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador para este site.');
+        console.error('[DriverValidate] Falha ao abrir câmera (getUserMedia):', error);
       }
     };
 
@@ -229,7 +234,13 @@ export default function DriverValidate() {
 
             {!scannerSupported && (
               <p className="text-sm text-muted-foreground">
-                Este navegador não suporta leitura automática por câmera. Use o token manual.
+                Este navegador não suporta leitura automática de QR. A câmera pode abrir normalmente, mas a leitura deve ser feita pelo token manual.
+              </p>
+            )}
+
+            {cameraError && (
+              <p className="text-sm text-destructive">
+                {cameraError}
               </p>
             )}
 
