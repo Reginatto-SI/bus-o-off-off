@@ -91,6 +91,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CardHeader, CardTitle } from '@/components/ui/card';
 
 // Types
 interface EventFilters {
@@ -248,6 +250,10 @@ export default function Events() {
   const [feeDialogOpen, setFeeDialogOpen] = useState(false);
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
   const [feeForm, setFeeForm] = useState({ name: '', fee_type: 'fixed' as 'fixed' | 'percent', value: '', is_active: true });
+
+  // Platform fee states
+  const [platformFeePassToClient, setPlatformFeePassToClient] = useState(false);
+  const [platformFeeAccepted, setPlatformFeeAccepted] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
 
   // Gate Stripe para monetização: bloqueia criação/publicação sem conta conectada.
@@ -518,6 +524,7 @@ export default function Events() {
     const hasCity = form.city.trim() !== '';
     const hasTrips = eventTrips.length > 0;
     const hasPrice = parseFloat(form.unit_price || '0') > 0;
+    const hasFeeAcceptance = platformFeeAccepted;
     
     // NEW: At least one IDA trip must have boarding (volta is optional)
     const hasIdaWithBoarding = eventTrips.some(trip => 
@@ -531,7 +538,7 @@ export default function Events() {
       : eventBoardingLocations.length > 0;
 
     return {
-      valid: hasName && hasDate && hasCity && hasTrips && hasBoardingForPublish && hasPrice,
+      valid: hasName && hasDate && hasCity && hasTrips && hasBoardingForPublish && hasPrice && hasFeeAcceptance,
       checks: {
         hasName,
         hasDate,
@@ -539,9 +546,10 @@ export default function Events() {
         hasTrips,
         hasBoardingLocations: hasBoardingForPublish,
         hasPrice,
+        hasFeeAcceptance,
       },
     };
-  }, [form, eventTrips, eventBoardingLocations]);
+  }, [form, eventTrips, eventBoardingLocations, platformFeeAccepted]);
 
   // Computed: is read-only (encerrado)
   const isReadOnly = form.status === 'encerrado';
@@ -881,8 +889,13 @@ export default function Events() {
 
     // Validate if trying to publish
     if (targetStatus === 'a_venda' && !publishChecklist.valid) {
-      toast.error('Corrija os itens pendentes antes de publicar o evento');
-      setActiveTab('publicacao');
+      if (!platformFeeAccepted) {
+        toast.error('Aceite a taxa da plataforma na aba Passagens antes de publicar.');
+        setActiveTab('passagens');
+      } else {
+        toast.error('Corrija os itens pendentes antes de publicar o evento');
+        setActiveTab('publicacao');
+      }
       return { error: true, eventId: editingId, isNew: false };
     }
 
@@ -1670,6 +1683,8 @@ export default function Events() {
     setEventBoardingLocations([]);
     setActiveTab('geral');
     setUploadingImage(false);
+    setPlatformFeePassToClient(false);
+    setPlatformFeeAccepted(false);
     setForm({
       name: '',
       date: '',
@@ -2510,7 +2525,7 @@ export default function Events() {
                             disabled={isReadOnly}
                           />
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-3">
                           <div className="space-y-2">
                             <Label htmlFor="date">Data *</Label>
                             <Input
@@ -2534,59 +2549,58 @@ export default function Events() {
                               Local onde o evento acontece (destino final da viagem)
                             </p>
                           </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="boarding_tolerance_minutes">Tolerância (min)</Label>
+                            <Input
+                              id="boarding_tolerance_minutes"
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={form.boarding_tolerance_minutes}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === '') {
+                                  setForm({ ...form, boarding_tolerance_minutes: '' });
+                                  return;
+                                }
+                                const parsed = parseInt(value, 10);
+                                if (Number.isNaN(parsed) || parsed <= 0) return;
+                                setForm({ ...form, boarding_tolerance_minutes: parsed.toString() });
+                              }}
+                              placeholder="Ex: 10"
+                              disabled={isReadOnly}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="boarding_tolerance_minutes">Tolerância de embarque (minutos)</Label>
-                      <Input
-                        id="boarding_tolerance_minutes"
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={form.boarding_tolerance_minutes}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Permite vazio (opcional) e bloqueia valores não positivos.
-                          if (value === '') {
-                            setForm({ ...form, boarding_tolerance_minutes: '' });
-                            return;
-                          }
-                          const parsed = parseInt(value, 10);
-                          if (Number.isNaN(parsed) || parsed <= 0) return;
-                          setForm({ ...form, boarding_tolerance_minutes: parsed.toString() });
-                        }}
-                        placeholder="Ex: 10"
-                        disabled={isReadOnly}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Descrição</Label>
-                      <Textarea
-                        id="description"
-                        value={form.description}
-                        onChange={(e) => setForm({ ...form, description: e.target.value })}
-                        placeholder="Descrição do evento (opcional)"
-                        rows={3}
-                        disabled={isReadOnly}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="public_info">Informações e Regras Importantes (exibidas ao público)</Label>
-                      <Textarea
-                        id="public_info"
-                        value={form.public_info}
-                        onChange={(e) => setForm({ ...form, public_info: e.target.value })}
-                        placeholder="Ex: regras de embarque, documentos obrigatórios e orientações gerais"
-                        rows={4}
-                        disabled={isReadOnly}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Esse conteúdo será exibido no aplicativo público ao clicar em ‘Informações e regras’.
-                      </p>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Descrição</Label>
+                        <Textarea
+                          id="description"
+                          value={form.description}
+                          onChange={(e) => setForm({ ...form, description: e.target.value })}
+                          placeholder="Descrição do evento (opcional)"
+                          rows={3}
+                          disabled={isReadOnly}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="public_info">Informações e Regras (exibidas ao público)</Label>
+                        <Textarea
+                          id="public_info"
+                          value={form.public_info}
+                          onChange={(e) => setForm({ ...form, public_info: e.target.value })}
+                          placeholder="Ex: regras de embarque, documentos obrigatórios e orientações gerais"
+                          rows={3}
+                          disabled={isReadOnly}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Esse conteúdo será exibido no aplicativo público ao clicar em 'Informações e regras'.
+                        </p>
+                      </div>
                     </div>
                   </TabsContent>
 
@@ -2645,7 +2659,7 @@ export default function Events() {
                             )}
                           </div>
                         ) : (
-                          <div className="space-y-3">
+                          <div className="grid gap-3 lg:grid-cols-2">
                             {/* Mantemos a ordem visual Ida → Volta para evitar confusão no operador. */}
                             {sortedEventTrips.map((trip) => {
                               const pairedTrip = trip.paired_trip_id 
@@ -2741,32 +2755,57 @@ export default function Events() {
                       </div>
                     ) : (
                       <>
-                        {/* Trip Selector */}
-                        <div className="space-y-2">
-                          <Label>Viagem Selecionada</Label>
-                          <Select
-                            value={selectedTripIdForBoardings ?? '__none__'}
-                            onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione uma viagem" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Todas as viagens</SelectItem>
-                              {sortedEventTrips.map((trip) => (
-                                <SelectItem key={trip.id} value={trip.id}>
-                                  {getTripLabelWithoutTime(trip)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div className="grid gap-4 lg:grid-cols-[40%,1fr] items-end">
+                          <div className="space-y-2">
+                            <Label>Viagem Selecionada</Label>
+                            <Select
+                              value={selectedTripIdForBoardings ?? '__none__'}
+                              onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione uma viagem" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Todas as viagens</SelectItem>
+                                {sortedEventTrips.map((trip) => (
+                                  <SelectItem key={trip.id} value={trip.id}>
+                                    {getTripLabelWithoutTime(trip)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-6 text-sm pb-1">
+                            <div>
+                              <span className="text-muted-foreground">Total de embarques: </span>
+                              <span className="font-medium">
+                                {selectedTripIdForBoardings
+                                  ? eventBoardingLocations.filter(ebl => ebl.trip_id === selectedTripIdForBoardings).length
+                                  : eventBoardingLocations.length}
+                              </span>
+                            </div>
+                            {(() => {
+                              const targetTrip = selectedTripIdForBoardings || (sortedEventTrips.length > 0 ? sortedEventTrips[0].id : null);
+                              if (!targetTrip) return null;
+                              const firstBoarding = eventBoardingLocations
+                                .filter(ebl => ebl.trip_id === targetTrip)
+                                .sort((a, b) => a.stop_order - b.stop_order)[0];
+                              if (!firstBoarding?.departure_time) return null;
+                              return (
+                                <div>
+                                  <span className="text-muted-foreground">Horário base: </span>
+                                  <span className="font-medium">{firstBoarding.departure_time.slice(0, 5)}</span>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         {/* Actions */}
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <h3 className="font-medium">
                             {selectedTripIdForBoardings 
-                              ? `Embarques da viagem selecionada`
+                              ? 'Embarques da viagem selecionada'
                               : 'Todos os embarques'
                             }
                           </h3>
@@ -2961,90 +3000,183 @@ export default function Events() {
                         </AlertDescription>
                       </Alert>
                     )}
-                    <div className="space-y-4">
-                      <h3 className="font-medium">Configurações de Venda</h3>
-                      
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="unit_price">Preço da Passagem *</Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
-                            <Input
-                              id="unit_price"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              className="pl-10"
-                              value={form.unit_price}
-                              onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
-                              onBlur={() => {
-                                if (form.unit_price) {
-                                  const value = parseFloat(form.unit_price);
-                                  if (!isNaN(value)) {
-                                    setForm({ ...form, unit_price: value.toFixed(2) });
+
+                    {/* Card 1 — Configuração da Passagem */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Configuração da Passagem</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="unit_price">Preço da Passagem *</Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
+                              <Input
+                                id="unit_price"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                className="pl-10"
+                                value={form.unit_price}
+                                onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                                onBlur={() => {
+                                  if (form.unit_price) {
+                                    const value = parseFloat(form.unit_price);
+                                    if (!isNaN(value)) {
+                                      setForm({ ...form, unit_price: value.toFixed(2) });
+                                    }
                                   }
-                                }
-                              }}
-                              placeholder="0,00"
+                                }}
+                                placeholder="0,00"
+                                disabled={isReadOnly}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="max_tickets">Limite por Compra</Label>
+                            <Input
+                              id="max_tickets"
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={form.max_tickets_per_purchase}
+                              onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
                               disabled={isReadOnly}
                             />
+                            <p className="text-xs text-muted-foreground">
+                              Use 0 para permitir compras sem limite por pedido
+                            </p>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="max_tickets">Limite de Passagens por Compra</Label>
-                          <Input
-                            id="max_tickets"
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={form.max_tickets_per_purchase}
-                            onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
+                      </CardContent>
+                    </Card>
+
+                    {/* Card 2 — Canais de Venda */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Canais de Venda</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="allow_online_sale">Venda Online</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Passagens disponíveis no portal público
+                            </p>
+                          </div>
+                          <Switch
+                            id="allow_online_sale"
+                            checked={form.allow_online_sale}
+                            onCheckedChange={(checked) => setForm({ ...form, allow_online_sale: checked })}
                             disabled={isReadOnly}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Use 0 para permitir compras sem limite por pedido
-                          </p>
                         </div>
-                      </div>
+                        <Separator />
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="allow_seller_sale">Venda por Vendedor</Label>
+                            <p className="text-sm text-muted-foreground">
+                              Vendedores podem vender via link exclusivo
+                            </p>
+                          </div>
+                          <Switch
+                            id="allow_seller_sale"
+                            checked={form.allow_seller_sale}
+                            onCheckedChange={(checked) => setForm({ ...form, allow_seller_sale: checked })}
+                            disabled={isReadOnly}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                      <div className="space-y-4 pt-4">
-                        <h4 className="text-sm font-medium text-muted-foreground">Canais de Venda</h4>
-                        
-                        <Card className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label htmlFor="allow_online_sale">Venda Online</Label>
-                              <p className="text-sm text-muted-foreground">
-                                Passagens disponíveis no portal público
-                              </p>
-                            </div>
-                            <Switch
-                              id="allow_online_sale"
-                              checked={form.allow_online_sale}
-                              onCheckedChange={(checked) => setForm({ ...form, allow_online_sale: checked })}
-                              disabled={isReadOnly}
-                            />
+                    {/* Card 3 — Taxa da Plataforma (6%) */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Taxa da Plataforma (6%)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          A plataforma cobra 6% sobre cada passagem vendida online via Stripe.
+                        </p>
+
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="platform_fee_pass">Repassar taxa para o cliente</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Se ativado, o cliente pagará o preço base + 6%
+                            </p>
                           </div>
-                        </Card>
-                        
-                        <Card className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label htmlFor="allow_seller_sale">Venda por Vendedor</Label>
-                              <p className="text-sm text-muted-foreground">
-                                Vendedores podem vender via link exclusivo
-                              </p>
-                            </div>
-                            <Switch
-                              id="allow_seller_sale"
-                              checked={form.allow_seller_sale}
-                              onCheckedChange={(checked) => setForm({ ...form, allow_seller_sale: checked })}
-                              disabled={isReadOnly}
-                            />
-                          </div>
-                        </Card>
-                      </div>
-                    </div>
+                          <Switch
+                            id="platform_fee_pass"
+                            checked={platformFeePassToClient}
+                            onCheckedChange={setPlatformFeePassToClient}
+                            disabled={isReadOnly}
+                          />
+                        </div>
+
+                        {/* Simulação dinâmica */}
+                        {form.unit_price && parseFloat(form.unit_price) > 0 && (() => {
+                          const basePrice = parseFloat(form.unit_price);
+                          const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
+                          const clientPrice = platformFeePassToClient ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
+                          const organizerNet = platformFeePassToClient ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+
+                          return (
+                            <Card className="p-3 bg-muted/50">
+                              <p className="text-xs text-muted-foreground mb-2 font-medium">Simulação</p>
+                              <div className="text-sm space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Preço base</span>
+                                  <span>R$ {basePrice.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Taxa da plataforma (6%)</span>
+                                  <span>R$ {platformFee.toFixed(2)}</span>
+                                </div>
+                                <Separator className="my-1" />
+                                <div className="flex justify-between font-medium">
+                                  <span>Preço final ao cliente</span>
+                                  <span>R$ {clientPrice.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between font-medium text-primary">
+                                  <span>Valor líquido do organizador</span>
+                                  <span>R$ {organizerNet.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })()}
+                      </CardContent>
+                    </Card>
+
+                    {/* Card 4 — Aceite Obrigatório */}
+                    <Card className={cn(
+                      'border',
+                      !platformFeeAccepted && 'border-orange-500/30 bg-orange-500/5'
+                    )}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            id="platform_fee_accepted"
+                            checked={platformFeeAccepted}
+                            onCheckedChange={(checked) => setPlatformFeeAccepted(checked === true)}
+                            disabled={isReadOnly}
+                          />
+                          <label htmlFor="platform_fee_accepted" className="text-sm leading-relaxed cursor-pointer">
+                            Li e aceito a cobrança da taxa de <strong>6%</strong> sobre vendas online.
+                          </label>
+                        </div>
+                        {!platformFeeAccepted && (
+                          <p className="text-xs text-orange-600 mt-2 ml-7">
+                            Este aceite é obrigatório para publicar o evento.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
 
                     {/* Taxas Adicionais */}
                     {editingId && (
@@ -3232,6 +3364,52 @@ export default function Events() {
                         </Select>
                       </div>
 
+                      {/* Resumo Financeiro do Evento */}
+                      {editingId && form.unit_price && parseFloat(form.unit_price) > 0 && (
+                        <Card className="p-4">
+                          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                            <DollarSign className="h-4 w-4" />
+                            Resumo Financeiro do Evento
+                          </h4>
+                          <div className="text-sm space-y-2">
+                            {(() => {
+                              const basePrice = parseFloat(form.unit_price);
+                              const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
+                              const clientPrice = platformFeePassToClient ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
+                              const organizerNet = platformFeePassToClient ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+
+                              return (
+                                <>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Preço ao cliente</span>
+                                    <span className="font-medium">R$ {clientPrice.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Taxa da plataforma (6%)</span>
+                                    <span>R$ {platformFee.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Quem paga a taxa</span>
+                                    <span>{platformFeePassToClient ? 'Cliente' : 'Organizador'}</span>
+                                  </div>
+                                  <Separator className="my-1" />
+                                  <div className="flex justify-between font-medium text-primary">
+                                    <span>Valor líquido estimado por ingresso</span>
+                                    <span>R$ {organizerNet.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Canais ativos</span>
+                                    <span>
+                                      {[form.allow_online_sale && 'Online', form.allow_seller_sale && 'Vendedor'].filter(Boolean).join(' • ') || 'Nenhum'}
+                                    </span>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </Card>
+                      )}
+
                       {/* Publish Checklist */}
                       {editingId && form.status !== 'encerrado' && (
                         <Card className={`p-4 ${publishChecklist.valid ? 'bg-green-500/5 border-green-500/20' : 'bg-orange-500/5 border-orange-500/20'}`}>
@@ -3282,6 +3460,16 @@ export default function Events() {
                               )}
                               <span className={publishChecklist.checks.hasPrice ? 'text-muted-foreground' : 'text-destructive'}>
                                 Preço da passagem definido
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {publishChecklist.checks.hasFeeAcceptance ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-destructive" />
+                              )}
+                              <span className={publishChecklist.checks.hasFeeAcceptance ? 'text-muted-foreground' : 'text-destructive'}>
+                                Taxa da plataforma aceita
                               </span>
                             </div>
                           </div>
