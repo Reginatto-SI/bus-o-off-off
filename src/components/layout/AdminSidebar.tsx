@@ -259,9 +259,10 @@ export function AdminSidebar() {
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-[11px] font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-sm font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                   aria-expanded={Boolean(openGroups[group.id])}
                 >
+                  {/* Tamanho alinhado com o padrão tipográfico dos itens de navegação para melhorar legibilidade. */}
                   <span>{group.label}</span>
                   <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openGroups[group.id] ? 'rotate-0' : '-rotate-90')} />
                 </button>
