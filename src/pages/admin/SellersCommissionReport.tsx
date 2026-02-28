@@ -461,6 +461,42 @@ export default function SellersCommissionReport() {
   const exportStorageSuffix = isSummaryView ? 'resumo' : 'detalhado';
   const exportFileNameSuffix = isSummaryView ? 'resumo-vendedor' : 'detalhado-venda';
 
+  const periodLabel = useMemo(() => {
+    if (!filters.dateFrom && !filters.dateTo) return 'Todos os períodos';
+    const from = filters.dateFrom ? format(new Date(filters.dateFrom), 'dd/MM/yyyy', { locale: ptBR }) : 'Início';
+    const to = filters.dateTo ? format(new Date(filters.dateTo), 'dd/MM/yyyy', { locale: ptBR }) : 'Hoje';
+    return `${from} até ${to}`;
+  }, [filters.dateFrom, filters.dateTo]);
+
+  const appliedFiltersForPdf = useMemo(() => {
+    const activeEventLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
+    const activeSellerLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
+    const statusLabel = filters.status === 'all' ? 'Todos' : (statusLabels[filters.status] ?? filters.status);
+
+    return [
+      { label: 'Aba', value: isSummaryView ? 'Resumo por Vendedor' : 'Detalhado por Venda' },
+      { label: 'Evento', value: activeEventLabel },
+      { label: 'Vendedor', value: activeSellerLabel },
+      { label: 'Status', value: statusLabel },
+    ];
+  }, [eventFilterOptions, filters.eventId, filters.sellerId, filters.status, isSummaryView, sellerFilterOptions]);
+
+  const averageCommissionPerSale = useMemo(() => {
+    if (!kpis.eligible_sales) return 0;
+    return Number((kpis.total_commission / kpis.eligible_sales).toFixed(2));
+  }, [kpis.eligible_sales, kpis.total_commission]);
+
+  // PDF sincronizado com KPIs da interface: os mesmos indicadores/filtros da tela são enviados ao export.
+  // Comissão é gerencial (não usa Stripe) e o bloco de resumo deve permanecer alinhado às regras atuais da UI.
+  const summaryItemsForPdf = useMemo(() => [
+    { label: 'Comissão Total', value: `R$ ${kpis.total_commission.toFixed(2)}`, emphasis: 'highlight' as const },
+    { label: 'Receita Elegível', value: `R$ ${kpis.eligible_revenue.toFixed(2)}` },
+    { label: 'Vendas Elegíveis', value: String(kpis.eligible_sales) },
+    { label: 'Passagens', value: String(kpis.total_tickets) },
+    { label: 'Nº de Vendedores', value: String(kpis.sellers_count) },
+    { label: 'Comissão Média por Venda', value: `R$ ${averageCommissionPerSale.toFixed(2)}` },
+  ], [averageCommissionPerSale, kpis]);
+
   const renderPagination = () => (
     <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -800,6 +836,10 @@ export default function SellersCommissionReport() {
           title={isSummaryView ? 'Comissão de Vendedores - Resumo por Vendedor' : 'Comissão de Vendedores - Detalhado por Venda'}
           company={activeCompany}
           totalRecords={totalResultsCount}
+          periodLabel={periodLabel}
+          appliedFilters={appliedFiltersForPdf}
+          summaryTitle="Resumo da Apuração"
+          summaryItems={summaryItemsForPdf}
         />
       </div>
     </AdminLayout>
