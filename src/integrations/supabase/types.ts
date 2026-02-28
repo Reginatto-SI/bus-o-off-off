@@ -1252,6 +1252,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+
+      get_sellers_commission_kpis: {
+        Args: {
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
+        }
+        Returns: {
+          eligible_revenue: number
+          eligible_sales: number
+          sellers_count: number
+          total_commission: number
+          total_tickets: number
+        }[]
+      }
+      get_sellers_commission_summary_paginated: {
+        Args: {
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
+        }
+        Returns: {
+          commission_percent: number
+          eligible_revenue: number
+          eligible_sales: number
+          seller_id: string
+          seller_name: string
+          total_commission: number
+          total_count: number
+          total_tickets: number
+        }[]
+      }
       get_sales_report_kpis: {
         Args: {
           p_company_id?: string
