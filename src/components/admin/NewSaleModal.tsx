@@ -734,15 +734,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               const eventDateLabel = selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date, 'dd/MM') : '--/--';
                               return (
                                 <SelectItem key={t.id} value={t.id}>
-                                  <div className="flex flex-col py-1">
-                                    <span className="font-medium">
-                                      {v ? `${vehicleTypeLabels[v.type] ?? v.type} ${v.plate} — ${v.capacity} lugares` : t.id.slice(0, 8)}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {getTripTypeLabel(t.trip_type)} — {eventDateLabel} às {t.departure_time?.slice(0, 5) || '--:--'}
-                                    </span>
-                                    <span className="text-xs text-primary">Vagas disponíveis: {remainingSeats}</span>
-                                  </div>
+                                  {/* Mantém o trigger compacto e evita "estouro" visual ao selecionar o transporte. */}
+                                  {v
+                                    ? `${vehicleTypeLabels[v.type] ?? v.type} ${v.plate} — ${getTripTypeLabel(t.trip_type)} • ${eventDateLabel} ${t.departure_time?.slice(0, 5) || '--:--'} • ${remainingSeats} vagas`
+                                    : t.id.slice(0, 8)}
                                 </SelectItem>
                               );
                             })}
@@ -750,16 +745,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         </Select>
                       )}
                       {!!selectedTrip && (
-                        <div className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-2 font-medium text-foreground">
+                        <div className="space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 font-medium text-foreground">
                             <Route className="h-3.5 w-3.5" />
                             {getTripTypeLabel(selectedTrip.trip_type)}
                           </div>
-                          <div className="mt-1 flex items-center gap-2">
+                          <div className="flex items-center gap-2">
                             <CalendarClock className="h-3.5 w-3.5" />
                             Saída prevista: {selectedEvent?.date ? formatDateOnlyBR(selectedEvent.date, 'dd/MM') : '--/--'} às {selectedTrip.departure_time?.slice(0, 5) || '--:--'}
                           </div>
-                          <div className="mt-1 flex items-center gap-2 text-primary">
+                          <div className="flex items-center gap-2 text-primary">
                             <Bus className="h-3.5 w-3.5" />
                             Capacidade: {selectedVehicle?.capacity ?? 0} • Vagas restantes: {selectedTripRemainingSeats}
                           </div>
@@ -1001,14 +996,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       </div>
                     )}
 
-                    {/* Summary */}
+                    {/* Summary (fixo no fluxo do formulário para não sobrepor os cards de passageiro) */}
                     {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
                       const price = parseFloat(unitPrice || '0');
                       const breakdown = calculateFees(price, eventFees);
                       const hasFees = breakdown.fees.length > 0;
                       const total = breakdown.unitPriceWithFees * passengers.length;
                       return (
-                        <div className="sticky bottom-0 space-y-2 rounded-xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
+                        <div className="mt-2 space-y-2 rounded-xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
                           <div className="flex items-center justify-between text-sm">
                             <span>Quantidade de passagens</span>
                             <span className="font-medium">{passengers.length}</span>
