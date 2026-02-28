@@ -103,9 +103,8 @@ const navigationGroups: NavigationGroup[] = [{
     statusLabel: 'Em breve'
   }, {
     name: 'Comissão de Vendedores',
-    icon: BadgePercent,
-    disabled: true,
-    statusLabel: 'Em breve'
+    href: '/admin/relatorios/comissao-vendedores',
+    icon: BadgePercent
   }]
 }, {
   id: 'administracao',
