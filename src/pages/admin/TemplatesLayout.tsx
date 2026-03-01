@@ -10,6 +10,16 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,7 +28,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Download, Upload, Loader2, Eye, Pencil, Copy, Power, LayoutTemplate, Save, Paintbrush } from 'lucide-react';
+import {
+  Plus,
+  Download,
+  Upload,
+  Loader2,
+  Eye,
+  Pencil,
+  Copy,
+  Power,
+  LayoutTemplate,
+  Save,
+  Paintbrush,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { TemplateLayout, TemplateVehicleType } from '@/types/database';
@@ -54,7 +79,6 @@ const VEHICLE_OPTIONS: Array<{ value: TemplateVehicleType; label: string; floors
 ];
 
 const TAG_OPTIONS = ['janela', 'corredor', 'frente', 'fundo', 'proximo_banheiro', 'proximo_escada', 'premium'] as const;
-
 const CATEGORY_OPTIONS: ItemCategory[] = ['convencional', 'executivo', 'semi_leito', 'leito', 'leito_cama'];
 
 const CATEGORY_COLORS: Record<ItemCategory, string> = {
@@ -71,11 +95,16 @@ export default function TemplatesLayout() {
   const { isDeveloper } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [templates, setTemplates] = useState<TemplateLayout[]>([]);
   const [filteredSearch, setFilteredSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'ativo' | 'inativo'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ativo' | 'inativo'>('ativo');
   const [typeFilter, setTypeFilter] = useState<'all' | TemplateVehicleType>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeFloor, setActiveFloor] = useState(1);
@@ -84,6 +113,8 @@ export default function TemplatesLayout() {
   const [lastSelectedCell, setLastSelectedCell] = useState<CellCoord | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<CellCoord | null>(null);
+  const [templateToDelete, setTemplateToDelete] = useState<TemplateLayout | null>(null);
+
   const [editorDraft, setEditorDraft] = useState<CellEditorDraft>({
     cell_type: 'assento',
     seat_number: '',
@@ -109,6 +140,9 @@ export default function TemplatesLayout() {
     grid_columns: 5,
   });
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const hasActiveFilters = filteredSearch !== '' || statusFilter !== 'ativo' || typeFilter !== 'all';
+
   const resetForm = () => {
     setEditingId(null);
     setActiveFloor(1);
@@ -121,24 +155,47 @@ export default function TemplatesLayout() {
     setItems([]);
   };
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (requestedPage = page, requestedPageSize = pageSize) => {
     setLoading(true);
-    const { data, error } = await supabase.from('template_layouts').select('*').order('updated_at', { ascending: false });
-    if (error) toast.error('Erro ao carregar templates oficiais');
-    else setTemplates((data ?? []) as TemplateLayout[]);
+
+    const from = (requestedPage - 1) * requestedPageSize;
+    const to = from + requestedPageSize - 1;
+
+    let query = supabase
+      .from('template_layouts')
+      .select('*', { count: 'exact' })
+      .order('updated_at', { ascending: false })
+      .range(from, to);
+
+    if (filteredSearch) query = query.ilike('name', `%${filteredSearch}%`);
+    if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+    if (typeFilter !== 'all') query = query.eq('vehicle_type', typeFilter);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      toast.error('Erro ao carregar templates oficiais');
+      setTemplates([]);
+      setTotalCount(0);
+      setLoading(false);
+      return;
+    }
+
+    setTemplates((data ?? []) as TemplateLayout[]);
+    setTotalCount(count ?? 0);
+
+    // Comentário: ajusta automaticamente para página anterior quando exclusão deixa a página atual vazia.
+    if ((data ?? []).length === 0 && requestedPage > 1) {
+      setPage(requestedPage - 1);
+    }
+
     setLoading(false);
   };
 
   useEffect(() => {
-    if (isDeveloper) fetchTemplates();
-  }, [isDeveloper]);
-
-  const filtered = useMemo(() => templates.filter((template) => {
-    if (filteredSearch && !template.name.toLowerCase().includes(filteredSearch.toLowerCase())) return false;
-    if (statusFilter !== 'all' && template.status !== statusFilter) return false;
-    if (typeFilter !== 'all' && template.vehicle_type !== typeFilter) return false;
-    return true;
-  }), [templates, filteredSearch, statusFilter, typeFilter]);
+    if (!isDeveloper) return;
+    fetchTemplates(page, pageSize);
+  }, [isDeveloper, filteredSearch, statusFilter, typeFilter, page, pageSize]);
 
   const floorLabels = useMemo(() => Array.from({ length: form.floors }, (_, idx) => idx + 1), [form.floors]);
 
@@ -201,7 +258,7 @@ export default function TemplatesLayout() {
     if (!validateDraft(draft, targetCoords)) return;
 
     setItems((prev) => {
-      let next = [...prev];
+      const next = [...prev];
 
       targetCoords.forEach((coord, index) => {
         const currentIndex = next.findIndex((item) => item.floor_number === coord.floor && item.row_number === coord.row && item.column_number === coord.column);
@@ -429,7 +486,7 @@ export default function TemplatesLayout() {
     toast.success(editingId ? 'Template atualizado' : 'Template criado');
     setDialogOpen(false);
     resetForm();
-    fetchTemplates();
+    setPage(1);
     setSaving(false);
   };
 
@@ -456,7 +513,7 @@ export default function TemplatesLayout() {
     }
 
     toast.success('Template duplicado');
-    fetchTemplates();
+    setPage(1);
   };
 
   const toggleStatus = async (template: TemplateLayout) => {
@@ -467,6 +524,42 @@ export default function TemplatesLayout() {
       toast.success(`Template ${nextStatus}`);
       fetchTemplates();
     }
+  };
+
+  const handleDeleteTemplate = async () => {
+    if (!templateToDelete) return;
+    setDeleting(true);
+
+    // Comentário: proteção para não excluir template em uso por veículos existentes.
+    const { count: vehiclesUsing, error: vehiclesError } = await supabase
+      .from('vehicles')
+      .select('id', { count: 'exact', head: true })
+      .eq('template_layout_id', templateToDelete.id);
+
+    // TODO: quando integração de templates em eventos/viagens for concluída, incluir a mesma proteção nessas entidades.
+    if (vehiclesError) {
+      toast.error('Erro ao validar vínculos do template');
+      setDeleting(false);
+      return;
+    }
+
+    if ((vehiclesUsing ?? 0) > 0) {
+      toast.error('Não é possível excluir: template está em uso.');
+      setDeleting(false);
+      return;
+    }
+
+    const { error } = await supabase.from('template_layouts').delete().eq('id', templateToDelete.id);
+
+    if (error) {
+      toast.error('Erro ao excluir template');
+    } else {
+      toast.success('Template excluído com sucesso');
+      setTemplateToDelete(null);
+      fetchTemplates();
+    }
+
+    setDeleting(false);
   };
 
   if (!isDeveloper) return <Navigate to="/admin/eventos" replace />;
@@ -744,71 +837,96 @@ export default function TemplatesLayout() {
 
         <FilterCard
           searchValue={filteredSearch}
-          onSearchChange={setFilteredSearch}
+          onSearchChange={(value) => { setFilteredSearch(value); setPage(1); }}
           searchPlaceholder="Buscar por nome do template"
           selects={[
             {
               id: 'status', label: 'Status', placeholder: 'Status', value: statusFilter,
-              onChange: (value) => setStatusFilter(value as 'all' | 'ativo' | 'inativo'),
-              options: [{ value: 'all', label: 'Todos' }, { value: 'ativo', label: 'Ativo' }, { value: 'inativo', label: 'Inativo' }],
+              onChange: (value) => { setStatusFilter(value as 'all' | 'ativo' | 'inativo'); setPage(1); },
+              options: [{ value: 'ativo', label: 'Ativo' }, { value: 'inativo', label: 'Inativo' }, { value: 'all', label: 'Todos' }],
             },
             {
               id: 'type', label: 'Tipo', placeholder: 'Tipo', value: typeFilter,
-              onChange: (value) => setTypeFilter(value as 'all' | TemplateVehicleType),
+              onChange: (value) => { setTypeFilter(value as 'all' | TemplateVehicleType); setPage(1); },
               options: [{ value: 'all', label: 'Todos' }, ...VEHICLE_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))],
             },
           ]}
-          onClearFilters={() => { setFilteredSearch(''); setStatusFilter('all'); setTypeFilter('all'); }}
-          hasActiveFilters={!!filteredSearch || statusFilter !== 'all' || typeFilter !== 'all'}
+          onClearFilters={() => { setFilteredSearch(''); setStatusFilter('ativo'); setTypeFilter('all'); setPage(1); }}
+          hasActiveFilters={hasActiveFilters}
         />
 
-        {loading ? (
-          <div className="flex items-center justify-center py-14"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<LayoutTemplate className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum template encontrado"
-            description="Cadastre templates oficiais para padronizar o layout de assentos"
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="admin-table-header">
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Versão</TableHead>
-                    <TableHead>Atualizado em</TableHead>
-                    <TableHead className="w-[72px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((template) => (
-                    <TableRow key={template.id}>
-                      <TableCell className="font-medium">{template.name}</TableCell>
-                      <TableCell>{VEHICLE_OPTIONS.find((option) => option.value === template.vehicle_type)?.label ?? template.vehicle_type}</TableCell>
-                      <TableCell><StatusBadge status={template.status} /></TableCell>
-                      <TableCell>v{template.current_version}</TableCell>
-                      <TableCell>{new Date(template.updated_at).toLocaleString('pt-BR')}</TableCell>
-                      <TableCell>
-                        <ActionsDropdown
-                          actions={[
-                            { label: 'Ver', icon: Eye, onClick: () => openEdit(template) },
-                            { label: 'Editar', icon: Pencil, onClick: () => openEdit(template) },
-                            { label: 'Duplicar', icon: Copy, onClick: () => duplicateTemplate(template) },
-                            { label: template.status === 'ativo' ? 'Inativar' : 'Ativar', icon: Power, onClick: () => toggleStatus(template) },
-                          ]}
-                        />
-                      </TableCell>
+        <div className="mt-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-14"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : templates.length === 0 ? (
+            <EmptyState
+              icon={<LayoutTemplate className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum template encontrado"
+              description="Cadastre templates oficiais para padronizar o layout de assentos"
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="admin-table-header">
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Versão</TableHead>
+                      <TableHead>Atualizado em</TableHead>
+                      <TableHead className="w-[72px]">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+                  </TableHeader>
+                  <TableBody>
+                    {templates.map((template) => (
+                      <TableRow key={template.id}>
+                        <TableCell className="font-medium">{template.name}</TableCell>
+                        <TableCell>{VEHICLE_OPTIONS.find((option) => option.value === template.vehicle_type)?.label ?? template.vehicle_type}</TableCell>
+                        <TableCell><StatusBadge status={template.status} /></TableCell>
+                        <TableCell>v{template.current_version}</TableCell>
+                        <TableCell>{new Date(template.updated_at).toLocaleString('pt-BR')}</TableCell>
+                        <TableCell>
+                          <ActionsDropdown
+                            actions={[
+                              { label: 'Ver', icon: Eye, onClick: () => openEdit(template) },
+                              { label: 'Editar', icon: Pencil, onClick: () => openEdit(template) },
+                              { label: 'Duplicar', icon: Copy, onClick: () => duplicateTemplate(template) },
+                              { label: template.status === 'ativo' ? 'Inativar' : 'Ativar', icon: Power, onClick: () => toggleStatus(template) },
+                              { label: 'Excluir', icon: Trash2, variant: 'destructive', onClick: () => setTemplateToDelete(template) },
+                            ]}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Página {page} de {totalPages} • {totalCount} registro(s)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}>
+                      <SelectTrigger className="h-8 w-[110px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 / pág</SelectItem>
+                        <SelectItem value="20">20 / pág</SelectItem>
+                        <SelectItem value="50">50 / pág</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((prev) => prev - 1)}>
+                      <ChevronLeft className="h-4 w-4 mr-1" />Anterior
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((prev) => prev + 1)}>
+                      Próximo<ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {/* Comentário: popup de propriedades segue padrão de Dialog já usado no painel admin. */}
         <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
@@ -885,6 +1003,23 @@ export default function TemplatesLayout() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!templateToDelete} onOpenChange={(open) => { if (!open) setTemplateToDelete(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir Template</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deseja excluir definitivamente este template? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteTemplate} disabled={deleting}>
+                {deleting ? 'Excluindo...' : 'Excluir'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );
