@@ -32,10 +32,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Handshake, Plus, Loader2, Pencil } from 'lucide-react';
+import { Handshake, Plus, Loader2, Pencil, Code2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
 
 export default function Partners() {
   const { isDeveloper } = useAuth();
@@ -135,6 +136,16 @@ export default function Partners() {
       <div className="page-container">
         <PageHeader
           title="Parceiros"
+          metadata={
+            <div className="space-y-2">
+              {/* Identificação visual discreta para reforçar que esta é uma área técnica do sistema. */}
+              <Badge variant="secondary" className="inline-flex items-center gap-1.5 border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-100">
+                <Code2 className="h-3.5 w-3.5" />
+                Área do Desenvolvedor
+              </Badge>
+              <p className="text-xs text-muted-foreground">Área técnica restrita ao desenvolvedor do sistema.</p>
+            </div>
+          }
           description="Gerencie os parceiros da plataforma e seus percentuais de comissão"
           actions={
             <Button onClick={openNew}>

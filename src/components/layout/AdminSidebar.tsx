@@ -237,6 +237,8 @@ export function AdminSidebar() {
     }));
   };
 
+  const isDeveloperOnlyItem = (item: NavigationItem) => item.roles?.length === 1 && item.roles[0] === 'developer';
+
   /* ── Expanded sidebar content (used for both mobile overlay and desktop expanded) ── */
   const expandedContent = (showToggle: boolean, onClose?: () => void) => (
     <>
@@ -291,7 +293,15 @@ export function AdminSidebar() {
                         )}
                       >
                         <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
-                        <span className="flex-1">{item.name}</span>
+                        <span className="flex flex-1 items-center gap-2">
+                          <span>{item.name}</span>
+                          {/* Identificador visual discreto para itens técnicos exclusivos do perfil developer. */}
+                          {isDeveloper && isDeveloperOnlyItem(item) && (
+                            <span className="rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                              Dev
+                            </span>
+                          )}
+                        </span>
                       </NavLink>
                     );
                   }
@@ -331,7 +341,15 @@ export function AdminSidebar() {
                   )}
                 >
                   <item.icon className={cn('h-4 w-4', isActive && 'text-primary')} />
-                  <span className="flex-1">{item.name}</span>
+                  <span className="flex flex-1 items-center gap-2">
+                    <span>{item.name}</span>
+                    {/* Identificador visual discreto para itens técnicos exclusivos do perfil developer. */}
+                    {isDeveloper && isDeveloperOnlyItem(item) && (
+                      <span className="rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                        Dev
+                      </span>
+                    )}
+                  </span>
                 </NavLink>
               );
             }

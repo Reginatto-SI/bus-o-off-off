@@ -44,6 +44,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ImagePlus,
+  Code2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -773,6 +774,16 @@ export default function TemplatesLayout() {
       <div className="page-container">
         <PageHeader
           title="Templates de Layout"
+          metadata={
+            <div className="space-y-2">
+              {/* Sinalização técnica padronizada para telas exclusivas de developer. */}
+              <Badge variant="secondary" className="inline-flex items-center gap-1.5 border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-100">
+                <Code2 className="h-3.5 w-3.5" />
+                Área do Desenvolvedor
+              </Badge>
+              <p className="text-xs text-muted-foreground">Área técnica restrita ao desenvolvedor do sistema.</p>
+            </div>
+          }
           description="Catálogo oficial de layouts globais para cadastro de veículos"
           actions={
             <>
