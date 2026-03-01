@@ -1192,6 +1192,133 @@ export type Database = {
           },
         ]
       }
+      template_layout_items: {
+        Row: {
+          category: string
+          column_number: number
+          created_at: string
+          floor_number: number
+          id: string
+          is_blocked: boolean
+          row_number: number
+          seat_number: string | null
+          tags: string[]
+          template_layout_id: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          column_number: number
+          created_at?: string
+          floor_number: number
+          id?: string
+          is_blocked?: boolean
+          row_number: number
+          seat_number?: string | null
+          tags?: string[]
+          template_layout_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          column_number?: number
+          created_at?: string
+          floor_number?: number
+          id?: string
+          is_blocked?: boolean
+          row_number?: number
+          seat_number?: string | null
+          tags?: string[]
+          template_layout_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_layout_items_template_layout_id_fkey"
+            columns: ["template_layout_id"]
+            isOneToOne: false
+            referencedRelation: "template_layouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_layout_versions: {
+        Row: {
+          created_at: string
+          id: string
+          layout_snapshot: Json
+          notes: string | null
+          template_layout_id: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          layout_snapshot: Json
+          notes?: string | null
+          template_layout_id: string
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          layout_snapshot?: Json
+          notes?: string | null
+          template_layout_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_layout_versions_template_layout_id_fkey"
+            columns: ["template_layout_id"]
+            isOneToOne: false
+            referencedRelation: "template_layouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_layouts: {
+        Row: {
+          created_at: string
+          current_version: number
+          description: string | null
+          floors: number
+          grid_columns: number
+          grid_rows: number
+          id: string
+          name: string
+          status: Database["public"]["Enums"]["seller_status"]
+          updated_at: string
+          vehicle_type: string
+        }
+        Insert: {
+          created_at?: string
+          current_version?: number
+          description?: string | null
+          floors?: number
+          grid_columns?: number
+          grid_rows?: number
+          id?: string
+          name: string
+          status?: Database["public"]["Enums"]["seller_status"]
+          updated_at?: string
+          vehicle_type: string
+        }
+        Update: {
+          created_at?: string
+          current_version?: number
+          description?: string | null
+          floors?: number
+          grid_columns?: number
+          grid_rows?: number
+          id?: string
+          name?: string
+          status?: Database["public"]["Enums"]["seller_status"]
+          updated_at?: string
+          vehicle_type?: string
+        }
+        Relationships: []
+      }
       vehicles: {
         Row: {
           brand: string | null
@@ -1209,6 +1336,9 @@ export type Database = {
           renavam: string | null
           seats_left_side: number
           seats_right_side: number
+          template_layout_id: string | null
+          template_layout_version: number | null
+          layout_snapshot: Json | null
           status: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at: string
@@ -1231,6 +1361,9 @@ export type Database = {
           renavam?: string | null
           seats_left_side?: number
           seats_right_side?: number
+          template_layout_id?: string | null
+          template_layout_version?: number | null
+          layout_snapshot?: Json | null
           status?: Database["public"]["Enums"]["seller_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
@@ -1253,6 +1386,9 @@ export type Database = {
           renavam?: string | null
           seats_left_side?: number
           seats_right_side?: number
+          template_layout_id?: string | null
+          template_layout_version?: number | null
+          layout_snapshot?: Json | null
           status?: Database["public"]["Enums"]["seller_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string

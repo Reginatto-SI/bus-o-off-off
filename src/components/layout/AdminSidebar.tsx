@@ -16,6 +16,7 @@ import {
   User,
   Image,
   Handshake,
+  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown
@@ -87,6 +88,12 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/parceiros',
     icon: Handshake,
     // Tela restrita: somente usuários developer podem visualizar o menu de Parceiros.
+    roles: ['developer']
+  }, {
+    name: 'Templates de Layout',
+    href: '/admin/templates-layout',
+    icon: LayoutTemplate,
+    // Catálogo oficial também é exclusivo de developer.
     roles: ['developer']
   }]
 }, {
