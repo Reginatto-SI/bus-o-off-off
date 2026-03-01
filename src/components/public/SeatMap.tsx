@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Seat } from '@/types/database';
+import { Seat, SeatCategory } from '@/types/database';
 import { SeatButton, SeatState } from './SeatButton';
 import { SeatLegend } from './SeatLegend';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -51,6 +51,8 @@ export function SeatMap({
   }, [loadingStatus, interactionDisabled, wasLoading]);
 
   const isBlocked = loadingStatus || interactionDisabled;
+
+  const seatCategories = seats.map((s) => ((s as any).category || 'convencional') as SeatCategory);
 
   const floorSeats = seats
     .filter((s) => s.floor === activeFloor)
@@ -167,6 +169,7 @@ export function SeatMap({
                             key={seat.id}
                             label={seat.label}
                             state={getSeatState(seat)}
+                            category={(seat as any).category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );
@@ -191,6 +194,7 @@ export function SeatMap({
                             key={seat.id}
                             label={seat.label}
                             state={getSeatState(seat)}
+                            category={(seat as any).category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );
@@ -206,7 +210,7 @@ export function SeatMap({
       </div>
 
       {/* Legend */}
-      <SeatLegend />
+      <SeatLegend categories={seatCategories} />
     </div>
   );
 }

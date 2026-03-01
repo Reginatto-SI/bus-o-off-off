@@ -39,7 +39,7 @@ serve(async (req) => {
     // 1. Fetch tickets by CPF, joining sales + event + boarding_location + trip
     const { data: ticketRows, error: ticketError } = await supabaseAdmin
       .from("tickets")
-      .select("*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*, vehicle:vehicles(type, plate), driver:drivers!trips_driver_id_fkey(name))")
+      .select("*, sale:sales(*, event:events(*), boarding_location:boarding_locations(*)), trip:trips(*, vehicle:vehicles(type, plate, floors), driver:drivers!trips_driver_id_fkey(name))")
       .eq("passenger_cpf", cpfDigits);
 
     if (ticketError) {
@@ -102,7 +102,20 @@ serve(async (req) => {
       is_active: true,
     }));
 
-    // 5. Fetch boarding departure times for each ticket
+    // 5. Fetch seat data (category, floor) for tickets that have seat_id
+    const seatIds = filtered.map((t: any) => t.seat_id).filter(Boolean);
+    const seatMap = new Map();
+    if (seatIds.length > 0) {
+      const { data: seatRows } = await supabaseAdmin
+        .from("seats")
+        .select("id, category, floor")
+        .in("id", seatIds);
+      for (const s of seatRows ?? []) {
+        seatMap.set(s.id, { category: s.category || "convencional", floor: s.floor || 1 });
+      }
+    }
+
+    // 6. Fetch boarding departure times for each ticket
     const results = [];
     for (const t of filtered) {
       let boardingDepartureTime = null;
@@ -124,9 +137,9 @@ serve(async (req) => {
       const companyId = t?.sale?.event?.company_id;
       const company = companyId ? companyMap.get(companyId) ?? null : null;
 
-      // Return only the fields the frontend needs — no raw sale record
-      // saleId e stripeCheckoutSessionId retornados para o frontend poder
-      // exibir o ID da passagem e verificar o status de pagamento no Stripe.
+      const seatInfo = t.seat_id ? seatMap.get(t.seat_id) : null;
+
+      // Return only the fields the frontend needs
       results.push({
         ticketId: t.id,
         saleId: t.sale_id,
@@ -159,6 +172,9 @@ serve(async (req) => {
         vehicleType: t.trip?.vehicle?.type || null,
         vehiclePlate: t.trip?.vehicle?.plate || null,
         driverName: t.trip?.driver?.name || null,
+        seatCategory: seatInfo?.category || null,
+        seatFloor: seatInfo?.floor || null,
+        vehicleFloors: t.trip?.vehicle?.floors || 1,
       });
     }
 

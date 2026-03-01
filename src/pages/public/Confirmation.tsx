@@ -47,6 +47,8 @@ export default function Confirmation() {
   const paymentSuccess = searchParams.get('payment') === 'success';
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
+  const [seatDataMap, setSeatDataMap] = useState<Record<string, { category: string; floor: number }>>({});
+  const [vehicleFloors, setVehicleFloors] = useState<number>(1);
   const [boardingDepartureTime, setBoardingDepartureTime] = useState<string | null>(null);
   const [boardingDepartureDate, setBoardingDepartureDate] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyInfo | null>(null);
@@ -108,7 +110,27 @@ export default function Confirmation() {
           setFeeLines(breakdown.fees);
         }
       }
-      if (ticketsRes.data) setTickets(ticketsRes.data as TicketRecord[]);
+      if (ticketsRes.data) {
+        setTickets(ticketsRes.data as TicketRecord[]);
+
+        // Fetch seat category/floor for each ticket
+        const seatIds = (ticketsRes.data as TicketRecord[]).map(t => t.seat_id).filter(Boolean) as string[];
+        if (seatIds.length > 0) {
+          const { data: seatsData } = await supabase
+            .from('seats')
+            .select('id, category, floor')
+            .in('id', seatIds);
+          if (seatsData) {
+            const map: Record<string, { category: string; floor: number }> = {};
+            seatsData.forEach((s: any) => { map[s.id] = { category: s.category || 'convencional', floor: s.floor || 1 }; });
+            setSeatDataMap(map);
+          }
+        }
+
+        // Get vehicle floors from trip
+        const tripVehicle = (saleRes.data as any)?.trip?.vehicle;
+        if (tripVehicle) setVehicleFloors(tripVehicle.floors || 1);
+      }
       setLoading(false);
     };
 
@@ -188,6 +210,8 @@ export default function Confirmation() {
       ? (sale.gross_amount ?? sale.unit_price * sale.quantity) / sale.quantity
       : undefined;
 
+    const seatInfo = t.seat_id ? seatDataMap[t.seat_id] : null;
+
     return {
       ticketId: t.id,
       qrCodeToken: t.qr_code_token,
@@ -222,6 +246,9 @@ export default function Confirmation() {
       fees: feeLines.length > 0 ? feeLines : undefined,
       unitPrice: feeLines.length > 0 ? unitPrice : undefined,
       totalPaid: totalPaidPerTicket,
+      seatCategory: seatInfo?.category || null,
+      seatFloor: seatInfo?.floor || null,
+      vehicleFloors: vehicleFloors,
     };
   });
 
