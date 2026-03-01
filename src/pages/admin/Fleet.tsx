@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Vehicle } from '@/types/database';
+import { TemplateLayout, Vehicle } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -105,6 +105,7 @@ export default function Fleet() {
   const { isGerente, isOperador, activeCompanyId, activeCompany, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [templateLayouts, setTemplateLayouts] = useState<TemplateLayout[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
@@ -145,6 +146,8 @@ export default function Fleet() {
     color: '',
     whatsapp_group_link: '',
     notes: '',
+    template_layout_id: '',
+    clone_vehicle_id: '',
   });
 
   // Stats calculations
@@ -263,6 +266,17 @@ export default function Fleet() {
   }, [form.capacity, form.seats_left_side, form.seats_right_side]);
 
   // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
+  const fetchTemplateLayouts = async () => {
+    // Comentário: templates oficiais são globais, por isso não filtramos por empresa nesta consulta.
+    const { data, error } = await supabase
+      .from('template_layouts')
+      .select('*')
+      .eq('status', 'ativo')
+      .order('name');
+
+    if (!error) setTemplateLayouts((data ?? []) as TemplateLayout[]);
+  };
+
   const fetchVehicles = async () => {
     if (!activeCompanyId) return;
     const { data, error } = await supabase
@@ -291,6 +305,10 @@ export default function Fleet() {
   };
 
   // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
+  useEffect(() => {
+    fetchTemplateLayouts();
+  }, []);
+
   useEffect(() => {
     if (activeCompanyId) fetchVehicles();
   }, [activeCompanyId]);
@@ -322,6 +340,12 @@ export default function Fleet() {
     if (!isAdmin) {
       console.warn('Permissão insuficiente ao salvar veículo: usuário não-admin.');
       toast.error('Você não tem permissão para salvar veículos');
+      setSaving(false);
+      return;
+    }
+
+    if (!editingId && !form.template_layout_id) {
+      toast.error('Selecione um template oficial de layout para novos veículos');
       setSaving(false);
       return;
     }
@@ -364,8 +388,47 @@ export default function Fleet() {
       color: form.color || null,
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
+      template_layout_id: form.template_layout_id || null,
+      // Comentário: snapshot é preenchido no momento da criação para preservar o layout histórico do veículo.
+      layout_snapshot: null,
+      template_layout_version: null,
       company_id: activeCompanyId,
     };
+
+    // Comentário: se escolher clonar veículo existente, priorizamos o snapshot já consolidado desse veículo.
+    if (!editingId && form.clone_vehicle_id) {
+      const sourceVehicle = vehicles.find((vehicle) => vehicle.id === form.clone_vehicle_id);
+      if (sourceVehicle?.layout_snapshot) {
+        vehicleData.layout_snapshot = sourceVehicle.layout_snapshot;
+        vehicleData.template_layout_id = sourceVehicle.template_layout_id;
+        vehicleData.template_layout_version = sourceVehicle.template_layout_version;
+      }
+    }
+
+    // Comentário: ao criar veículo, copiamos snapshot do template para evitar quebra em versões futuras.
+    if (!editingId && form.template_layout_id && !vehicleData.layout_snapshot) {
+      const selectedTemplate = templateLayouts.find((template) => template.id === form.template_layout_id);
+      if (selectedTemplate) {
+        const { data: snapshotItems } = await supabase
+          .from('template_layout_items')
+          .select('floor_number, row_number, column_number, seat_number, category, tags, is_blocked')
+          .eq('template_layout_id', selectedTemplate.id)
+          .order('floor_number')
+          .order('row_number')
+          .order('column_number');
+
+        vehicleData.layout_snapshot = {
+          template_layout_id: selectedTemplate.id,
+          template_name: selectedTemplate.name,
+          template_version: selectedTemplate.current_version,
+          floors: selectedTemplate.floors,
+          grid_rows: selectedTemplate.grid_rows,
+          grid_columns: selectedTemplate.grid_columns,
+          items: snapshotItems ?? [],
+        };
+        vehicleData.template_layout_version = selectedTemplate.current_version;
+      }
+    }
 
     let error;
     if (editingId) {
@@ -441,6 +504,8 @@ export default function Fleet() {
       color: vehicle.color ?? '',
       whatsapp_group_link: vehicle.whatsapp_group_link ?? '',
       notes: vehicle.notes ?? '',
+      template_layout_id: vehicle.template_layout_id ?? '',
+      clone_vehicle_id: '',
     });
     setDialogOpen(true);
   };
@@ -489,6 +554,8 @@ export default function Fleet() {
       color: '',
       whatsapp_group_link: '',
       notes: '',
+      template_layout_id: '',
+      clone_vehicle_id: '',
     });
   };
 
@@ -655,6 +722,44 @@ export default function Fleet() {
 
                         <TabsContent value="capacidade" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="space-y-2 xl:col-span-2">
+                              <Label>Layout do Veículo (Template Oficial)</Label>
+                              <Select
+                                value={form.template_layout_id || 'none'}
+                                onValueChange={(value) => setForm({ ...form, template_layout_id: value === 'none' ? '' : value })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Sem template</SelectItem>
+                                  {templateLayouts.map((template) => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2 xl:col-span-2">
+                              <Label>Clonar layout de outro veículo (opcional)</Label>
+                              <Select
+                                value={form.clone_vehicle_id || 'none'}
+                                onValueChange={(value) => setForm({ ...form, clone_vehicle_id: value === 'none' ? '' : value })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o veículo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Não clonar</SelectItem>
+                                  {vehicles.map((vehicle) => (
+                                    <SelectItem key={vehicle.id} value={vehicle.id}>
+                                      {vehicle.plate} • {vehicle.model ?? 'Modelo'}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                             <div className="space-y-2">
                               <Label htmlFor="capacity">Capacidade máxima</Label>
                               <Input
