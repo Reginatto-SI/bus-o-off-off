@@ -249,10 +249,14 @@ export interface Event {
   enable_checkout_validation: boolean;
   is_archived: boolean;
   image_url: string | null;
+  // Política comercial por evento: controla se vende trecho solto, ida obrigatória ou pacote fechado.
+  transport_policy: TransportPolicy;
   company_id: string;
   created_at: string;
   updated_at: string;
 }
+
+export type TransportPolicy = 'trecho_independente' | 'ida_obrigatoria_volta_opcional' | 'ida_volta_obrigatorio';
 
 export type TripCreationType = 'ida' | 'volta' | 'ida_volta';
 

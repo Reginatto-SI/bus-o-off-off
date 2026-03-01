@@ -383,6 +383,7 @@ export type Database = {
           name: string
           public_info: string | null
           status: Database["public"]["Enums"]["event_status"]
+          transport_policy: string
           unit_price: number
           updated_at: string
         }
@@ -403,6 +404,7 @@ export type Database = {
           name: string
           public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
+          transport_policy?: string
           unit_price?: number
           updated_at?: string
         }
@@ -423,6 +425,7 @@ export type Database = {
           name?: string
           public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
+          transport_policy?: string
           unit_price?: number
           updated_at?: string
         }
