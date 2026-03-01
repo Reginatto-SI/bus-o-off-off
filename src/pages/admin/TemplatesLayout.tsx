@@ -47,6 +47,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { TemplateLayout, TemplateVehicleType } from '@/types/database';
+import { PostgrestError } from '@supabase/supabase-js';
 
 type ItemCategory = 'convencional' | 'executivo' | 'semi_leito' | 'leito' | 'leito_cama';
 type CellType = 'assento' | 'bloqueado' | 'vazio';
@@ -90,6 +91,30 @@ const CATEGORY_COLORS: Record<ItemCategory, string> = {
 };
 
 const getCellKey = (coord: CellCoord) => `${coord.floor}-${coord.row}-${coord.column}`;
+
+const logSupabaseErrorInDev = (context: string, error: PostgrestError | null) => {
+  if (!error || !import.meta.env.DEV) return;
+
+  // Comentário: diagnóstico obrigatório do delete para diferenciar RLS, FK/constraint e erro de query.
+  console.error(`[TemplatesLayout][${context}]`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
+};
+
+const getDeleteTemplateErrorMessage = (error: PostgrestError) => {
+  if (error.code === '42501') {
+    return 'Você não tem permissão para excluir templates.';
+  }
+
+  if (error.code === '23503') {
+    return 'Este template está vinculado a registros do sistema. Para manter histórico e evitar inconsistência, ele não pode ser excluído. Use “Inativar”.';
+  }
+
+  return 'Não foi possível excluir o template. Tente novamente.';
+};
 
 export default function TemplatesLayout() {
   const { isDeveloper } = useAuth();
@@ -528,35 +553,68 @@ export default function TemplatesLayout() {
 
   const handleDeleteTemplate = async () => {
     if (!templateToDelete) return;
+
+    if (templateToDelete.status !== 'inativo') {
+      // Comentário: camada de proteção extra para impedir exclusão de templates ativos por acidente.
+      toast.error('Somente templates inativos podem ser excluídos definitivamente.');
+      return;
+    }
+
     setDeleting(true);
 
-    // Comentário: proteção para não excluir template em uso por veículos existentes.
-    const { count: vehiclesUsing, error: vehiclesError } = await supabase
+    const canDeleteTemplate = async (templateId: string) => {
+      // Comentário: Camada A (estado atual): bloqueia exclusão se já houver vínculo com veículos.
+      const { count: vehiclesUsing, error: vehiclesError } = await supabase
       .from('vehicles')
       .select('id', { count: 'exact', head: true })
-      .eq('template_layout_id', templateToDelete.id);
+      .eq('template_layout_id', templateId);
 
-    // TODO: quando integração de templates em eventos/viagens for concluída, incluir a mesma proteção nessas entidades.
-    if (vehiclesError) {
+      logSupabaseErrorInDev('delete-template-check-vehicles', vehiclesError);
+
+      if (vehiclesError) {
+        return {
+          canDelete: false,
+          reason: 'validation_error' as const,
+        };
+      }
+
+      if ((vehiclesUsing ?? 0) > 0) {
+        return {
+          canDelete: false,
+          reason: 'in_use' as const,
+        };
+      }
+
+      // TODO: Camada B (futuro): adicionar validação de uso em eventos/viagens quando a integração consumir template_layout_id.
+      return {
+        canDelete: true,
+        reason: null,
+      };
+    };
+
+    const deleteValidation = await canDeleteTemplate(templateToDelete.id);
+
+    if (!deleteValidation.canDelete && deleteValidation.reason === 'validation_error') {
       toast.error('Erro ao validar vínculos do template');
       setDeleting(false);
       return;
     }
 
-    if ((vehiclesUsing ?? 0) > 0) {
-      toast.error('Não é possível excluir: template está em uso.');
+    if (!deleteValidation.canDelete) {
+      toast.error('Não é possível excluir: este template está vinculado e pode impactar veículos/eventos. Use “Inativar”.');
       setDeleting(false);
       return;
     }
 
     const { error } = await supabase.from('template_layouts').delete().eq('id', templateToDelete.id);
+    logSupabaseErrorInDev('delete-template-execute', error);
 
     if (error) {
-      toast.error('Erro ao excluir template');
+      toast.error(getDeleteTemplateErrorMessage(error));
     } else {
       toast.success('Template excluído com sucesso');
       setTemplateToDelete(null);
-      fetchTemplates();
+      fetchTemplates(page, pageSize);
     }
 
     setDeleting(false);
@@ -893,7 +951,10 @@ export default function TemplatesLayout() {
                               { label: 'Editar', icon: Pencil, onClick: () => openEdit(template) },
                               { label: 'Duplicar', icon: Copy, onClick: () => duplicateTemplate(template) },
                               { label: template.status === 'ativo' ? 'Inativar' : 'Ativar', icon: Power, onClick: () => toggleStatus(template) },
-                              { label: 'Excluir', icon: Trash2, variant: 'destructive', onClick: () => setTemplateToDelete(template) },
+                              // Comentário: ação destrutiva aparece apenas para status inativo para reduzir risco operacional.
+                              ...(template.status === 'inativo'
+                                ? [{ label: 'Excluir', icon: Trash2, variant: 'destructive' as const, onClick: () => setTemplateToDelete(template) }]
+                                : []),
                             ]}
                           />
                         </TableCell>
@@ -1009,13 +1070,13 @@ export default function TemplatesLayout() {
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir Template</AlertDialogTitle>
               <AlertDialogDescription>
-                Deseja excluir definitivamente este template? Esta ação não pode ser desfeita.
+                Excluir definitivamente este template? Essa ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteTemplate} disabled={deleting}>
-                {deleting ? 'Excluindo...' : 'Excluir'}
+                {deleting ? 'Excluindo...' : 'Excluir definitivamente'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
