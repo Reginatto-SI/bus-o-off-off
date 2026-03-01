@@ -795,41 +795,46 @@ export default function TemplatesLayout() {
                       </TabsList>
                       <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
                         <TabsContent value="geral" className="space-y-4 mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>Nome *</Label>
-                              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                          {/* Comentário: a aba Geral foi dividida em 2 colunas para melhorar legibilidade e equilíbrio visual no desktop. */}
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label>Nome *</Label>
+                                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Tipo de Veículo</Label>
+                                <Select
+                                  value={form.vehicle_type}
+                                  onValueChange={(value: TemplateVehicleType) => {
+                                    const found = VEHICLE_OPTIONS.find((item) => item.value === value);
+                                    setForm({ ...form, vehicle_type: value, floors: found?.floors ?? 1, grid_columns: found?.cols ?? 5 });
+                                    setActiveFloor(1);
+                                    setSelectedKeys([]);
+                                  }}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {VEHICLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Descrição</Label>
+                                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={5} />
+                              </div>
                             </div>
-                            <div className="space-y-2">
-                              <Label>Tipo de Veículo</Label>
-                              <Select
-                                value={form.vehicle_type}
-                                onValueChange={(value: TemplateVehicleType) => {
-                                  const found = VEHICLE_OPTIONS.find((item) => item.value === value);
-                                  setForm({ ...form, vehicle_type: value, floors: found?.floors ?? 1, grid_columns: found?.cols ?? 5 });
-                                  setActiveFloor(1);
-                                  setSelectedKeys([]);
-                                }}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {VEHICLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label>Descrição</Label>
-                              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
-                            </div>
-                            <div className="space-y-3 sm:col-span-2">
-                              <Label>Imagem de referência do veículo (opcional)</Label>
-                              <div className="rounded-md border p-3">
+
+                            <div className="space-y-4">
+                              {/* Comentário: o card de imagem é apenas ilustrativo e não interfere na lógica do grid de assentos. */}
+                              <div className="space-y-2 rounded-md border border-border/70 p-3">
+                                <Label>Imagem de referência do veículo (opcional)</Label>
                                 {form.image_url ? (
                                   <div className="space-y-3">
                                     <img
                                       src={form.image_url}
                                       alt="Imagem de referência do veículo"
-                                      className="max-h-48 w-full rounded border object-contain"
+                                      className="max-h-[200px] w-full rounded border object-contain"
                                     />
                                     <div className="flex flex-wrap gap-2">
                                       <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}>
@@ -848,7 +853,7 @@ export default function TemplatesLayout() {
                                       {uploadingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                                       {uploadingImage ? 'Enviando...' : 'Adicionar imagem (SVG/PNG)'}
                                     </Button>
-                                    <p className="text-xs text-muted-foreground">Formato aceito: SVG ou PNG até 5MB.</p>
+                                    <p className="text-xs text-muted-foreground">Formatos: SVG ou PNG • Limite: 5MB.</p>
                                   </div>
                                 )}
                                 <input
@@ -862,25 +867,28 @@ export default function TemplatesLayout() {
                                   }}
                                 />
                               </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Status</Label>
-                              <Select value={form.status} onValueChange={(value: 'ativo' | 'inativo') => setForm({ ...form, status: value })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem></SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Pavimentos</Label>
-                              <Input type="number" value={form.floors} min={1} max={2} onChange={(e) => setForm({ ...form, floors: Math.max(1, Math.min(2, Number(e.target.value || 1))) })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Linhas da grade</Label>
-                              <Input type="number" value={form.grid_rows} min={4} max={40} onChange={(e) => setForm({ ...form, grid_rows: Math.max(4, Math.min(40, Number(e.target.value || 12))) })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Colunas da grade</Label>
-                              <Input type="number" value={form.grid_columns} min={3} max={10} onChange={(e) => setForm({ ...form, grid_columns: Math.max(3, Math.min(10, Number(e.target.value || 5))) })} />
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label>Status</Label>
+                                  <Select value={form.status} onValueChange={(value: 'ativo' | 'inativo') => setForm({ ...form, status: value })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem></SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Pavimentos</Label>
+                                  <Input type="number" value={form.floors} min={1} max={2} onChange={(e) => setForm({ ...form, floors: Math.max(1, Math.min(2, Number(e.target.value || 1))) })} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Linhas da grade</Label>
+                                  <Input type="number" value={form.grid_rows} min={4} max={40} onChange={(e) => setForm({ ...form, grid_rows: Math.max(4, Math.min(40, Number(e.target.value || 12))) })} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Colunas da grade</Label>
+                                  <Input type="number" value={form.grid_columns} min={3} max={10} onChange={(e) => setForm({ ...form, grid_columns: Math.max(3, Math.min(10, Number(e.target.value || 5))) })} />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </TabsContent>
