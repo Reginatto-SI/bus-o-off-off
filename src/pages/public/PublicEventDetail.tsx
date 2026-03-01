@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, EventBoardingLocation } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Ticket, Bus, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
@@ -13,6 +14,11 @@ import { BoardingLocationCard } from '@/components/public/BoardingLocationCard';
 import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 
+type TransportPolicy = Event['transport_policy'];
+
+const isGroupedPolicy = (policy?: TransportPolicy) =>
+  policy === 'ida_obrigatoria_volta_opcional' || policy === 'ida_volta_obrigatorio';
+
 export default function PublicEventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -20,17 +26,27 @@ export default function PublicEventDetail() {
   const sellerRef = searchParams.get('ref');
 
   const [event, setEvent] = useState<Event | null>(null);
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [allTrips, setAllTrips] = useState<Trip[]>([]);
   const [locations, setLocations] = useState<EventBoardingLocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedTrip, setSelectedTrip] = useState('');
+  const [selectedReturnTrip, setSelectedReturnTrip] = useState<string | null>(null);
+  const [includeReturn, setIncludeReturn] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [availableSeatsMap, setAvailableSeatsMap] = useState<Record<string, number>>({});
   const [isInfoDrawerOpen, setIsInfoDrawerOpen] = useState(false);
 
-  // Fetch event, trips, and locations
+  const transportPolicy: TransportPolicy = event?.transport_policy ?? 'trecho_independente';
+  const groupedPolicy = isGroupedPolicy(transportPolicy);
+  const mandatoryRoundTrip = transportPolicy === 'ida_volta_obrigatorio';
+
+  const outboundTrips = useMemo(
+    () => (groupedPolicy ? allTrips.filter((trip) => trip.trip_type === 'ida') : allTrips),
+    [groupedPolicy, allTrips]
+  );
+
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
@@ -46,21 +62,31 @@ export default function PublicEventDetail() {
       ]);
 
       if (eventRes.data) setEvent(eventRes.data as Event);
-      const allTrips = (tripsRes.data ?? []) as Trip[];
-      const tripsData = allTrips.filter(t => t.trip_type === 'ida');
-      setTrips(tripsData);
+      const fetchedTrips = (tripsRes.data ?? []) as Trip[];
+      setAllTrips(fetchedTrips);
       if (locationsRes.data) setLocations(locationsRes.data as EventBoardingLocation[]);
 
-      // Auto-select if only one trip
-      if (tripsData.length === 1) {
-        setSelectedTrip(tripsData[0].id);
+      const initialPolicy = (eventRes.data as Event | null)?.transport_policy ?? 'trecho_independente';
+      const grouped = isGroupedPolicy(initialPolicy);
+      const initialTrips = grouped ? fetchedTrips.filter((trip) => trip.trip_type === 'ida') : fetchedTrips;
+
+      if (initialTrips.length === 1) {
+        const outboundTrip = initialTrips[0];
+        setSelectedTrip(outboundTrip.id);
+
+        if (grouped) {
+          const paired = outboundTrip.paired_trip_id
+            ? fetchedTrips.find((trip) => trip.id === outboundTrip.paired_trip_id)
+            : fetchedTrips.find((trip) => trip.trip_type === 'volta');
+          setSelectedReturnTrip(paired?.id ?? null);
+          setIncludeReturn(initialPolicy === 'ida_volta_obrigatorio' ? true : Boolean(paired));
+        }
       }
 
-      // Fetch available seats for all trips
-      if (tripsData.length > 0) {
+      if (fetchedTrips.length > 0) {
         const results: Record<string, number> = {};
         await Promise.all(
-          tripsData.map(async (trip) => {
+          fetchedTrips.map(async (trip) => {
             const { data } = await supabase.rpc('get_trip_available_capacity', {
               trip_uuid: trip.id,
             });
@@ -76,17 +102,29 @@ export default function PublicEventDetail() {
     fetchData();
   }, [id]);
 
-  // Reset downstream selections when vehicle changes
   const handleSelectTrip = (tripId: string) => {
     setSelectedTrip(tripId);
     setSelectedLocation('');
     setQuantity(1);
+
+    if (!groupedPolicy) {
+      setSelectedReturnTrip(null);
+      setIncludeReturn(false);
+      return;
+    }
+
+    const outboundTrip = allTrips.find((trip) => trip.id === tripId);
+    const paired = outboundTrip?.paired_trip_id
+      ? allTrips.find((trip) => trip.id === outboundTrip.paired_trip_id)
+      : allTrips.find((trip) => trip.trip_type === 'volta');
+
+    setSelectedReturnTrip(paired?.id ?? null);
+    // Política padrão oficial: ida sempre obrigatória e volta opcional como complemento explícito para o cliente.
+    setIncludeReturn(mandatoryRoundTrip ? true : Boolean(paired));
   };
 
-  // Filter locations by selected trip
   const filteredLocations = locations.filter((loc) => loc.trip_id === selectedTrip);
 
-  // Auto-select if only one location
   useEffect(() => {
     if (filteredLocations.length === 1 && selectedTrip) {
       setSelectedLocation(filteredLocations[0].boarding_location_id);
@@ -94,10 +132,22 @@ export default function PublicEventDetail() {
   }, [selectedTrip, filteredLocations.length]);
 
   const currentAvailableSeats = selectedTrip ? (availableSeatsMap[selectedTrip] ?? 0) : 0;
+  const returnAvailableSeats = selectedReturnTrip ? (availableSeatsMap[selectedReturnTrip] ?? 0) : 0;
+
+  // Regra de estoque por política:
+  // - trecho independente: valida trecho selecionado.
+  // - ida obrigatória + volta opcional: valida ida e, se marcada, também volta.
+  // - pacote obrigatório: limita pela menor disponibilidade entre ida e volta.
+  const policyAvailableSeats = mandatoryRoundTrip
+    ? Math.min(currentAvailableSeats, returnAvailableSeats)
+    : includeReturn && selectedReturnTrip
+    ? Math.min(currentAvailableSeats, returnAvailableSeats)
+    : currentAvailableSeats;
+
   const maxQuantity = event
     ? Math.min(
-        currentAvailableSeats,
-        event.max_tickets_per_purchase === 0 ? currentAvailableSeats : event.max_tickets_per_purchase
+        policyAvailableSeats,
+        event.max_tickets_per_purchase === 0 ? policyAvailableSeats : event.max_tickets_per_purchase
       )
     : 1;
 
@@ -107,18 +157,23 @@ export default function PublicEventDetail() {
       return;
     }
 
-    if (quantity > currentAvailableSeats) {
-      toast.error(`Apenas ${currentAvailableSeats} lugares disponíveis`);
+    if (mandatoryRoundTrip && !selectedReturnTrip) {
+      toast.error('Este evento exige ida e volta, mas a volta não está configurada.');
       return;
     }
 
-    // Find departure_time from selected event boarding location
-    const selectedEBL = filteredLocations.find(l => l.boarding_location_id === selectedLocation);
+    if (quantity > policyAvailableSeats) {
+      toast.error(`Apenas ${policyAvailableSeats} lugares disponíveis`);
+      return;
+    }
+
+    const selectedEBL = filteredLocations.find((l) => l.boarding_location_id === selectedLocation);
     const params = new URLSearchParams({
       trip: selectedTrip,
       location: selectedLocation,
       quantity: String(quantity),
       ...(selectedEBL?.departure_time && { time: selectedEBL.departure_time }),
+      ...(includeReturn && selectedReturnTrip && { return_trip: selectedReturnTrip }),
       ...(sellerRef && { ref: sellerRef }),
     });
 
@@ -152,25 +207,18 @@ export default function PublicEventDetail() {
     );
   }
 
-  const hasTrips = trips.length > 0;
+  const hasTrips = outboundTrips.length > 0;
 
   return (
     <PublicLayout>
       <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Back button */}
-        <Button
-          variant="ghost"
-          className="px-0"
-          onClick={() => navigate(`/eventos${sellerRef ? `?ref=${sellerRef}` : ''}`)}
-        >
+        <Button variant="ghost" className="px-0" onClick={() => navigate(`/eventos${sellerRef ? `?ref=${sellerRef}` : ''}`)}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar
         </Button>
 
-        {/* Event summary */}
         <EventSummaryCard event={event} compact />
 
-        {/* Conteúdo cadastrado no Admin (aba Geral) para informar regras públicas do evento. */}
         {event.public_info && (
           <button
             type="button"
@@ -190,11 +238,13 @@ export default function PublicEventDetail() {
           />
         ) : (
           <>
-            {/* Vehicle selection */}
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold">Escolha o veículo disponível</h2>
+              <h2 className="text-lg font-semibold">{groupedPolicy ? 'Transporte do Evento' : 'Escolha o veículo disponível'}</h2>
+              {!groupedPolicy && (
+                <p className="text-xs text-muted-foreground">Vagas controladas por trecho.</p>
+              )}
               <div className="space-y-3">
-                {trips.map((trip) => (
+                {outboundTrips.map((trip) => (
                   <VehicleCard
                     key={trip.id}
                     trip={trip}
@@ -206,7 +256,26 @@ export default function PublicEventDetail() {
               </div>
             </section>
 
-            {/* Boarding location selection */}
+            {groupedPolicy && selectedTrip && selectedReturnTrip && (
+              <section className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                <p className="text-sm font-medium">Ida selecionada com sucesso.</p>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="include-return" className="text-sm cursor-pointer">
+                    {mandatoryRoundTrip ? 'Volta obrigatória neste evento' : 'Adicionar volta (opcional)'}
+                  </label>
+                  <Checkbox
+                    id="include-return"
+                    checked={includeReturn || mandatoryRoundTrip}
+                    disabled={mandatoryRoundTrip}
+                    onCheckedChange={(checked) => setIncludeReturn(Boolean(checked))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Vagas Ida: {currentAvailableSeats} • Vagas Volta: {returnAvailableSeats}
+                </p>
+              </section>
+            )}
+
             {selectedTrip && filteredLocations.length > 0 && (
               <section className="space-y-3">
                 <h2 className="text-lg font-semibold">Escolha onde e quando embarcar</h2>
@@ -224,35 +293,15 @@ export default function PublicEventDetail() {
               </section>
             )}
 
-            {selectedTrip && filteredLocations.length === 0 && (
-              <EmptyState
-                icon={<Bus className="h-6 w-6 text-muted-foreground" />}
-                title="Embarques não configurados"
-                description="Os locais de embarque para este veículo ainda não foram definidos"
-                className="py-6"
-              />
-            )}
-
-            {/* Quantity selection */}
             {selectedTrip && selectedLocation && maxQuantity > 0 && (
               <section className="space-y-3">
                 <h2 className="text-lg font-semibold">Quantas passagens?</h2>
-                <QuantitySelector
-                  value={quantity}
-                  onChange={setQuantity}
-                  min={1}
-                  max={maxQuantity}
-                />
+                <QuantitySelector value={quantity} onChange={setQuantity} min={1} max={maxQuantity} />
               </section>
             )}
 
-            {/* CTA */}
             <div className="pt-2">
-              <Button
-                className="w-full h-14 text-lg font-medium"
-                disabled={!selectedTrip || !selectedLocation || quantity < 1}
-                onClick={handleContinue}
-              >
+              <Button className="w-full h-14 text-lg font-medium" disabled={!selectedTrip || !selectedLocation || quantity < 1} onClick={handleContinue}>
                 Escolher assentos
               </Button>
             </div>

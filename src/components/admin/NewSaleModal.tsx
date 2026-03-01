@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { SeatMap } from '@/components/public/SeatMap';
 import { TicketCard } from '@/components/public/TicketCard';
 import {
@@ -133,6 +134,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [boardingOptions, setBoardingOptions] = useState<BoardingOption[]>([]);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedTripId, setSelectedTripId] = useState('');
+  const [selectedReturnTripId, setSelectedReturnTripId] = useState<string | null>(null);
+  const [includeReturnTrip, setIncludeReturnTrip] = useState(false);
   const [selectedBoardingId, setSelectedBoardingId] = useState('');
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [loadingTrips, setLoadingTrips] = useState(false);
@@ -164,6 +167,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Derived
   const selectedEvent = events.find((e) => e.id === selectedEventId);
+  const selectedEventPolicy = selectedEvent?.transport_policy ?? 'trecho_independente';
+  const groupedTransportPolicy = selectedEventPolicy === 'ida_obrigatoria_volta_opcional' || selectedEventPolicy === 'ida_volta_obrigatorio';
+  const mandatoryReturnPolicy = selectedEventPolicy === 'ida_volta_obrigatorio';
   const selectedTrip = trips.find((t) => t.id === selectedTripId);
   const selectedVehicle = selectedTrip?.vehicle;
   const selectedTripSoldCount = selectedTripId ? (tripSoldSeats[selectedTripId] ?? 0) : 0;
@@ -176,6 +182,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setActiveTab('manual');
       setSelectedEventId('');
       setSelectedTripId('');
+      setSelectedReturnTripId(null);
+      setIncludeReturnTrip(false);
       setSelectedBoardingId('');
       setSelectedSeats([]);
       setPassengers([]);
@@ -224,6 +232,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setTrips([]);
       setTripSoldSeats({});
       setSelectedTripId('');
+      setSelectedReturnTripId(null);
+      setIncludeReturnTrip(false);
       setEventFees([]);
       return;
     }
@@ -265,11 +275,36 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         setTripSoldSeats({});
       }
       setSelectedTripId('');
+      setSelectedReturnTripId(null);
+      setIncludeReturnTrip(false);
       setSelectedBoardingId('');
       setLoadingTrips(false);
     };
     fetchTrips();
   }, [selectedEventId]);
+
+
+  useEffect(() => {
+    if (!selectedTripId) {
+      setSelectedReturnTripId(null);
+      setIncludeReturnTrip(false);
+      return;
+    }
+
+    if (!groupedTransportPolicy) {
+      setSelectedReturnTripId(null);
+      setIncludeReturnTrip(false);
+      return;
+    }
+
+    const outboundTrip = trips.find((trip) => trip.id === selectedTripId);
+    const pairedReturnTrip = outboundTrip?.paired_trip_id
+      ? trips.find((trip) => trip.id === outboundTrip.paired_trip_id)
+      : trips.find((trip) => trip.trip_type === 'volta');
+
+    setSelectedReturnTripId(pairedReturnTrip?.id ?? null);
+    setIncludeReturnTrip(mandatoryReturnPolicy ? true : Boolean(pairedReturnTrip));
+  }, [selectedTripId, groupedTransportPolicy, mandatoryReturnPolicy, trips]);
 
   // ── Fetch boarding locations when event+trip change ──
   useEffect(() => {
@@ -362,7 +397,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   };
 
   // ── Validation ──
-  const canGoStep2 = selectedEventId && selectedTripId && selectedBoardingId;
+  const canGoStep2 = selectedEventId && selectedTripId && selectedBoardingId && (!mandatoryReturnPolicy || !!selectedReturnTripId);
   const canGoStep3 = selectedSeats.length > 0;
 
   const canConfirm = useMemo(() => {
@@ -500,6 +535,24 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       }));
       const { error: ticketError } = await supabase.from('tickets').insert(ticketRows as any);
       if (ticketError) throw ticketError;
+
+      if ((mandatoryReturnPolicy || includeReturnTrip) && selectedReturnTripId) {
+        // Mantemos uma única venda para o financeiro e adicionamos tickets da volta por trip_id.
+        const returnTicketRows = passengers.map((p, index) => ({
+          sale_id: saleId,
+          trip_id: selectedReturnTripId,
+          seat_id: null,
+          seat_label: `VOLTA-${index + 1}`,
+          passenger_name: p.name.trim(),
+          passenger_cpf: p.cpf.replace(/\D/g, ''),
+          passenger_phone: p.phone?.replace(/\D/g, '') || null,
+          boarding_status: 'pendente',
+          company_id: activeCompanyId,
+        }));
+
+        const { error: returnTicketError } = await supabase.from('tickets').insert(returnTicketRows as any);
+        if (returnTicketError) throw returnTicketError;
+      }
 
       // 3. Insert sale_log
       let logAction = '';
@@ -727,7 +780,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <Select value={selectedTripId} onValueChange={setSelectedTripId} disabled={!selectedEventId}>
                           <SelectTrigger><SelectValue placeholder="Selecione o transporte" /></SelectTrigger>
                           <SelectContent>
-                            {trips.map((t) => {
+                            {(groupedTransportPolicy ? trips.filter((t) => t.trip_type === 'ida') : trips).map((t) => {
                               const v = t.vehicle;
                               const soldSeatsCount = tripSoldSeats[t.id] ?? 0;
                               const remainingSeats = v ? Math.max(v.capacity - soldSeatsCount, 0) : 0;
@@ -744,8 +797,21 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           </SelectContent>
                         </Select>
                       )}
+                      {selectedEventId && selectedEventPolicy === 'trecho_independente' && (
+                        <p className="text-xs text-muted-foreground">Vagas controladas por trecho.</p>
+                      )}
                       {!!selectedTrip && (
                         <div className="space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
+                          {groupedTransportPolicy && (
+                            <div className="flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1">
+                              <span>{mandatoryReturnPolicy ? 'Volta obrigatória' : 'Adicionar volta opcional'}</span>
+                              <Checkbox
+                                checked={mandatoryReturnPolicy ? true : includeReturnTrip}
+                                disabled={mandatoryReturnPolicy || !selectedReturnTripId}
+                                onCheckedChange={(checked) => setIncludeReturnTrip(Boolean(checked))}
+                              />
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 font-medium text-foreground">
                             <Route className="h-3.5 w-3.5" />
                             {getTripTypeLabel(selectedTrip.trip_type)}

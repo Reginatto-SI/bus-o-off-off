@@ -145,6 +145,7 @@ export default function Checkout() {
   const quantity = parseInt(searchParams.get('quantity') || '1');
   const sellerRef = searchParams.get('ref');
   const departureTime = searchParams.get('time');
+  const returnTripId = searchParams.get('return_trip');
 
   const [event, setEvent] = useState<Event | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -167,6 +168,7 @@ export default function Checkout() {
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
+  const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
   const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
     setLoadingSeatStatus(true);
     setSeatStatusError(null);
@@ -533,6 +535,27 @@ export default function Checkout() {
       return;
     }
 
+    // Estoque por política: ida sempre obrigatória; volta depende da política do evento.
+    const shouldCreateReturn = mandatoryRoundTrip || Boolean(returnTripId);
+
+    if (mandatoryRoundTrip && !returnTripId) {
+      toast.error('Este evento exige ida e volta. Volte e selecione a volta.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (shouldCreateReturn && returnTripId) {
+      const { data: returnAvailable } = await supabase.rpc('get_trip_available_capacity', {
+        trip_uuid: returnTripId,
+      });
+
+      if (returnAvailable !== null && quantity > returnAvailable) {
+        toast.error(`Volta com apenas ${returnAvailable} vaga${returnAvailable !== 1 ? 's' : ''} disponível`);
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const payer = passengers[payerIndex];
 
     // Vendedor é rastreio comercial (link/ref). Comissão de vendedor é manual e fora do Stripe.
@@ -611,6 +634,30 @@ export default function Checkout() {
       await supabase.from('sales').delete().eq('id', sale.id);
       setSubmitting(false);
       return;
+    }
+
+    if ((mandatoryRoundTrip || Boolean(returnTripId)) && returnTripId) {
+      // Mantemos uma única venda financeira (Stripe) e adicionamos bilhetes extras para a volta.
+      // Assim o estoque segue por trip_id sem quebrar o histórico/composição atual da venda.
+      const returnTicketInserts = passengers.map((passenger, i) => ({
+        sale_id: sale.id,
+        trip_id: returnTripId,
+        seat_id: null,
+        seat_label: `VOLTA-${i + 1}`,
+        passenger_name: passenger.name.trim(),
+        passenger_cpf: passenger.cpf.replace(/\D/g, ''),
+        passenger_phone: passenger.phone.replace(/\D/g, '') || null,
+        company_id: event.company_id,
+      }));
+
+      const { error: returnTicketsError } = await supabase.from('tickets').insert(returnTicketInserts);
+      if (returnTicketsError) {
+        await supabase.from('tickets').delete().eq('sale_id', sale.id);
+        await supabase.from('sales').delete().eq('id', sale.id);
+        toast.error('Erro ao confirmar os bilhetes da volta.');
+        setSubmitting(false);
+        return;
+      }
     }
 
     // Try to create Stripe checkout session
