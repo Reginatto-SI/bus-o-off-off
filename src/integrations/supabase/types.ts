@@ -1282,6 +1282,7 @@ export type Database = {
           created_at: string
           current_version: number
           description: string | null
+          image_url: string | null
           floors: number
           grid_columns: number
           grid_rows: number
@@ -1295,6 +1296,7 @@ export type Database = {
           created_at?: string
           current_version?: number
           description?: string | null
+          image_url?: string | null
           floors?: number
           grid_columns?: number
           grid_rows?: number
@@ -1308,6 +1310,7 @@ export type Database = {
           created_at?: string
           current_version?: number
           description?: string | null
+          image_url?: string | null
           floors?: number
           grid_columns?: number
           grid_rows?: number

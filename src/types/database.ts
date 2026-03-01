@@ -158,6 +158,7 @@ export interface TemplateLayout {
   name: string;
   vehicle_type: TemplateVehicleType;
   description: string | null;
+  image_url: string | null;
   status: VehicleStatus;
   floors: number;
   grid_rows: number;
