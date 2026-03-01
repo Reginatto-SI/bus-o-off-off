@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee } from '@/types/database';
+import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee, TransportPolicy } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -162,6 +162,24 @@ const imageStatusOptions = [
   { value: 'without', label: 'Sem imagem' },
 ];
 
+const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; description: string }> = [
+  {
+    value: 'trecho_independente',
+    label: 'Venda por Trecho Independente',
+    description: 'Ida e volta são vendidos separadamente, com estoque controlado por trecho.',
+  },
+  {
+    value: 'ida_obrigatoria_volta_opcional',
+    label: 'Ida Obrigatória + Volta Opcional',
+    description: 'Regra padrão: toda venda exige ida, e a volta pode ser adicionada opcionalmente.',
+  },
+  {
+    value: 'ida_volta_obrigatorio',
+    label: 'Pacote Ida + Volta Obrigatório',
+    description: 'Venda em pacote único, com validação simultânea de vagas em ida e volta.',
+  },
+];
+
 export default function Events() {
   const { activeCompanyId, user } = useAuth();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
@@ -278,6 +296,8 @@ export default function Events() {
     allow_seller_sale: true,
     enable_checkout_validation: false,
     image_url: '' as string | null,
+    // Padrão comercial oficial para novos eventos: Ida obrigatória + Volta opcional.
+    transport_policy: 'ida_obrigatoria_volta_opcional' as TransportPolicy,
   });
   
   // Image upload state
@@ -923,6 +943,8 @@ export default function Events() {
       allow_online_sale: form.allow_online_sale,
       allow_seller_sale: form.allow_seller_sale,
       enable_checkout_validation: form.enable_checkout_validation,
+      // Política aplicada por evento para padronizar regras de venda entre Admin e portal público.
+      transport_policy: form.transport_policy,
       company_id: activeCompanyId,
     };
 
@@ -1131,6 +1153,7 @@ export default function Events() {
       allow_seller_sale: event.allow_seller_sale ?? true,
       enable_checkout_validation: event.enable_checkout_validation ?? false,
       image_url: (event as any).image_url ?? null,
+      transport_policy: (event as any).transport_policy ?? 'trecho_independente',
     });
     setActiveTab('geral');
     loadEventData(event.id);
@@ -1702,6 +1725,7 @@ export default function Events() {
       allow_seller_sale: true,
       enable_checkout_validation: false,
       image_url: null,
+      transport_policy: 'ida_obrigatoria_volta_opcional',
     });
   };
 
@@ -2577,6 +2601,29 @@ export default function Events() {
                           </div>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="transport_policy">Política de Transporte do Evento *</Label>
+                      <Select
+                        value={form.transport_policy}
+                        onValueChange={(value) => setForm({ ...form, transport_policy: value as TransportPolicy })}
+                        disabled={isReadOnly}
+                      >
+                        <SelectTrigger id="transport_policy">
+                          <SelectValue placeholder="Selecione a política" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {transportPolicyOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {transportPolicyOptions.find((option) => option.value === form.transport_policy)?.description}
+                      </p>
                     </div>
 
                     <div className="grid gap-4 lg:grid-cols-2">
