@@ -93,6 +93,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // Types
 interface EventFilters {
@@ -1289,10 +1290,29 @@ export default function Events() {
     setTripDialogOpen(true);
   };
 
+  useEffect(() => {
+    if (!tripDialogOpen || editingTripId) return;
+
+    // Regras guiadas por política: evita criação de configuração incoerente com o modelo comercial do evento.
+    if (isRoundTripMandatoryPolicy && tripForm.trip_creation_type !== 'ida_volta') {
+      setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida_volta' }));
+      return;
+    }
+
+    if (isGroupedTransportPolicy && tripForm.trip_creation_type === 'volta') {
+      setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida' }));
+    }
+  }, [tripDialogOpen, editingTripId, isGroupedTransportPolicy, isRoundTripMandatoryPolicy, tripForm.trip_creation_type]);
+
   const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId || !activeCompanyId) return;
-    
+
+    if (!editingTripId && isRoundTripMandatoryPolicy && tripForm.trip_creation_type !== 'ida_volta') {
+      toast.error('Na política de pacote obrigatório, cadastre Ida e Volta em conjunto.');
+      return;
+    }
+
     setSavingTrip(true);
 
     const selectedVehicle = vehicles.find(v => v.id === tripForm.vehicle_id);
@@ -1930,6 +1950,51 @@ export default function Events() {
       return (a.departure_time ?? '').localeCompare(b.departure_time ?? '') || a.id.localeCompare(b.id);
     });
   }, [eventTrips]);
+
+  const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
+  const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
+
+  const groupedBoardingTripOptions = useMemo(() => {
+    // Em políticas agrupadas, mostramos Ida+Volta como uma única opção comercial no seletor de embarques.
+    return sortedEventTrips
+      .filter((trip) => trip.trip_type === 'ida')
+      .map((idaTrip) => {
+        const pairedTrip = idaTrip.paired_trip_id
+          ? sortedEventTrips.find((trip) => trip.id === idaTrip.paired_trip_id)
+          : sortedEventTrips.find((trip) => trip.trip_type === 'volta');
+
+        const baseLabel = idaTrip.vehicle
+          ? `${vehicleTypeLabels[idaTrip.vehicle.type]} ${idaTrip.vehicle.plate}`
+          : `Transporte ${idaTrip.id.slice(0, 8)}`;
+
+        return {
+          value: idaTrip.id,
+          label: pairedTrip ? `${baseLabel} — Ida + Volta` : `${baseLabel} — Ida`,
+          pairedTripId: pairedTrip?.id ?? null,
+        };
+      });
+  }, [sortedEventTrips]);
+
+  const getBoardingTripIdsForSelection = (tripId: string | null) => {
+    if (!tripId) return null;
+    if (!isGroupedTransportPolicy) return [tripId];
+
+    const selectedIdaTrip = sortedEventTrips.find((trip) => trip.id === tripId);
+    const pairedTrip = selectedIdaTrip?.paired_trip_id
+      ? sortedEventTrips.find((trip) => trip.id === selectedIdaTrip.paired_trip_id)
+      : sortedEventTrips.find((trip) => trip.trip_type === 'volta');
+
+    // Quando a política é agrupada, tratar ida/volta como um único bloco visual evita duplicidade operacional.
+    return pairedTrip ? [tripId, pairedTrip.id] : [tripId];
+  };
+
+  const boardingTripSelectorOptions = useMemo(() => {
+    if (isGroupedTransportPolicy) {
+      return groupedBoardingTripOptions.map((option) => ({ value: option.value, label: option.label }));
+    }
+
+    return sortedEventTrips.map((trip) => ({ value: trip.id, label: getTripLabelWithoutTime(trip) }));
+  }, [isGroupedTransportPolicy, groupedBoardingTripOptions, sortedEventTrips]);
 
   const availableBoardingLocations = useMemo(() => {
     const addedIds = eventBoardingLocations.map(ebl => ebl.boarding_location_id);
@@ -2604,7 +2669,30 @@ export default function Events() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="transport_policy">Política de Transporte do Evento *</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="transport_policy">Política de Transporte do Evento *</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground"
+                              aria-label="Entender políticas de transporte"
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-80 space-y-2">
+                            <p className="text-sm font-medium">Como funciona cada política?</p>
+                            <ul className="space-y-2 text-xs text-muted-foreground">
+                              <li><strong className="text-foreground">Venda por Trecho Independente:</strong> ida e volta são selecionadas separadamente.</li>
+                              <li><strong className="text-foreground">Ida Obrigatória + Volta Opcional:</strong> ida entra por padrão e a volta é adicional.</li>
+                              <li><strong className="text-foreground">Pacote Ida + Volta Obrigatório:</strong> a venda exige disponibilidade nos dois trechos.</li>
+                            </ul>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                       <Select
                         value={form.transport_policy}
                         onValueChange={(value) => setForm({ ...form, transport_policy: value as TransportPolicy })}
@@ -2818,9 +2906,9 @@ export default function Events() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__none__">Todas as viagens</SelectItem>
-                                {sortedEventTrips.map((trip) => (
-                                  <SelectItem key={trip.id} value={trip.id}>
-                                    {getTripLabelWithoutTime(trip)}
+                                {boardingTripSelectorOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -2831,15 +2919,19 @@ export default function Events() {
                               <span className="text-muted-foreground">Total de embarques: </span>
                               <span className="font-medium">
                                 {selectedTripIdForBoardings
-                                  ? eventBoardingLocations.filter(ebl => ebl.trip_id === selectedTripIdForBoardings).length
+                                  ? eventBoardingLocations.filter((ebl) => {
+                                      const selectedTripIds = getBoardingTripIdsForSelection(selectedTripIdForBoardings);
+                                      return selectedTripIds ? selectedTripIds.includes(ebl.trip_id ?? '') : false;
+                                    }).length
                                   : eventBoardingLocations.length}
                               </span>
                             </div>
                             {(() => {
                               const targetTrip = selectedTripIdForBoardings || (sortedEventTrips.length > 0 ? sortedEventTrips[0].id : null);
                               if (!targetTrip) return null;
+                              const selectedTripIds = getBoardingTripIdsForSelection(targetTrip) ?? [targetTrip];
                               const firstBoarding = eventBoardingLocations
-                                .filter(ebl => ebl.trip_id === targetTrip)
+                                .filter((ebl) => selectedTripIds.includes(ebl.trip_id ?? ''))
                                 .sort((a, b) => a.stop_order - b.stop_order)[0];
                               if (!firstBoarding?.departure_time) return null;
                               return (
@@ -2856,13 +2948,15 @@ export default function Events() {
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <h3 className="font-medium">
                             {selectedTripIdForBoardings 
-                              ? 'Embarques da viagem selecionada'
+                              ? isGroupedTransportPolicy
+                                ? 'Embarques do transporte selecionado (Ida + Volta)'
+                                : 'Embarques da viagem selecionada'
                               : 'Todos os embarques'
                             }
                           </h3>
                           <div className="flex gap-2">
                             {/* Copy from Ida button - only for Volta trips */}
-                            {!isReadOnly && selectedTripIdForBoardings && (() => {
+                            {!isReadOnly && selectedTripIdForBoardings && !isGroupedTransportPolicy && (() => {
                               const selectedTrip = eventTrips.find(t => t.id === selectedTripIdForBoardings);
                               const hasIdaWithBoardings = eventTrips.some(t => 
                                 t.trip_type === 'ida' && 
@@ -2903,7 +2997,10 @@ export default function Events() {
                           </div>
                         ) : (() => {
                           const filteredBoardings = selectedTripIdForBoardings
-                            ? eventBoardingLocations.filter(ebl => ebl.trip_id === selectedTripIdForBoardings)
+                            ? eventBoardingLocations.filter((ebl) => {
+                                const selectedTripIds = getBoardingTripIdsForSelection(selectedTripIdForBoardings);
+                                return selectedTripIds ? selectedTripIds.includes(ebl.trip_id ?? '') : false;
+                              })
                             : eventBoardingLocations;
                           
                           const sortedBoardings = [...filteredBoardings].sort((a, b) => {
@@ -2916,7 +3013,7 @@ export default function Events() {
                             }
                             return (a.stop_order || 1) - (b.stop_order || 1);
                           });
-                          const canReorderBoardings = !isReadOnly && Boolean(selectedTripIdForBoardings);
+                          const canReorderBoardings = !isReadOnly && Boolean(selectedTripIdForBoardings) && !isGroupedTransportPolicy;
 
                           if (sortedBoardings.length === 0) {
                             return (
@@ -2925,7 +3022,9 @@ export default function Events() {
                                 <p>Nenhum local de embarque definido</p>
                                 <p className="text-sm">
                                   {selectedTripIdForBoardings 
-                                    ? 'Adicione locais para esta viagem'
+                                    ? isGroupedTransportPolicy
+                                      ? 'Adicione locais para o transporte (ida e volta)'
+                                      : 'Adicione locais para esta viagem'
                                     : 'Adicione locais onde os passageiros embarcarão'
                                   }
                                 </p>
@@ -3794,11 +3893,11 @@ export default function Events() {
                     className="flex flex-wrap gap-4"
                   >
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ida" id="trip_type_ida" />
+                      <RadioGroupItem value="ida" id="trip_type_ida" disabled={isRoundTripMandatoryPolicy} />
                       <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Ida</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="volta" id="trip_type_volta" />
+                      <RadioGroupItem value="volta" id="trip_type_volta" disabled={isGroupedTransportPolicy} />
                       <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Volta</Label>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -3809,6 +3908,16 @@ export default function Events() {
                   {tripForm.trip_creation_type === 'ida_volta' && (
                     <p className="text-xs text-muted-foreground">
                       Serão criadas duas viagens vinculadas com os mesmos dados.
+                    </p>
+                  )}
+                  {isGroupedTransportPolicy && (
+                    <p className="text-xs text-muted-foreground">
+                      Nesta política, não permitimos criar somente a volta para evitar incoerência comercial.
+                    </p>
+                  )}
+                  {isRoundTripMandatoryPolicy && (
+                    <p className="text-xs text-muted-foreground">
+                      Pacote obrigatório: use sempre “Ida e Volta” para manter o transporte agrupado.
                     </p>
                   )}
                 </div>
