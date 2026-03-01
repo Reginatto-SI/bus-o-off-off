@@ -79,14 +79,18 @@ export default function Confirmation() {
       if (saleRes.data) {
         setSale(saleRes.data as unknown as Sale);
 
+        let companyFeePercent: number | null = null;
         const companyId = (saleRes.data as any).event?.company_id;
         if (companyId) {
           const { data: companyData } = await supabase
             .from('companies')
-            .select('name, trade_name, logo_url, city, state, primary_color, ticket_color, cnpj, phone, whatsapp, address, slogan')
+            .select('name, trade_name, logo_url, city, state, primary_color, ticket_color, cnpj, phone, whatsapp, address, slogan, platform_fee_percent')
             .eq('id', companyId)
             .maybeSingle();
-          if (companyData) setCompany(companyData as CompanyInfo);
+          if (companyData) {
+            setCompany(companyData as CompanyInfo);
+            companyFeePercent = companyData.platform_fee_percent != null ? Number(companyData.platform_fee_percent) : null;
+          }
         }
 
         const { data: selectedBoarding } = await supabase
@@ -106,11 +110,15 @@ export default function Confirmation() {
           .eq('is_active', true)
           .order('sort_order');
         if (saleRes.data) {
-          const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
-            passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
-            feePercent: 6,
-          });
-          setFeeLines(breakdown.fees);
+          if (companyFeePercent == null) {
+            toast({ title: 'Taxa da plataforma da empresa indisponível', variant: 'destructive' });
+          } else {
+            const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
+              passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
+              feePercent: Number(companyFeePercent),
+            });
+            setFeeLines(breakdown.fees);
+          }
         }
       }
       if (ticketsRes.data) {

@@ -80,7 +80,7 @@ serve(async (req) => {
     if (companyIds.length > 0) {
       const { data: companyRows } = await supabaseAdmin
         .from("companies")
-        .select("id, name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan")
+.select("id, name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan, platform_fee_percent")
         .in("id", companyIds);
 
       for (const c of companyRows ?? []) {
@@ -179,9 +179,18 @@ serve(async (req) => {
     }
 
     const passPlatformFeeToCustomer = Boolean(filtered[0]?.sale?.event?.pass_platform_fee_to_customer);
+    const firstCompanyId = filtered[0]?.sale?.event?.company_id;
+    const platformFeePercent = firstCompanyId ? companyMap.get(firstCompanyId)?.platform_fee_percent ?? null : null;
+
+    if (platformFeePercent == null) {
+      return new Response(
+        JSON.stringify({ error: "platform_fee_percent not configured for company" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
-      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer }),
+      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer, platformFeePercent }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

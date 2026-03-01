@@ -170,6 +170,7 @@ export default function Checkout() {
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
+  const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(null);
   const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
   const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
     setLoadingSeatStatus(true);
@@ -253,6 +254,20 @@ export default function Checkout() {
             return;
           }
           setEvent(eventData);
+
+          // Fonte de verdade: taxa da empresa dona do evento (sem fallback silencioso).
+          const { data: companyData, error: companyError } = await supabase
+            .from('companies')
+            .select('platform_fee_percent')
+            .eq('id', eventData.company_id)
+            .single();
+
+          if (companyError || companyData?.platform_fee_percent == null) {
+            toast.error('Não foi possível carregar a taxa da plataforma da empresa.');
+            navigate(`/eventos/${id}`);
+            return;
+          }
+          setPlatformFeePercent(Number(companyData.platform_fee_percent));
 
           // Fetch event fees
           const { data: feesData } = await supabase
@@ -579,9 +594,15 @@ export default function Checkout() {
     }
 
     // Calculate fees
+    if (platformFeePercent == null) {
+      toast.error('Taxa da plataforma da empresa indisponível.');
+      setSubmitting(false);
+      return;
+    }
+
     const feeBreakdown = calculateFees(event.unit_price ?? 0, eventFees, {
       passToCustomer: event.pass_platform_fee_to_customer,
-      feePercent: 6,
+      feePercent: platformFeePercent,
     });
 
     // Create sale
@@ -983,9 +1004,17 @@ export default function Checkout() {
 
             {/* Fee breakdown summary */}
             {event && (() => {
+              if (platformFeePercent == null) {
+                return (
+                  <div className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
+                    Não foi possível carregar a taxa da plataforma da empresa para simular o total.
+                  </div>
+                );
+              }
+
               const breakdown = calculateFees(event.unit_price ?? 0, eventFees, {
                 passToCustomer: event.pass_platform_fee_to_customer,
-                feePercent: 6,
+                feePercent: platformFeePercent,
               });
               const hasActiveFees = breakdown.fees.length > 0;
               return (
