@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -43,6 +43,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ImagePlus,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -159,11 +160,17 @@ export default function TemplatesLayout() {
     name: '',
     vehicle_type: 'onibus' as TemplateVehicleType,
     description: '',
+    image_url: null as string | null,
     status: 'ativo' as 'ativo' | 'inativo',
     floors: 1,
     grid_rows: 12,
     grid_columns: 5,
   });
+
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingImagePreviewUrlRef = useRef<string | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const hasActiveFilters = filteredSearch !== '' || statusFilter !== 'ativo' || typeFilter !== 'all';
@@ -176,7 +183,14 @@ export default function TemplatesLayout() {
     setEditorOpen(false);
     setEditingCell(null);
     setPaintMode(false);
-    setForm({ name: '', vehicle_type: 'onibus', description: '', status: 'ativo', floors: 1, grid_rows: 12, grid_columns: 5 });
+    if (pendingImagePreviewUrlRef.current) {
+      // Comentário: libera URL temporária para evitar vazamento de memória ao fechar o modal.
+      URL.revokeObjectURL(pendingImagePreviewUrlRef.current);
+      pendingImagePreviewUrlRef.current = null;
+    }
+    setPendingImageFile(null);
+    setUploadingImage(false);
+    setForm({ name: '', vehicle_type: 'onibus', description: '', image_url: null, status: 'ativo', floors: 1, grid_rows: 12, grid_columns: 5 });
     setItems([]);
   };
 
@@ -402,6 +416,7 @@ export default function TemplatesLayout() {
       name: template.name,
       vehicle_type: template.vehicle_type,
       description: template.description ?? '',
+      image_url: template.image_url ?? null,
       status: template.status,
       floors: template.floors,
       grid_rows: template.grid_rows,
@@ -456,6 +471,86 @@ export default function TemplatesLayout() {
     return true;
   };
 
+
+  const isTemplateImageLocalPreview = (url: string | null) => Boolean(url?.startsWith('blob:'));
+
+  const clearPendingTemplateImagePreview = () => {
+    if (pendingImagePreviewUrlRef.current) {
+      URL.revokeObjectURL(pendingImagePreviewUrlRef.current);
+      pendingImagePreviewUrlRef.current = null;
+    }
+  };
+
+  const handleTemplateImageUpload = async (file?: File) => {
+    if (!file) return;
+
+    const isAllowedType = ['image/png', 'image/svg+xml'].includes(file.type);
+    if (!isAllowedType) {
+      toast.error('Envie apenas arquivo PNG ou SVG.');
+      return;
+    }
+
+    const maxFileSizeInBytes = 5 * 1024 * 1024;
+    if (file.size > maxFileSizeInBytes) {
+      toast.error('A imagem deve ter no máximo 5MB.');
+      return;
+    }
+
+    clearPendingTemplateImagePreview();
+
+    if (editingId) {
+      setUploadingImage(true);
+      const fileExtension = file.name.toLowerCase().endswith('.svg') ? 'svg' : 'png';
+      const filePath = `templates-layout/${editingId}-${Date.now()}.${fileExtension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('event-images')
+        .upload(filePath, file, { upsert: false });
+
+      if (uploadError) {
+        toast.error('Erro ao fazer upload da imagem de referência.');
+        setUploadingImage(false);
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
+      const { error: updateError } = await supabase.from('template_layouts').update({ image_url: publicUrl }).eq('id', editingId);
+
+      if (updateError) {
+        toast.error('Erro ao salvar imagem no template.');
+      } else {
+        setForm((prev) => ({ ...prev, image_url: publicUrl }));
+        toast.success('Imagem de referência enviada com sucesso.');
+      }
+
+      setUploadingImage(false);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    pendingImagePreviewUrlRef.current = previewUrl;
+    setPendingImageFile(file);
+    setForm((prev) => ({ ...prev, image_url: previewUrl }));
+  };
+
+  const handleRemoveTemplateImage = async () => {
+    if (!form.image_url) return;
+
+    clearPendingTemplateImagePreview();
+    setPendingImageFile(null);
+
+    if (editingId && !isTemplateImageLocalPreview(form.image_url)) {
+      const { error } = await supabase.from('template_layouts').update({ image_url: null }).eq('id', editingId);
+      if (error) {
+        toast.error('Erro ao remover imagem de referência.');
+        return;
+      }
+    }
+
+    setForm((prev) => ({ ...prev, image_url: null }));
+    toast.success('Imagem de referência removida.');
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) return toast.error('Informe o nome do template');
     if (!validateItems()) return;
@@ -465,6 +560,7 @@ export default function TemplatesLayout() {
       name: form.name.trim(),
       vehicle_type: form.vehicle_type,
       description: form.description.trim() || null,
+      image_url: form.image_url,
       status: form.status,
       floors: form.floors,
       grid_rows: form.grid_rows,
@@ -495,6 +591,31 @@ export default function TemplatesLayout() {
       return;
     }
 
+    // Comentário: para novo template, persiste a imagem após obter o ID real para montar path estável no storage.
+    if (!editingId && pendingImageFile) {
+      const fileExtension = pendingImageFile.name.toLowerCase().endswith('.svg') ? 'svg' : 'png';
+      const filePath = `templates-layout/${templateId}-${Date.now()}.${fileExtension}`;
+      const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, pendingImageFile, { upsert: false });
+
+      if (uploadError) {
+        toast.error('Erro ao enviar imagem de referência');
+        setSaving(false);
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
+      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ image_url: publicUrl }).eq('id', templateId);
+      if (imageUpdateError) {
+        toast.error('Erro ao salvar imagem de referência no template');
+        setSaving(false);
+        return;
+      }
+
+      setForm((prev) => ({ ...prev, image_url: publicUrl }));
+      clearPendingTemplateImagePreview();
+      setPendingImageFile(null);
+    }
+
     // Comentário: estratégia simples e segura para evitar inconsistência entre grade e itens.
     await supabase.from('template_layout_items').delete().eq('template_layout_id', templateId);
     if (items.length > 0) {
@@ -520,6 +641,7 @@ export default function TemplatesLayout() {
       name: `${template.name} (Cópia)`,
       vehicle_type: template.vehicle_type,
       description: template.description,
+      image_url: template.image_url,
       status: 'inativo',
       floors: template.floors,
       grid_rows: template.grid_rows,
@@ -673,50 +795,100 @@ export default function TemplatesLayout() {
                       </TabsList>
                       <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
                         <TabsContent value="geral" className="space-y-4 mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>Nome *</Label>
-                              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                          {/* Comentário: a aba Geral foi dividida em 2 colunas para melhorar legibilidade e equilíbrio visual no desktop. */}
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label>Nome *</Label>
+                                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Tipo de Veículo</Label>
+                                <Select
+                                  value={form.vehicle_type}
+                                  onValueChange={(value: TemplateVehicleType) => {
+                                    const found = VEHICLE_OPTIONS.find((item) => item.value === value);
+                                    setForm({ ...form, vehicle_type: value, floors: found?.floors ?? 1, grid_columns: found?.cols ?? 5 });
+                                    setActiveFloor(1);
+                                    setSelectedKeys([]);
+                                  }}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {VEHICLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Descrição</Label>
+                                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={5} />
+                              </div>
                             </div>
-                            <div className="space-y-2">
-                              <Label>Tipo de Veículo</Label>
-                              <Select
-                                value={form.vehicle_type}
-                                onValueChange={(value: TemplateVehicleType) => {
-                                  const found = VEHICLE_OPTIONS.find((item) => item.value === value);
-                                  setForm({ ...form, vehicle_type: value, floors: found?.floors ?? 1, grid_columns: found?.cols ?? 5 });
-                                  setActiveFloor(1);
-                                  setSelectedKeys([]);
-                                }}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {VEHICLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label>Descrição</Label>
-                              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Status</Label>
-                              <Select value={form.status} onValueChange={(value: 'ativo' | 'inativo') => setForm({ ...form, status: value })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem></SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Pavimentos</Label>
-                              <Input type="number" value={form.floors} min={1} max={2} onChange={(e) => setForm({ ...form, floors: Math.max(1, Math.min(2, Number(e.target.value || 1))) })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Linhas da grade</Label>
-                              <Input type="number" value={form.grid_rows} min={4} max={40} onChange={(e) => setForm({ ...form, grid_rows: Math.max(4, Math.min(40, Number(e.target.value || 12))) })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Colunas da grade</Label>
-                              <Input type="number" value={form.grid_columns} min={3} max={10} onChange={(e) => setForm({ ...form, grid_columns: Math.max(3, Math.min(10, Number(e.target.value || 5))) })} />
+
+                            <div className="space-y-4">
+                              {/* Comentário: o card de imagem é apenas ilustrativo e não interfere na lógica do grid de assentos. */}
+                              <div className="space-y-2 rounded-md border border-border/70 p-3">
+                                <Label>Imagem de referência do veículo (opcional)</Label>
+                                {form.image_url ? (
+                                  <div className="space-y-3">
+                                    <img
+                                      src={form.image_url}
+                                      alt="Imagem de referência do veículo"
+                                      className="max-h-[200px] w-full rounded border object-contain"
+                                    />
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}>
+                                        <ImagePlus className="mr-2 h-4 w-4" />
+                                        Substituir imagem
+                                      </Button>
+                                      <Button type="button" variant="outline" size="sm" onClick={handleRemoveTemplateImage} disabled={uploadingImage}>
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Remover imagem
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}>
+                                      {uploadingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                                      {uploadingImage ? 'Enviando...' : 'Adicionar imagem (SVG/PNG)'}
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">Formatos: SVG ou PNG • Limite: 5MB.</p>
+                                  </div>
+                                )}
+                                <input
+                                  ref={imageInputRef}
+                                  type="file"
+                                  accept=".svg,.png,image/svg+xml,image/png"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    handleTemplateImageUpload(e.target.files?.[0]);
+                                    e.currentTarget.value = '';
+                                  }}
+                                />
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label>Status</Label>
+                                  <Select value={form.status} onValueChange={(value: 'ativo' | 'inativo') => setForm({ ...form, status: value })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem></SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Pavimentos</Label>
+                                  <Input type="number" value={form.floors} min={1} max={2} onChange={(e) => setForm({ ...form, floors: Math.max(1, Math.min(2, Number(e.target.value || 1))) })} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Linhas da grade</Label>
+                                  <Input type="number" value={form.grid_rows} min={4} max={40} onChange={(e) => setForm({ ...form, grid_rows: Math.max(4, Math.min(40, Number(e.target.value || 12))) })} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Colunas da grade</Label>
+                                  <Input type="number" value={form.grid_columns} min={3} max={10} onChange={(e) => setForm({ ...form, grid_columns: Math.max(3, Math.min(10, Number(e.target.value || 5))) })} />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </TabsContent>
@@ -812,6 +984,17 @@ export default function TemplatesLayout() {
                         </TabsContent>
 
                         <TabsContent value="preview" className="mt-0 space-y-4">
+                          {form.image_url && (
+                            <div className="space-y-2 rounded-md border p-3">
+                              <p className="text-sm font-medium">Imagem ilustrativa do veículo</p>
+                              <img
+                                src={form.image_url}
+                                alt="Imagem ilustrativa do veículo"
+                                className="max-h-64 w-full rounded border object-contain"
+                              />
+                            </div>
+                          )}
+
                           <div className="flex flex-wrap items-center gap-2">
                             <Label>Visualização:</Label>
                             <Select value={previewMode} onValueChange={(value: 'categoria' | 'tags') => setPreviewMode(value)}>
