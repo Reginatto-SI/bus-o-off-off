@@ -150,6 +150,7 @@ export interface Vehicle {
 }
 
 export type SeatStatus = 'disponivel' | 'bloqueado';
+export type SeatCategory = 'convencional' | 'executivo' | 'leito' | 'semi_leito';
 
 export interface Seat {
   id: string;
@@ -159,6 +160,7 @@ export interface Seat {
   row_number: number;
   column_number: number;
   status: SeatStatus;
+  category: SeatCategory;
   company_id: string;
   created_at: string;
 }

@@ -1,117 +1,147 @@
 
 
-# Ajustes de UX e Conformidade — Tela /admin/eventos
+# Evolução Estrutural — Categoria de Assento (Double Decker)
 
-Este plano modifica exclusivamente o arquivo `src/pages/admin/Events.tsx` (4072 linhas). Nenhum outro arquivo é alterado. Nenhuma migração de banco necessária.
+## Escopo
+
+Adicionar `category` aos assentos, evoluir cadastro de frota para configuração por pavimento/categoria, diferenciar visualmente no mapa e exibir pavimento+categoria no ticket.
 
 ---
 
-## Mudanças
+## 1. Migração de Banco de Dados
 
-### 1. Etapa Geral — Redistribuir campos em colunas (desktop)
-
-**Linhas ~2366-2591** — Reorganizar o `TabsContent value="geral"`:
-
-- **Linha 1**: Manter grid existente `lg:grid-cols-[200px,1fr]` (Banner + Nome do Evento) — já está assim.
-- **Linha 2**: Mover Data, Cidade e Tolerância para um grid de 3 colunas:
-  ```
-  <div className="grid gap-4 sm:grid-cols-3">
-    Data | Cidade | Tolerância
-  </div>
-  ```
-  Atualmente Data e Cidade estão em `sm:grid-cols-2` e Tolerância fica sozinha abaixo.
-- **Linha 3**: Colocar Descrição e Informações lado a lado:
-  ```
-  <div className="grid gap-4 lg:grid-cols-2">
-    Descrição | Informações e Regras
-  </div>
-  ```
-  Atualmente ficam empilhadas verticalmente.
-
-### 2. Etapa Frotas — Cards de viagem lado a lado
-
-**Linhas ~2648-2715** — No bloco que renderiza `sortedEventTrips.map(...)`:
-
-- Trocar container de `<div className="space-y-3">` para `<div className="grid gap-3 lg:grid-cols-2">`.
-- Os cards individuais já são `<Card>`, ficarão lado a lado automaticamente quando houver Ida + Volta.
-
-### 3. Etapa Embarques — Dropdown menor + resumo ao lado
-
-**Linhas ~2745-2763** — No bloco do "Trip Selector":
-
-- Envolver dropdown + resumo em grid:
-  ```
-  <div className="grid gap-4 lg:grid-cols-[40%,1fr] items-end">
-    <div> Select (Viagem Selecionada) </div>
-    <div> Resumo: Total de embarques | Horário base </div>
-  </div>
-  ```
-- O resumo exibirá contagem de `filteredBoardings.length` e horário do primeiro embarque (stop_order 1).
-
-### 4. Etapa Passagens — Reestruturar em 4 Cards
-
-**Linhas ~2954-3211** — Reescrever o `TabsContent value="passagens"`:
-
-Novo estado no componente:
-```ts
-const [platformFeePassToClient, setPlatformFeePassToClient] = useState(false);
-const [platformFeeAccepted, setPlatformFeeAccepted] = useState(false);
+**Nova coluna `seats.category`:**
+```sql
+ALTER TABLE public.seats
+  ADD COLUMN category text NOT NULL DEFAULT 'convencional';
 ```
 
-**Card 1 — Configuração da Passagem**:
-- Preço + Limite por compra (grid 2 colunas) — já existe, apenas envolver em Card com titulo.
+Valores possíveis: `convencional`, `executivo`, `leito`, `semi_leito`. Sem enum rígido — campo texto com default `convencional`. Permite extensão futura sem migração.
 
-**Card 2 — Canais de Venda**:
-- Venda Online + Venda por Vendedor — mover o bloco existente para dentro de um Card com titulo.
-
-**Card 3 — Taxa da Plataforma (6%)** (NOVO):
-- Titulo: "Taxa da Plataforma (6%)"
-- Texto fixo explicativo
-- Toggle: "Repassar taxa para o cliente" (`platformFeePassToClient`)
-- Simulação dinâmica usando `form.unit_price`:
-  - Preço base
-  - Taxa (6%)
-  - Preço final ao cliente (se repasse ativado: base + 6%)
-  - Valor líquido do organizador (base - 6% se não repassar, ou base inteiro se repassar)
-
-**Card 4 — Aceite Obrigatório** (NOVO):
-- Checkbox: "Li e aceito a cobrança da taxa de 6% sobre vendas online."
-- Estado: `platformFeeAccepted`
-
-Manter o bloco de **Taxas Adicionais** e **Resumo do Evento** existentes abaixo dos 4 cards.
-
-### 5. Etapa Publicação — Resumo Financeiro + bloqueio de aceite
-
-**Linhas ~3214-3320** — No `TabsContent value="publicacao"`:
-
-Antes do checklist existente, adicionar Card "Resumo Financeiro do Evento":
-- Preço ao cliente (base ou base+6%)
-- Taxa da plataforma (6%)
-- Quem paga a taxa (organizador ou cliente)
-- Valor líquido estimado por ingresso
-- Canais ativos (Online / Vendedor)
-
-**Bloqueio de publicação**:
-- Adicionar `platformFeeAccepted` como requisito no `publishChecklist`:
-  - Novo check: `hasFeeAcceptance: platformFeeAccepted`
-  - Incluir no `valid` condition
-- Se tentar publicar sem aceite: toast + redirecionar para aba passagens
-- Adicionar item visual no checklist: "Taxa da plataforma aceita"
-
-### 6. Estado e imports
-
-- Adicionar `Checkbox` import de `@/components/ui/checkbox`
-- Adicionar estados: `platformFeePassToClient`, `platformFeeAccepted`
-- No `resetForm()`, resetar ambos para `false`
-- No `loadEventData` ao editar, inicializar `platformFeeAccepted = false` (sempre exigir re-aceite por sessão)
+Veículos e assentos existentes: todos recebem `convencional` automaticamente via DEFAULT. Zero migração manual.
 
 ---
 
-## Arquivos afetados
+## 2. Tipo TypeScript (`src/types/database.ts`)
+
+- Adicionar `SeatCategory` type: `'convencional' | 'executivo' | 'leito' | 'semi_leito'`
+- Adicionar `category: SeatCategory` à interface `Seat`
+
+---
+
+## 3. Cadastro de Frota (`src/pages/admin/Fleet.tsx`)
+
+### Aba "Capacidade" — Evolução
+
+Quando `floors === 2`:
+- Exibir seção "Configuração por Pavimento"
+- Para cada pavimento, permitir definir **setores** (ex: 8 Leito + 40 Convencional no piso superior, 12 Executivo no piso inferior)
+- Interface: lista de setores com campos `categoria` (select) + `quantidade` (input number)
+- Botão "Adicionar Setor" por pavimento
+- Validação: soma total dos setores = capacidade do veículo
+
+Quando `floors === 1`:
+- Comportamento atual mantido
+- Categoria padrão: Convencional para todos
+
+### Preview do Layout
+- Colorir assentos por categoria na prévia (cores diferenciadas por categoria)
+- Legenda de cores abaixo da prévia
+
+### Persistência
+- `vehicleData` passa a incluir informação de setores como metadado (para regeneração de assentos)
+- Ao salvar veículo (novo ou edição), regenerar assentos com `category` correto
+
+---
+
+## 4. Geração de Assentos (`generateSeatLayout`)
+
+**Checkout (`src/pages/public/Checkout.tsx`)** e **Fleet preview:**
+- Função `generateSeatLayout` recebe novo parâmetro: `sectors: { category: string; quantity: number; floor: number }[]`
+- Gera assentos respeitando ordem dos setores por pavimento
+- Numeração sequencial única contínua (1, 2, 3...)
+- Cada assento recebe `category` do setor correspondente
+
+---
+
+## 5. Mapa de Assentos — Diferenciação Visual
+
+### `SeatButton` (`src/components/public/SeatButton.tsx`)
+- Aceitar prop `category?: string`
+- Quando `state === 'available'`, aplicar borda/cor de fundo sutil por categoria:
+  - `leito`: borda dourada / fundo amarelo sutil
+  - `executivo`: borda verde / fundo verde sutil
+  - `convencional`: comportamento atual (cinza)
+  - `semi_leito`: borda azul / fundo azul sutil
+
+### `SeatMap` (`src/components/public/SeatMap.tsx`)
+- Passar `category` de cada `Seat` para `SeatButton`
+
+### `SeatLegend` (`src/components/public/SeatLegend.tsx`)
+- Adicionar seção "Categorias" quando veículo tiver múltiplas categorias
+- Exibir badge colorido + nome da categoria
+
+---
+
+## 6. Resumo de Compra (Checkout)
+
+Na etapa de confirmação do Checkout:
+- Exibir para cada assento selecionado:
+  - `Assento 12 — Piso Superior — Leito`
+- Traduzir floor: 1 → "Piso Inferior" (se 2 pisos) ou omitir (se 1 piso), 2 → "Piso Superior"
+
+---
+
+## 7. Ticket — TicketCard + Visual Renderer
+
+### `TicketCardData` (`src/components/public/TicketCard.tsx`)
+- Adicionar campos opcionais: `seatCategory?: string`, `seatFloor?: number`, `vehicleFloors?: number`
+
+### `TicketCard` — Exibição
+- Abaixo de "Assento X", exibir:
+  - Pavimento (se veículo 2 pisos): "Piso Superior" / "Piso Inferior"
+  - Categoria: "Leito" / "Executivo" / "Convencional"
+
+### `ticketVisualRenderer.ts`
+- Na seção "Dados do Passageiro", após `Assento {label}`:
+  - Linha: `Pavimento: Superior` (se 2 pisos)
+  - Linha: `Categoria: Leito`
+
+### `ticketPdfGenerator.ts`
+- Sem alteração direta (usa renderTicketVisual)
+
+---
+
+## 8. Consulta de Passagens + Confirmação
+
+Nos locais que montam `TicketCardData` (Confirmation.tsx, TicketLookup.tsx, etc.):
+- Buscar `category` e `floor` do assento (join com seats) e `floors` do veículo
+- Passar para `TicketCardData`
+
+---
+
+## Arquivos Afetados
 
 | Arquivo | Tipo |
 |---------|------|
-| `src/pages/admin/Events.tsx` | Modificação (layout + lógica de taxa/aceite) |
+| Migração SQL | Nova coluna `seats.category` |
+| `src/types/database.ts` | Tipo `SeatCategory`, campo em `Seat` |
+| `src/pages/admin/Fleet.tsx` | Configuração de setores por pavimento |
+| `src/pages/public/Checkout.tsx` | `generateSeatLayout` com categorias, resumo |
+| `src/components/public/SeatButton.tsx` | Prop `category`, cores |
+| `src/components/public/SeatMap.tsx` | Passa `category` |
+| `src/components/public/SeatLegend.tsx` | Legenda de categorias |
+| `src/components/public/TicketCard.tsx` | Campos e exibição de pavimento/categoria |
+| `src/lib/ticketVisualRenderer.ts` | Renderização de pavimento/categoria |
+| `src/pages/public/Confirmation.tsx` | Montar dados de categoria no ticket |
+| `src/pages/public/TicketLookup.tsx` | Montar dados de categoria no ticket |
 
-Nenhuma migração. Nenhum novo componente. Nenhuma alteração em telas públicas ou fluxo de compra.
+---
+
+## Compatibilidade
+
+- Veículos existentes: `category = 'convencional'` automático (DEFAULT)
+- Assentos já criados: recebem `convencional` sem migração
+- 1 pavimento: comportamento idêntico ao atual
+- RLS: sem alteração (coluna na mesma tabela `seats`, políticas existentes cobrem)
 

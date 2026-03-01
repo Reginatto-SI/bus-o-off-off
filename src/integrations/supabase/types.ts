@@ -108,20 +108,20 @@ export type Database = {
           cnpj: string | null
           created_at: string
           document: string | null
+          document_number: string | null
           email: string | null
           id: string
           is_active: boolean
           legal_name: string | null
-          legal_type: 'PF' | 'PJ'
+          legal_type: string
           logo_url: string | null
-          document_number: string | null
           name: string
           notes: string | null
           partner_split_percent: number
-          public_slug: string | null
           phone: string | null
           platform_fee_percent: number
           primary_color: string | null
+          public_slug: string | null
           slogan: string | null
           state: string | null
           stripe_account_id: string | null
@@ -139,20 +139,20 @@ export type Database = {
           cnpj?: string | null
           created_at?: string
           document?: string | null
+          document_number?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
           legal_name?: string | null
-          legal_type?: 'PF' | 'PJ'
+          legal_type?: string
           logo_url?: string | null
-          document_number?: string | null
           name: string
           notes?: string | null
           partner_split_percent?: number
-          public_slug?: string | null
           phone?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
+          public_slug?: string | null
           slogan?: string | null
           state?: string | null
           stripe_account_id?: string | null
@@ -170,20 +170,20 @@ export type Database = {
           cnpj?: string | null
           created_at?: string
           document?: string | null
+          document_number?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
           legal_name?: string | null
-          legal_type?: 'PF' | 'PJ'
+          legal_type?: string
           logo_url?: string | null
-          document_number?: string | null
           name?: string
           notes?: string | null
           partner_split_percent?: number
-          public_slug?: string | null
           phone?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
+          public_slug?: string | null
           slogan?: string | null
           state?: string | null
           stripe_account_id?: string | null
@@ -371,11 +371,11 @@ export type Database = {
           allow_seller_sale: boolean
           boarding_tolerance_minutes: number | null
           city: string
-          enable_checkout_validation: boolean
           company_id: string
           created_at: string
           date: string
           description: string | null
+          enable_checkout_validation: boolean
           id: string
           image_url: string | null
           is_archived: boolean
@@ -392,11 +392,11 @@ export type Database = {
           allow_seller_sale?: boolean
           boarding_tolerance_minutes?: number | null
           city: string
-          enable_checkout_validation?: boolean
           company_id: string
           created_at?: string
           date: string
           description?: string | null
+          enable_checkout_validation?: boolean
           id?: string
           image_url?: string | null
           is_archived?: boolean
@@ -413,11 +413,11 @@ export type Database = {
           allow_seller_sale?: boolean
           boarding_tolerance_minutes?: number | null
           city?: string
-          enable_checkout_validation?: boolean
           company_id?: string
           created_at?: string
           date?: string
           description?: string | null
+          enable_checkout_validation?: boolean
           id?: string
           image_url?: string | null
           is_archived?: boolean
@@ -706,6 +706,7 @@ export type Database = {
       }
       seats: {
         Row: {
+          category: string
           column_number: number
           company_id: string
           created_at: string
@@ -717,6 +718,7 @@ export type Database = {
           vehicle_id: string
         }
         Insert: {
+          category?: string
           column_number: number
           company_id: string
           created_at?: string
@@ -728,6 +730,7 @@ export type Database = {
           vehicle_id: string
         }
         Update: {
+          category?: string
           column_number?: number
           company_id?: string
           created_at?: string
@@ -955,6 +958,13 @@ export type Database = {
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_validations_validated_by_driver_id_fkey"
+            columns: ["validated_by_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
         ]
@@ -1255,48 +1265,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-
-      get_sellers_commission_kpis: {
-        Args: {
-          p_company_id?: string
-          p_date_from?: string
-          p_date_to?: string
-          p_event_id?: string
-          p_search?: string
-          p_seller_id?: string
-          p_status?: Database["public"]["Enums"]["sale_status"]
-        }
-        Returns: {
-          eligible_revenue: number
-          eligible_sales: number
-          sellers_count: number
-          total_commission: number
-          total_tickets: number
-        }[]
-      }
-      get_sellers_commission_summary_paginated: {
-        Args: {
-          p_company_id?: string
-          p_date_from?: string
-          p_date_to?: string
-          p_event_id?: string
-          p_limit?: number
-          p_offset?: number
-          p_search?: string
-          p_seller_id?: string
-          p_status?: Database["public"]["Enums"]["sale_status"]
-        }
-        Returns: {
-          commission_percent: number
-          eligible_revenue: number
-          eligible_sales: number
-          seller_id: string
-          seller_name: string
-          total_commission: number
-          total_count: number
-          total_tickets: number
-        }[]
-      }
       get_sales_report_kpis: {
         Args: {
           p_company_id?: string
@@ -1341,6 +1309,47 @@ export type Database = {
           total_sales: number
         }[]
       }
+      get_sellers_commission_kpis: {
+        Args: {
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
+        }
+        Returns: {
+          eligible_revenue: number
+          eligible_sales: number
+          sellers_count: number
+          total_commission: number
+          total_tickets: number
+        }[]
+      }
+      get_sellers_commission_summary_paginated: {
+        Args: {
+          p_company_id?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_event_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_seller_id?: string
+          p_status?: Database["public"]["Enums"]["sale_status"]
+        }
+        Returns: {
+          commission_percent: number
+          eligible_revenue: number
+          eligible_sales: number
+          seller_id: string
+          seller_name: string
+          total_commission: number
+          total_count: number
+          total_tickets: number
+        }[]
+      }
       get_trip_available_capacity: {
         Args: { trip_uuid: string }
         Returns: number
@@ -1355,16 +1364,21 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
-      is_developer: { Args: { _user_id: string }; Returns: boolean }
       is_company_public_slug_available: {
         Args: { current_company_id?: string; input_slug: string }
         Returns: boolean
       }
+      is_developer: { Args: { _user_id: string }; Returns: boolean }
       normalize_city_name: { Args: { input: string }; Returns: string }
+      normalize_public_slug: { Args: { input_slug: string }; Returns: string }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
+      user_belongs_to_company: {
+        Args: { _company_id: string; _user_id: string }
+        Returns: boolean
+      }
       validate_ticket_scan: {
         Args: {
           p_action: string
@@ -1383,10 +1397,6 @@ export type Database = {
           result: string
           seat_label: string
         }[]
-      }
-      user_belongs_to_company: {
-        Args: { _company_id: string; _user_id: string }
-        Returns: boolean
       }
     }
     Enums: {

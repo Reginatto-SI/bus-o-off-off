@@ -137,6 +137,7 @@ export default function Fleet() {
     model: '',
     year_model: '',
     capacity: '',
+    floors: '1',
     seats_left_side: defaultSeatSides.seatsLeftSide,
     seats_right_side: defaultSeatSides.seatsRightSide,
     chassis: '',
@@ -355,6 +356,7 @@ export default function Fleet() {
       model: form.model || null,
       year_model: Number.isNaN(yearModel) ? null : yearModel,
       capacity,
+      floors: Math.max(1, Math.min(2, Number.parseInt(form.floors, 10) || 1)),
       seats_left_side: seatsLeftSide,
       seats_right_side: seatsRightSide,
       chassis: form.chassis || null,
@@ -431,6 +433,7 @@ export default function Fleet() {
       model: vehicle.model ?? '',
       year_model: vehicle.year_model?.toString() ?? '',
       capacity: vehicle.capacity.toString(),
+      floors: (vehicle.floors ?? 1).toString(),
       seats_left_side: vehicle.seats_left_side?.toString() ?? '2',
       seats_right_side: vehicle.seats_right_side?.toString() ?? '2',
       chassis: vehicle.chassis ?? '',
@@ -478,6 +481,7 @@ export default function Fleet() {
       model: '',
       year_model: '',
       capacity: '',
+      floors: '1',
       seats_left_side: defaults.seatsLeftSide,
       seats_right_side: defaults.seatsRightSide,
       chassis: '',
@@ -650,9 +654,9 @@ export default function Fleet() {
                         </TabsContent>
 
                         <TabsContent value="capacidade" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                            <div className="space-y-2 sm:col-span-1 xl:col-span-1">
-                              <Label htmlFor="capacity">Capacidade máxima de passageiros</Label>
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="capacity">Capacidade máxima</Label>
                               <Input
                                 id="capacity"
                                 type="number"
@@ -662,6 +666,21 @@ export default function Fleet() {
                                 placeholder="46"
                                 required
                               />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="floors">Pavimentos</Label>
+                              <Select
+                                value={form.floors}
+                                onValueChange={(v) => setForm({ ...form, floors: v })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">1 Pavimento</SelectItem>
+                                  <SelectItem value="2">2 Pavimentos (Double Decker)</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="seats_left_side">Fileiras lado esquerdo</Label>
