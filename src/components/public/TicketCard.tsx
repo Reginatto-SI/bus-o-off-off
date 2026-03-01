@@ -303,7 +303,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 ))}
                 {ticket.totalPaid != null && (
                   <div className="flex justify-between font-semibold text-sm pt-1 border-t">
-                    <span>Total</span>
+                    <span>Total pago</span>
                     <span>R$ {ticket.totalPaid.toFixed(2)}</span>
                   </div>
                 )}

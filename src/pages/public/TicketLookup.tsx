@@ -216,9 +216,14 @@ export default function TicketLookup() {
         is_active: true,
       }));
 
+      const passPlatformFeeToCustomer = Boolean(data?.passPlatformFeeToCustomer);
+
       const cards: TicketCardData[] = ticketResults.map((t: any) => {
         const unitPrice = t.unitPrice ?? 0;
-        const breakdown = calculateFees(unitPrice, eventFees);
+        const breakdown = calculateFees(unitPrice, eventFees, {
+          passToCustomer: passPlatformFeeToCustomer,
+          feePercent: 6,
+        });
 
         return {
           ticketId: t.ticketId,

@@ -579,7 +579,10 @@ export default function Checkout() {
     }
 
     // Calculate fees
-    const feeBreakdown = calculateFees(event.unit_price ?? 0, eventFees);
+    const feeBreakdown = calculateFees(event.unit_price ?? 0, eventFees, {
+      passToCustomer: event.pass_platform_fee_to_customer,
+      feePercent: 6,
+    });
 
     // Create sale
     const { data: sale, error: saleError } = await supabase
@@ -980,7 +983,10 @@ export default function Checkout() {
 
             {/* Fee breakdown summary */}
             {event && (() => {
-              const breakdown = calculateFees(event.unit_price ?? 0, eventFees);
+              const breakdown = calculateFees(event.unit_price ?? 0, eventFees, {
+                passToCustomer: event.pass_platform_fee_to_customer,
+                feePercent: 6,
+              });
               const hasActiveFees = breakdown.fees.length > 0;
               return (
                 <div className="rounded-lg border p-4 space-y-2 bg-muted/30">
