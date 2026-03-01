@@ -372,5 +372,6 @@ export interface EventWithCompany extends Event {
     id: string;
     name: string;
     logo_url: string | null;
+    whatsapp?: string | null;
   };
 }
