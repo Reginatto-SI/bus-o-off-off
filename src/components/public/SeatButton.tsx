@@ -1,11 +1,13 @@
 import { cn } from '@/lib/utils';
 import { Check, User, Ban } from 'lucide-react';
+import type { SeatCategory } from '@/types/database';
 
 export type SeatState = 'available' | 'selected' | 'occupied' | 'blocked';
 
 interface SeatButtonProps {
   label: string;
   state: SeatState;
+  category?: SeatCategory;
   onClick: () => void;
 }
 
@@ -20,8 +22,17 @@ const stateStyles: Record<SeatState, string> = {
     'bg-amber-50 border-amber-300 text-amber-500 cursor-not-allowed',
 };
 
-export function SeatButton({ label, state, onClick }: SeatButtonProps) {
+const categoryStyles: Record<string, string> = {
+  leito: 'border-yellow-500 bg-yellow-50',
+  executivo: 'border-emerald-500 bg-emerald-50',
+  semi_leito: 'border-blue-500 bg-blue-50',
+};
+
+export function SeatButton({ label, state, category, onClick }: SeatButtonProps) {
   const isInteractive = state === 'available' || state === 'selected';
+  const categoryClass = state === 'available' && category && category !== 'convencional'
+    ? categoryStyles[category] || ''
+    : '';
 
   return (
     <button
@@ -33,6 +44,7 @@ export function SeatButton({ label, state, onClick }: SeatButtonProps) {
         'relative flex items-center justify-center w-11 h-11 rounded-lg border-2 text-xs font-bold transition-all',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         stateStyles[state],
+        categoryClass,
       )}
     >
       {state === 'selected' ? (

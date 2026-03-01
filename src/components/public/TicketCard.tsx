@@ -27,30 +27,28 @@ export interface TicketCardData {
   boardingDepartureTime: string | null;
   boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
-  // Identificador único da venda para suporte
   saleId?: string;
-  // Checkout session do Stripe para verificação de status
   stripeCheckoutSessionId?: string | null;
-  // Company branding
   companyName: string;
   companyLogoUrl: string | null;
   companyCity: string | null;
   companyState: string | null;
   companyPrimaryColor: string | null;
-  // Company details
   companyCnpj: string | null;
   companyPhone: string | null;
   companyWhatsapp: string | null;
   companyAddress: string | null;
   companySlogan: string | null;
-  // Vehicle/driver operational info
   vehicleType?: string | null;
   vehiclePlate?: string | null;
   driverName?: string | null;
-  // Fees breakdown (optional)
   fees?: { name: string; amount: number }[];
   totalPaid?: number;
   unitPrice?: number;
+  // Double Decker / categoria
+  seatCategory?: string | null;
+  seatFloor?: number | null;
+  vehicleFloors?: number | null;
 }
 
 function maskCpf(cpf: string): string {
@@ -202,7 +200,16 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                   <Armchair className="h-3.5 w-3.5" />
                   Assento {ticket.seatLabel}
                 </div>
-
+                {ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null && (
+                  <div className="flex items-center gap-2 text-xs">
+                    Pavimento: {ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}
+                  </div>
+                )}
+                {ticket.seatCategory && ticket.seatCategory !== 'convencional' && (
+                  <div className="flex items-center gap-2 text-xs">
+                    Categoria: {{ leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', convencional: 'Convencional' }[ticket.seatCategory] || ticket.seatCategory}
+                  </div>
+                )}
                 {/* ID da Passagem — para suporte rápido */}
                 {ticket.saleId && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">

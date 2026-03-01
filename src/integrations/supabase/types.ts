@@ -706,6 +706,7 @@ export type Database = {
       }
       seats: {
         Row: {
+          category: string
           column_number: number
           company_id: string
           created_at: string
@@ -717,6 +718,7 @@ export type Database = {
           vehicle_id: string
         }
         Insert: {
+          category?: string
           column_number: number
           company_id: string
           created_at?: string
@@ -728,6 +730,7 @@ export type Database = {
           vehicle_id: string
         }
         Update: {
+          category?: string
           column_number?: number
           company_id?: string
           created_at?: string

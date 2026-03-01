@@ -251,6 +251,9 @@ export default function TicketLookup() {
           vehicleType: t.vehicleType || null,
           vehiclePlate: t.vehiclePlate || null,
           driverName: t.driverName || null,
+          seatCategory: t.seatCategory || null,
+          seatFloor: t.seatFloor || null,
+          vehicleFloors: t.vehicleFloors || null,
           fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
           totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
         };

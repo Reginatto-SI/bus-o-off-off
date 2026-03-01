@@ -97,6 +97,7 @@ function generateSeatLayout(
           row_number: row,
           column_number: col,
           status: 'disponivel',
+          category: 'convencional',
         });
       }
 
@@ -111,6 +112,7 @@ function generateSeatLayout(
           row_number: row,
           column_number: col,
           status: 'disponivel',
+          category: 'convencional',
         });
       }
 

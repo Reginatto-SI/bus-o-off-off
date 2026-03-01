@@ -59,7 +59,9 @@ export async function renderTicketVisual(
   const feeRows = hasFees ? ticket.fees!.length + (ticket.unitPrice != null ? 1 : 0) + (ticket.totalPaid != null ? 1 : 0) : 0;
   const hasVehicleInfo = !!(ticket.vehicleType || ticket.vehiclePlate || ticket.driverName);
   const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
-  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight;
+  const hasSeatMeta = !!(ticket.seatCategory && ticket.seatCategory !== 'convencional') || !!(ticket.vehicleFloors && ticket.vehicleFloors > 1 && ticket.seatFloor);
+  const seatMetaHeight = hasSeatMeta ? 60 : 0;
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -176,6 +178,17 @@ export async function renderTicketVisual(
   ctx.fillText(`CPF: ${maskCpf(ticket.passengerCpf)}`, cardX + 34, y);
   y += 30;
   ctx.fillText(`Assento ${ticket.seatLabel}`, cardX + 34, y);
+
+  if (ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null) {
+    y += 28;
+    ctx.fillText(`Pavimento: ${ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}`, cardX + 34, y);
+  }
+
+  const categoryLabels: Record<string, string> = { leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', convencional: 'Convencional' };
+  if (ticket.seatCategory && ticket.seatCategory !== 'convencional') {
+    y += 28;
+    ctx.fillText(`Categoria: ${categoryLabels[ticket.seatCategory] || ticket.seatCategory}`, cardX + 34, y);
+  }
 
   // Código curto da venda (para suporte rápido)
   if ((ticket as any).saleId) {
