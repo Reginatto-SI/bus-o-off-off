@@ -26,7 +26,8 @@ export default function PublicEvents() {
           company:companies!events_company_id_fkey(
             id,
             name,
-            logo_url
+            logo_url,
+            whatsapp
           )
         `)
         .eq('status', 'a_venda')
@@ -51,9 +52,6 @@ export default function PublicEvents() {
           </h1>
           <p className="text-muted-foreground">
             Compra segura com confirmação imediata após o pagamento
-          </p>
-          <p className="text-xs text-muted-foreground/70">
-            Eventos organizados por empresas parceiras
           </p>
         </section>
 

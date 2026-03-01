@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin } from 'lucide-react';
+import { Calendar, MapPin, MessageCircle } from 'lucide-react';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
+import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
@@ -22,6 +23,16 @@ const formatPrice = (price: number) => {
 
 export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: EventCardFeaturedProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
+  const whatsappHelpLink = buildWhatsappWaMeLink({
+    phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
+    message: `Olá! Estou com dúvida sobre o evento ${event.name} em ${(() => {
+      const localDate = parseDateOnlyAsLocal(event.date);
+      return localDate
+        ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(localDate)
+        : formatDateOnlyBR(event.date);
+    })()}. Pode me ajudar?`,
+  });
 
   return (
     <div className="relative overflow-hidden rounded-xl">
@@ -94,6 +105,19 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           </div>
         </div>
       </Link>
+
+      {/* CTA secundário de ajuda, visual leve para não disputar atenção com o botão de compra. */}
+      {whatsappHelpLink && (
+        <a
+          href={whatsappHelpLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute bottom-5 left-4 z-30 inline-flex items-center gap-1.5 text-xs text-white/85 hover:text-white transition-colors"
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          Ajuda no WhatsApp
+        </a>
+      )}
 
       {/* CTA */}
       <div className="absolute bottom-4 right-4 z-30">
