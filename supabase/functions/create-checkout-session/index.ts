@@ -99,9 +99,9 @@ serve(async (req) => {
       );
     }
 
-    // Cálculo da taxa da plataforma: usa platform_fee_percent variável por empresa (default 7.5%)
+    // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
     // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend)
-    const feePercent = (company.platform_fee_percent ?? 7.5) / 100;
+    const feePercent = 0.06;
     const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
     const totalAmountCents = Math.round(grossAmount * 100);
     const applicationFeeCents = Math.round(totalAmountCents * feePercent);
