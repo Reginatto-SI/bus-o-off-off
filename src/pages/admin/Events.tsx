@@ -578,6 +578,10 @@ export default function Events() {
   // Computed: is read-only (encerrado)
   const isReadOnly = form.status === 'encerrado';
 
+  // Flags de política usados em validações/effects da tela. Mantidos aqui para evitar uso antes da inicialização.
+  const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
+  const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
+
   // Stats calculations
   const stats = useMemo(() => {
     // KPIs do topo representam apenas eventos ativos para manter a leitura operacional da tela.
@@ -1960,8 +1964,6 @@ export default function Events() {
     });
   }, [eventTrips]);
 
-  const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
-  const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
 
   const groupedBoardingTripOptions = useMemo(() => {
     // Em políticas agrupadas, mostramos Ida+Volta como uma única opção comercial no seletor de embarques.
