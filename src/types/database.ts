@@ -1,6 +1,7 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
+export type TemplateVehicleType = VehicleType | 'double_deck';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
 export type SaleStatus = 'reservado' | 'pago' | 'cancelado';
@@ -144,7 +145,24 @@ export interface Vehicle {
   floors: number;
   seats_left_side: number;
   seats_right_side: number;
+  template_layout_id: string | null;
+  template_layout_version: number | null;
+  layout_snapshot: Record<string, any> | null;
   company_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateLayout {
+  id: string;
+  name: string;
+  vehicle_type: TemplateVehicleType;
+  description: string | null;
+  status: VehicleStatus;
+  floors: number;
+  grid_rows: number;
+  grid_columns: number;
+  current_version: number;
   created_at: string;
   updated_at: string;
 }
