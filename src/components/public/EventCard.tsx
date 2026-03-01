@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Building2 } from 'lucide-react';
+import { Calendar, MapPin, MessageCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
+import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { EventWithCompany } from '@/types/database';
 
 interface EventCardProps {
@@ -24,6 +24,16 @@ const formatPrice = (price: number) => {
 
 export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
+  const whatsappHelpLink = buildWhatsappWaMeLink({
+    phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
+    message: `Olá! Estou com dúvida sobre o evento ${event.name} em ${(() => {
+      const localDate = parseDateOnlyAsLocal(event.date);
+      return localDate
+        ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(localDate)
+        : formatDateOnlyBR(event.date);
+    })()}. Pode me ajudar?`,
+  });
 
   return (
     <Card className="overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -97,18 +107,18 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           </div>
         </div>
 
-        {/* Empresa Organizadora */}
-        {event.company && (
-          <div className="flex items-center gap-2 pt-2 border-t">
-            <Avatar className="h-6 w-6">
-              <AvatarImage src={event.company.logo_url || undefined} />
-              <AvatarFallback className="text-xs bg-muted">
-                <Building2 className="h-3 w-3" />
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs text-muted-foreground truncate">
-              {event.company.name}
-            </span>
+        {/* CTA secundário de suporte sem competir com o botão principal de compra. */}
+        {whatsappHelpLink && (
+          <div className="flex justify-end pt-1">
+            <a
+              href={whatsappHelpLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              Ajuda no WhatsApp
+            </a>
           </div>
         )}
 
