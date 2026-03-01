@@ -129,12 +129,26 @@ serve(async (req) => {
 
       console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand check`);
 
-      // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
-      // Mantemos esse valor aqui para manter o financeiro consistente com checkout/admin/ticket.
-      const platformFeePercent = 6;
+      if (company.platform_fee_percent == null) {
+        return new Response(
+          JSON.stringify({ paymentStatus: "reservado", detail: "Company platform fee not configured" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const platformFeePercent = Number(company.platform_fee_percent);
+      if (!Number.isFinite(platformFeePercent)) {
+        return new Response(
+          JSON.stringify({ paymentStatus: "reservado", detail: "Company platform fee invalid" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const partnerSplitPercent = company.partner_split_percent ?? 50;
       const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
-      const platformFeeTotal = grossAmount * (platformFeePercent / 100);
+      const grossAmountCents = Math.round(grossAmount * 100);
+      const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
+      const platformFeeTotal = platformFeeCents / 100;
 
       const { data: partner } = await supabaseAdmin
         .from("partners")
@@ -148,9 +162,9 @@ serve(async (req) => {
       let stripeTransferId: string | null = null;
 
       if (partner?.stripe_account_id && partner.status === "ativo") {
-        partnerFeeAmount = platformFeeTotal * (partnerSplitPercent / 100);
-        platformNetAmount = platformFeeTotal - partnerFeeAmount;
-        const partnerFeeCents = Math.round(partnerFeeAmount * 100);
+        const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
+        partnerFeeAmount = partnerFeeCents / 100;
+        platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
 
         if (partnerFeeCents > 0) {
           try {

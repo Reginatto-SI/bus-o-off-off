@@ -21,9 +21,7 @@ export interface PlatformFeeConfig {
   feePercent?: number;
 }
 
-const DEFAULT_PLATFORM_FEE_PERCENT = 6;
-
-export function calculatePlatformFee(unitPrice: number, feePercent: number = DEFAULT_PLATFORM_FEE_PERCENT): number {
+export function calculatePlatformFee(unitPrice: number, feePercent: number): number {
   return Math.round(unitPrice * (feePercent / 100) * 100) / 100;
 }
 
@@ -49,10 +47,15 @@ export function calculateFees(
         : Math.round(f.value * 100) / 100,
   }));
 
-  // Regra comercial Smartbus: taxa da plataforma (6%) só entra no valor do cliente quando o repasse está ativo.
+  // Suporte: somente adiciona taxa da plataforma ao cliente quando o repasse do evento está ativo.
+  // Importante: o percentual deve vir da empresa (fonte de verdade), sem fallback silencioso.
   if (platformFeeConfig?.passToCustomer) {
+    if (platformFeeConfig.feePercent == null || Number.isNaN(Number(platformFeeConfig.feePercent))) {
+      throw new Error('platform_fee_percent indisponível para cálculo de taxa da plataforma');
+    }
+
     feeLines.unshift({
-      name: `Taxa da plataforma (${platformFeeConfig.feePercent ?? DEFAULT_PLATFORM_FEE_PERCENT}%)`,
+      name: `Taxa da plataforma (${platformFeeConfig.feePercent}%)`,
       amount: calculatePlatformFee(unitPrice, platformFeeConfig.feePercent),
     });
   }

@@ -6,13 +6,15 @@ import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Ticket, Bus, ArrowLeft } from 'lucide-react';
+import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { VehicleCard } from '@/components/public/VehicleCard';
 import { BoardingLocationCard } from '@/components/public/BoardingLocationCard';
 import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { parseDateOnlyAsLocal } from '@/lib/date';
 
 type TransportPolicy = Event['transport_policy'];
 
@@ -37,6 +39,7 @@ export default function PublicEventDetail() {
   const [quantity, setQuantity] = useState(1);
   const [availableSeatsMap, setAvailableSeatsMap] = useState<Record<string, number>>({});
   const [isInfoDrawerOpen, setIsInfoDrawerOpen] = useState(false);
+  const [supportWhatsapp, setSupportWhatsapp] = useState<string | null>(null);
 
   const transportPolicy: TransportPolicy = event?.transport_policy ?? 'trecho_independente';
   const groupedPolicy = isGroupedPolicy(transportPolicy);
@@ -61,7 +64,26 @@ export default function PublicEventDetail() {
           .order('stop_order', { ascending: true }),
       ]);
 
-      if (eventRes.data) setEvent(eventRes.data as Event);
+      if (eventRes.data) {
+        const eventData = eventRes.data as Event & { whatsapp?: string | null };
+        setEvent(eventData as Event);
+
+        // Prioridade de suporte: WhatsApp no evento (quando existir) e fallback para WhatsApp da empresa.
+        const eventWhatsapp = eventData.whatsapp?.trim() || null;
+        if (eventWhatsapp) {
+          setSupportWhatsapp(eventWhatsapp);
+        } else {
+          const { data: companyData } = await supabase
+            .from('companies')
+            .select('whatsapp')
+            .eq('id', eventData.company_id)
+            .single();
+          setSupportWhatsapp(companyData?.whatsapp ?? null);
+        }
+      } else {
+        setSupportWhatsapp(null);
+      }
+
       const fetchedTrips = (tripsRes.data ?? []) as Trip[];
       setAllTrips(fetchedTrips);
       if (locationsRes.data) setLocations(locationsRes.data as EventBoardingLocation[]);
@@ -125,11 +147,14 @@ export default function PublicEventDetail() {
 
   const filteredLocations = locations.filter((loc) => loc.trip_id === selectedTrip);
 
+  const singleFilteredLocationId =
+    filteredLocations.length === 1 ? filteredLocations[0].boarding_location_id : null;
+
   useEffect(() => {
-    if (filteredLocations.length === 1 && selectedTrip) {
-      setSelectedLocation(filteredLocations[0].boarding_location_id);
+    if (singleFilteredLocationId && selectedTrip) {
+      setSelectedLocation(singleFilteredLocationId);
     }
-  }, [selectedTrip, filteredLocations.length]);
+  }, [selectedTrip, singleFilteredLocationId]);
 
   const currentAvailableSeats = selectedTrip ? (availableSeatsMap[selectedTrip] ?? 0) : 0;
   const returnAvailableSeats = selectedReturnTrip ? (availableSeatsMap[selectedReturnTrip] ?? 0) : 0;
@@ -150,6 +175,19 @@ export default function PublicEventDetail() {
         event.max_tickets_per_purchase === 0 ? policyAvailableSeats : event.max_tickets_per_purchase
       )
     : 1;
+
+
+  const whatsappHelpLink = event
+    ? buildWhatsappWaMeLink({
+        phone: supportWhatsapp,
+        message: `Olá! Estou com dúvida sobre o evento ${event.name} em ${(() => {
+          const localDate = parseDateOnlyAsLocal(event.date);
+          return localDate
+            ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(localDate)
+            : event.date;
+        })()}. Pode me ajudar?`,
+      })
+    : null;
 
   const handleContinue = () => {
     if (!selectedTrip || !selectedLocation || quantity < 1) {
@@ -300,7 +338,21 @@ export default function PublicEventDetail() {
               </section>
             )}
 
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
+              {/* Link secundário de suporte para evitar o retorno da jornada em caso de dúvida no checkout. */}
+              {whatsappHelpLink && (
+                <div className="flex justify-end">
+                  <a
+                    href={whatsappHelpLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Ajuda no WhatsApp
+                  </a>
+                </div>
+              )}
               <Button className="w-full h-14 text-lg font-medium" disabled={!selectedTrip || !selectedLocation || quantity < 1} onClick={handleContinue}>
                 Escolher assentos
               </Button>

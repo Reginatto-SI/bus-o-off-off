@@ -276,6 +276,8 @@ export default function Events() {
   const [stripeGateOpen, setStripeGateOpen] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeGatePendingAction, setStripeGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
+  // Fonte de verdade da taxa: companies.platform_fee_percent da empresa ativa.
+  const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState<number | null>(null);
 
   // Main form
   const [form, setForm] = useState({
@@ -293,7 +295,7 @@ export default function Events() {
     allow_online_sale: true,
     allow_seller_sale: true,
     enable_checkout_validation: false,
-    // Regra financeira fixa do produto: 6% pode ser repassado ao cliente por evento.
+    // Regra por evento: apenas define quem absorve a taxa da plataforma (cliente/organizador).
     pass_platform_fee_to_customer: false,
     // Aceite legal obrigatório para publicação. Persistido no evento para não "desmarcar" ao reabrir.
     platform_fee_terms_accepted: false,
@@ -327,6 +329,29 @@ export default function Events() {
   }, [form.name, form.date, form.city]);
 
   const isGeralComplete = geralMissingFields.length === 0;
+
+  const hasValidCompanyPlatformFee = companyPlatformFeePercent !== null && Number.isFinite(companyPlatformFeePercent);
+
+  const fetchCompanyPlatformFee = async () => {
+    if (!activeCompanyId) {
+      setCompanyPlatformFeePercent(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('companies')
+      .select('platform_fee_percent')
+      .eq('id', activeCompanyId)
+      .single();
+
+    if (error || data?.platform_fee_percent == null) {
+      // Comentário de suporte: bloqueamos operações financeiras sem taxa válida para evitar cobrança incorreta.
+      setCompanyPlatformFeePercent(null);
+      return;
+    }
+
+    setCompanyPlatformFeePercent(Number(data.platform_fee_percent));
+  };
 
   const checkStripeConnection = async () => {
     if (!activeCompanyId) {
@@ -878,6 +903,7 @@ export default function Events() {
       fetchEvents();
       fetchVehiclesAndDrivers();
       fetchSalesData();
+      fetchCompanyPlatformFee();
     }
   }, [activeCompanyId]);
 
@@ -905,7 +931,13 @@ export default function Events() {
       return { error: true, eventId: editingId, isNew: false };
     }
 
-    // Publicação gera receita: exige Stripe conectado antes de seguir.
+    // Publicação gera receita: exige taxa válida da empresa e Stripe conectado antes de seguir.
+    if (targetStatus === 'a_venda' && !hasValidCompanyPlatformFee) {
+      toast.error('Defina a Taxa da Plataforma da empresa em /admin/empresa antes de publicar.');
+      setActiveTab('passagens');
+      return { error: true, eventId: editingId, isNew: false };
+    }
+
     if (targetStatus === 'a_venda') {
       const hasStripe = await checkStripeConnection();
       if (!hasStripe) {
@@ -3266,24 +3298,24 @@ export default function Events() {
                       </CardContent>
                     </Card>
 
-                    {/* Card 3 — Taxa da Plataforma (6%) */}
+                    {/* Card 3 — Taxa da Plataforma (dinâmica por empresa) */}
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
                           <DollarSign className="h-4 w-4" />
-                          Taxa da Plataforma (6%)
+                          Taxa da Plataforma ({hasValidCompanyPlatformFee ? `${companyPlatformFeePercent}%` : 'indisponível'})
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                          A plataforma cobra 6% sobre cada passagem vendida online via Stripe.
+                          A plataforma cobra a taxa configurada na empresa sobre cada passagem vendida online via Stripe.
                         </p>
 
                         <div className="flex items-center justify-between">
                           <div className="space-y-0.5">
                             <Label htmlFor="platform_fee_pass">Repassar taxa para o cliente</Label>
                             <p className="text-xs text-muted-foreground">
-                              Se ativado, o cliente pagará o preço base + 6%
+                              Se ativado, o cliente pagará o preço base + taxa da plataforma da empresa
                             </p>
                           </div>
                           <Switch
@@ -3297,7 +3329,18 @@ export default function Events() {
                         {/* Simulação dinâmica */}
                         {form.unit_price && parseFloat(form.unit_price) > 0 && (() => {
                           const basePrice = parseFloat(form.unit_price);
-                          const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
+                          if (!hasValidCompanyPlatformFee) {
+                            return (
+                              <Alert variant="destructive">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                  Não foi possível carregar a taxa da plataforma da empresa. Ajuste em /admin/empresa para liberar a simulação.
+                                </AlertDescription>
+                              </Alert>
+                            );
+                          }
+
+                          const platformFee = Math.round(basePrice * ((companyPlatformFeePercent as number) / 100) * 100) / 100;
                           const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
                           const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
 
@@ -3310,7 +3353,7 @@ export default function Events() {
                                   <span>R$ {basePrice.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Taxa da plataforma (6%)</span>
+                                  <span>Taxa da plataforma ({companyPlatformFeePercent}%)</span>
                                   <span>R$ {platformFee.toFixed(2)}</span>
                                 </div>
                                 <Separator className="my-1" />
@@ -3343,7 +3386,7 @@ export default function Events() {
                             disabled={isReadOnly}
                           />
                           <label htmlFor="platform_fee_accepted" className="text-sm leading-relaxed cursor-pointer">
-                            Li e aceito a cobrança da taxa de <strong>6%</strong> sobre vendas online.
+                            Li e aceito a cobrança da taxa da plataforma (<strong>{hasValidCompanyPlatformFee ? `${companyPlatformFeePercent}%` : 'configuração indisponível'}</strong>) sobre vendas online.
                           </label>
                         </div>
                         {!form.platform_fee_terms_accepted && (
@@ -3550,7 +3593,18 @@ export default function Events() {
                           <div className="text-sm space-y-2">
                             {(() => {
                               const basePrice = parseFloat(form.unit_price);
-                              const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
+                              if (!hasValidCompanyPlatformFee) {
+                            return (
+                              <Alert variant="destructive">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                  Não foi possível carregar a taxa da plataforma da empresa. Ajuste em /admin/empresa para liberar a simulação.
+                                </AlertDescription>
+                              </Alert>
+                            );
+                          }
+
+                          const platformFee = Math.round(basePrice * ((companyPlatformFeePercent as number) / 100) * 100) / 100;
                               const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
                               const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
 
@@ -3561,7 +3615,7 @@ export default function Events() {
                                     <span className="font-medium">R$ {clientPrice.toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Taxa da plataforma (6%)</span>
+                                    <span className="text-muted-foreground">Taxa da plataforma ({companyPlatformFeePercent}%)</span>
                                     <span>R$ {platformFee.toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between">

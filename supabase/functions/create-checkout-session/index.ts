@@ -99,12 +99,26 @@ serve(async (req) => {
       );
     }
 
-    // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
+    // Fonte de verdade: taxa da plataforma definida por empresa (companies.platform_fee_percent).
+    if (company.platform_fee_percent == null) {
+      return new Response(JSON.stringify({ error: "Company platform fee is not configured", error_code: "platform_fee_missing" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const platformFeePercent = Number(company.platform_fee_percent);
+    if (!Number.isFinite(platformFeePercent)) {
+      return new Response(JSON.stringify({ error: "Company platform fee is invalid", error_code: "platform_fee_invalid" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend)
-    const feePercent = 0.06;
     const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
     const totalAmountCents = Math.round(grossAmount * 100);
-    const applicationFeeCents = Math.round(totalAmountCents * feePercent);
+    const applicationFeeCents = Math.round(totalAmountCents * (platformFeePercent / 100));
 
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
@@ -130,6 +144,8 @@ serve(async (req) => {
       metadata: {
         sale_id: sale.id,
         company_id: sale.company_id,
+        platform_fee_percent_applied: String(platformFeePercent),
+        platform_fee_amount_applied: String(applicationFeeCents),
       },
       success_url: `${origin}/confirmacao/${sale.id}?payment=success`,
       cancel_url: `${origin}/eventos/${sale.event_id}/checkout?trip=${sale.trip_id}&location=${sale.boarding_location_id}&quantity=${sale.quantity}`,

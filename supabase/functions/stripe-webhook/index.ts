@@ -60,13 +60,24 @@ async function processPaymentConfirmed(
     .eq("id", sale.company_id)
     .single();
 
-  // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
-  const platformFeePercent = 6;
+  if (company?.platform_fee_percent == null) {
+    console.error(`Company ${sale.company_id} missing platform_fee_percent; aborting financial settlement.`);
+    return;
+  }
+
+  const platformFeePercent = Number(company.platform_fee_percent);
+  if (!Number.isFinite(platformFeePercent)) {
+    console.error(`Company ${sale.company_id} has invalid platform_fee_percent: ${company.platform_fee_percent}`);
+    return;
+  }
+
   const partnerSplitPercent = company?.partner_split_percent ?? 50;
 
   // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend no momento da venda)
   const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
-  const platformFeeTotal = grossAmount * (platformFeePercent / 100);
+  const grossAmountCents = Math.round(grossAmount * 100);
+  const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
+  const platformFeeTotal = platformFeeCents / 100;
 
   const { data: partner } = await supabaseAdmin
     .from("partners")
@@ -80,10 +91,9 @@ async function processPaymentConfirmed(
   let stripeTransferId: string | null = null;
 
   if (partner?.stripe_account_id && partner.status === "ativo") {
-    partnerFeeAmount = platformFeeTotal * (partnerSplitPercent / 100);
-    platformNetAmount = platformFeeTotal - partnerFeeAmount;
-
-    const partnerFeeCents = Math.round(partnerFeeAmount * 100);
+    const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
+    partnerFeeAmount = partnerFeeCents / 100;
+    platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
 
     if (partnerFeeCents > 0) {
       try {
