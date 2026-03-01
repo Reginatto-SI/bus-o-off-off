@@ -217,12 +217,17 @@ export default function TicketLookup() {
       }));
 
       const passPlatformFeeToCustomer = Boolean(data?.passPlatformFeeToCustomer);
+      const platformFeePercent = data?.platformFeePercent;
+
+      if (platformFeePercent == null) {
+        throw new Error('platform_fee_percent não disponível para emissão da passagem');
+      }
 
       const cards: TicketCardData[] = ticketResults.map((t: any) => {
         const unitPrice = t.unitPrice ?? 0;
         const breakdown = calculateFees(unitPrice, eventFees, {
           passToCustomer: passPlatformFeeToCustomer,
-          feePercent: 6,
+          feePercent: Number(platformFeePercent),
         });
 
         return {
