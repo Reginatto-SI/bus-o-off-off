@@ -270,9 +270,6 @@ export default function Events() {
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
   const [feeForm, setFeeForm] = useState({ name: '', fee_type: 'fixed' as 'fixed' | 'percent', value: '', is_active: true });
 
-  // Platform fee states
-  const [platformFeePassToClient, setPlatformFeePassToClient] = useState(false);
-  const [platformFeeAccepted, setPlatformFeeAccepted] = useState(false);
   const [savingFee, setSavingFee] = useState(false);
 
   // Gate Stripe para monetização: bloqueia criação/publicação sem conta conectada.
@@ -296,6 +293,11 @@ export default function Events() {
     allow_online_sale: true,
     allow_seller_sale: true,
     enable_checkout_validation: false,
+    // Regra financeira fixa do produto: 6% pode ser repassado ao cliente por evento.
+    pass_platform_fee_to_customer: false,
+    // Aceite legal obrigatório para publicação. Persistido no evento para não "desmarcar" ao reabrir.
+    platform_fee_terms_accepted: false,
+    platform_fee_terms_accepted_at: null as string | null,
     image_url: '' as string | null,
     // Padrão comercial oficial para novos eventos: Ida obrigatória + Volta opcional.
     transport_policy: 'ida_obrigatoria_volta_opcional' as TransportPolicy,
@@ -546,7 +548,7 @@ export default function Events() {
     const hasCity = form.city.trim() !== '';
     const hasTrips = eventTrips.length > 0;
     const hasPrice = parseFloat(form.unit_price || '0') > 0;
-    const hasFeeAcceptance = platformFeeAccepted;
+    const hasFeeAcceptance = form.platform_fee_terms_accepted;
     
     // NEW: At least one IDA trip must have boarding (volta is optional)
     const hasIdaWithBoarding = eventTrips.some(trip => 
@@ -571,10 +573,14 @@ export default function Events() {
         hasFeeAcceptance,
       },
     };
-  }, [form, eventTrips, eventBoardingLocations, platformFeeAccepted]);
+  }, [form, eventTrips, eventBoardingLocations]);
 
   // Computed: is read-only (encerrado)
   const isReadOnly = form.status === 'encerrado';
+
+  // Flags de política usados em validações/effects da tela. Mantidos aqui para evitar uso antes da inicialização.
+  const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
+  const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
 
   // Stats calculations
   const stats = useMemo(() => {
@@ -911,7 +917,7 @@ export default function Events() {
 
     // Validate if trying to publish
     if (targetStatus === 'a_venda' && !publishChecklist.valid) {
-      if (!platformFeeAccepted) {
+      if (!form.platform_fee_terms_accepted) {
         toast.error('Aceite a taxa da plataforma na aba Passagens antes de publicar.');
         setActiveTab('passagens');
       } else {
@@ -944,6 +950,9 @@ export default function Events() {
       allow_online_sale: form.allow_online_sale,
       allow_seller_sale: form.allow_seller_sale,
       enable_checkout_validation: form.enable_checkout_validation,
+      pass_platform_fee_to_customer: form.pass_platform_fee_to_customer,
+      platform_fee_terms_accepted: form.platform_fee_terms_accepted,
+      platform_fee_terms_accepted_at: form.platform_fee_terms_accepted ? form.platform_fee_terms_accepted_at ?? new Date().toISOString() : null,
       // Política aplicada por evento para padronizar regras de venda entre Admin e portal público.
       transport_policy: form.transport_policy,
       company_id: activeCompanyId,
@@ -1153,6 +1162,9 @@ export default function Events() {
       allow_online_sale: event.allow_online_sale ?? true,
       allow_seller_sale: event.allow_seller_sale ?? true,
       enable_checkout_validation: event.enable_checkout_validation ?? false,
+      pass_platform_fee_to_customer: (event as any).pass_platform_fee_to_customer ?? false,
+      platform_fee_terms_accepted: (event as any).platform_fee_terms_accepted ?? false,
+      platform_fee_terms_accepted_at: (event as any).platform_fee_terms_accepted_at ?? null,
       image_url: (event as any).image_url ?? null,
       transport_policy: (event as any).transport_policy ?? 'trecho_independente',
     });
@@ -1729,8 +1741,6 @@ export default function Events() {
     setEventBoardingLocations([]);
     setActiveTab('geral');
     setUploadingImage(false);
-    setPlatformFeePassToClient(false);
-    setPlatformFeeAccepted(false);
     setForm({
       name: '',
       date: '',
@@ -1744,6 +1754,9 @@ export default function Events() {
       allow_online_sale: true,
       allow_seller_sale: true,
       enable_checkout_validation: false,
+      pass_platform_fee_to_customer: false,
+      platform_fee_terms_accepted: false,
+      platform_fee_terms_accepted_at: null,
       image_url: null,
       transport_policy: 'ida_obrigatoria_volta_opcional',
     });
@@ -1951,8 +1964,6 @@ export default function Events() {
     });
   }, [eventTrips]);
 
-  const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
-  const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
 
   const groupedBoardingTripOptions = useMemo(() => {
     // Em políticas agrupadas, mostramos Ida+Volta como uma única opção comercial no seletor de embarques.
@@ -3277,8 +3288,8 @@ export default function Events() {
                           </div>
                           <Switch
                             id="platform_fee_pass"
-                            checked={platformFeePassToClient}
-                            onCheckedChange={setPlatformFeePassToClient}
+                            checked={form.pass_platform_fee_to_customer}
+                            onCheckedChange={(checked) => setForm({ ...form, pass_platform_fee_to_customer: checked })}
                             disabled={isReadOnly}
                           />
                         </div>
@@ -3287,8 +3298,8 @@ export default function Events() {
                         {form.unit_price && parseFloat(form.unit_price) > 0 && (() => {
                           const basePrice = parseFloat(form.unit_price);
                           const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
-                          const clientPrice = platformFeePassToClient ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
-                          const organizerNet = platformFeePassToClient ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+                          const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
+                          const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
 
                           return (
                             <Card className="p-3 bg-muted/50">
@@ -3321,21 +3332,21 @@ export default function Events() {
                     {/* Card 4 — Aceite Obrigatório */}
                     <Card className={cn(
                       'border',
-                      !platformFeeAccepted && 'border-orange-500/30 bg-orange-500/5'
+                      !form.platform_fee_terms_accepted && 'border-orange-500/30 bg-orange-500/5'
                     )}>
                       <CardContent className="pt-6">
                         <div className="flex items-start gap-3">
                           <Checkbox
                             id="platform_fee_accepted"
-                            checked={platformFeeAccepted}
-                            onCheckedChange={(checked) => setPlatformFeeAccepted(checked === true)}
+                            checked={form.platform_fee_terms_accepted}
+                            onCheckedChange={(checked) => setForm({ ...form, platform_fee_terms_accepted: checked === true, platform_fee_terms_accepted_at: checked === true ? (form.platform_fee_terms_accepted_at ?? new Date().toISOString()) : null })}
                             disabled={isReadOnly}
                           />
                           <label htmlFor="platform_fee_accepted" className="text-sm leading-relaxed cursor-pointer">
                             Li e aceito a cobrança da taxa de <strong>6%</strong> sobre vendas online.
                           </label>
                         </div>
-                        {!platformFeeAccepted && (
+                        {!form.platform_fee_terms_accepted && (
                           <p className="text-xs text-orange-600 mt-2 ml-7">
                             Este aceite é obrigatório para publicar o evento.
                           </p>
@@ -3540,8 +3551,8 @@ export default function Events() {
                             {(() => {
                               const basePrice = parseFloat(form.unit_price);
                               const platformFee = Math.round(basePrice * 0.06 * 100) / 100;
-                              const clientPrice = platformFeePassToClient ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
-                              const organizerNet = platformFeePassToClient ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+                              const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
+                              const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
 
                               return (
                                 <>
@@ -3555,7 +3566,7 @@ export default function Events() {
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Quem paga a taxa</span>
-                                    <span>{platformFeePassToClient ? 'Cliente' : 'Organizador'}</span>
+                                    <span>{form.pass_platform_fee_to_customer ? 'Cliente' : 'Organizador'}</span>
                                   </div>
                                   <Separator className="my-1" />
                                   <div className="flex justify-between font-medium text-primary">

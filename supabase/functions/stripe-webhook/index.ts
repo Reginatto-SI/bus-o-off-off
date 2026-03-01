@@ -60,7 +60,8 @@ async function processPaymentConfirmed(
     .eq("id", sale.company_id)
     .single();
 
-  const platformFeePercent = company?.platform_fee_percent ?? 7.5;
+  // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
+  const platformFeePercent = 6;
   const partnerSplitPercent = company?.partner_split_percent ?? 50;
 
   // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend no momento da venda)

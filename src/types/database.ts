@@ -249,6 +249,9 @@ export interface Event {
   allow_online_sale: boolean;
   allow_seller_sale: boolean;
   enable_checkout_validation: boolean;
+  pass_platform_fee_to_customer: boolean;
+  platform_fee_terms_accepted: boolean;
+  platform_fee_terms_accepted_at: string | null;
   is_archived: boolean;
   image_url: string | null;
   // Política comercial por evento: controla se vende trecho solto, ida obrigatória ou pacote fechado.

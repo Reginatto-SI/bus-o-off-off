@@ -178,8 +178,10 @@ serve(async (req) => {
       });
     }
 
+    const passPlatformFeeToCustomer = Boolean(filtered[0]?.sale?.event?.pass_platform_fee_to_customer);
+
     return new Response(
-      JSON.stringify({ tickets: results, eventFees }),
+      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

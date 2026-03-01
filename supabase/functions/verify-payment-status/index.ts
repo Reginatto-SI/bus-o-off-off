@@ -129,8 +129,9 @@ serve(async (req) => {
 
       console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand check`);
 
-      // Cálculo de comissão e transfer (mesma lógica do webhook)
-      const platformFeePercent = company.platform_fee_percent ?? 7.5;
+      // Regra oficial atual: taxa da plataforma fixa em 6% para vendas online.
+      // Mantemos esse valor aqui para manter o financeiro consistente com checkout/admin/ticket.
+      const platformFeePercent = 6;
       const partnerSplitPercent = company.partner_split_percent ?? 50;
       const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
       const platformFeeTotal = grossAmount * (platformFeePercent / 100);

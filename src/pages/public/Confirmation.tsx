@@ -105,8 +105,11 @@ export default function Confirmation() {
           .eq('event_id', saleRes.data.event_id)
           .eq('is_active', true)
           .order('sort_order');
-        if (feesData && feesData.length > 0 && saleRes.data) {
-          const breakdown = calculateFees(saleRes.data.unit_price, feesData as EventFeeInput[]);
+        if (saleRes.data) {
+          const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
+            passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
+            feePercent: 6,
+          });
           setFeeLines(breakdown.fees);
         }
       }

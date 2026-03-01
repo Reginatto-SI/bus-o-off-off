@@ -320,7 +320,7 @@ export async function renderTicketVisual(
     if (ticket.totalPaid != null) {
       ctx.fillStyle = '#0f172a';
       ctx.font = '600 20px Inter, Arial, sans-serif';
-      ctx.fillText('Total', cardX + 34, y);
+      ctx.fillText('Total pago', cardX + 34, y);
       ctx.fillText(`R$ ${ticket.totalPaid.toFixed(2)}`, cardX + cardW - 160, y);
     }
   }
