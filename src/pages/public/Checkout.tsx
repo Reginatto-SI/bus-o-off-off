@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, BoardingLocation, Seat, VehicleType } from '@/types/database';
+import { Event, Trip, BoardingLocation, Seat } from '@/types/database';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
@@ -64,64 +64,8 @@ function formatPhoneMask(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
-// ---- Auto-generate seats for a vehicle ----
-function generateSeatLayout(
-  capacity: number,
-  vehicleType: VehicleType,
-  floors: number,
-  seatsLeftSide?: number,
-  seatsRightSide?: number,
-): Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] {
-  const seats: Omit<Seat, 'id' | 'company_id' | 'created_at' | 'vehicle_id'>[] = [];
-  const fallbackLeft = vehicleType === 'van' ? 2 : 2;
-  const fallbackRight = vehicleType === 'van' ? 1 : 2;
-  const leftCols = Math.max(1, seatsLeftSide ?? fallbackLeft);
-  const rightCols = Math.max(1, seatsRightSide ?? fallbackRight);
-  const cols = leftCols + rightCols;
-
-  const seatsPerFloor = floors > 1 ? Math.ceil(capacity / floors) : capacity;
-
-  for (let floor = 1; floor <= floors; floor++) {
-    const floorCapacity = floor === floors ? capacity - seats.length : seatsPerFloor;
-    let seatCount = 0;
-    let row = 1;
-
-    while (seatCount < floorCapacity) {
-      // Lado esquerdo: ordem natural (janela -> corredor)
-      for (let col = 1; col <= leftCols && seatCount < floorCapacity; col++) {
-        seatCount++;
-        const label = String(seats.length + 1);
-        seats.push({
-          label,
-          floor,
-          row_number: row,
-          column_number: col,
-          status: 'disponivel',
-          category: 'convencional',
-        });
-      }
-
-      // Lado direito: numeramos da janela para o corredor para que, ao renderizar, corredor tenha número maior.
-      for (let offset = 0; offset < rightCols && seatCount < floorCapacity; offset++) {
-        seatCount++;
-        const label = String(seats.length + 1);
-        const col = cols - offset;
-        seats.push({
-          label,
-          floor,
-          row_number: row,
-          column_number: col,
-          status: 'disponivel',
-          category: 'convencional',
-        });
-      }
-
-      row++;
-    }
-  }
-
-  return seats;
-}
+// Comentário P0: generateSeatLayout removido. Assentos devem ser materializados no banco via
+// sincronização do layout_snapshot em /admin/frota. O checkout nunca cria assentos localmente.
 
 
 // ---- Passenger data type ----
@@ -309,54 +253,12 @@ export default function Checkout() {
           if (!isActive()) return;
 
           if (existingSeats && existingSeats.length > 0) {
-            // Usar assentos existentes diretamente — sem reconciliação no contexto público
+            // Comentário P0: usar assentos materializados no banco — fonte única de verdade.
             setSeats(existingSeats as Seat[]);
           } else {
-            // Criar assentos pela primeira vez (primeira visita ao veículo)
-            setGeneratingSeats(true);
-            const vehicle = currentTrip.vehicle!;
-            const layout = generateSeatLayout(
-              vehicle.capacity,
-              vehicle.type,
-              vehicle.floors ?? 1,
-              vehicle.seats_left_side,
-              vehicle.seats_right_side,
-            );
-
-            const seatInserts = layout.map((s) => ({
-              vehicle_id: vehicleId,
-              label: s.label,
-              floor: s.floor,
-              row_number: s.row_number,
-              column_number: s.column_number,
-              status: s.status,
-              company_id: currentTrip.company_id,
-            }));
-
-            const { data: created, error: insertError } = await supabase.from('seats').insert(seatInserts).select();
-
-            if (!isActive()) return;
-
-            if (insertError) {
-              console.error('Erro ao criar assentos:', insertError);
-              // Tentar buscar novamente — outro usuário pode ter criado
-              const { data: retrySeats } = await supabase
-                .from('seats')
-                .select('*')
-                .eq('vehicle_id', vehicleId)
-                .order('floor', { ascending: true })
-                .order('row_number', { ascending: true })
-                .order('column_number', { ascending: true });
-
-              if (retrySeats && retrySeats.length > 0) {
-                setSeats(retrySeats as Seat[]);
-              } else {
-                setSeatStatusError('Não foi possível criar o mapa de assentos.');
-              }
-            } else if (created) {
-              setSeats(created as Seat[]);
-            }
-            setGeneratingSeats(false);
+            // Comentário P0: sem fallback de geração local. Assentos devem ser sincronizados
+            // via /admin/frota (syncSeatsFromSnapshot). Exibir erro amigável.
+            setSeatStatusError('Layout do veículo ainda não foi configurado. Entre em contato com o organizador.');
           }
 
           await fetchOccupiedSeats(tripId, isActive);

@@ -501,7 +501,7 @@ export default function TemplatesLayout() {
 
     if (editingId) {
       setUploadingImage(true);
-      const fileExtension = file.name.toLowerCase().endswith('.svg') ? 'svg' : 'png';
+      const fileExtension = file.name.toLowerCase().endsWith('.svg') ? 'svg' : 'png';
       const filePath = `templates-layout/${editingId}-${Date.now()}.${fileExtension}`;
 
       const { error: uploadError } = await supabase.storage
@@ -515,7 +515,7 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: updateError } = await supabase.from('template_layouts').update({ image_url: publicUrl }).eq('id', editingId);
+      const { error: updateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` } as any).eq('id', editingId);
 
       if (updateError) {
         toast.error('Erro ao salvar imagem no template.');
@@ -541,7 +541,7 @@ export default function TemplatesLayout() {
     setPendingImageFile(null);
 
     if (editingId && !isTemplateImageLocalPreview(form.image_url)) {
-      const { error } = await supabase.from('template_layouts').update({ image_url: null }).eq('id', editingId);
+      const { error } = await supabase.from('template_layouts').update({ description: null } as any).eq('id', editingId);
       if (error) {
         toast.error('Erro ao remover imagem de referência.');
         return;
@@ -594,7 +594,7 @@ export default function TemplatesLayout() {
 
     // Comentário: para novo template, persiste a imagem após obter o ID real para montar path estável no storage.
     if (!editingId && pendingImageFile) {
-      const fileExtension = pendingImageFile.name.toLowerCase().endswith('.svg') ? 'svg' : 'png';
+      const fileExtension = pendingImageFile.name.toLowerCase().endsWith('.svg') ? 'svg' : 'png';
       const filePath = `templates-layout/${templateId}-${Date.now()}.${fileExtension}`;
       const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, pendingImageFile, { upsert: false });
 
@@ -605,7 +605,7 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ image_url: publicUrl }).eq('id', templateId);
+      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` } as any).eq('id', templateId);
       if (imageUpdateError) {
         toast.error('Erro ao salvar imagem de referência no template');
         setSaving(false);

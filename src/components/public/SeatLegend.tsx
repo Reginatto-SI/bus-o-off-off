@@ -30,12 +30,14 @@ const categoryLabels: Record<string, string> = {
   executivo: 'Executivo',
   leito: 'Leito',
   semi_leito: 'Semi-leito',
+  leito_cama: 'Leito Cama',
 };
 
 const categoryColors: Record<string, string> = {
   leito: 'bg-yellow-50 border-yellow-500 text-yellow-700',
   executivo: 'bg-emerald-50 border-emerald-500 text-emerald-700',
   semi_leito: 'bg-blue-50 border-blue-500 text-blue-700',
+  leito_cama: 'bg-rose-50 border-rose-500 text-rose-700',
   convencional: 'bg-white border-gray-300 text-gray-700',
 };
 

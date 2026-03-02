@@ -169,7 +169,7 @@ export interface TemplateLayout {
 }
 
 export type SeatStatus = 'disponivel' | 'bloqueado';
-export type SeatCategory = 'convencional' | 'executivo' | 'leito' | 'semi_leito';
+export type SeatCategory = 'convencional' | 'executivo' | 'leito' | 'semi_leito' | 'leito_cama';
 
 export interface Seat {
   id: string;
