@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { TemplateLayout, Vehicle } from '@/types/database';
+import { SeatCategory, TemplateLayout, Vehicle } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -92,6 +93,26 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
   onibus: 'Ônibus',
   micro_onibus: 'Micro-ônibus',
   van: 'Van',
+};
+
+type TemplatePreviewItem = {
+  floor_number: number;
+  row_number: number;
+  column_number: number;
+  seat_number: string | null;
+  category: SeatCategory | null;
+  tags: string[] | null;
+  is_blocked: boolean;
+};
+
+const TEMPLATE_PREVIEW_CATEGORIES: SeatCategory[] = ['convencional', 'executivo', 'semi_leito', 'leito', 'leito_cama'];
+
+const TEMPLATE_PREVIEW_CATEGORY_COLORS: Record<SeatCategory, string> = {
+  convencional: 'bg-sky-100 text-sky-700 border-sky-200',
+  executivo: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  semi_leito: 'bg-amber-100 text-amber-700 border-amber-200',
+  leito: 'bg-violet-100 text-violet-700 border-violet-200',
+  leito_cama: 'bg-rose-100 text-rose-700 border-rose-200',
 };
 
 
@@ -227,9 +248,7 @@ export default function Fleet() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [templateLayouts, setTemplateLayouts] = useState<TemplateLayout[]>([]);
-  const [templateItemsByLayoutId, setTemplateItemsByLayoutId] = useState<
-    Record<string, Array<{ floor_number: number; row_number: number; column_number: number; seat_number: string | null; is_blocked: boolean }>>
-  >({});
+  const [templateItemsByLayoutId, setTemplateItemsByLayoutId] = useState<Record<string, TemplatePreviewItem[]>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
@@ -418,44 +437,72 @@ export default function Fleet() {
     });
   }, [selectedTemplate, templateDetailSummary]);
 
-  const seatLayoutPreview = useMemo(() => {
-    const capacity = Number.parseInt(form.capacity, 10);
-    const leftSide = Number.parseInt(form.seats_left_side, 10);
-    const rightSide = Number.parseInt(form.seats_right_side, 10);
+  const selectedTemplateItems = useMemo(() => {
+    if (!selectedTemplate) return [];
+    return templateItemsByLayoutId[selectedTemplate.id] ?? [];
+  }, [selectedTemplate, templateItemsByLayoutId]);
 
-    if (Number.isNaN(capacity) || Number.isNaN(leftSide) || Number.isNaN(rightSide)) return null;
-    if (capacity <= 0 || leftSide <= 0 || rightSide <= 0) return null;
+  const previewFloorLabels = useMemo(
+    () => (selectedTemplate ? Array.from({ length: selectedTemplate.floors }, (_, idx) => idx + 1) : []),
+    [selectedTemplate],
+  );
 
-    const rows: Array<{ rowNumber: number; left: Array<number | null>; right: Array<number | null> }> = [];
-    let seatLabel = 1;
-    let rowNumber = 1;
+  const previewRowIndexes = useMemo(
+    () => (selectedTemplate ? Array.from({ length: selectedTemplate.grid_rows }, (_, idx) => idx + 1) : []),
+    [selectedTemplate],
+  );
 
-    while (seatLabel <= capacity) {
-      const left: Array<number | null> = [];
-      const right: Array<number | null> = [];
+  const previewColumnIndexes = useMemo(
+    () => (selectedTemplate ? Array.from({ length: selectedTemplate.grid_columns }, (_, idx) => idx + 1) : []),
+    [selectedTemplate],
+  );
 
-      for (let index = 0; index < leftSide; index++) {
-        left.push(seatLabel <= capacity ? seatLabel++ : null);
-      }
+  const previewCategoryTotals = useMemo(() => {
+    return TEMPLATE_PREVIEW_CATEGORIES.reduce<Record<SeatCategory, number>>((acc, category) => {
+      acc[category] = selectedTemplateItems.filter((item) => !item.is_blocked && item.category === category).length;
+      return acc;
+    }, {
+      convencional: 0,
+      executivo: 0,
+      semi_leito: 0,
+      leito: 0,
+      leito_cama: 0,
+    });
+  }, [selectedTemplateItems]);
 
-      for (let index = 0; index < rightSide; index++) {
-        right.push(seatLabel <= capacity ? seatLabel++ : null);
-      }
+  const previewBlockedTotal = useMemo(
+    () => selectedTemplateItems.filter((item) => item.is_blocked).length,
+    [selectedTemplateItems],
+  );
 
-      // Comentário: no lado direito, exibimos menor número na janela e maior no corredor (padrão operacional).
-      rows.push({ rowNumber, left, right: right.reverse() });
-      rowNumber++;
-    }
+  const previewCapacityTotal = useMemo(
+    () => selectedTemplateItems.filter((item) => !item.is_blocked).length,
+    [selectedTemplateItems],
+  );
 
-    // Comentário: limitamos a visualização para manter o modal compacto sem perder noção do layout.
-    const maxRowsVisible = 10;
-    const visibleRows = rows.slice(0, maxRowsVisible);
+  const getPreviewItemByCoord = (floor: number, row: number, column: number) => {
+    return selectedTemplateItems.find(
+      (item) => item.floor_number === floor && item.row_number === row && item.column_number === column,
+    );
+  };
 
-    return {
-      visibleRows,
-      hiddenRowsCount: Math.max(rows.length - maxRowsVisible, 0),
-    };
-  }, [form.capacity, form.seats_left_side, form.seats_right_side]);
+  const fetchTemplateItems = async (templateLayoutId: string) => {
+    if (!templateLayoutId || templateItemsByLayoutId[templateLayoutId]) return;
+    const { data, error } = await supabase
+      .from('template_layout_items')
+      .select('floor_number, row_number, column_number, seat_number, category, tags, is_blocked')
+      .eq('template_layout_id', templateLayoutId)
+      .order('floor_number')
+      .order('row_number')
+      .order('column_number');
+
+    if (error) return;
+
+    setTemplateItemsByLayoutId((prev) => ({
+      ...prev,
+      [templateLayoutId]: (data ?? []) as TemplatePreviewItem[],
+    }));
+  };
 
   const fetchTemplateItems = async (templateLayoutId: string) => {
     if (!templateLayoutId || templateItemsByLayoutId[templateLayoutId]) return;
@@ -1024,46 +1071,55 @@ export default function Fleet() {
                           <div className="mt-5 space-y-2">
                             <Label>Prévia do layout (visão superior)</Label>
                             <div className="rounded-lg border bg-muted/20 p-3">
-                              {selectedTemplate && seatLayoutPreview ? (
-                                <div className="mx-auto w-full max-w-[420px]">
-                                  <div className="rounded-xl border bg-background/80 p-3">
-                                    <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                                      <span>Motorista</span>
-                                      <span>Layout {form.seats_left_side}x{form.seats_right_side}</span>
+                              {selectedTemplate ? (
+                                <div className="space-y-4">
+                                  <div className="space-y-3 rounded-md border p-3">
+                                    <p className="text-sm text-muted-foreground">Capacidade total: {previewCapacityTotal} assentos</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {TEMPLATE_PREVIEW_CATEGORIES.map((category) => (
+                                        <Badge key={category} className={TEMPLATE_PREVIEW_CATEGORY_COLORS[category]}>
+                                          {category}: {previewCategoryTotals[category]}
+                                        </Badge>
+                                      ))}
+                                      <Badge variant="outline">Bloqueados: {previewBlockedTotal}</Badge>
                                     </div>
+                                  </div>
 
-                                    <div className="space-y-1.5">
-                                      {seatLayoutPreview.visibleRows.map((row) => (
-                                        <div key={row.rowNumber} className="flex items-center justify-center gap-1">
-                                          <div className="flex gap-1">
-                                            {row.left.map((seatNumber, index) => (
-                                              <div key={`left-${row.rowNumber}-${index}`} className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-[10px] font-semibold">
-                                                {seatNumber ?? ''}
-                                              </div>
-                                            ))}
-                                          </div>
-                                          <div className="mx-1 h-6 w-5 border-x border-dashed border-border/80" />
-                                          <div className="flex gap-1">
-                                            {row.right.map((seatNumber, index) => (
-                                              <div key={`right-${row.rowNumber}-${index}`} className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-[10px] font-semibold">
-                                                {seatNumber ?? ''}
-                                              </div>
-                                            ))}
+                                  {/* Comentário: Prévia do layout na frota reutiliza o preview oficial do template para garantir fidelidade visual e evitar divergência entre cadastro e operação. */}
+                                  <div className="max-h-[520px] space-y-4 overflow-auto pr-1">
+                                    {previewFloorLabels.map((floor) => (
+                                      <div key={floor} className="rounded-md border p-3">
+                                        <p className="mb-3 text-sm font-medium">{floor === 1 ? 'Pavimento Inferior' : 'Pavimento Superior'}</p>
+                                        <div className="overflow-x-auto">
+                                          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${selectedTemplate.grid_columns}, minmax(44px, 1fr))` }}>
+                                            {previewRowIndexes.flatMap((row) => previewColumnIndexes.map((column) => {
+                                              const cell = getPreviewItemByCoord(floor, row, column);
+
+                                              if (!cell) {
+                                                return <div key={`${floor}-${row}-${column}`} className="h-12 rounded border border-dashed bg-muted/20" />;
+                                              }
+
+                                              if (cell.is_blocked) {
+                                                return <div key={`${floor}-${row}-${column}`} className="flex h-12 items-center justify-center rounded border bg-muted text-xs text-muted-foreground">BLOQ</div>;
+                                              }
+
+                                              const colorClass = TEMPLATE_PREVIEW_CATEGORY_COLORS[cell.category ?? 'convencional'];
+
+                                              return (
+                                                <div key={`${floor}-${row}-${column}`} className={`flex h-12 items-center justify-center rounded border text-xs ${colorClass}`}>
+                                                  {cell.seat_number ?? 'ASS'}
+                                                </div>
+                                              );
+                                            }))}
                                           </div>
                                         </div>
-                                      ))}
-                                    </div>
-
-                                    {seatLayoutPreview.hiddenRowsCount > 0 && (
-                                      <p className="mt-2 text-center text-xs text-muted-foreground">
-                                        +{seatLayoutPreview.hiddenRowsCount} fileira(s) não exibida(s) na prévia
-                                      </p>
-                                    )}
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               ) : (
                                 <p className="text-sm text-muted-foreground">
-                                  Selecione um Template Oficial para ver a prévia.
+                                  Selecione um Template Oficial para visualizar o layout completo.
                                 </p>
                               )}
                             </div>
