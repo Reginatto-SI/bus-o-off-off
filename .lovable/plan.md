@@ -1,147 +1,94 @@
 
 
-# Evolução Estrutural — Categoria de Assento (Double Decker)
+# Equalização Crítica: Templates → Frota → Eventos → Checkout
 
-## Escopo
+## Correções imediatas (build errors)
 
-Adicionar `category` aos assentos, evoluir cadastro de frota para configuração por pavimento/categoria, diferenciar visualmente no mapa e exibir pavimento+categoria no ticket.
-
----
-
-## 1. Migração de Banco de Dados
-
-**Nova coluna `seats.category`:**
-```sql
-ALTER TABLE public.seats
-  ADD COLUMN category text NOT NULL DEFAULT 'convencional';
-```
-
-Valores possíveis: `convencional`, `executivo`, `leito`, `semi_leito`. Sem enum rígido — campo texto com default `convencional`. Permite extensão futura sem migração.
-
-Veículos e assentos existentes: todos recebem `convencional` automaticamente via DEFAULT. Zero migração manual.
+Dois erros de build em `TemplatesLayout.tsx` (linhas 504 e 597): `.endswith()` deve ser `.endsWith()` (case-sensitive JavaScript).
 
 ---
 
-## 2. Tipo TypeScript (`src/types/database.ts`)
+## P0 — Mudanças Críticas
 
-- Adicionar `SeatCategory` type: `'convencional' | 'executivo' | 'leito' | 'semi_leito'`
-- Adicionar `category: SeatCategory` à interface `Seat`
+### 1) Remover fallback `generateSeatLayout` do Checkout
 
----
+**Arquivo:** `src/pages/public/Checkout.tsx`
 
-## 3. Cadastro de Frota (`src/pages/admin/Fleet.tsx`)
+- Remover a função `generateSeatLayout` (linhas 68-124) e todo o bloco `else` (linhas 314-359) que cria assentos localmente quando não existem.
+- Novo comportamento: se `existingSeats.length === 0`, exibir estado de erro amigável ("Layout do veículo ainda não foi configurado. Entre em contato com o organizador.") e impedir seleção.
+- O mapa de assentos só renderiza a partir de `seats` materializados no banco.
 
-### Aba "Capacidade" — Evolução
+### 2) Sincronização idempotente `layout_snapshot → seats`
 
-Quando `floors === 2`:
-- Exibir seção "Configuração por Pavimento"
-- Para cada pavimento, permitir definir **setores** (ex: 8 Leito + 40 Convencional no piso superior, 12 Executivo no piso inferior)
-- Interface: lista de setores com campos `categoria` (select) + `quantidade` (input number)
-- Botão "Adicionar Setor" por pavimento
-- Validação: soma total dos setores = capacidade do veículo
+**Arquivo:** `src/pages/admin/Fleet.tsx` (dentro do `handleSubmit`)
 
-Quando `floors === 1`:
-- Comportamento atual mantido
-- Categoria padrão: Convencional para todos
+Após salvar o veículo com sucesso (insert ou update que altere template/snapshot):
 
-### Preview do Layout
-- Colorir assentos por categoria na prévia (cores diferenciadas por categoria)
-- Legenda de cores abaixo da prévia
+1. Ler `layout_snapshot.items` do veículo recém-salvo.
+2. Buscar `seats` existentes do `vehicle_id`.
+3. Para cada item do snapshot:
+   - Se existe seat na mesma posição (`floor`, `row_number`, `column_number`): atualizar `label`, `category`, `status` (bloqueado/disponivel).
+   - Se não existe: inserir.
+4. Para seats que existem no banco mas não no snapshot: deletar (se não tiver tickets vinculados) ou marcar como bloqueado.
+5. Atualizar `vehicle.capacity` = contagem de assentos não-bloqueados do snapshot.
 
-### Persistência
-- `vehicleData` passa a incluir informação de setores como metadado (para regeneração de assentos)
-- Ao salvar veículo (novo ou edição), regenerar assentos com `category` correto
+Criar função utilitária `syncSeatsFromSnapshot(vehicleId, companyId, snapshot)` inline no Fleet.tsx (sem novo arquivo).
 
----
+### 3) Capacidade travada pelo layout
 
-## 4. Geração de Assentos (`generateSeatLayout`)
+**Arquivo:** `src/pages/admin/Fleet.tsx`
+- Quando veículo tem `template_layout_id` ou `layout_snapshot`, o campo `capacity` fica readonly e é calculado automaticamente (contagem de itens não-bloqueados do snapshot).
+- Exibir texto: "Capacidade calculada pelo layout: X assentos".
 
-**Checkout (`src/pages/public/Checkout.tsx`)** e **Fleet preview:**
-- Função `generateSeatLayout` recebe novo parâmetro: `sectors: { category: string; quantity: number; floor: number }[]`
-- Gera assentos respeitando ordem dos setores por pavimento
-- Numeração sequencial única contínua (1, 2, 3...)
-- Cada assento recebe `category` do setor correspondente
+**Arquivo:** `src/pages/admin/EventDetail.tsx`
+- Ao selecionar veículo na criação de trip, preencher `capacity` automaticamente com `vehicle.capacity` e tornar o campo readonly (remover edição manual de capacidade).
 
----
+### 4) Categoria `leito_cama` completa
 
-## 5. Mapa de Assentos — Diferenciação Visual
+**Arquivo:** `src/types/database.ts`
+- Alterar `SeatCategory` para incluir `leito_cama`:
+  ```ts
+  export type SeatCategory = 'convencional' | 'executivo' | 'leito' | 'semi_leito' | 'leito_cama';
+  ```
 
-### `SeatButton` (`src/components/public/SeatButton.tsx`)
-- Aceitar prop `category?: string`
-- Quando `state === 'available'`, aplicar borda/cor de fundo sutil por categoria:
-  - `leito`: borda dourada / fundo amarelo sutil
-  - `executivo`: borda verde / fundo verde sutil
-  - `convencional`: comportamento atual (cinza)
-  - `semi_leito`: borda azul / fundo azul sutil
+**Arquivo:** `src/components/public/SeatButton.tsx`
+- Adicionar estilo para `leito_cama`: `'leito_cama': 'border-rose-500 bg-rose-50'`
 
-### `SeatMap` (`src/components/public/SeatMap.tsx`)
-- Passar `category` de cada `Seat` para `SeatButton`
+**Arquivo:** `src/components/public/SeatLegend.tsx`
+- Adicionar label e cor para `leito_cama`.
 
-### `SeatLegend` (`src/components/public/SeatLegend.tsx`)
-- Adicionar seção "Categorias" quando veículo tiver múltiplas categorias
-- Exibir badge colorido + nome da categoria
+**Arquivo:** `src/lib/ticketVisualRenderer.ts` e `src/components/public/TicketCard.tsx`
+- Adicionar `leito_cama: 'Leito Cama'` nos maps de labels de categoria.
 
 ---
 
-## 6. Resumo de Compra (Checkout)
+## P1 — Ajustes Importantes
 
-Na etapa de confirmação do Checkout:
-- Exibir para cada assento selecionado:
-  - `Assento 12 — Piso Superior — Leito`
-- Traduzir floor: 1 → "Piso Inferior" (se 2 pisos) ou omitir (se 1 piso), 2 → "Piso Superior"
+### 5) Regra unificada de numeração (janela < corredor)
 
----
+Não será criado arquivo novo. A ordenação já existe no snapshot do template — a sincronização respeita a ordem do snapshot. O `SeatMap` já ordena por `row_number`/`column_number` do banco. A fonte de verdade é o template.
 
-## 7. Ticket — TicketCard + Visual Renderer
+### 6) UX somente-leitura quando veículo usa template
 
-### `TicketCardData` (`src/components/public/TicketCard.tsx`)
-- Adicionar campos opcionais: `seatCategory?: string`, `seatFloor?: number`, `vehicleFloors?: number`
-
-### `TicketCard` — Exibição
-- Abaixo de "Assento X", exibir:
-  - Pavimento (se veículo 2 pisos): "Piso Superior" / "Piso Inferior"
-  - Categoria: "Leito" / "Executivo" / "Convencional"
-
-### `ticketVisualRenderer.ts`
-- Na seção "Dados do Passageiro", após `Assento {label}`:
-  - Linha: `Pavimento: Superior` (se 2 pisos)
-  - Linha: `Categoria: Leito`
-
-### `ticketPdfGenerator.ts`
-- Sem alteração direta (usa renderTicketVisual)
-
----
-
-## 8. Consulta de Passagens + Confirmação
-
-Nos locais que montam `TicketCardData` (Confirmation.tsx, TicketLookup.tsx, etc.):
-- Buscar `category` e `floor` do assento (join com seats) e `floors` do veículo
-- Passar para `TicketCardData`
+**Arquivo:** `src/pages/admin/Fleet.tsx`
+- Quando `editingId` e veículo tem `template_layout_id`: campos de layout (capacity, floors, seats_left_side, seats_right_side) ficam readonly.
+- Exibir badge: "Layout vinculado ao template oficial".
+- Não implementar "clone para layout próprio" neste pacote (preparação futura).
 
 ---
 
 ## Arquivos Afetados
 
-| Arquivo | Tipo |
-|---------|------|
-| Migração SQL | Nova coluna `seats.category` |
-| `src/types/database.ts` | Tipo `SeatCategory`, campo em `Seat` |
-| `src/pages/admin/Fleet.tsx` | Configuração de setores por pavimento |
-| `src/pages/public/Checkout.tsx` | `generateSeatLayout` com categorias, resumo |
-| `src/components/public/SeatButton.tsx` | Prop `category`, cores |
-| `src/components/public/SeatMap.tsx` | Passa `category` |
-| `src/components/public/SeatLegend.tsx` | Legenda de categorias |
-| `src/components/public/TicketCard.tsx` | Campos e exibição de pavimento/categoria |
-| `src/lib/ticketVisualRenderer.ts` | Renderização de pavimento/categoria |
-| `src/pages/public/Confirmation.tsx` | Montar dados de categoria no ticket |
-| `src/pages/public/TicketLookup.tsx` | Montar dados de categoria no ticket |
-
----
-
-## Compatibilidade
-
-- Veículos existentes: `category = 'convencional'` automático (DEFAULT)
-- Assentos já criados: recebem `convencional` sem migração
-- 1 pavimento: comportamento idêntico ao atual
-- RLS: sem alteração (coluna na mesma tabela `seats`, políticas existentes cobrem)
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/admin/TemplatesLayout.tsx` | Fix `.endswith` → `.endsWith` (2 ocorrências) |
+| `src/pages/public/Checkout.tsx` | Remover `generateSeatLayout` e fallback; estado de erro |
+| `src/pages/admin/Fleet.tsx` | Sincronização seats, capacity readonly, UX template |
+| `src/pages/admin/EventDetail.tsx` | Capacity auto-preenchida e readonly na trip |
+| `src/types/database.ts` | Adicionar `leito_cama` ao `SeatCategory` |
+| `src/components/public/SeatButton.tsx` | Estilo `leito_cama` |
+| `src/components/public/SeatLegend.tsx` | Label/cor `leito_cama` |
+| `src/components/public/TicketCard.tsx` | Label `leito_cama` |
+| `src/lib/ticketVisualRenderer.ts` | Label `leito_cama` |
+| `src/components/public/SeatMap.tsx` | Remover cast `(seat as any).category` (já tipado) |
 
