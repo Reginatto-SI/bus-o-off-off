@@ -227,6 +227,9 @@ export default function Fleet() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [templateLayouts, setTemplateLayouts] = useState<TemplateLayout[]>([]);
+  const [templateItemsByLayoutId, setTemplateItemsByLayoutId] = useState<
+    Record<string, Array<{ floor_number: number; row_number: number; column_number: number; seat_number: string | null; is_blocked: boolean }>>
+  >({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
@@ -347,6 +350,74 @@ export default function Fleet() {
   }, [filters]);
 
 
+  const selectedTemplate = useMemo(
+    () => templateLayouts.find((template) => template.id === form.template_layout_id) ?? null,
+    [templateLayouts, form.template_layout_id],
+  );
+
+  const templateDetailSummary = useMemo(() => {
+    if (!selectedTemplate) return null;
+
+    const templateItems = templateItemsByLayoutId[selectedTemplate.id] ?? [];
+    const totalCapacityFromItems = templateItems.filter((item) => !item.is_blocked && item.seat_number).length;
+
+    // Comentário: quando o template ainda não carregou itens, usamos os dados persistidos no veículo como fallback.
+    const fallbackCapacity = Number.parseInt(form.capacity, 10);
+    const totalCapacity = totalCapacityFromItems > 0 ? totalCapacityFromItems : (Number.isNaN(fallbackCapacity) ? 0 : fallbackCapacity);
+
+    // Comentário: na ausência de metadado explícito de configuração, derivamos 2x2/2x1 pela largura do grid.
+    const gridColumns = selectedTemplate.grid_columns;
+    let leftSide = 1;
+    let rightSide = 1;
+    if (gridColumns >= 3 && gridColumns % 2 === 1) {
+      leftSide = (gridColumns - 1) / 2;
+      rightSide = (gridColumns - 1) / 2;
+    } else if (gridColumns >= 4 && gridColumns % 2 === 0) {
+      leftSide = gridColumns / 2;
+      rightSide = gridColumns / 2;
+    }
+
+    return {
+      capacity: totalCapacity,
+      floors: selectedTemplate.floors,
+      leftSide,
+      rightSide,
+      configurationLabel: `${leftSide}x${rightSide}`,
+      description: selectedTemplate.description,
+      imageUrl: selectedTemplate.image_url,
+    };
+  }, [selectedTemplate, templateItemsByLayoutId, form.capacity]);
+
+  // Comentário: Aba Capacidade agora é exclusiva para Template Oficial para evitar inconsistência e confusão de cadastro.
+  useEffect(() => {
+    if (!selectedTemplate || !templateDetailSummary) return;
+    setForm((prev) => {
+      const nextCapacity = String(templateDetailSummary.capacity);
+      const nextFloors = String(templateDetailSummary.floors);
+      const nextLeftSide = String(templateDetailSummary.leftSide);
+      const nextRightSide = String(templateDetailSummary.rightSide);
+
+      if (
+        prev.capacity === nextCapacity &&
+        prev.floors === nextFloors &&
+        prev.seats_left_side === nextLeftSide &&
+        prev.seats_right_side === nextRightSide &&
+        prev.clone_vehicle_id === ''
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        capacity: nextCapacity,
+        floors: nextFloors,
+        seats_left_side: nextLeftSide,
+        seats_right_side: nextRightSide,
+        clone_vehicle_id: '',
+      };
+    });
+  }, [selectedTemplate, templateDetailSummary]);
+
   const seatLayoutPreview = useMemo(() => {
     const capacity = Number.parseInt(form.capacity, 10);
     const leftSide = Number.parseInt(form.seats_left_side, 10);
@@ -385,6 +456,24 @@ export default function Fleet() {
       hiddenRowsCount: Math.max(rows.length - maxRowsVisible, 0),
     };
   }, [form.capacity, form.seats_left_side, form.seats_right_side]);
+
+  const fetchTemplateItems = async (templateLayoutId: string) => {
+    if (!templateLayoutId || templateItemsByLayoutId[templateLayoutId]) return;
+    const { data, error } = await supabase
+      .from('template_layout_items')
+      .select('floor_number, row_number, column_number, seat_number, is_blocked')
+      .eq('template_layout_id', templateLayoutId)
+      .order('floor_number')
+      .order('row_number')
+      .order('column_number');
+
+    if (error) return;
+
+    setTemplateItemsByLayoutId((prev) => ({
+      ...prev,
+      [templateLayoutId]: (data ?? []) as Array<{ floor_number: number; row_number: number; column_number: number; seat_number: string | null; is_blocked: boolean }>,
+    }));
+  };
 
   // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchTemplateLayouts = async () => {
@@ -434,6 +523,12 @@ export default function Fleet() {
     if (activeCompanyId) fetchVehicles();
   }, [activeCompanyId]);
 
+  useEffect(() => {
+    if (form.template_layout_id) {
+      fetchTemplateItems(form.template_layout_id);
+    }
+  }, [form.template_layout_id]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -452,9 +547,6 @@ export default function Fleet() {
     }
 
     const yearModel = form.year_model ? Number.parseInt(form.year_model, 10) : null;
-    const capacity = Number.parseInt(form.capacity, 10);
-    const seatsLeftSide = Number.parseInt(form.seats_left_side, 10);
-    const seatsRightSide = Number.parseInt(form.seats_right_side, 10);
     const normalizedPlate = form.plate.trim().toUpperCase();
     const isAdmin = isGerente || isOperador;
 
@@ -465,11 +557,24 @@ export default function Fleet() {
       return;
     }
 
-    if (!editingId && !form.template_layout_id) {
-      toast.error('Selecione um template oficial de layout para novos veículos');
+    if (!form.template_layout_id) {
+      toast.error('Selecione um template oficial de layout para o veículo');
       setSaving(false);
       return;
     }
+
+    const templateForVehicle = templateLayouts.find((template) => template.id === form.template_layout_id);
+    if (!templateForVehicle) {
+      toast.error('Template oficial inválido. Selecione um layout válido');
+      setSaving(false);
+      return;
+    }
+
+    const templateItems = templateItemsByLayoutId[templateForVehicle.id] ?? [];
+    const derivedCapacity = templateItems.filter((item) => !item.is_blocked && item.seat_number).length;
+    const capacity = derivedCapacity > 0 ? derivedCapacity : Number.parseInt(form.capacity, 10);
+    const seatsLeftSide = Number.parseInt(form.seats_left_side, 10);
+    const seatsRightSide = Number.parseInt(form.seats_right_side, 10);
 
     if (!normalizedPlate) {
       console.warn('Validação de veículo: placa ausente no modal de frota.');
@@ -515,16 +620,6 @@ export default function Fleet() {
       template_layout_version: null,
       company_id: activeCompanyId,
     };
-
-    // Comentário: se escolher clonar veículo existente, priorizamos o snapshot já consolidado desse veículo.
-    if (!editingId && form.clone_vehicle_id) {
-      const sourceVehicle = vehicles.find((vehicle) => vehicle.id === form.clone_vehicle_id);
-      if (sourceVehicle?.layout_snapshot) {
-        vehicleData.layout_snapshot = sourceVehicle.layout_snapshot;
-        vehicleData.template_layout_id = sourceVehicle.template_layout_id;
-        vehicleData.template_layout_version = sourceVehicle.template_layout_version;
-      }
-    }
 
     // Comentário: ao criar veículo, copiamos snapshot do template para evitar quebra em versões futuras.
     if (!editingId && form.template_layout_id && !vehicleData.layout_snapshot) {
@@ -854,8 +949,9 @@ export default function Fleet() {
                         </TabsContent>
 
                         <TabsContent value="capacidade" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                            <div className="space-y-2 xl:col-span-2">
+                          {/* Comentário: Aba Capacidade agora é exclusiva para Template Oficial para evitar inconsistência e confusão de cadastro. */}
+                          <div className="grid gap-4 xl:grid-cols-2">
+                            <div className="space-y-2">
                               <Label>Layout do Veículo (Template Oficial)</Label>
                               <Select
                                 value={form.template_layout_id || 'none'}
@@ -865,7 +961,7 @@ export default function Fleet() {
                                   <SelectValue placeholder="Selecione o template" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="none">Sem template</SelectItem>
+                                  <SelectItem value="none">Selecione um template oficial</SelectItem>
                                   {templateLayouts.map((template) => (
                                     <SelectItem key={template.id} value={template.id}>
                                       {template.name}
@@ -874,103 +970,61 @@ export default function Fleet() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="space-y-2 xl:col-span-2">
-                              <Label>Clonar layout de outro veículo (opcional)</Label>
-                              <Select
-                                value={form.clone_vehicle_id || 'none'}
-                                onValueChange={(value) => setForm({ ...form, clone_vehicle_id: value === 'none' ? '' : value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o veículo" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">Não clonar</SelectItem>
-                                  {vehicles.map((vehicle) => (
-                                    <SelectItem key={vehicle.id} value={vehicle.id}>
-                                      {vehicle.plate} • {vehicle.model ?? 'Modelo'}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {/* Comentário P0: quando veículo tem template/snapshot, capacidade é calculada e readonly */}
-                            {editingId && form.template_layout_id && (
-                              <div className="xl:col-span-4">
-                                <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
-                                  <CheckCircle className="h-4 w-4 shrink-0" />
-                                  <span>Layout vinculado ao template oficial. Capacidade e geometria são controlados pelo template.</span>
-                                </div>
+
+                            <div className="rounded-lg border bg-muted/20 p-4">
+                              <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+                                <CheckCircle className="h-4 w-4 text-primary" />
+                                <span>Detalhes do Template</span>
                               </div>
-                            )}
-                            <div className="space-y-2">
-                              <Label htmlFor="capacity">Capacidade máxima</Label>
-                              <Input
-                                id="capacity"
-                                type="number"
-                                min="1"
-                                value={form.capacity}
-                                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                                placeholder="46"
-                                required
-                                readOnly={!!(editingId && form.template_layout_id)}
-                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
-                              />
-                              {editingId && form.template_layout_id && (
-                                <p className="text-xs text-muted-foreground">Capacidade calculada pelo layout</p>
+                              <p className="mb-3 text-xs text-muted-foreground">
+                                Derivado do Template Oficial (não editável aqui).
+                              </p>
+                              {selectedTemplate && templateDetailSummary ? (
+                                <div className="space-y-3 text-sm">
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    <div className="rounded-md border bg-background p-2">
+                                      <p className="text-xs text-muted-foreground">Capacidade total</p>
+                                      <p className="font-medium">{templateDetailSummary.capacity}</p>
+                                    </div>
+                                    <div className="rounded-md border bg-background p-2">
+                                      <p className="text-xs text-muted-foreground">Pavimentos</p>
+                                      <p className="font-medium">{templateDetailSummary.floors}</p>
+                                    </div>
+                                    <div className="rounded-md border bg-background p-2 sm:col-span-2">
+                                      <p className="text-xs text-muted-foreground">Configuração</p>
+                                      <p className="font-medium">{templateDetailSummary.configurationLabel}</p>
+                                    </div>
+                                  </div>
+                                  {templateDetailSummary.description && (
+                                    <div>
+                                      <p className="text-xs text-muted-foreground">Descrição</p>
+                                      <p>{templateDetailSummary.description}</p>
+                                    </div>
+                                  )}
+                                  {templateDetailSummary.imageUrl && (
+                                    <div className="space-y-1">
+                                      <p className="text-xs text-muted-foreground">Imagem de referência</p>
+                                      <img
+                                        src={templateDetailSummary.imageUrl}
+                                        alt={`Template ${selectedTemplate.name}`}
+                                        className="h-28 w-full rounded-md border object-cover"
+                                        loading="lazy"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  Selecione um Template Oficial para visualizar os detalhes derivados.
+                                </p>
                               )}
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="floors">Pavimentos</Label>
-                              <Select
-                                value={form.floors}
-                                onValueChange={(v) => setForm({ ...form, floors: v })}
-                                disabled={!!(editingId && form.template_layout_id)}
-                              >
-                                <SelectTrigger className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="1">1 Pavimento</SelectItem>
-                                  <SelectItem value="2">2 Pavimentos (Double Decker)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="seats_left_side">Fileiras lado esquerdo</Label>
-                              <Input
-                                id="seats_left_side"
-                                type="number"
-                                min="1"
-                                max="4"
-                                value={form.seats_left_side}
-                                onChange={(e) => setForm({ ...form, seats_left_side: e.target.value })}
-                                placeholder="2"
-                                required
-                                readOnly={!!(editingId && form.template_layout_id)}
-                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="seats_right_side">Fileiras lado direito</Label>
-                              <Input
-                                id="seats_right_side"
-                                type="number"
-                                min="1"
-                                max="4"
-                                value={form.seats_right_side}
-                                onChange={(e) => setForm({ ...form, seats_right_side: e.target.value })}
-                                placeholder="2"
-                                required
-                                readOnly={!!(editingId && form.template_layout_id)}
-                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
-                              />
                             </div>
                           </div>
 
                           <div className="mt-5 space-y-2">
                             <Label>Prévia do layout (visão superior)</Label>
                             <div className="rounded-lg border bg-muted/20 p-3">
-                              {seatLayoutPreview ? (
+                              {selectedTemplate && seatLayoutPreview ? (
                                 <div className="mx-auto w-full max-w-[420px]">
                                   <div className="rounded-xl border bg-background/80 p-3">
                                     <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
@@ -1009,7 +1063,7 @@ export default function Fleet() {
                                 </div>
                               ) : (
                                 <p className="text-sm text-muted-foreground">
-                                  Informe capacidade e fileiras válidas para visualizar a simulação.
+                                  Selecione um Template Oficial para ver a prévia.
                                 </p>
                               )}
                             </div>
