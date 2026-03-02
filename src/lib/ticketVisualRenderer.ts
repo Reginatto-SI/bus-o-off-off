@@ -184,7 +184,7 @@ export async function renderTicketVisual(
     ctx.fillText(`Pavimento: ${ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}`, cardX + 34, y);
   }
 
-  const categoryLabels: Record<string, string> = { leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', convencional: 'Convencional' };
+  const categoryLabels: Record<string, string> = { leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', leito_cama: 'Leito Cama', convencional: 'Convencional' };
   if (ticket.seatCategory && ticket.seatCategory !== 'convencional') {
     y += 28;
     ctx.fillText(`Categoria: ${categoryLabels[ticket.seatCategory] || ticket.seatCategory}`, cardX + 34, y);

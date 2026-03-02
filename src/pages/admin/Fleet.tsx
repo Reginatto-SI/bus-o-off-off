@@ -95,6 +95,127 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
 };
 
 
+// Comentário P0: sincronização idempotente layout_snapshot → seats.
+// Garante que assentos no banco reflitam exatamente o snapshot do veículo.
+async function syncSeatsFromSnapshot(
+  vehicleId: string,
+  companyId: string,
+  snapshot: Record<string, any> | null,
+) {
+  if (!snapshot || !snapshot.items || !Array.isArray(snapshot.items)) return;
+
+  const items = snapshot.items as Array<{
+    floor_number: number;
+    row_number: number;
+    column_number: number;
+    seat_number?: string | null;
+    category?: string;
+    is_blocked?: boolean;
+  }>;
+
+  // 1. Buscar seats existentes do veículo
+  const { data: existingSeats } = await supabase
+    .from('seats')
+    .select('id, floor, row_number, column_number')
+    .eq('vehicle_id', vehicleId);
+
+  const existing = existingSeats ?? [];
+  const existingMap = new Map<string, string>();
+  existing.forEach((s) => {
+    existingMap.set(`${s.floor}-${s.row_number}-${s.column_number}`, s.id);
+  });
+
+  // 2. Numerar sequencialmente (items já vêm ordenados do snapshot)
+  const nonBlockedItems = items.filter((i) => !i.is_blocked);
+  let seatNumber = 1;
+  const labelMap = new Map<number, string>(); // index → label
+  items.forEach((item, idx) => {
+    if (item.is_blocked) {
+      labelMap.set(idx, item.seat_number || 'X');
+    } else {
+      labelMap.set(idx, item.seat_number || String(seatNumber++));
+    }
+  });
+
+  const toInsert: Array<{
+    vehicle_id: string;
+    company_id: string;
+    label: string;
+    floor: number;
+    row_number: number;
+    column_number: number;
+    status: string;
+    category: string;
+  }> = [];
+
+  const toUpdate: Array<{ id: string; label: string; status: string; category: string }> = [];
+  const processedKeys = new Set<string>();
+
+  items.forEach((item, idx) => {
+    const key = `${item.floor_number}-${item.row_number}-${item.column_number}`;
+    processedKeys.add(key);
+    const label = labelMap.get(idx) || String(idx + 1);
+    const status = item.is_blocked ? 'bloqueado' : 'disponivel';
+    const category = item.category || 'convencional';
+
+    const existingId = existingMap.get(key);
+    if (existingId) {
+      toUpdate.push({ id: existingId, label, status, category });
+    } else {
+      toInsert.push({
+        vehicle_id: vehicleId,
+        company_id: companyId,
+        label,
+        floor: item.floor_number,
+        row_number: item.row_number,
+        column_number: item.column_number,
+        status,
+        category,
+      });
+    }
+  });
+
+  // 3. Seats que existem no banco mas não no snapshot: verificar se têm tickets vinculados
+  const orphanIds = existing
+    .filter((s) => !processedKeys.has(`${s.floor}-${s.row_number}-${s.column_number}`))
+    .map((s) => s.id);
+
+  // 4. Executar operações
+  if (toInsert.length > 0) {
+    await supabase.from('seats').insert(toInsert);
+  }
+
+  for (const upd of toUpdate) {
+    await supabase
+      .from('seats')
+      .update({ label: upd.label, status: upd.status, category: upd.category })
+      .eq('id', upd.id);
+  }
+
+  if (orphanIds.length > 0) {
+    // Verificar se algum tem ticket vinculado
+    const { data: linkedTickets } = await supabase
+      .from('tickets')
+      .select('seat_id')
+      .in('seat_id', orphanIds);
+
+    const linkedSeatIds = new Set((linkedTickets ?? []).map((t) => t.seat_id));
+    const toDelete = orphanIds.filter((id) => !linkedSeatIds.has(id));
+    const toBlock = orphanIds.filter((id) => linkedSeatIds.has(id));
+
+    if (toDelete.length > 0) {
+      await supabase.from('seats').delete().in('id', toDelete);
+    }
+    if (toBlock.length > 0) {
+      await supabase.from('seats').update({ status: 'bloqueado' }).in('id', toBlock);
+    }
+  }
+
+  // 5. Atualizar capacidade do veículo = assentos não bloqueados
+  const calculatedCapacity = nonBlockedItems.length;
+  await supabase.from('vehicles').update({ capacity: calculatedCapacity }).eq('id', vehicleId);
+}
+
 const getSeatSidesByType = (type: Vehicle['type']) => {
   // Comentário: usamos presets brasileiros para acelerar cadastro e manter edição manual quando necessário.
   if (type === 'van') return { seatsLeftSide: '2', seatsRightSide: '1' };
@@ -430,12 +551,15 @@ export default function Fleet() {
       }
     }
 
+    let savedVehicleId = editingId;
     let error;
     if (editingId) {
       const { company_id, ...updateData } = vehicleData;
       ({ error } = await supabase.from('vehicles').update(updateData).eq('id', editingId));
     } else {
-      ({ error } = await supabase.from('vehicles').insert([vehicleData]));
+      const result = await supabase.from('vehicles').insert([vehicleData]).select('id').single();
+      error = result.error;
+      if (result.data) savedVehicleId = result.data.id;
     }
 
     if (error) {
@@ -478,6 +602,15 @@ export default function Fleet() {
         })
       );
     } else {
+      // Comentário P0: sincronizar seats a partir do layout_snapshot após salvar veículo.
+      if (savedVehicleId && vehicleData.layout_snapshot) {
+        try {
+          await syncSeatsFromSnapshot(savedVehicleId, activeCompanyId, vehicleData.layout_snapshot as Record<string, any>);
+        } catch (syncError) {
+          console.error('Erro ao sincronizar assentos:', syncError);
+          toast.error('Veículo salvo, mas houve erro ao sincronizar assentos.');
+        }
+      }
       toast.success(editingId ? 'Veículo atualizado' : 'Veículo cadastrado');
       setDialogOpen(false);
       resetForm();
@@ -760,6 +893,15 @@ export default function Fleet() {
                                 </SelectContent>
                               </Select>
                             </div>
+                            {/* Comentário P0: quando veículo tem template/snapshot, capacidade é calculada e readonly */}
+                            {editingId && form.template_layout_id && (
+                              <div className="xl:col-span-4">
+                                <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
+                                  <CheckCircle className="h-4 w-4 shrink-0" />
+                                  <span>Layout vinculado ao template oficial. Capacidade e geometria são controlados pelo template.</span>
+                                </div>
+                              </div>
+                            )}
                             <div className="space-y-2">
                               <Label htmlFor="capacity">Capacidade máxima</Label>
                               <Input
@@ -770,15 +912,21 @@ export default function Fleet() {
                                 onChange={(e) => setForm({ ...form, capacity: e.target.value })}
                                 placeholder="46"
                                 required
+                                readOnly={!!(editingId && form.template_layout_id)}
+                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
                               />
+                              {editingId && form.template_layout_id && (
+                                <p className="text-xs text-muted-foreground">Capacidade calculada pelo layout</p>
+                              )}
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="floors">Pavimentos</Label>
                               <Select
                                 value={form.floors}
                                 onValueChange={(v) => setForm({ ...form, floors: v })}
+                                disabled={!!(editingId && form.template_layout_id)}
                               >
-                                <SelectTrigger>
+                                <SelectTrigger className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -798,6 +946,8 @@ export default function Fleet() {
                                 onChange={(e) => setForm({ ...form, seats_left_side: e.target.value })}
                                 placeholder="2"
                                 required
+                                readOnly={!!(editingId && form.template_layout_id)}
+                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
                               />
                             </div>
                             <div className="space-y-2">
@@ -811,6 +961,8 @@ export default function Fleet() {
                                 onChange={(e) => setForm({ ...form, seats_right_side: e.target.value })}
                                 placeholder="2"
                                 required
+                                readOnly={!!(editingId && form.template_layout_id)}
+                                className={editingId && form.template_layout_id ? 'bg-muted cursor-not-allowed' : ''}
                               />
                             </div>
                           </div>

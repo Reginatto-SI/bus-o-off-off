@@ -207,7 +207,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 )}
                 {ticket.seatCategory && ticket.seatCategory !== 'convencional' && (
                   <div className="flex items-center gap-2 text-xs">
-                    Categoria: {{ leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', convencional: 'Convencional' }[ticket.seatCategory] || ticket.seatCategory}
+                    Categoria: {{ leito: 'Leito', executivo: 'Executivo', semi_leito: 'Semi-leito', leito_cama: 'Leito Cama', convencional: 'Convencional' }[ticket.seatCategory] || ticket.seatCategory}
                   </div>
                 )}
                 {/* ID da Passagem — para suporte rápido */}

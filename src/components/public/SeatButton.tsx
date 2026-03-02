@@ -26,6 +26,7 @@ const categoryStyles: Record<string, string> = {
   leito: 'border-yellow-500 bg-yellow-50',
   executivo: 'border-emerald-500 bg-emerald-50',
   semi_leito: 'border-blue-500 bg-blue-50',
+  leito_cama: 'border-rose-500 bg-rose-50',
 };
 
 export function SeatButton({ label, state, category, onClick }: SeatButtonProps) {

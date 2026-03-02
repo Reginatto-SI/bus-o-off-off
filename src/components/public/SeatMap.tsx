@@ -52,7 +52,7 @@ export function SeatMap({
 
   const isBlocked = loadingStatus || interactionDisabled;
 
-  const seatCategories = seats.map((s) => ((s as any).category || 'convencional') as SeatCategory);
+  const seatCategories = seats.map((s) => (s.category || 'convencional') as SeatCategory);
 
   const floorSeats = seats
     .filter((s) => s.floor === activeFloor)
@@ -169,7 +169,7 @@ export function SeatMap({
                             key={seat.id}
                             label={seat.label}
                             state={getSeatState(seat)}
-                            category={(seat as any).category as SeatCategory | undefined}
+                            category={seat.category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );
@@ -194,7 +194,7 @@ export function SeatMap({
                             key={seat.id}
                             label={seat.label}
                             state={getSeatState(seat)}
-                            category={(seat as any).category as SeatCategory | undefined}
+                            category={seat.category as SeatCategory | undefined}
                             onClick={() => handleSeatClick(seat.id)}
                           />
                         );

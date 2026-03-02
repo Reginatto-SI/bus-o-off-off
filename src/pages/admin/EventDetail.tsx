@@ -130,6 +130,8 @@ export default function EventDetail() {
     setSavingTrip(true);
 
     const vehicle = vehicles.find((v) => v.id === tripForm.vehicle_id);
+    // Comentário P0: capacidade da trip é sempre herdada do veículo (fonte de verdade do layout).
+    const tripCapacity = vehicle?.capacity || 0;
 
     const { error } = await supabase.from('trips').insert([
       {
@@ -137,7 +139,7 @@ export default function EventDetail() {
         vehicle_id: tripForm.vehicle_id,
         driver_id: tripForm.driver_id,
         departure_time: tripForm.departure_time,
-        capacity: tripForm.capacity ? parseInt(tripForm.capacity) : vehicle?.capacity || 0,
+        capacity: tripCapacity,
         company_id: activeCompanyId!,
       },
     ]);
@@ -305,9 +307,14 @@ export default function EventDetail() {
                         <Label>Veículo</Label>
                         <Select
                           value={tripForm.vehicle_id}
-                          onValueChange={(value) =>
-                            setTripForm({ ...tripForm, vehicle_id: value })
-                          }
+                          onValueChange={(value) => {
+                            const selectedVehicle = vehicles.find((v) => v.id === value);
+                            setTripForm({
+                              ...tripForm,
+                              vehicle_id: value,
+                              capacity: selectedVehicle ? selectedVehicle.capacity.toString() : '',
+                            });
+                          }}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione um veículo" />
@@ -357,12 +364,11 @@ export default function EventDetail() {
                           <Label>Capacidade</Label>
                           <Input
                             type="number"
-                            placeholder="Padrão do veículo"
                             value={tripForm.capacity}
-                            onChange={(e) =>
-                              setTripForm({ ...tripForm, capacity: e.target.value })
-                            }
+                            readOnly
+                            className="bg-muted cursor-not-allowed"
                           />
+                          <p className="text-xs text-muted-foreground">Herdada do veículo selecionado</p>
                         </div>
                       </div>
                       <Button type="submit" className="w-full" disabled={savingTrip}>
