@@ -504,6 +504,24 @@ export default function Fleet() {
     }));
   };
 
+  const fetchTemplateItems = async (templateLayoutId: string) => {
+    if (!templateLayoutId || templateItemsByLayoutId[templateLayoutId]) return;
+    const { data, error } = await supabase
+      .from('template_layout_items')
+      .select('floor_number, row_number, column_number, seat_number, is_blocked')
+      .eq('template_layout_id', templateLayoutId)
+      .order('floor_number')
+      .order('row_number')
+      .order('column_number');
+
+    if (error) return;
+
+    setTemplateItemsByLayoutId((prev) => ({
+      ...prev,
+      [templateLayoutId]: (data ?? []) as Array<{ floor_number: number; row_number: number; column_number: number; seat_number: string | null; is_blocked: boolean }>,
+    }));
+  };
+
   // Guard: não buscar sem empresa ativa (isolamento multi-tenant obrigatório)
   const fetchTemplateLayouts = async () => {
     // Comentário: templates oficiais são globais, por isso não filtramos por empresa nesta consulta.
