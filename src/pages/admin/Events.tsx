@@ -88,6 +88,7 @@ import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { cn } from '@/lib/utils';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { Progress } from '@/components/ui/progress';
+import { useLocation } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -190,6 +191,7 @@ const seatCategoryLabels: Record<string, string> = {
 };
 
 export default function Events() {
+  const location = useLocation();
   const { activeCompanyId, user } = useAuth();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
   const [loading, setLoading] = useState(true);
@@ -457,6 +459,27 @@ export default function Events() {
       document.removeEventListener('visibilitychange', onFocus);
     };
   }, [stripeGateOpen, stripeGatePendingAction, activeCompanyId]);
+  useEffect(() => {
+    // Comentário: permite deep-link de ação rápida do Dashboard sem alterar o fluxo padrão da tela.
+    const params = new URLSearchParams(location.search);
+    if (params.get('novo') !== '1') return;
+
+    const openCreateFromDashboard = async () => {
+      const hasStripe = await checkStripeConnection();
+      if (!hasStripe) {
+        setStripeGatePendingAction('create_event');
+        setStripeGateOpen(true);
+        return;
+      }
+
+      resetForm();
+      setIsCreateWizardMode(true);
+      setDialogOpen(true);
+    };
+
+    openCreateFromDashboard();
+  }, [location.search]);
+
   const hasAtLeastOneFleet = eventTrips.length > 0;
   const hasValidBoarding = eventBoardingLocations.some((boarding) => Boolean(boarding.trip_id));
   const hasTicketsRequirements = parseFloat(form.unit_price || '0') > 0;
