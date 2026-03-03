@@ -50,11 +50,14 @@ type NavigationGroup = {
   id: string;
   label: string;
   items: NavigationItem[];
+  standalone?: boolean;
 };
 
 const navigationGroups: NavigationGroup[] = [{
   id: 'dashboard',
-  label: 'Início',
+  label: 'Dashboard',
+  // O Dashboard é tratado como entrada principal isolada na navegação.
+  standalone: true,
   items: [{
     name: 'Dashboard',
     href: '/admin/dashboard',
@@ -314,19 +317,21 @@ export function AdminSidebar() {
           <div className="space-y-4">
             {visibleGroups.map(group => (
               <div key={group.id} className="space-y-1">
-                {/* Cabeçalho funciona como accordion somente no menu expandido. */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.id)}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-sm font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                  aria-expanded={Boolean(openGroups[group.id])}
-                >
-                  {/* Tamanho alinhado com o padrão tipográfico dos itens de navegação para melhorar legibilidade. */}
-                  <span>{group.label}</span>
-                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openGroups[group.id] ? 'rotate-0' : '-rotate-90')} />
-                </button>
+                {!group.standalone && (
+                  /* Cabeçalho funciona como accordion somente no menu expandido. */
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.id)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-sm font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                    aria-expanded={Boolean(openGroups[group.id])}
+                  >
+                    {/* Tamanho alinhado com o padrão tipográfico dos itens de navegação para melhorar legibilidade. */}
+                    <span>{group.label}</span>
+                    <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openGroups[group.id] ? 'rotate-0' : '-rotate-90')} />
+                  </button>
+                )}
 
-                {openGroups[group.id] && group.items.map((item, index) => {
+                {(group.standalone || openGroups[group.id]) && group.items.map((item, index) => {
                   const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
                   const itemKey = `${group.id}-${item.href ?? item.name}-${index}`;
 
