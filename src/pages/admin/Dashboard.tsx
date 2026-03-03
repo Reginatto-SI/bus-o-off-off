@@ -14,6 +14,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -36,7 +37,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { formatCurrencyBRL } from '@/lib/currency';
+import { normalizePublicSlug } from '@/lib/publicSlug';
+import { toast } from 'sonner';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares
@@ -106,8 +108,26 @@ function formatPercent(value: number | null) {
    ═══════════════════════════════════════════════════ */
 
 export default function Dashboard() {
-  const { activeCompanyId, canViewFinancials } = useAuth();
+  const { activeCompanyId, activeCompany, canViewFinancials } = useAuth();
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>(30);
+
+  // Comentário: reaproveita o mesmo padrão de nick público usado no restante do admin.
+  const normalizedPublicSlug = useMemo(() => normalizePublicSlug(activeCompany?.public_slug ?? ''), [activeCompany?.public_slug]);
+  const publicShowcaseUrl = useMemo(
+    () => (normalizedPublicSlug ? `${window.location.origin}/${normalizedPublicSlug}` : null),
+    [normalizedPublicSlug]
+  );
+
+  const handleOpenPublicShowcase = () => {
+    if (!publicShowcaseUrl) {
+      toast.warning('Configure o link da sua vitrine em /admin/empresa antes de acessar.');
+      navigate('/admin/empresa');
+      return;
+    }
+
+    window.open(publicShowcaseUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const dateFrom = useMemo(() => subDays(startOfDay(new Date()), period).toISOString(), [period]);
   const today = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
@@ -354,16 +374,27 @@ export default function Dashboard() {
           title="Dashboard"
           description="Visão geral da operação e vendas"
           actions={
-            <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Últimos 7 dias</SelectItem>
-                <SelectItem value="30">Últimos 30 dias</SelectItem>
-                <SelectItem value="90">Últimos 90 dias</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button asChild>
+                {/* Comentário: querystring sinaliza para a tela de eventos abrir com foco em criação. */}
+                <Link to="/admin/eventos?novo=1">+ Novo Evento</Link>
+              </Button>
+
+              <Button variant="outline" onClick={handleOpenPublicShowcase}>
+                Abrir vitrine pública
+              </Button>
+
+              <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30">Últimos 30 dias</SelectItem>
+                  <SelectItem value="90">Últimos 90 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           }
         />
 
