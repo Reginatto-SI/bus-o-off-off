@@ -137,6 +137,44 @@ async function syncSeatsFromSnapshot(
     is_blocked?: boolean;
   }>;
 
+  // === FASE 0: Limpar lixo técnico (_legacy_ e _tmp_) sem tickets vinculados ===
+  // Isso evita acúmulo progressivo de seats fantasmas a cada re-sync.
+  {
+    // Buscar todos os seats técnicos do veículo
+    const { data: techSeats } = await supabase
+      .from('seats')
+      .select('id, label')
+      .eq('vehicle_id', vehicleId)
+      .or('label.ilike._legacy_%,label.ilike._tmp_%');
+
+    if (techSeats && techSeats.length > 0) {
+      const techIds = techSeats.map((s) => s.id);
+
+      // Verificar quais têm tickets vinculados
+      const { data: linkedTickets } = await supabase
+        .from('tickets')
+        .select('seat_id')
+        .in('seat_id', techIds);
+
+      const linkedIds = new Set((linkedTickets ?? []).filter((t) => t.seat_id).map((t) => t.seat_id!));
+      const toClean = techIds.filter((id) => !linkedIds.has(id));
+
+      if (toClean.length > 0) {
+        const { error: cleanErr } = await supabase
+          .from('seats')
+          .delete()
+          .in('id', toClean);
+
+        if (cleanErr) {
+          result.errors.push(`Erro ao limpar seats técnicos: ${cleanErr.message}`);
+        } else {
+          result.deleted += toClean.length;
+          console.log(`[syncSeats] FASE 0: removidos ${toClean.length} seats técnicos (_legacy_/_tmp_)`);
+        }
+      }
+    }
+  }
+
   // === FASE 1: Montar estado desejado ===
   // Numerar sequencialmente (items já vêm ordenados do snapshot)
   let seatNumber = 1;
