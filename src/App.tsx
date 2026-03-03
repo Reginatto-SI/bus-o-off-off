@@ -83,6 +83,8 @@ const App = () => (
             <Route path="/motorista/validar" element={<DriverValidate />} />
 
             {/* Admin Panel */}
+            {/* Redireciona a rota base do admin para o dashboard mantendo o layout e guardas atuais. */}
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/admin/dashboard" element={<Dashboard />} />
             <Route path="/admin/eventos" element={<Events />} />
             <Route path="/admin/eventos/:id" element={<EventDetail />} />
