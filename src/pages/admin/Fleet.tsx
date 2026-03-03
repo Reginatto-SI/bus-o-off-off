@@ -645,14 +645,13 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      // Comentário: snapshot é preenchido no momento da criação para preservar o layout histórico do veículo.
-      layout_snapshot: null,
-      template_layout_version: null,
+      layout_snapshot: null as Record<string, any> | null,
+      template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
 
-    // Comentário: ao criar veículo, copiamos snapshot do template para evitar quebra em versões futuras.
-    if (!editingId && form.template_layout_id && !vehicleData.layout_snapshot) {
+    // Comentário: sempre gerar snapshot do template (criação E edição) para garantir sincronização de categorias.
+    if (form.template_layout_id) {
       const selectedTemplate = templateLayouts.find((template) => template.id === form.template_layout_id);
       if (selectedTemplate) {
         const { data: snapshotItems } = await supabase
@@ -817,17 +816,68 @@ export default function Fleet() {
     });
   };
 
+  const [resyncing, setResyncing] = useState<string | null>(null);
+
+  const handleResyncSeats = async (vehicle: Vehicle) => {
+    if (!activeCompanyId || !vehicle.template_layout_id) return;
+    setResyncing(vehicle.id);
+    try {
+      const template = templateLayouts.find((t) => t.id === vehicle.template_layout_id);
+      if (!template) {
+        toast.error('Template não encontrado');
+        setResyncing(null);
+        return;
+      }
+
+      const { data: snapshotItems } = await supabase
+        .from('template_layout_items')
+        .select('floor_number, row_number, column_number, seat_number, category, tags, is_blocked')
+        .eq('template_layout_id', template.id)
+        .order('floor_number')
+        .order('row_number')
+        .order('column_number');
+
+      const snapshot = {
+        template_layout_id: template.id,
+        template_name: template.name,
+        template_version: template.current_version,
+        floors: template.floors,
+        grid_rows: template.grid_rows,
+        grid_columns: template.grid_columns,
+        items: snapshotItems ?? [],
+      };
+
+      await supabase.from('vehicles').update({
+        layout_snapshot: snapshot,
+        template_layout_version: template.current_version,
+      }).eq('id', vehicle.id);
+
+      await syncSeatsFromSnapshot(vehicle.id, activeCompanyId, snapshot);
+      toast.success('Assentos re-sincronizados com sucesso');
+      fetchVehicles();
+    } catch (err) {
+      console.error('Erro ao re-sincronizar:', err);
+      toast.error('Erro ao re-sincronizar assentos');
+    }
+    setResyncing(null);
+  };
+
   const getVehicleActions = (vehicle: Vehicle): ActionItem[] => [
     {
       label: 'Editar',
       icon: Pencil,
       onClick: () => handleEdit(vehicle),
     },
+    ...(vehicle.template_layout_id ? [{
+      label: 'Re-sincronizar assentos',
+      icon: Bus,
+      onClick: () => handleResyncSeats(vehicle),
+    }] : []),
     {
       label: vehicle.status === 'ativo' ? 'Desativar' : 'Ativar',
       icon: Power,
       onClick: () => handleToggleStatus(vehicle),
-      variant: vehicle.status === 'ativo' ? 'destructive' : 'default',
+      variant: vehicle.status === 'ativo' ? 'destructive' : 'default' as const,
     },
   ];
 
