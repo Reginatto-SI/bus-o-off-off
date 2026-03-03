@@ -95,6 +95,7 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
 
 // Types
 interface EventFilters {
@@ -482,7 +483,7 @@ export default function Events() {
 
   const hasAtLeastOneFleet = eventTrips.length > 0;
   const hasValidBoarding = eventBoardingLocations.some((boarding) => Boolean(boarding.trip_id));
-  const hasTicketsRequirements = parseFloat(form.unit_price || '0') > 0;
+  const hasTicketsRequirements = parseCurrencyInputBRL(form.unit_price) > 0;
 
   const getTabLockMessage = (tabValue: string, persistedEventId?: string | null): string | null => {
     const effectiveEventId = persistedEventId ?? editingId;
@@ -608,7 +609,7 @@ export default function Events() {
     const hasDate = form.date !== '';
     const hasCity = form.city.trim() !== '';
     const hasTrips = eventTrips.length > 0;
-    const hasPrice = parseFloat(form.unit_price || '0') > 0;
+    const hasPrice = parseCurrencyInputBRL(form.unit_price) > 0;
     const hasFeeAcceptance = form.platform_fee_terms_accepted;
     
     // NEW: At least one IDA trip must have boarding (volta is optional)
@@ -1085,7 +1086,7 @@ export default function Events() {
       description: form.description || null,
       public_info: form.public_info || null,
       status: targetStatus,
-      unit_price: parseFloat(form.unit_price || '0'),
+      unit_price: parseCurrencyInputBRL(form.unit_price),
       max_tickets_per_purchase: parseInt(form.max_tickets_per_purchase || '5', 10),
       allow_online_sale: form.allow_online_sale,
       allow_seller_sale: form.allow_seller_sale,
@@ -1169,12 +1170,12 @@ export default function Events() {
     // Persist category prices if enabled
     if (!error && newEventId && form.use_category_pricing) {
       const pricesToUpsert = categoryPrices
-        .filter((cp) => cp.price !== '' && parseFloat(cp.price) >= 0)
+        .filter((cp) => cp.price !== '' && parseCurrencyInputBRL(cp.price) >= 0)
         .map((cp) => ({
           event_id: newEventId,
           company_id: activeCompanyId!,
           category: cp.category,
-          price: parseFloat(cp.price),
+          price: parseCurrencyInputBRL(cp.price),
         }));
 
       if (pricesToUpsert.length > 0) {
@@ -3355,20 +3356,11 @@ export default function Events() {
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
                               <Input
                                 id="unit_price"
-                                type="number"
-                                step="0.01"
-                                min="0"
+                                type="text"
+                                inputMode="numeric"
                                 className="pl-10"
                                 value={form.unit_price}
-                                onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
-                                onBlur={() => {
-                                  if (form.unit_price) {
-                                    const value = parseFloat(form.unit_price);
-                                    if (!isNaN(value)) {
-                                      setForm({ ...form, unit_price: value.toFixed(2) });
-                                    }
-                                  }
-                                }}
+                                onChange={(e) => setForm({ ...form, unit_price: formatCurrencyInputFromDigits(e.target.value) })}
                                 placeholder="0,00"
                                 disabled={isReadOnly}
                               />
@@ -3440,7 +3432,7 @@ export default function Events() {
                                   <Alert>
                                     <AlertTriangle className="h-4 w-4" />
                                     <AlertDescription>
-                                      Nenhum preço por categoria definido. O preço base (R$ {form.unit_price || '0.00'}) será usado para todos os assentos.
+                                      Nenhum preço por categoria definido. O preço base ({formatCurrencyBRL(parseCurrencyInputBRL(form.unit_price))}) será usado para todos os assentos.
                                     </AlertDescription>
                                   </Alert>
                                 )}
@@ -3458,25 +3450,14 @@ export default function Events() {
                                       <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
                                         <Input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
+                                          type="text"
+                                          inputMode="numeric"
                                           className="pl-10 h-9"
                                           value={cp.price}
                                           onChange={(e) => {
                                             setCategoryPrices((prev) =>
-                                              prev.map((item, i) => i === idx ? { ...item, price: e.target.value } : item)
+                                              prev.map((item, i) => i === idx ? { ...item, price: formatCurrencyInputFromDigits(e.target.value) } : item)
                                             );
-                                          }}
-                                          onBlur={() => {
-                                            if (cp.price) {
-                                              const val = parseFloat(cp.price);
-                                              if (!isNaN(val)) {
-                                                setCategoryPrices((prev) =>
-                                                  prev.map((item, i) => i === idx ? { ...item, price: val.toFixed(2) } : item)
-                                                );
-                                              }
-                                            }
                                           }}
                                           placeholder="0,00"
                                           disabled={isReadOnly}
@@ -3484,7 +3465,7 @@ export default function Events() {
                                       </div>
                                       {(!cp.price || cp.price === '') && (
                                         <p className="text-[11px] text-muted-foreground">
-                                          Usará preço base: R$ {form.unit_price || '0.00'}
+                                          Usará preço base: {formatCurrencyBRL(parseCurrencyInputBRL(form.unit_price))}
                                         </p>
                                       )}
                                     </div>
@@ -3579,8 +3560,8 @@ export default function Events() {
                         </div>
 
                         {/* Simulação dinâmica */}
-                        {form.unit_price && parseFloat(form.unit_price) > 0 && (() => {
-                          const basePrice = parseFloat(form.unit_price);
+                        {form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (() => {
+                          const basePrice = parseCurrencyInputBRL(form.unit_price);
                           if (!hasValidCompanyPlatformFee) {
                             return (
                               <Alert variant="destructive">
@@ -3602,20 +3583,20 @@ export default function Events() {
                               <div className="text-sm space-y-1">
                                 <div className="flex justify-between">
                                   <span>Preço base</span>
-                                  <span>R$ {basePrice.toFixed(2)}</span>
+                                  <span>{formatCurrencyBRL(basePrice)}</span>
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
                                   <span>Taxa da plataforma ({companyPlatformFeePercent}%)</span>
-                                  <span>R$ {platformFee.toFixed(2)}</span>
+                                  <span>{formatCurrencyBRL(platformFee)}</span>
                                 </div>
                                 <Separator className="my-1" />
                                 <div className="flex justify-between font-medium">
                                   <span>Preço final ao cliente</span>
-                                  <span>R$ {clientPrice.toFixed(2)}</span>
+                                  <span>{formatCurrencyBRL(clientPrice)}</span>
                                 </div>
                                 <div className="flex justify-between font-medium text-primary">
                                   <span>Valor líquido do organizador</span>
-                                  <span>R$ {organizerNet.toFixed(2)}</span>
+                                  <span>{formatCurrencyBRL(organizerNet)}</span>
                                 </div>
                               </div>
                             </Card>
@@ -3695,11 +3676,11 @@ export default function Events() {
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                       {fee.fee_type === 'fixed'
-                                        ? `R$ ${Number(fee.value).toFixed(2)}`
+                                        ? formatCurrencyBRL(Number(fee.value))
                                         : `${Number(fee.value).toFixed(1)}%`}
                                       {fee.fee_type === 'percent' && form.unit_price && (
                                         <span className="ml-1">
-                                          (≈ R$ {(parseFloat(form.unit_price || '0') * fee.value / 100).toFixed(2)})
+                                          (≈ {formatCurrencyBRL((parseCurrencyInputBRL(form.unit_price) * fee.value / 100))})
                                         </span>
                                       )}
                                     </p>
@@ -3764,26 +3745,26 @@ export default function Events() {
                             <div className="text-sm space-y-0.5">
                               <div className="flex justify-between">
                                 <span>Passagem</span>
-                                <span>R$ {parseFloat(form.unit_price || '0').toFixed(2)}</span>
+                                <span>{formatCurrencyBRL(parseCurrencyInputBRL(form.unit_price))}</span>
                               </div>
                               {eventFees.filter(f => f.is_active).map(fee => {
-                                const basePrice = parseFloat(form.unit_price || '0');
+                                const basePrice = parseCurrencyInputBRL(form.unit_price);
                                 const feeAmount = fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value;
                                 return (
                                   <div key={fee.id} className="flex justify-between text-muted-foreground">
                                     <span>{fee.name}</span>
-                                    <span>+ R$ {feeAmount.toFixed(2)}</span>
+                                    <span>+ {formatCurrencyBRL(feeAmount)}</span>
                                   </div>
                                 );
                               })}
                               <div className="flex justify-between font-medium border-t pt-1 mt-1">
                                 <span>Total por passageiro</span>
-                                <span>R$ {(() => {
-                                  const basePrice = parseFloat(form.unit_price || '0');
+                                <span>{(() => {
+                                  const basePrice = parseCurrencyInputBRL(form.unit_price);
                                   const totalFees = eventFees.filter(f => f.is_active).reduce((sum, fee) => {
                                     return sum + (fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value);
                                   }, 0);
-                                  return (basePrice + totalFees).toFixed(2);
+                                  return formatCurrencyBRL(basePrice + totalFees);
                                 })()}</span>
                               </div>
                             </div>
@@ -3836,7 +3817,7 @@ export default function Events() {
                       </div>
 
                       {/* Resumo Financeiro do Evento */}
-                      {editingId && form.unit_price && parseFloat(form.unit_price) > 0 && (
+                      {editingId && form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (
                         <Card className="p-4">
                           <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                             <DollarSign className="h-4 w-4" />
@@ -3844,7 +3825,7 @@ export default function Events() {
                           </h4>
                           <div className="text-sm space-y-2">
                             {(() => {
-                              const basePrice = parseFloat(form.unit_price);
+                              const basePrice = parseCurrencyInputBRL(form.unit_price);
                               if (!hasValidCompanyPlatformFee) {
                             return (
                               <Alert variant="destructive">
@@ -3864,11 +3845,11 @@ export default function Events() {
                                 <>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Preço ao cliente</span>
-                                    <span className="font-medium">R$ {clientPrice.toFixed(2)}</span>
+                                    <span className="font-medium">{formatCurrencyBRL(clientPrice)}</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Taxa da plataforma ({companyPlatformFeePercent}%)</span>
-                                    <span>R$ {platformFee.toFixed(2)}</span>
+                                    <span>{formatCurrencyBRL(platformFee)}</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Quem paga a taxa</span>
@@ -3877,7 +3858,7 @@ export default function Events() {
                                   <Separator className="my-1" />
                                   <div className="flex justify-between font-medium text-primary">
                                     <span>Valor líquido estimado por ingresso</span>
-                                    <span>R$ {organizerNet.toFixed(2)}</span>
+                                    <span>{formatCurrencyBRL(organizerNet)}</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Canais ativos</span>
@@ -4173,7 +4154,7 @@ export default function Events() {
                     min="0"
                     value={feeForm.value}
                     onChange={(e) => setFeeForm({ ...feeForm, value: e.target.value })}
-                    placeholder={feeForm.fee_type === 'fixed' ? '0.00' : '0.0'}
+                    placeholder={feeForm.fee_type === 'fixed' ? 'R$ 0,00' : '0.0'}
                     required
                   />
                 </div>

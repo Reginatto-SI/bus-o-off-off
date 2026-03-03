@@ -60,6 +60,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDateOnlyBR } from '@/lib/date';
 import { cn } from '@/lib/utils';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 interface ReportFilters {
   search: string;
@@ -432,9 +433,9 @@ export default function SellersCommissionReport() {
     { key: 'total_tickets', label: 'Passagens' },
     ...(canViewFinancials
       ? [
-          { key: 'eligible_revenue', label: 'Receita elegível', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'eligible_revenue', label: 'Receita elegível', format: (v: any) => formatCurrencyBRL(Number(v)) },
           { key: 'commission_percent', label: 'Comissão %', format: (v: any) => `${Number(v).toFixed(2)}%` },
-          { key: 'total_commission', label: 'Comissão total', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'total_commission', label: 'Comissão total', format: (v: any) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
   ];
@@ -447,9 +448,9 @@ export default function SellersCommissionReport() {
     { key: 'quantity', label: 'Quantidade' },
     ...(canViewFinancials
       ? [
-          { key: 'base_amount', label: 'Base da venda', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'base_amount', label: 'Base da venda', format: (v: any) => formatCurrencyBRL(Number(v)) },
           { key: 'commission_percent', label: 'Comissão %', format: (v: any) => `${Number(v).toFixed(2)}%` },
-          { key: 'commission_amount', label: 'Comissão (R$)', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'commission_amount', label: 'Comissão (R$)', format: (v: any) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
     { key: 'status', label: 'Status', format: (v) => statusLabels[v] ?? v },
@@ -489,12 +490,12 @@ export default function SellersCommissionReport() {
   // PDF sincronizado com KPIs da interface: os mesmos indicadores/filtros da tela são enviados ao export.
   // Comissão é gerencial (não usa Stripe) e o bloco de resumo deve permanecer alinhado às regras atuais da UI.
   const summaryItemsForPdf = useMemo(() => [
-    { label: 'Comissão Total', value: `R$ ${kpis.total_commission.toFixed(2)}`, emphasis: 'highlight' as const },
-    { label: 'Receita Elegível', value: `R$ ${kpis.eligible_revenue.toFixed(2)}` },
+    { label: 'Comissão Total', value: formatCurrencyBRL(kpis.total_commission), emphasis: 'highlight' as const },
+    { label: 'Receita Elegível', value: formatCurrencyBRL(kpis.eligible_revenue) },
     { label: 'Vendas Elegíveis', value: String(kpis.eligible_sales) },
     { label: 'Passagens', value: String(kpis.total_tickets) },
     { label: 'Nº de Vendedores', value: String(kpis.sellers_count) },
-    { label: 'Comissão Média por Venda', value: `R$ ${averageCommissionPerSale.toFixed(2)}` },
+    { label: 'Comissão Média por Venda', value: formatCurrencyBRL(averageCommissionPerSale) },
   ], [averageCommissionPerSale, kpis]);
 
   const renderPagination = () => (
@@ -565,10 +566,10 @@ export default function SellersCommissionReport() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           {canViewFinancials && (
-            <StatsCard label="Comissão Total" value={`R$ ${kpis.total_commission.toFixed(2)}`} icon={BadgePercent} variant="success" />
+            <StatsCard label="Comissão Total" value={formatCurrencyBRL(kpis.total_commission)} icon={BadgePercent} variant="success" />
           )}
           {canViewFinancials && (
-            <StatsCard label="Receita Elegível" value={`R$ ${kpis.eligible_revenue.toFixed(2)}`} icon={DollarSign} variant="success" />
+            <StatsCard label="Receita Elegível" value={formatCurrencyBRL(kpis.eligible_revenue)} icon={DollarSign} variant="success" />
           )}
           <StatsCard label="Vendas Elegíveis" value={kpis.eligible_sales} icon={ShoppingCart} />
           <StatsCard label="Passagens" value={kpis.total_tickets} icon={Ticket} />
@@ -757,9 +758,9 @@ export default function SellersCommissionReport() {
                           <TableCell className="font-medium">{row.seller_name}</TableCell>
                           <TableCell className="text-center">{row.eligible_sales}</TableCell>
                           <TableCell className="text-center">{row.total_tickets}</TableCell>
-                          {canViewFinancials && <TableCell className="text-right">R$ {row.eligible_revenue.toFixed(2)}</TableCell>}
+                          {canViewFinancials && <TableCell className="text-right">{formatCurrencyBRL(row.eligible_revenue)}</TableCell>}
                           {canViewFinancials && <TableCell className="text-right">{row.commission_percent.toFixed(2)}%</TableCell>}
-                          {canViewFinancials && <TableCell className="text-right font-medium">R$ {row.total_commission.toFixed(2)}</TableCell>}
+                          {canViewFinancials && <TableCell className="text-right font-medium">{formatCurrencyBRL(row.total_commission)}</TableCell>}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -801,9 +802,9 @@ export default function SellersCommissionReport() {
                             <TableCell className="font-mono text-xs">{sale.id.slice(0, 8)}…</TableCell>
                             <TableCell>{sale.seller?.name ?? 'Sem vendedor'}</TableCell>
                             <TableCell className="text-center">{sale.quantity}</TableCell>
-                            {canViewFinancials && <TableCell className="text-right">R$ {baseAmount.toFixed(2)}</TableCell>}
+                            {canViewFinancials && <TableCell className="text-right">{formatCurrencyBRL(baseAmount)}</TableCell>}
                             {canViewFinancials && <TableCell className="text-right">{commissionPercent.toFixed(2)}%</TableCell>}
-                            {canViewFinancials && <TableCell className="text-right">R$ {commissionAmount.toFixed(2)}</TableCell>}
+                            {canViewFinancials && <TableCell className="text-right">{formatCurrencyBRL(commissionAmount)}</TableCell>}
                             <TableCell><StatusBadge status={sale.status} /></TableCell>
                           </TableRow>
                         );

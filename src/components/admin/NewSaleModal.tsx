@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
+import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -399,7 +400,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     });
     setPassengers(newPassengers);
     if (selectedEvent) {
-      setUnitPrice(String(selectedEvent.unit_price));
+      setUnitPrice(formatCurrencyBRL(selectedEvent.unit_price));
     }
   };
 
@@ -426,7 +427,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       }
     }
     if (activeTab === 'manual') {
-      const price = parseFloat(unitPrice);
+      const price = parseCurrencyInputBRL(unitPrice);
       if (isNaN(price) || price < 0) return false;
     }
     return passengers.length > 0;
@@ -437,7 +438,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
     const companyDisplayName = company?.trade_name || company?.name || '';
     const isManualSale = activeTab === 'manual';
-    const ticketUnitPrice = isManualSale ? parseFloat(unitPrice || '0') : (selectedEvent?.unit_price ?? 0);
+    const ticketUnitPrice = isManualSale ? parseCurrencyInputBRL(unitPrice) : (selectedEvent?.unit_price ?? 0);
     const feeBreakdown = calculateFees(ticketUnitPrice, eventFees);
 
     // Reutiliza exatamente o detalhamento de taxas do ticket padrão para manter consistência visual e de exportação.
@@ -506,7 +507,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       const isBlock = activeTab === 'bloqueio';
       const isManual = activeTab === 'manual';
-      const basePrice = isManual ? parseFloat(unitPrice) : (selectedEvent?.unit_price ?? 0);
+      const basePrice = isManual ? parseCurrencyInputBRL(unitPrice) : (selectedEvent?.unit_price ?? 0);
       const usesCatPricing = Boolean((selectedEvent as any)?.use_category_pricing) && categoryPricesMap.size > 0;
 
       // Per-seat total when category pricing is active
@@ -930,16 +931,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           <div className="space-y-2">
                             <Label>Valor unitário *</Label>
                             <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
+                              type="text"
+                              inputMode="numeric"
                               value={unitPrice}
-                              onChange={(e) => setUnitPrice(e.target.value)}
+                              onChange={(e) => setUnitPrice(formatCurrencyInputFromDigits(e.target.value))}
                             />
                             {selectedEvent && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
-                                Preço do evento: R$ {Number(selectedEvent.unit_price).toFixed(2)}
+                                Preço do evento: {formatCurrencyBRL(selectedEvent.unit_price)}
                               </p>
                             )}
                           </div>
@@ -1092,7 +1092,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                     {/* Summary (fixo no fluxo do formulário para não sobrepor os cards de passageiro) */}
                     {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
-                      const price = parseFloat(unitPrice || '0');
+                      const price = parseCurrencyInputBRL(unitPrice);
                       const breakdown = calculateFees(price, eventFees);
                       const hasFees = breakdown.fees.length > 0;
                       const total = breakdown.unitPriceWithFees * passengers.length;
@@ -1104,17 +1104,17 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           </div>
                           <div className="flex items-center justify-between text-sm">
                             <span>Valor unitário</span>
-                            <span className="font-medium">R$ {price.toFixed(2)}</span>
+                            <span className="font-medium">{formatCurrencyBRL(price)}</span>
                           </div>
                           {hasFees && breakdown.fees.map((fee, idx) => (
                             <div key={idx} className="flex justify-between text-sm text-muted-foreground">
                               <span>{fee.name} × {passengers.length}</span>
-                              <span>R$ {(fee.amount * passengers.length).toFixed(2)}</span>
+                              <span>{formatCurrencyBRL(fee.amount * passengers.length)}</span>
                             </div>
                           ))}
                           <div className="flex justify-between border-t pt-2 text-base font-bold text-primary">
                             <span>Total</span>
-                            <span>R$ {total.toFixed(2)}</span>
+                            <span>{formatCurrencyBRL(total)}</span>
                           </div>
                         </div>
                       );

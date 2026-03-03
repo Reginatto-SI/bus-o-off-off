@@ -48,6 +48,7 @@ import {
 import { toast } from 'sonner';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
 const vehicleTypeLabels: Record<Vehicle['type'], string> = {
@@ -590,7 +591,7 @@ export default function EventDetail() {
                           <TableCell>{sale.quantity}</TableCell>
                           {canViewFinancials && (
                             <TableCell>
-                              R$ {(sale.quantity * sale.unit_price).toFixed(2)}
+                              {formatCurrencyBRL((sale.quantity * sale.unit_price))}
                             </TableCell>
                           )}
                           <TableCell>

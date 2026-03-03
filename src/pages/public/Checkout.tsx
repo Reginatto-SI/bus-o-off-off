@@ -31,6 +31,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -970,24 +971,24 @@ export default function Checkout() {
                     perSeatPrices.map((s) => (
                       <div key={s.seatId} className="flex justify-between text-sm">
                         <span>Assento {s.label}</span>
-                        <span>R$ {s.price.toFixed(2)}</span>
+                        <span>{formatCurrencyBRL(s.price)}</span>
                       </div>
                     ))
                   ) : (
                     <div className="flex justify-between text-sm">
                       <span>Passagem × {quantity}</span>
-                      <span>R$ {((event.unit_price ?? 0) * quantity).toFixed(2)}</span>
+                      <span>{formatCurrencyBRL((event.unit_price ?? 0) * quantity)}</span>
                     </div>
                   )}
                   {hasActiveFees && breakdown.fees.map((fee, idx) => (
                     <div key={idx} className="flex justify-between text-sm text-muted-foreground">
                       <span>{fee.name} × {quantity}</span>
-                      <span>R$ {(fee.amount * quantity).toFixed(2)}</span>
+                      <span>{formatCurrencyBRL(fee.amount * quantity)}</span>
                     </div>
                   ))}
                   <div className="flex justify-between text-base font-semibold pt-1 border-t">
                     <span>Total</span>
-                    <span>R$ {grandTotal.toFixed(2)}</span>
+                    <span>{formatCurrencyBRL(grandTotal)}</span>
                   </div>
                 </div>
               );
