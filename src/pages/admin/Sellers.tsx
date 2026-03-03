@@ -67,6 +67,7 @@ import {
 import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 interface SellerFilters {
   search: string;

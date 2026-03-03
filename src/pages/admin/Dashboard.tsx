@@ -38,6 +38,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { normalizePublicSlug } from '@/lib/publicSlug';
+import { toast } from 'sonner';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares
