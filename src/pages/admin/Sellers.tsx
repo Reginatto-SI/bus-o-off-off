@@ -197,7 +197,7 @@ export default function Sellers() {
         label: 'Total Vendido (R$)',
         format: (_v: any, row?: any) => {
           const st = row ? salesStats[row.id] : undefined;
-          return st ? st.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
+          return formatCurrencyBRL(st?.total ?? 0);
         },
       },
       { key: 'notes', label: 'Observações' },
@@ -733,7 +733,7 @@ export default function Sellers() {
                         </TableCell>
                         <TableCell>{st?.count ?? 0}</TableCell>
                         <TableCell>
-                          {(st?.total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          {formatCurrencyBRL(st?.total ?? 0)}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={seller.status} />

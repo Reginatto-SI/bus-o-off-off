@@ -7,6 +7,7 @@ import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { cn } from '@/lib/utils';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { formatCurrencyBRL } from '@/lib/currency';
 import { EventWithCompany } from '@/types/database';
 
 interface EventCardProps {
@@ -14,13 +15,6 @@ interface EventCardProps {
   sellerRef?: string | null;
   isSoldOut?: boolean;
 }
-
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(price);
-};
 
 export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
@@ -83,7 +77,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
             </h3>
           </Link>
           <p className="text-xl font-bold text-primary mt-1">
-            {formatPrice(event.unit_price)}
+            {formatCurrencyBRL(event.unit_price)}
           </p>
         </div>
 

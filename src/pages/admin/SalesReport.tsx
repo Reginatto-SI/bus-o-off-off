@@ -54,6 +54,7 @@ import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 interface ReportFilters {
   search: string;
@@ -561,8 +562,8 @@ export default function SalesReport() {
     { key: 'seller_name', label: 'Vendedor' },
     { key: 'quantity', label: 'Qtd' },
     { key: 'seat_labels', label: 'Poltrona' },
-    { key: 'unit_price', label: 'Valor Unit.', format: (v) => `R$ ${Number(v).toFixed(2)}` },
-    { key: 'total_value', label: 'Valor Total', format: (v) => `R$ ${Number(v).toFixed(2)}` },
+    { key: 'unit_price', label: 'Valor Unit.', format: (v) => formatCurrencyBRL(Number(v)) },
+    { key: 'total_value', label: 'Valor Total', format: (v) => formatCurrencyBRL(Number(v)) },
     { key: 'status', label: 'Status', format: (v) => statusLabels[v] ?? v },
     { key: 'sale_id', label: 'ID Venda' },
     { key: 'payment_id', label: 'ID Pagamento' },
@@ -575,9 +576,9 @@ export default function SalesReport() {
     { key: 'cancelled_sales', label: 'Canceladas' },
     ...(canViewFinancials
       ? [
-          { key: 'gross_revenue', label: 'Receita Bruta', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
-          { key: 'platform_fee', label: 'Custo da Plataforma', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
-          { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v: any) => `R$ ${Number(v).toFixed(2)}` },
+          { key: 'gross_revenue', label: 'Receita Bruta', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'platform_fee', label: 'Custo da Plataforma', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v: any) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
   ];
@@ -680,19 +681,19 @@ export default function SalesReport() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           {canViewFinancials && (
-            <StatsCard label="Receita Bruta" value={`R$ ${stats.grossRevenue.toFixed(2)}`} icon={DollarSign} variant="success" />
+            <StatsCard label="Receita Bruta" value={formatCurrencyBRL(stats.grossRevenue)} icon={DollarSign} variant="success" />
           )}
           <StatsCard label="Total de Vendas" value={stats.totalSales} icon={ShoppingCart} />
           <StatsCard label="Vendas Pagas" value={stats.paidSales} icon={CheckCircle} variant="success" />
-          <StatsCard label="Ticket Médio" value={`R$ ${ticketMedio.toFixed(2)}`} icon={TrendingUp} />
+          <StatsCard label="Ticket Médio" value={formatCurrencyBRL(ticketMedio)} icon={TrendingUp} />
           {/* Exibimos quantidade para manter semântica igual à tela /admin/vendas. */}
           <StatsCard label="Cancelamentos" value={stats.cancelledSales} icon={Percent} variant={cancelPercent > 10 ? 'destructive' : 'warning'} />
         </div>
 
         {canViewFinancials && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <StatsCard label="Custo da Plataforma" value={`R$ ${stats.platformFee.toFixed(2)}`} icon={DollarSign} />
-            <StatsCard label="Comissão dos Vendedores" value={`R$ ${stats.sellersCommission.toFixed(2)}`} icon={Users} />
+            <StatsCard label="Custo da Plataforma" value={formatCurrencyBRL(stats.platformFee)} icon={DollarSign} />
+            <StatsCard label="Comissão dos Vendedores" value={formatCurrencyBRL(stats.sellersCommission)} icon={Users} />
           </div>
         )}
 
@@ -881,13 +882,13 @@ export default function SalesReport() {
                           <TableCell className="text-center">{row.paidSales}</TableCell>
                           <TableCell className="text-center">{row.cancelledSales}</TableCell>
                           {canViewFinancials && (
-                            <TableCell className="text-right font-medium">R$ {row.grossRevenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrencyBRL(row.grossRevenue)}</TableCell>
                           )}
                           {canViewFinancials && (
-                            <TableCell className="text-right">R$ {row.platformFee.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{formatCurrencyBRL(row.platformFee)}</TableCell>
                           )}
                           {canViewFinancials && (
-                            <TableCell className="text-right">R$ {row.sellersCommission.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{formatCurrencyBRL(row.sellersCommission)}</TableCell>
                           )}
                         </TableRow>
                       ))}
@@ -943,7 +944,7 @@ export default function SalesReport() {
                             <TableCell>{formatSeatLabels(sale.id)}</TableCell>
                             {canViewFinancials && (
                               <TableCell className="text-right font-medium">
-                                R$ {(sale.quantity * sale.unit_price).toFixed(2)}
+                                {formatCurrencyBRL((sale.quantity * sale.unit_price))}
                               </TableCell>
                             )}
                             <TableCell>

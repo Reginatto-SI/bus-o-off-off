@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, MapPin, MessageCircle } from 'lucide-react';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { formatCurrencyBRL } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
@@ -13,13 +14,6 @@ interface EventCardFeaturedProps {
   sellerRef?: string | null;
   isSoldOut?: boolean;
 }
-
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(price);
-};
 
 export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: EventCardFeaturedProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
@@ -80,7 +74,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
               {event.name}
             </h3>
             <p className="text-2xl font-bold text-primary mt-1">
-              {formatPrice(event.unit_price)}
+              {formatCurrencyBRL(event.unit_price)}
             </p>
           </div>
 

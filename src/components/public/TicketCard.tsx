@@ -10,6 +10,7 @@ import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 export interface TicketCardData {
   ticketId: string;
@@ -292,19 +293,19 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 {ticket.unitPrice != null && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Passagem</span>
-                    <span>R$ {ticket.unitPrice.toFixed(2)}</span>
+                    <span>{formatCurrencyBRL(ticket.unitPrice)}</span>
                   </div>
                 )}
                 {ticket.fees.map((fee, idx) => (
                   <div key={idx} className="flex justify-between">
                     <span className="text-muted-foreground">{fee.name}</span>
-                    <span>R$ {fee.amount.toFixed(2)}</span>
+                    <span>{formatCurrencyBRL(fee.amount)}</span>
                   </div>
                 ))}
                 {ticket.totalPaid != null && (
                   <div className="flex justify-between font-semibold text-sm pt-1 border-t">
                     <span>Total pago</span>
-                    <span>R$ {ticket.totalPaid.toFixed(2)}</span>
+                    <span>{formatCurrencyBRL(ticket.totalPaid)}</span>
                   </div>
                 )}
               </div>
