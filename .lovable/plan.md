@@ -1,122 +1,43 @@
 
 
-# Preço por Categoria de Assento — Plano de Implementação
+# Fix: Sincronização de Categorias Template → Seats → Evento
 
-## Resumo
+## Problema Raiz
 
-Adicionar suporte a preços diferenciados por categoria de assento no evento, com persistência via nova tabela `event_category_prices`, switch de ativação no admin, e cálculo correto no checkout público e venda manual.
+Dois veículos existentes têm `layout_snapshot = NULL` e 49/50 seats todos com categoria "convencional", apesar do template ter 3 categorias (convencional: 36, executivo: 12, leito: 12). Isso acontece porque:
 
----
+1. O snapshot só é gerado na **criação** de veículo novo (condição `!editingId` na linha 655 do Fleet.tsx). Veículos editados nunca recebem snapshot.
+2. Sem snapshot, `syncSeatsFromSnapshot` nunca roda e as categorias dos seats nunca são atualizadas.
+3. Consequência: na aba Passagens do Evento, a query busca categorias da tabela `seats` e encontra apenas "convencional".
 
-## 1. Banco de Dados — Nova Tabela
+## Correções
 
-```sql
-CREATE TABLE public.event_category_prices (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id uuid NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
-  company_id uuid NOT NULL,
-  category text NOT NULL DEFAULT 'convencional',
-  price numeric NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (event_id, category)
-);
+### 1. Fleet.tsx — Gerar snapshot também ao editar veículo existente
 
-ALTER TABLE public.event_category_prices ENABLE ROW LEVEL SECURITY;
+**Mudança:** Remover a condição `!editingId` da linha 655. Se o veículo tem `template_layout_id` e o snapshot está nulo (ou o template mudou), regenerar o snapshot tanto na criação quanto na edição.
+
+Após o save (update ou insert), **sempre** rodar `syncSeatsFromSnapshot` quando houver `template_layout_id`, mesmo que o snapshot já existisse — para re-sincronizar categorias de veículos antigos.
+
+Lógica simplificada:
+```
+if (form.template_layout_id) {
+  // Buscar items do template e montar snapshot
+  // Salvar snapshot no veículo
+  // Rodar syncSeatsFromSnapshot
+}
 ```
 
-Novo campo no evento:
-```sql
-ALTER TABLE public.events ADD COLUMN use_category_pricing boolean NOT NULL DEFAULT false;
-```
+### 2. Fleet.tsx — Botão "Re-sincronizar Layout" para veículos existentes
 
-RLS policies:
-- Admins can manage (ALL) where `is_admin(auth.uid()) AND user_belongs_to_company(auth.uid(), company_id)`
-- Public can view (SELECT) where event is `a_venda`
+Adicionar na aba Capacidade, quando veículo tem template vinculado, um botão discreto "Re-sincronizar assentos do template" que força a regeneração do snapshot e re-sync dos seats. Isso resolve veículos existentes sem precisar editar/salvar.
 
----
+### 3. Garantir que `syncSeatsFromSnapshot` atualiza categoria dos seats existentes
 
-## 2. Tipos TypeScript (`src/types/database.ts`)
-
-- Adicionar `use_category_pricing: boolean` à interface `Event`
-- Criar interface `EventCategoryPrice { id, event_id, company_id, category: SeatCategory, price: number }`
-
----
-
-## 3. Admin — Aba Passagens (`src/pages/admin/Events.tsx`)
-
-### Form state
-- Adicionar `use_category_pricing: boolean` ao `form`
-- Novo state: `categoryPrices: { category: string; price: string; seatCount: number }[]`
-
-### UI (dentro do Card "Configuração da Passagem", após o campo "Preço Base")
-- Renomear label para "Preço Base da Passagem"
-- Switch: "Usar preços por categoria de assento"
-- Quando ativo, bloco expandido:
-  - Busca categorias distintas dos `seats` dos veículos vinculados ao evento (via trips → vehicles → seats)
-  - Lista cada categoria com: nome formatado, quantidade de assentos (informativo), campo de preço (R$)
-  - Layout 2 colunas no desktop
-  - Se categoria sem preço definido: mostrar texto "(Usará preço base: R$ X)" discreto
-  - Alerta se nenhuma categoria tem preço definido
-
-### Persistência
-- Ao salvar evento: se `use_category_pricing`, upsert na tabela `event_category_prices`
-- Ao carregar evento: fetch `event_category_prices` e popular state
-
-### Simulação de taxa
-- Quando `use_category_pricing` está ativo, a simulação de taxa da plataforma usa o preço base como referência genérica (sem mudança)
-
----
-
-## 4. Checkout Público (`src/pages/public/Checkout.tsx`)
-
-### Fetch
-- Buscar `event_category_prices` quando `event.use_category_pricing === true`
-
-### Função utilitária (inline)
-```ts
-const getSeatPrice = (seat: Seat): number => {
-  if (!event?.use_category_pricing) return event?.unit_price ?? 0;
-  const catPrice = categoryPrices.find(cp => cp.category === seat.category);
-  return catPrice?.price ?? event?.unit_price ?? 0; // fallback para preço base
-};
-```
-
-### Cálculo de total
-- Ao invés de `unit_price * quantity`, somar `getSeatPrice(seat)` para cada assento selecionado
-- Na criação da sale: `unit_price` = preço médio (ou preço base), `gross_amount` = soma real dos preços + taxas
-- Fees: aplicar fees sobre cada assento individualmente e somar
-
-### Resumo de compra
-- Mostrar preço individual por assento quando preços variam
-- Total = soma dos preços individuais + taxas
-
----
-
-## 5. Venda Manual Admin (`src/components/admin/NewSaleModal.tsx`)
-
-### Mesmo approach
-- Buscar `event_category_prices` quando evento usa pricing por categoria
-- Usar `getSeatPrice` para cada assento selecionado
-- Atualizar cálculo de `gross_amount`
-
----
-
-## 6. Compatibilidade
-
-- Eventos existentes: `use_category_pricing = false` (DEFAULT), comportamento idêntico ao atual
-- Se ativado sem preços configurados: fallback para preço base com alerta
-- Nenhuma mudança em relatórios/comissões (usam `gross_amount` que já é o valor final)
-
----
+Já está implementado (linha 180-184 do Fleet.tsx faz `toUpdate.push({ id, label, status, category })`), MAS preciso verificar que o batch update realmente escreve `category`. Vou conferir o bloco de update.
 
 ## Arquivos Afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| Migração SQL | Nova tabela + coluna |
-| `src/types/database.ts` | Interface + campo em Event |
-| `src/pages/admin/Events.tsx` | Switch, UI categorias, persistência |
-| `src/pages/public/Checkout.tsx` | Fetch prices, cálculo por assento |
-| `src/components/admin/NewSaleModal.tsx` | Cálculo por assento na venda manual |
+| `src/pages/admin/Fleet.tsx` | Snapshot na edição + botão re-sync + garantir update de category |
 
