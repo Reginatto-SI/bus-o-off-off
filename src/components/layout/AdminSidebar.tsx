@@ -4,6 +4,9 @@ import {
   Bus,
   Users,
   MapPin,
+  Globe,
+  Ticket,
+  Database,
   ShoppingCart,
   UserCheck,
   LogOut,
@@ -21,6 +24,7 @@ import {
   PanelLeftOpen,
   ChevronDown,
   LayoutDashboard,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,6 +53,7 @@ type NavigationItem = {
 type NavigationGroup = {
   id: string;
   label: string;
+  icon: typeof Calendar;
   items: NavigationItem[];
   standalone?: boolean;
 };
@@ -56,6 +61,7 @@ type NavigationGroup = {
 const navigationGroups: NavigationGroup[] = [{
   id: 'dashboard',
   label: 'Dashboard',
+  icon: LayoutDashboard,
   // O Dashboard é tratado como entrada principal isolada na navegação.
   standalone: true,
   items: [{
@@ -66,6 +72,8 @@ const navigationGroups: NavigationGroup[] = [{
 }, {
   id: 'eventos',
   label: 'Eventos',
+  // Ícone de ticket evita repetição de calendário e diferencia o agrupamento dos itens internos.
+  icon: Ticket,
   items: [{
     name: 'Eventos',
     href: '/admin/eventos',
@@ -78,6 +86,7 @@ const navigationGroups: NavigationGroup[] = [{
 }, {
   id: 'cadastros',
   label: 'Cadastros',
+  icon: Database,
   items: [{
     name: 'Frota (Veículos)',
     href: '/admin/frota',
@@ -115,13 +124,14 @@ const navigationGroups: NavigationGroup[] = [{
 }, {
   id: 'relatorios',
   label: 'Relatórios',
+  icon: BarChart3,
   items: [{
     name: 'Relatório de Vendas',
     href: '/admin/relatorios/vendas',
     icon: FileText
   }, {
     name: 'Relatório por Evento',
-    icon: BarChart3,
+    icon: Calendar,
     disabled: true,
     statusLabel: 'Em breve'
   }, {
@@ -132,6 +142,7 @@ const navigationGroups: NavigationGroup[] = [{
 }, {
   id: 'administracao',
   label: 'Administração',
+  icon: Settings,
   items: [{
     name: 'Usuários',
     href: '/admin/usuarios',
@@ -140,15 +151,16 @@ const navigationGroups: NavigationGroup[] = [{
   }, {
     name: 'Empresa',
     href: '/admin/empresa',
-    icon: Settings
+    icon: Building2
   }]
 }, {
   id: 'conta',
   label: 'Conta',
+  icon: User,
   items: [{
     name: 'Minha Conta',
     href: '/admin/minha-conta',
-    icon: User
+    icon: Settings
   }]
 }];
 
@@ -249,7 +261,7 @@ export function AdminSidebar() {
           id: 'public-showcase',
           name: 'Minha Vitrine Pública',
           href: publicShowcaseUrl ?? '/admin/empresa',
-          icon: Calendar,
+          icon: Globe,
           openInNewTab: Boolean(publicShowcaseUrl),
           statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
         },
@@ -325,8 +337,11 @@ export function AdminSidebar() {
                     className="flex w-full items-center justify-between rounded-lg px-3 py-1 text-left text-sm font-medium text-[#94A3B8] hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                     aria-expanded={Boolean(openGroups[group.id])}
                   >
-                    {/* Tamanho alinhado com o padrão tipográfico dos itens de navegação para melhorar legibilidade. */}
-                    <span>{group.label}</span>
+                    {/* Ícone do grupo mantém hierarquia visual sem competir com o estado ativo dos itens. */}
+                    <span className="flex items-center gap-2">
+                      <group.icon className="h-4 w-4" />
+                      <span>{group.label}</span>
+                    </span>
                     <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openGroups[group.id] ? 'rotate-0' : '-rotate-90')} />
                   </button>
                 )}
