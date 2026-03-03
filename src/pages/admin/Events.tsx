@@ -928,7 +928,7 @@ export default function Events() {
     };
   }, []);
 
-  // Fetch category prices for event
+  // Fetch category prices for event — fonte: layout_snapshot dos veículos (verdade oficial)
   const fetchCategoryPrices = async (eventId: string) => {
     setLoadingCategoryPrices(true);
     try {
@@ -938,7 +938,7 @@ export default function Events() {
         .select('*')
         .eq('event_id', eventId);
 
-      // 2. Get distinct categories from seats of vehicles linked via trips
+      // 2. Get vehicles linked via trips
       const { data: tripsData } = await supabase
         .from('trips')
         .select('vehicle_id')
@@ -948,20 +948,44 @@ export default function Events() {
       let seatCategories: { category: string; count: number }[] = [];
 
       if (vehicleIds.length > 0) {
-        const { data: seatsData } = await supabase
-          .from('seats')
-          .select('category')
-          .in('vehicle_id', vehicleIds)
-          .neq('status', 'bloqueado');
+        // Fonte principal: layout_snapshot (fonte de verdade oficial do template)
+        const { data: vehiclesData } = await supabase
+          .from('vehicles')
+          .select('layout_snapshot')
+          .in('id', vehicleIds);
 
         const categoryCounts: Record<string, number> = {};
-        (seatsData ?? []).forEach((s: any) => {
-          categoryCounts[s.category] = (categoryCounts[s.category] ?? 0) + 1;
+        let usedSnapshot = false;
+
+        (vehiclesData ?? []).forEach((v: any) => {
+          if (v.layout_snapshot?.items && Array.isArray(v.layout_snapshot.items)) {
+            usedSnapshot = true;
+            (v.layout_snapshot.items as any[]).forEach((item: any) => {
+              if (!item.is_blocked && item.seat_number) {
+                const cat = item.category || 'convencional';
+                categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+              }
+            });
+          }
         });
+
+        // Fallback: se nenhum veículo tem snapshot, usar tabela seats
+        if (!usedSnapshot) {
+          const { data: seatsData } = await supabase
+            .from('seats')
+            .select('category')
+            .in('vehicle_id', vehicleIds)
+            .neq('status', 'bloqueado');
+
+          (seatsData ?? []).forEach((s: any) => {
+            categoryCounts[s.category] = (categoryCounts[s.category] ?? 0) + 1;
+          });
+        }
+
         seatCategories = Object.entries(categoryCounts).map(([category, count]) => ({ category, count }));
       }
 
-      // 3. Merge: for each category from seats, use saved price or empty
+      // 3. Merge: for each category from snapshot, use saved price or empty
       const savedMap = new Map((savedPrices ?? []).map((p: any) => [p.category, p.price]));
       const merged = seatCategories.map(({ category, count }) => ({
         category,
