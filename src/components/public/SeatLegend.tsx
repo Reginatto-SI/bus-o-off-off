@@ -15,12 +15,12 @@ const statusItems = [
   },
   {
     label: 'Ocupado',
-    className: 'bg-red-50 border-red-300 text-red-400',
+    className: 'bg-gray-100 border-gray-300 text-gray-500',
     icon: <User className="h-2.5 w-2.5" />,
   },
   {
     label: 'Bloqueado',
-    className: 'bg-amber-50 border-amber-300 text-amber-500',
+    className: 'bg-amber-100 border-amber-300 text-amber-700',
     icon: <Ban className="h-2.5 w-2.5" />,
   },
 ];
@@ -29,16 +29,16 @@ const categoryLabels: Record<string, string> = {
   convencional: 'Convencional',
   executivo: 'Executivo',
   leito: 'Leito',
-  semi_leito: 'Semi-leito',
-  leito_cama: 'Leito Cama',
+  semi_leito: 'Leito',
+  leito_cama: 'Leito',
 };
 
-const categoryColors: Record<string, string> = {
-  leito: 'bg-yellow-50 border-yellow-500 text-yellow-700',
-  executivo: 'bg-emerald-50 border-emerald-500 text-emerald-700',
-  semi_leito: 'bg-blue-50 border-blue-500 text-blue-700',
-  leito_cama: 'bg-rose-50 border-rose-500 text-rose-700',
-  convencional: 'bg-white border-gray-300 text-gray-700',
+const categoryBorderColors: Record<string, string> = {
+  convencional: 'border-gray-300',
+  executivo: 'border-emerald-500',
+  leito: 'border-yellow-500',
+  semi_leito: 'border-yellow-500',
+  leito_cama: 'border-yellow-500',
 };
 
 interface SeatLegendProps {
@@ -46,11 +46,18 @@ interface SeatLegendProps {
 }
 
 export function SeatLegend({ categories }: SeatLegendProps) {
-  const uniqueCategories = categories ? [...new Set(categories)] : [];
-  const showCategories = uniqueCategories.length > 1;
+  void categories;
+
+  // A categoria é sempre secundária no fluxo público, então a legenda fica fixa com 3 tipos.
+  const normalizedCategories: Array<'convencional' | 'executivo' | 'leito'> = [
+    'convencional',
+    'executivo',
+    'leito',
+  ];
 
   return (
     <div className="space-y-3">
+      <div className="text-center text-xs font-semibold text-muted-foreground">Status</div>
       <div className="flex flex-wrap gap-4 justify-center">
         {statusItems.map((item) => (
           <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -61,16 +68,15 @@ export function SeatLegend({ categories }: SeatLegendProps) {
           </div>
         ))}
       </div>
-      {showCategories && (
-        <div className="flex flex-wrap gap-3 justify-center pt-1">
-          {uniqueCategories.map((cat) => (
-            <div key={cat} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className={cn('w-5 h-5 rounded border-2', categoryColors[cat] || categoryColors.convencional)} />
-              <span>{categoryLabels[cat] || cat}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="text-center text-xs font-semibold text-muted-foreground">Tipo de poltrona</div>
+      <div className="flex flex-wrap gap-3 justify-center pt-1">
+        {normalizedCategories.map((cat) => (
+          <div key={cat} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className={cn('w-5 h-5 rounded border-2 bg-white', categoryBorderColors[cat] || categoryBorderColors.convencional)} />
+            <span>{categoryLabels[cat]}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
