@@ -126,7 +126,11 @@ export function SeatMap({
         <Tabs value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
           <TabsList className="w-full h-auto gap-1 p-1">
             {availableSeatsByFloor.map(({ floor, availableCount }) => (
-              <TabsTrigger key={floor} value={String(floor)} className="flex-1 h-auto py-2">
+              <TabsTrigger
+                key={floor}
+                value={String(floor)}
+                className="flex-1 h-auto py-2 data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-primary/30"
+              >
                 <span className="flex flex-col leading-tight text-center">
                   <span>{floor === 1 ? 'Piso inferior' : floor === 2 ? 'Piso superior' : `Piso ${floor}`}</span>
                   <span className="text-[11px] font-normal text-muted-foreground">
@@ -139,6 +143,16 @@ export function SeatMap({
         </Tabs>
       )}
 
+      {/* Contexto dinâmico para reforçar o piso ativo sem exigir leitura dos botões. */}
+      {floors > 1 && (
+        <div className="text-center text-xs text-muted-foreground">
+          Escolha seu assento no{' '}
+          <span className="font-semibold text-foreground">
+            {activeFloor === 1 ? 'Piso inferior' : activeFloor === 2 ? 'Piso superior' : `Piso ${activeFloor}`}
+          </span>
+        </div>
+      )}
+
       {/* Selection counter */}
       <div className="text-center text-sm font-medium text-foreground">
         Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
@@ -148,7 +162,7 @@ export function SeatMap({
       {showSynced && (
         <div className="flex items-center justify-center gap-1.5 text-xs text-green-600 animate-in fade-in duration-300">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          <span>Assentos sincronizados</span>
+          <span>Assentos atualizados em tempo real</span>
         </div>
       )}
 

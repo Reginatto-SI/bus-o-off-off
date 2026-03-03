@@ -795,7 +795,7 @@ export default function Checkout() {
                 </>
               ) : (
                 <>
-                  Continuar para dados dos passageiros
+                  Continuar para identificação dos passageiros
                   <ChevronRight className="h-5 w-5 ml-1" />
                 </>
               )}
