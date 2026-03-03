@@ -278,7 +278,11 @@ export default function Checkout() {
 
           if (existingSeats && existingSeats.length > 0) {
             // Comentário P0: usar assentos materializados no banco — fonte única de verdade.
-            setSeats(existingSeats as Seat[]);
+            // Filtrar seats técnicos (_legacy_/_tmp_) como proteção defensiva.
+            const validSeats = existingSeats.filter(
+              (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
+            );
+            setSeats(validSeats as Seat[]);
           } else {
             // Comentário P0: sem fallback de geração local. Assentos devem ser sincronizados
             // via /admin/frota (syncSeatsFromSnapshot). Exibir erro amigável.
