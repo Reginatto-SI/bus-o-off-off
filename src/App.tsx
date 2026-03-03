@@ -10,6 +10,7 @@ import { VersionUpdateBanner } from "@/components/system/VersionUpdateBanner";
 import Login from "./pages/Login";
 
 // Admin pages
+import Dashboard from "./pages/admin/Dashboard";
 import Events from "./pages/admin/Events";
 import EventDetail from "./pages/admin/EventDetail";
 import Fleet from "./pages/admin/Fleet";
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/motorista/validar" element={<DriverValidate />} />
 
             {/* Admin Panel */}
+            <Route path="/admin/dashboard" element={<Dashboard />} />
             <Route path="/admin/eventos" element={<Events />} />
             <Route path="/admin/eventos/:id" element={<EventDetail />} />
             <Route path="/admin/frota" element={<Fleet />} />

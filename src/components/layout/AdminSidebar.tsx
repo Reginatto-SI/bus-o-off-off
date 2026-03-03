@@ -19,7 +19,8 @@ import {
   LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronDown
+  ChevronDown,
+  LayoutDashboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,6 +53,14 @@ type NavigationGroup = {
 };
 
 const navigationGroups: NavigationGroup[] = [{
+  id: 'dashboard',
+  label: 'Início',
+  items: [{
+    name: 'Dashboard',
+    href: '/admin/dashboard',
+    icon: LayoutDashboard,
+  }],
+}, {
   id: 'eventos',
   label: 'Eventos',
   items: [{
