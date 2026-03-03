@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 export default function MySales() {
   const { sellerId } = useAuth();
@@ -135,7 +136,7 @@ export default function MySales() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Vendido</p>
-                  <p className="text-2xl font-bold">R$ {totalValue.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">{formatCurrencyBRL(totalValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -151,7 +152,7 @@ export default function MySales() {
                   <p className="text-sm text-muted-foreground">
                     Comissão Estimada ({seller?.commission_percent}%)
                   </p>
-                  <p className="text-2xl font-bold">R$ {estimatedCommission.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">{formatCurrencyBRL(estimatedCommission)}</p>
                 </div>
               </div>
             </CardContent>
@@ -200,9 +201,9 @@ export default function MySales() {
                         <TableCell>{sale.customer_name}</TableCell>
                         <TableCell>{sale.event?.name}</TableCell>
                         <TableCell>{sale.quantity}</TableCell>
-                        <TableCell>R$ {saleValue.toFixed(2)}</TableCell>
+                        <TableCell>{formatCurrencyBRL(saleValue)}</TableCell>
                         <TableCell className="text-success font-medium">
-                          R$ {commission.toFixed(2)}
+                          {formatCurrencyBRL(commission)}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={sale.status} />

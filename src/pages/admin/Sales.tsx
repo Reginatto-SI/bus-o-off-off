@@ -92,6 +92,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { TicketCard, type TicketCardData } from '@/components/public/TicketCard';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 function formatCpfMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -266,7 +267,7 @@ export default function Sales() {
     { key: 'vehicle_info', label: 'Veículo' },
     { key: 'boarding_location_name', label: 'Local Embarque' },
     { key: 'quantity', label: 'Quantidade' },
-    { key: 'total_value', label: 'Valor Total', format: (v) => `R$ ${Number(v).toFixed(2)}` },
+    { key: 'total_value', label: 'Valor Total', format: (v) => formatCurrencyBRL(Number(v)) },
     { key: 'seller_name', label: 'Vendedor' },
     { key: 'status', label: 'Status', format: (v) => statusLabels[v] ?? v },
   ];
@@ -891,7 +892,7 @@ export default function Sales() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <StatsCard label="Total de Vendas" value={stats.total} icon={ShoppingCart} />
           {canViewFinancials && (
-            <StatsCard label="Total Arrecadado" value={`R$ ${stats.totalValue.toFixed(2)}`} icon={DollarSign} variant="success" />
+            <StatsCard label="Total Arrecadado" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
           )}
           <StatsCard label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
           <StatsCard label="Reservadas" value={stats.reservadas} icon={Clock} variant="warning" />
@@ -901,8 +902,8 @@ export default function Sales() {
         {/* KPI financeiro resumido: mantemos apenas o custo da plataforma para reduzir ruído visual. */}
         {isGerente && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatsCard label="Custo da Plataforma" value={`R$ ${stats.totalPlatformFee.toFixed(2)}`} icon={DollarSign} />
-            <StatsCard label="Comissão dos Vendedores" value={`R$ ${stats.totalSellersCommission.toFixed(2)}`} icon={Users} />
+            <StatsCard label="Custo da Plataforma" value={formatCurrencyBRL(stats.totalPlatformFee)} icon={DollarSign} />
+            <StatsCard label="Comissão dos Vendedores" value={formatCurrencyBRL(stats.totalSellersCommission)} icon={Users} />
           </div>
         )}
 
@@ -1122,7 +1123,7 @@ export default function Sales() {
                         </TableCell>
                         {canViewFinancials && (
                           <TableCell className="font-medium">
-                            R$ {(sale.quantity * sale.unit_price).toFixed(2)}
+                            {formatCurrencyBRL((sale.quantity * sale.unit_price))}
                           </TableCell>
                         )}
                         <TableCell>{sale.seller?.name ?? '-'}</TableCell>
@@ -1335,8 +1336,8 @@ export default function Sales() {
                           />
                           {canViewFinancials && (
                             <>
-                              <InfoRow label="Valor Unitário" value={`R$ ${Number(detailSale.unit_price).toFixed(2)}`} />
-                              <InfoRow label="Valor Total" value={`R$ ${(detailSale.quantity * detailSale.unit_price).toFixed(2)}`} />
+                              <InfoRow label="Valor Unitário" value={formatCurrencyBRL(Number(detailSale.unit_price))} />
+                              <InfoRow label="Valor Total" value={formatCurrencyBRL((detailSale.quantity * detailSale.unit_price))} />
                             </>
                           )}
                           <InfoRow label="Vendedor" value={detailSale.seller?.name ?? '-'} />
