@@ -103,6 +103,7 @@ export default function Checkout() {
   const [generatingSeats, setGeneratingSeats] = useState(false);
   const [loadingSeatStatus, setLoadingSeatStatus] = useState(false);
   const [seatStatusError, setSeatStatusError] = useState<string | null>(null);
+  const [categoryPrices, setCategoryPrices] = useState<{ category: string; price: number }[]>([]);
 
 
   // Step management: 1 = seat selection, 2 = passenger data
@@ -116,6 +117,19 @@ export default function Checkout() {
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(null);
   const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
+
+  // Helper: get price for a seat based on category pricing
+  const getSeatPrice = (seatId: string): number => {
+    if (!event) return 0;
+    if (!(event as any).use_category_pricing) return event.unit_price ?? 0;
+    const seat = seats.find((s) => s.id === seatId);
+    if (!seat) return event.unit_price ?? 0;
+    const catPrice = categoryPrices.find((cp) => cp.category === seat.category);
+    return catPrice?.price ?? event.unit_price ?? 0;
+  };
+
+  const usesCategoryPricing = Boolean((event as any)?.use_category_pricing);
+  const hasMixedPrices = usesCategoryPricing && selectedSeats.length > 0 && new Set(selectedSeats.map(getSeatPrice)).size > 1;
   const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
     setLoadingSeatStatus(true);
     setSeatStatusError(null);
@@ -221,6 +235,15 @@ export default function Checkout() {
             .eq('is_active', true)
             .order('sort_order');
           setEventFees((feesData ?? []) as EventFeeInput[]);
+
+          // Fetch category prices if enabled
+          if ((eventData as any).use_category_pricing) {
+            const { data: catPrices } = await supabase
+              .from('event_category_prices')
+              .select('category, price')
+              .eq('event_id', id!);
+            setCategoryPrices((catPrices ?? []).map((cp: any) => ({ category: cp.category, price: Number(cp.price) })));
+          }
         }
         if (tripRes.data) setTrip(tripRes.data as Trip);
         if (locationRes.data) setLocation(locationRes.data as BoardingLocation);
@@ -502,10 +525,21 @@ export default function Checkout() {
       return;
     }
 
-    const feeBreakdown = calculateFees(event.unit_price ?? 0, eventFees, {
+    // Calculate fees — per-seat pricing when category pricing is active
+    const seatsTotal = usesCategoryPricing
+      ? selectedSeats.reduce((sum, seatId) => sum + getSeatPrice(seatId), 0)
+      : (event.unit_price ?? 0) * quantity;
+
+    const avgUnitPrice = usesCategoryPricing ? (seatsTotal / quantity) : (event.unit_price ?? 0);
+
+    const feeBreakdown = calculateFees(avgUnitPrice, eventFees, {
       passToCustomer: event.pass_platform_fee_to_customer,
       feePercent: platformFeePercent,
     });
+
+    const grossAmount = usesCategoryPricing
+      ? seatsTotal + (feeBreakdown.totalFees * quantity)
+      : feeBreakdown.unitPriceWithFees * quantity;
 
     // Create sale
     const { data: sale, error: saleError } = await supabase
@@ -520,7 +554,7 @@ export default function Checkout() {
         customer_phone: payer.phone.replace(/\D/g, ''),
         quantity,
         unit_price: event.unit_price ?? 0,
-        gross_amount: feeBreakdown.unitPriceWithFees * quantity,
+        gross_amount: grossAmount,
         status: 'reservado' as const,
         company_id: event.company_id,
       })
@@ -919,12 +953,32 @@ export default function Checkout() {
                 feePercent: platformFeePercent,
               });
               const hasActiveFees = breakdown.fees.length > 0;
+
+              // Per-seat pricing display
+              const perSeatPrices = usesCategoryPricing
+                ? selectedSeats.map((seatId) => ({ seatId, price: getSeatPrice(seatId), label: seatLabelMap[seatId] }))
+                : null;
+              const seatsSubtotal = perSeatPrices
+                ? perSeatPrices.reduce((sum, s) => sum + s.price, 0)
+                : (event.unit_price ?? 0) * quantity;
+              const totalFees = breakdown.totalFees * quantity;
+              const grandTotal = seatsSubtotal + totalFees;
+
               return (
                 <div className="rounded-lg border p-4 space-y-2 bg-muted/30">
-                  <div className="flex justify-between text-sm">
-                    <span>Passagem × {quantity}</span>
-                    <span>R$ {((event.unit_price ?? 0) * quantity).toFixed(2)}</span>
-                  </div>
+                  {perSeatPrices ? (
+                    perSeatPrices.map((s) => (
+                      <div key={s.seatId} className="flex justify-between text-sm">
+                        <span>Assento {s.label}</span>
+                        <span>R$ {s.price.toFixed(2)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span>Passagem × {quantity}</span>
+                      <span>R$ {((event.unit_price ?? 0) * quantity).toFixed(2)}</span>
+                    </div>
+                  )}
                   {hasActiveFees && breakdown.fees.map((fee, idx) => (
                     <div key={idx} className="flex justify-between text-sm text-muted-foreground">
                       <span>{fee.name} × {quantity}</span>
@@ -933,7 +987,7 @@ export default function Checkout() {
                   ))}
                   <div className="flex justify-between text-base font-semibold pt-1 border-t">
                     <span>Total</span>
-                    <span>R$ {(breakdown.unitPriceWithFees * quantity).toFixed(2)}</span>
+                    <span>R$ {grandTotal.toFixed(2)}</span>
                   </div>
                 </div>
               );

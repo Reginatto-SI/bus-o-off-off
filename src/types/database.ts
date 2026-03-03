@@ -275,7 +275,19 @@ export interface Event {
   image_url: string | null;
   // Política comercial por evento: controla se vende trecho solto, ida obrigatória ou pacote fechado.
   transport_policy: TransportPolicy;
+  // Preço diferenciado por categoria de assento
+  use_category_pricing: boolean;
   company_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventCategoryPrice {
+  id: string;
+  event_id: string;
+  company_id: string;
+  category: SeatCategory;
+  price: number;
   created_at: string;
   updated_at: string;
 }

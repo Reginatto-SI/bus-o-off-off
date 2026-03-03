@@ -164,6 +164,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
   const [activeTicketIndex, setActiveTicketIndex] = useState(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
+  const [categoryPricesMap, setCategoryPricesMap] = useState<Map<string, number>>(new Map());
 
   // Derived
   const selectedEvent = events.find((e) => e.id === selectedEventId);
@@ -255,6 +256,20 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const tripsData = (tripsRes.data ?? []) as TripWithDetails[];
       setTrips(tripsData);
       setEventFees((feesRes.data ?? []) as EventFeeInput[]);
+
+      // Fetch category prices if event uses category pricing
+      const evt = events.find((e) => e.id === selectedEventId) ?? (await supabase.from('events').select('use_category_pricing').eq('id', selectedEventId).single()).data;
+      if ((evt as any)?.use_category_pricing) {
+        const { data: catPrices } = await supabase
+          .from('event_category_prices')
+          .select('category, price')
+          .eq('event_id', selectedEventId);
+        const map = new Map<string, number>();
+        (catPrices ?? []).forEach((cp: any) => map.set(cp.category, Number(cp.price)));
+        setCategoryPricesMap(map);
+      } else {
+        setCategoryPricesMap(new Map());
+      }
 
       const tripIds = tripsData.map((trip) => trip.id);
       if (tripIds.length > 0) {
@@ -491,10 +506,23 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       const isBlock = activeTab === 'bloqueio';
       const isManual = activeTab === 'manual';
-      const price = isManual ? parseFloat(unitPrice) : (selectedEvent?.unit_price ?? 0);
+      const basePrice = isManual ? parseFloat(unitPrice) : (selectedEvent?.unit_price ?? 0);
+      const usesCatPricing = Boolean((selectedEvent as any)?.use_category_pricing) && categoryPricesMap.size > 0;
+
+      // Per-seat total when category pricing is active
+      const getSeatCatPrice = (seatId: string): number => {
+        if (!usesCatPricing) return basePrice;
+        const seat = seats.find((s) => s.id === seatId);
+        if (!seat) return basePrice;
+        return categoryPricesMap.get(seat.category) ?? basePrice;
+      };
+
       const quantity = passengers.length;
-      const feeBreakdown = calculateFees(price, eventFees);
-      const grossTotal = isBlock ? 0 : feeBreakdown.unitPriceWithFees * quantity;
+      const seatsTotal = usesCatPricing
+        ? selectedSeats.reduce((sum, seatId) => sum + getSeatCatPrice(seatId), 0)
+        : basePrice * quantity;
+      const feeBreakdown = calculateFees(basePrice, eventFees);
+      const grossTotal = isBlock ? 0 : seatsTotal + (feeBreakdown.totalFees * quantity);
 
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
 
@@ -509,7 +537,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           customer_cpf: isBlock ? '00000000000' : passengers[0]?.cpf.replace(/\D/g, ''),
           customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
-          unit_price: price,
+          unit_price: basePrice,
           status: isManual ? 'pago' : 'reservado',
           gross_amount: grossTotal,
           company_id: activeCompanyId,
