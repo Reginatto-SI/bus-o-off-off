@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Bus,
@@ -27,18 +27,22 @@ import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
+import { normalizePublicSlug } from '@/lib/publicSlug';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
 import logoAdmin from '@/assets/logo_admin.png';
+import { toast } from 'sonner';
 
 type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 
 type NavigationItem = {
+  id?: string;
   name: string;
   icon: typeof Calendar;
   href?: string;
   roles?: UserRole[];
   disabled?: boolean;
   statusLabel?: string;
+  openInNewTab?: boolean;
 };
 
 type NavigationGroup = {
@@ -188,9 +192,15 @@ function CollapsedNavItem({ item, isActive, onClick }: {
     <Tooltip>
       <TooltipTrigger asChild>
         {item.href && !item.disabled ? (
-          <NavLink to={item.href} onClick={onClick} className="flex justify-center">
-            {inner}
-          </NavLink>
+          item.openInNewTab ? (
+            <a href={item.href} target="_blank" rel="noreferrer" onClick={onClick} className="flex justify-center">
+              {inner}
+            </a>
+          ) : (
+            <NavLink to={item.href} onClick={onClick} className="flex justify-center">
+              {inner}
+            </NavLink>
+          )
         ) : (
           <button type="button" disabled={item.disabled} className="flex justify-center w-full">
             {inner}
@@ -206,18 +216,50 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper } = useAuth();
+  const { profile, userRole, signOut, isDeveloper, activeCompany } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
 
-  const visibleGroups = navigationGroups.map(group => ({
+  const normalizedPublicSlug = normalizePublicSlug(activeCompany?.public_slug ?? '');
+  const publicShowcaseUrl = normalizedPublicSlug ? `${window.location.origin}/${normalizedPublicSlug}` : null;
+
+  // Comentário: item dinâmico usa somente o nick público da empresa ativa, sem expor identificadores internos.
+  const groupsWithShowcaseLink = navigationGroups.map((group) => {
+    if (group.id !== 'eventos') return group;
+
+    return {
+      ...group,
+      items: [
+        ...group.items,
+        {
+          id: 'public-showcase',
+          name: 'Minha Vitrine Pública',
+          href: publicShowcaseUrl ?? '/admin/empresa',
+          icon: Calendar,
+          openInNewTab: Boolean(publicShowcaseUrl),
+          statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
+        },
+      ],
+    };
+  });
+
+  const visibleGroups = groupsWithShowcaseLink.map(group => ({
     ...group,
     items: group.items.filter(item => isDeveloper || !item.roles || (userRole && item.roles.includes(userRole)))
   })).filter(group => group.items.length > 0);
 
   // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
   const visibleItems = visibleGroups.flatMap(group => group.items);
+
+  const handleItemClick = (item: NavigationItem, onClose?: () => void) => {
+    if (item.id === 'public-showcase' && !publicShowcaseUrl) {
+      toast.warning('Configure o link da sua vitrine em /admin/empresa antes de acessar.');
+      navigate('/admin/empresa');
+      onClose?.();
+    }
+  };
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     // Por padrão os grupos iniciam fechados; apenas o grupo da rota ativa nasce aberto para manter contexto.
@@ -280,11 +322,35 @@ export function AdminSidebar() {
                   const itemKey = `${group.id}-${item.href ?? item.name}-${index}`;
 
                   if (item.href && !item.disabled) {
+                    if (item.openInNewTab) {
+                      return (
+                        <a
+                          key={itemKey}
+                          href={item.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => handleItemClick(item, onClose)}
+                          className="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#CBD5E1] transition-colors hover:bg-[#1E293B] hover:text-white"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span className="flex flex-1 items-center gap-2">
+                            <span>{item.name}</span>
+                            {/* Identificador visual discreto para itens técnicos exclusivos do perfil developer. */}
+                            {isDeveloper && isDeveloperOnlyItem(item) && (
+                              <span className="rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                                Dev
+                              </span>
+                            )}
+                          </span>
+                        </a>
+                      );
+                    }
+
                     return (
                       <NavLink
                         key={itemKey}
                         to={item.href}
-                        onClick={onClose}
+                        onClick={() => handleItemClick(item, onClose)}
                         className={cn(
                           'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                           isActive
@@ -328,11 +394,35 @@ export function AdminSidebar() {
             const itemKey = `${item.href ?? item.name}-${index}`;
 
             if (item.href && !item.disabled) {
+              if (item.openInNewTab) {
+                return (
+                  <a
+                    key={itemKey}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => handleItemClick(item, onClose)}
+                    className="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#CBD5E1] transition-colors hover:bg-[#1E293B] hover:text-white"
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span className="flex flex-1 items-center gap-2">
+                      <span>{item.name}</span>
+                      {/* Identificador visual discreto para itens técnicos exclusivos do perfil developer. */}
+                      {isDeveloper && isDeveloperOnlyItem(item) && (
+                        <span className="rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                          Dev
+                        </span>
+                      )}
+                    </span>
+                  </a>
+                );
+              }
+
               return (
                 <NavLink
                   key={itemKey}
                   to={item.href}
-                  onClick={onClose}
+                  onClick={() => handleItemClick(item, onClose)}
                   className={cn(
                     'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                     isActive
@@ -409,7 +499,7 @@ export function AdminSidebar() {
               const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
               // Chave estável/única evita artefatos visuais ao alternar expandido/colapsado com itens duplicados por nome.
               const collapsedItemKey = `${group.id}-${item.href ?? item.name}-${index}`;
-              return <CollapsedNavItem key={collapsedItemKey} item={item} isActive={isActive} />;
+              return <CollapsedNavItem key={collapsedItemKey} item={item} isActive={isActive} onClick={() => handleItemClick(item)} />;
             })
           )}
         </div>
