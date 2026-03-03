@@ -37,8 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { normalizePublicSlug } from '@/lib/publicSlug';
-import { toast } from 'sonner';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares

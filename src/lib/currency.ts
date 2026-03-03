@@ -38,3 +38,16 @@ export function formatCurrencyInputFromDigits(rawValue: string): string {
   const cents = Number(digitsOnly || '0');
   return formatCurrencyBRL(cents / 100);
 }
+
+
+// Formata para campo de input (sem prefixo), preservando 2 casas no padrão pt-BR.
+export function formatCurrencyValueBRL(value: number | string | null | undefined): string {
+  return formatCurrencyBRL(value).replace(/^R\$\s?/, '').trim();
+}
+
+// Máscara para inputs com prefixo visual externo (ex.: <span>R$</span>), retornando apenas o valor numérico formatado.
+export function formatCurrencyInputValueFromDigits(rawValue: string): string {
+  const digitsOnly = rawValue.replace(/\D/g, '');
+  const cents = Number(digitsOnly || '0');
+  return formatCurrencyValueBRL(cents / 100);
+}

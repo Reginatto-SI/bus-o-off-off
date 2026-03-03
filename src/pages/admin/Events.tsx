@@ -95,7 +95,7 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
+import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 
 // Types
 interface EventFilters {
@@ -1013,7 +1013,7 @@ export default function Events() {
       const savedMap = new Map((savedPrices ?? []).map((p: any) => [p.category, p.price]));
       const merged = seatCategories.map(({ category, count }) => ({
         category,
-        price: savedMap.has(category) ? String(savedMap.get(category)) : '',
+        price: savedMap.has(category) ? formatCurrencyValueBRL(savedMap.get(category)) : '',
         seatCount: count,
       }));
 
@@ -1335,7 +1335,8 @@ export default function Events() {
       description: event.description ?? '',
       public_info: event.public_info ?? '',
       status: event.status,
-      unit_price: event.unit_price?.toString() ?? '0',
+      // Padroniza carga do valor inicial com 2 casas no input de moeda (sem duplicar prefixo visual R$).
+      unit_price: formatCurrencyValueBRL(event.unit_price ?? 0),
       max_tickets_per_purchase: event.max_tickets_per_purchase?.toString() ?? '0',
       allow_online_sale: event.allow_online_sale ?? true,
       allow_seller_sale: event.allow_seller_sale ?? true,
@@ -3360,7 +3361,7 @@ export default function Events() {
                                 inputMode="numeric"
                                 className="pl-10"
                                 value={form.unit_price}
-                                onChange={(e) => setForm({ ...form, unit_price: formatCurrencyInputFromDigits(e.target.value) })}
+                                onChange={(e) => setForm({ ...form, unit_price: formatCurrencyInputValueFromDigits(e.target.value) })}
                                 placeholder="0,00"
                                 disabled={isReadOnly}
                               />
@@ -3456,7 +3457,7 @@ export default function Events() {
                                           value={cp.price}
                                           onChange={(e) => {
                                             setCategoryPrices((prev) =>
-                                              prev.map((item, i) => i === idx ? { ...item, price: formatCurrencyInputFromDigits(e.target.value) } : item)
+                                              prev.map((item, i) => i === idx ? { ...item, price: formatCurrencyInputValueFromDigits(e.target.value) } : item)
                                             );
                                           }}
                                           placeholder="0,00"
