@@ -311,6 +311,51 @@ export type Database = {
           },
         ]
       }
+      event_category_prices: {
+        Row: {
+          category: string
+          company_id: string
+          created_at: string
+          event_id: string
+          id: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          company_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          price?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_category_prices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_category_prices_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_fees: {
         Row: {
           company_id: string
@@ -389,6 +434,7 @@ export type Database = {
           transport_policy: string
           unit_price: number
           updated_at: string
+          use_category_pricing: boolean
         }
         Insert: {
           allow_online_sale?: boolean
@@ -413,6 +459,7 @@ export type Database = {
           transport_policy?: string
           unit_price?: number
           updated_at?: string
+          use_category_pricing?: boolean
         }
         Update: {
           allow_online_sale?: boolean
@@ -437,6 +484,7 @@ export type Database = {
           transport_policy?: string
           unit_price?: number
           updated_at?: string
+          use_category_pricing?: boolean
         }
         Relationships: [
           {

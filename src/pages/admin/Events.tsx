@@ -181,6 +181,14 @@ const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; des
   },
 ];
 
+const seatCategoryLabels: Record<string, string> = {
+  convencional: 'Convencional',
+  executivo: 'Executivo',
+  semi_leito: 'Semi-leito',
+  leito: 'Leito',
+  leito_cama: 'Leito-cama',
+};
+
 export default function Events() {
   const { activeCompanyId, user } = useAuth();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
@@ -303,7 +311,12 @@ export default function Events() {
     image_url: '' as string | null,
     // Padrão comercial oficial para novos eventos: Ida obrigatória + Volta opcional.
     transport_policy: 'ida_obrigatoria_volta_opcional' as TransportPolicy,
+    use_category_pricing: false,
   });
+
+  // Category pricing state
+  const [categoryPrices, setCategoryPrices] = useState<{ category: string; price: string; seatCount: number }[]>([]);
+  const [loadingCategoryPrices, setLoadingCategoryPrices] = useState(false);
   
   // Image upload state
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -915,12 +928,60 @@ export default function Events() {
     };
   }, []);
 
+  // Fetch category prices for event
+  const fetchCategoryPrices = async (eventId: string) => {
+    setLoadingCategoryPrices(true);
+    try {
+      // 1. Get saved prices
+      const { data: savedPrices } = await supabase
+        .from('event_category_prices')
+        .select('*')
+        .eq('event_id', eventId);
+
+      // 2. Get distinct categories from seats of vehicles linked via trips
+      const { data: tripsData } = await supabase
+        .from('trips')
+        .select('vehicle_id')
+        .eq('event_id', eventId);
+
+      const vehicleIds = [...new Set((tripsData ?? []).map((t: any) => t.vehicle_id))];
+      let seatCategories: { category: string; count: number }[] = [];
+
+      if (vehicleIds.length > 0) {
+        const { data: seatsData } = await supabase
+          .from('seats')
+          .select('category')
+          .in('vehicle_id', vehicleIds)
+          .neq('status', 'bloqueado');
+
+        const categoryCounts: Record<string, number> = {};
+        (seatsData ?? []).forEach((s: any) => {
+          categoryCounts[s.category] = (categoryCounts[s.category] ?? 0) + 1;
+        });
+        seatCategories = Object.entries(categoryCounts).map(([category, count]) => ({ category, count }));
+      }
+
+      // 3. Merge: for each category from seats, use saved price or empty
+      const savedMap = new Map((savedPrices ?? []).map((p: any) => [p.category, p.price]));
+      const merged = seatCategories.map(({ category, count }) => ({
+        category,
+        price: savedMap.has(category) ? String(savedMap.get(category)) : '',
+        seatCount: count,
+      }));
+
+      setCategoryPrices(merged);
+    } finally {
+      setLoadingCategoryPrices(false);
+    }
+  };
+
   // Load event data when editing
   const loadEventData = async (eventId: string) => {
     await Promise.all([
       fetchEventTrips(eventId),
       fetchEventBoardingLocations(eventId),
       fetchEventFees(eventId),
+      fetchCategoryPrices(eventId),
     ]);
   };
 
@@ -987,6 +1048,7 @@ export default function Events() {
       platform_fee_terms_accepted_at: form.platform_fee_terms_accepted ? form.platform_fee_terms_accepted_at ?? new Date().toISOString() : null,
       // Política aplicada por evento para padronizar regras de venda entre Admin e portal público.
       transport_policy: form.transport_policy,
+      use_category_pricing: form.use_category_pricing,
       company_id: activeCompanyId,
     };
 
@@ -1055,6 +1117,42 @@ export default function Events() {
     if (isCreating && newEventId) {
       setEditingId(newEventId);
       await loadEventData(newEventId);
+    }
+
+    // Persist category prices if enabled
+    if (!error && newEventId && form.use_category_pricing) {
+      const pricesToUpsert = categoryPrices
+        .filter((cp) => cp.price !== '' && parseFloat(cp.price) >= 0)
+        .map((cp) => ({
+          event_id: newEventId,
+          company_id: activeCompanyId!,
+          category: cp.category,
+          price: parseFloat(cp.price),
+        }));
+
+      if (pricesToUpsert.length > 0) {
+        await supabase
+          .from('event_category_prices')
+          .upsert(pricesToUpsert, { onConflict: 'event_id,category' });
+      }
+
+      // Remove prices for categories no longer present
+      const activeCategories = categoryPrices.map((cp) => cp.category);
+      if (activeCategories.length > 0) {
+        await supabase
+          .from('event_category_prices')
+          .delete()
+          .eq('event_id', newEventId)
+          .not('category', 'in', `(${activeCategories.join(',')})`);
+      }
+    }
+
+    // If category pricing was turned off, clean up saved prices
+    if (!error && newEventId && !form.use_category_pricing) {
+      await supabase
+        .from('event_category_prices')
+        .delete()
+        .eq('event_id', newEventId);
     }
 
     fetchEvents();
@@ -1199,6 +1297,7 @@ export default function Events() {
       platform_fee_terms_accepted_at: (event as any).platform_fee_terms_accepted_at ?? null,
       image_url: (event as any).image_url ?? null,
       transport_policy: (event as any).transport_policy ?? 'trecho_independente',
+      use_category_pricing: (event as any).use_category_pricing ?? false,
     });
     setActiveTab('geral');
     loadEventData(event.id);
@@ -1791,7 +1890,9 @@ export default function Events() {
       platform_fee_terms_accepted_at: null,
       image_url: null,
       transport_policy: 'ida_obrigatoria_volta_opcional',
+      use_category_pricing: false,
     });
+    setCategoryPrices([]);
   };
 
   const handleImageUpload = async (file?: File) => {
@@ -3199,10 +3300,10 @@ export default function Events() {
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">Configuração da Passagem</CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
-                            <Label htmlFor="unit_price">Preço da Passagem *</Label>
+                            <Label htmlFor="unit_price">Preço Base da Passagem *</Label>
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
                               <Input
@@ -3225,6 +3326,11 @@ export default function Events() {
                                 disabled={isReadOnly}
                               />
                             </div>
+                            {form.use_category_pricing && (
+                              <p className="text-xs text-muted-foreground">
+                                Usado como fallback para categorias sem preço definido
+                              </p>
+                            )}
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="max_tickets">Limite por Compra</Label>
@@ -3242,6 +3348,105 @@ export default function Events() {
                             </p>
                           </div>
                         </div>
+
+                        <Separator />
+
+                        {/* Switch: pricing por categoria */}
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="use_category_pricing">Usar preços por categoria de assento</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Define preços diferentes para cada tipo de assento (ex.: convencional, executivo, leito)
+                            </p>
+                          </div>
+                          <Switch
+                            id="use_category_pricing"
+                            checked={form.use_category_pricing}
+                            onCheckedChange={(checked) => {
+                              setForm({ ...form, use_category_pricing: checked });
+                              if (checked && editingId && categoryPrices.length === 0) {
+                                fetchCategoryPrices(editingId);
+                              }
+                            }}
+                            disabled={isReadOnly}
+                          />
+                        </div>
+
+                        {/* Category prices list */}
+                        {form.use_category_pricing && (
+                          <div className="space-y-3">
+                            {loadingCategoryPrices ? (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                              </div>
+                            ) : categoryPrices.length === 0 ? (
+                              <Alert>
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                  Nenhuma categoria de assento encontrada nos veículos vinculados a este evento.
+                                  Vincule frotas com layouts configurados na aba Frotas.
+                                </AlertDescription>
+                              </Alert>
+                            ) : (
+                              <>
+                                {categoryPrices.every((cp) => !cp.price || cp.price === '') && (
+                                  <Alert>
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                      Nenhum preço por categoria definido. O preço base (R$ {form.unit_price || '0.00'}) será usado para todos os assentos.
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  {categoryPrices.map((cp, idx) => (
+                                    <div key={cp.category} className="space-y-1.5 p-3 rounded-lg border bg-card">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-sm font-medium">
+                                          {seatCategoryLabels[cp.category] ?? cp.category}
+                                        </Label>
+                                        <span className="text-xs text-muted-foreground">
+                                          {cp.seatCount} assento{cp.seatCount !== 1 ? 's' : ''}
+                                        </span>
+                                      </div>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          className="pl-10 h-9"
+                                          value={cp.price}
+                                          onChange={(e) => {
+                                            setCategoryPrices((prev) =>
+                                              prev.map((item, i) => i === idx ? { ...item, price: e.target.value } : item)
+                                            );
+                                          }}
+                                          onBlur={() => {
+                                            if (cp.price) {
+                                              const val = parseFloat(cp.price);
+                                              if (!isNaN(val)) {
+                                                setCategoryPrices((prev) =>
+                                                  prev.map((item, i) => i === idx ? { ...item, price: val.toFixed(2) } : item)
+                                                );
+                                              }
+                                            }
+                                          }}
+                                          placeholder="0,00"
+                                          disabled={isReadOnly}
+                                        />
+                                      </div>
+                                      {(!cp.price || cp.price === '') && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                          Usará preço base: R$ {form.unit_price || '0.00'}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 
