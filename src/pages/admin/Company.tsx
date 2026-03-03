@@ -13,13 +13,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode } from 'lucide-react';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
+import { QRCodeSVG } from 'qrcode.react';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -144,11 +145,109 @@ export default function CompanyPage() {
   });
   const [slugCheckLoading, setSlugCheckLoading] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const showcaseQrRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedPublicSlug = normalizePublicSlug(form.public_slug);
   const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
   const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
   const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
+  const canRenderShowcaseQr = normalizedPublicSlug.length > 0 && !isReservedSlug && slugAvailable === true;
+
+  const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${normalizedPublicSlug || 'nick'}`;
+
+  // Comentário: reutiliza a serialização de SVG já adotada no projeto para exportações de QR em alta qualidade.
+  const getShowcaseQrSvgString = () => {
+    const svgElement = showcaseQrRef.current?.querySelector('svg');
+    if (!svgElement) return null;
+    return new XMLSerializer().serializeToString(svgElement);
+  };
+
+  const handleDownloadShowcaseQrSvg = () => {
+    if (!canRenderShowcaseQr) {
+      toast.error('Configure um nick válido para exportar o QR Code');
+      return;
+    }
+
+    const svgString = getShowcaseQrSvgString();
+    if (!svgString) {
+      toast.error('Erro ao gerar SVG do QR Code');
+      return;
+    }
+
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${getShowcaseQrFileBaseName()}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('QR Code SVG baixado!');
+  };
+
+  const handleDownloadShowcaseQrPng = () => {
+    if (!canRenderShowcaseQr) {
+      toast.error('Configure um nick válido para exportar o QR Code');
+      return;
+    }
+
+    const svgString = getShowcaseQrSvgString();
+    if (!svgString) {
+      toast.error('Erro ao gerar PNG do QR Code');
+      return;
+    }
+
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new window.Image();
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // Comentário: escala 4x evita borrão no PNG e mantém leitura para impressão.
+      const scale = 4;
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        toast.error('Erro ao renderizar PNG do QR Code');
+        return;
+      }
+
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, img.width, img.height);
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          toast.error('Erro ao exportar PNG do QR Code');
+          return;
+        }
+
+        const pngUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = `${getShowcaseQrFileBaseName()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(pngUrl);
+        toast.success('QR Code PNG baixado!');
+      }, 'image/png');
+
+      URL.revokeObjectURL(url);
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      toast.error('Erro ao processar QR Code para download');
+    };
+
+    img.src = url;
+  };
 
   const hydrateFormFromCompany = (data: Company | null) => {
     const legalType = data?.legal_type === 'PF' ? 'PF' : 'PJ';
@@ -952,65 +1051,118 @@ export default function CompanyPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="public_slug">Seu nick (link público)</Label>
-                          <Input
-                            id="public_slug"
-                            value={form.public_slug}
-                            onChange={(e) => setForm({ ...form, public_slug: e.target.value })}
-                            placeholder="Ex: Viagens São José"
-                          />
-                        </div>
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="public_slug">Seu nick (link público)</Label>
+                              <Input
+                                id="public_slug"
+                                value={form.public_slug}
+                                onChange={(e) => setForm({ ...form, public_slug: e.target.value })}
+                                placeholder="Ex: Viagens São José"
+                              />
+                            </div>
 
-                        <div className="grid gap-2 rounded-md border p-3 text-sm">
-                          <div className="flex items-start gap-2">
-                            <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium">Curto: {shortLink}</p>
-                              <p className="text-muted-foreground">Canônico: {canonicalLink}</p>
+                            <div className="grid gap-2 rounded-md border p-3 text-sm">
+                              <div className="flex items-start gap-2">
+                                <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <p className="font-medium">Curto: {shortLink}</p>
+                                  <p className="text-muted-foreground">Canônico: {canonicalLink}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {slugCheckLoading ? (
+                                <Badge variant="secondary" className="gap-1">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Validando nick...
+                                </Badge>
+                              ) : isReservedSlug ? (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" /> Indisponível (reservado)
+                                </Badge>
+                              ) : normalizedPublicSlug && slugAvailable === true ? (
+                                <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+                                  <CheckCircle2 className="h-3 w-3" /> Disponível
+                                </Badge>
+                              ) : normalizedPublicSlug && slugAvailable === false ? (
+                                <Badge variant="destructive" className="gap-1">
+                                  <AlertCircle className="h-3 w-3" /> Indisponível (já em uso)
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Digite um nick para validar</Badge>
+                              )}
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={!normalizedPublicSlug}
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(shortLink);
+                                  toast.success('Link curto copiado!');
+                                }}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copiar link curto
+                              </Button>
+                            </div>
+
+                            <p className="text-xs text-muted-foreground">
+                              Evite mudar depois para não quebrar links divulgados.
+                            </p>
+                          </div>
+
+                          <div className="rounded-md border bg-muted/20 p-3">
+                            <div className="space-y-3">
+                              <p className="text-sm font-medium">QR Code da vitrine</p>
+                              <div className="flex min-h-[220px] items-center justify-center rounded-md border bg-white p-3">
+                                {canRenderShowcaseQr ? (
+                                  <div ref={showcaseQrRef}>
+                                    <QRCodeSVG value={shortLink} size={200} level="H" includeMargin={false} />
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2 text-center text-muted-foreground">
+                                    <QrCode className="mx-auto h-8 w-8" />
+                                    <p className="text-xs">
+                                      Configure um nick válido para gerar o QR Code da vitrine.
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <p className="text-center text-xs text-muted-foreground">
+                                Escaneie para abrir a vitrine
+                              </p>
+
+                              <div className="grid gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="justify-start"
+                                  onClick={handleDownloadShowcaseQrPng}
+                                  disabled={!canRenderShowcaseQr}
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Baixar QR Code (PNG)
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="justify-start"
+                                  onClick={handleDownloadShowcaseQrSvg}
+                                  disabled={!canRenderShowcaseQr}
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Baixar QR Code (SVG)
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          {slugCheckLoading ? (
-                            <Badge variant="secondary" className="gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" /> Validando nick...
-                            </Badge>
-                          ) : isReservedSlug ? (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertCircle className="h-3 w-3" /> Indisponível (reservado)
-                            </Badge>
-                          ) : normalizedPublicSlug && slugAvailable === true ? (
-                            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
-                              <CheckCircle2 className="h-3 w-3" /> Disponível
-                            </Badge>
-                          ) : normalizedPublicSlug && slugAvailable === false ? (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertCircle className="h-3 w-3" /> Indisponível (já em uso)
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">Digite um nick para validar</Badge>
-                          )}
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={!normalizedPublicSlug}
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(shortLink);
-                              toast.success('Link curto copiado!');
-                            }}
-                          >
-                            <Copy className="mr-2 h-4 w-4" />
-                            Copiar link curto
-                          </Button>
-                        </div>
-
-                        <p className="text-xs text-muted-foreground">
-                          Evite mudar depois para não quebrar links divulgados.
-                        </p>
                       </CardContent>
                     </Card>
                   </TabsContent>
