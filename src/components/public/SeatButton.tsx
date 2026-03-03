@@ -15,7 +15,7 @@ const stateStyles: Record<SeatState, string> = {
   available:
     'bg-white text-gray-700 hover:bg-muted/40 cursor-pointer',
   selected:
-    'bg-primary text-primary-foreground cursor-pointer ring-2 ring-primary/30',
+    'bg-primary/15 text-primary border-primary shadow-sm cursor-pointer ring-2 ring-primary/35',
   occupied:
     'bg-gray-100 text-gray-500 cursor-not-allowed',
   blocked:
