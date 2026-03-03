@@ -1,6 +1,7 @@
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatBoardingDateTime } from '@/lib/utils';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 interface TicketVisualRenderOptions {
   width?: number;
@@ -308,20 +309,20 @@ export async function renderTicketVisual(
     if (ticket.unitPrice != null) {
       ctx.fillStyle = '#64748b';
       ctx.fillText('Passagem', cardX + 34, y);
-      ctx.fillText(`R$ ${ticket.unitPrice.toFixed(2)}`, cardX + cardW - 160, y);
+      ctx.fillText(formatCurrencyBRL(ticket.unitPrice), cardX + cardW - 160, y);
       y += 26;
     }
     ticket.fees.forEach((fee) => {
       ctx.fillStyle = '#64748b';
       ctx.fillText(fee.name, cardX + 34, y);
-      ctx.fillText(`R$ ${fee.amount.toFixed(2)}`, cardX + cardW - 160, y);
+      ctx.fillText(formatCurrencyBRL(fee.amount), cardX + cardW - 160, y);
       y += 26;
     });
     if (ticket.totalPaid != null) {
       ctx.fillStyle = '#0f172a';
       ctx.font = '600 20px Inter, Arial, sans-serif';
       ctx.fillText('Total pago', cardX + 34, y);
-      ctx.fillText(`R$ ${ticket.totalPaid.toFixed(2)}`, cardX + cardW - 160, y);
+      ctx.fillText(formatCurrencyBRL(ticket.totalPaid), cardX + cardW - 160, y);
     }
   }
 

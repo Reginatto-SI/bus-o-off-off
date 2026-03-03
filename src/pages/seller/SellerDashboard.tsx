@@ -62,6 +62,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { formatCurrencyBRL } from '@/lib/currency';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Dialog,
@@ -368,7 +369,7 @@ export default function SellerDashboard() {
                     <DollarSign className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">Total Vendido</p>
-                      <p className="text-lg font-bold">R$ {totalValue.toFixed(2)}</p>
+                      <p className="text-lg font-bold">{formatCurrencyBRL(totalValue)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -379,7 +380,7 @@ export default function SellerDashboard() {
                     <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">Pagas</p>
-                      <p className="text-lg font-bold">R$ {paidValue.toFixed(2)}</p>
+                      <p className="text-lg font-bold">{formatCurrencyBRL(paidValue)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -391,7 +392,7 @@ export default function SellerDashboard() {
                     <div className="min-w-0">
                       {/* Exibe o KPI financeiro principal sem alterar a regra já existente de comissão. */}
                       <p className="text-xs text-muted-foreground">Comissão a Receber</p>
-                      <p className="text-lg font-bold">R$ {sellerCommission.toFixed(2)}</p>
+                      <p className="text-lg font-bold">{formatCurrencyBRL(sellerCommission)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -537,7 +538,7 @@ export default function SellerDashboard() {
                             </p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-bold text-sm">R$ {saleValue.toFixed(2)}</p>
+                            <p className="font-bold text-sm">{formatCurrencyBRL(saleValue)}</p>
                             <StatusBadge status={sale.status} className="mt-1" />
                           </div>
                         </div>

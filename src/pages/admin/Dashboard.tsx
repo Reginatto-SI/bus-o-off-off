@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares
@@ -94,10 +95,6 @@ const CHART_LINE_COLOR = 'hsl(var(--primary))';
 /* ═══════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════ */
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
 
 function formatPercent(value: number | null) {
   if (value === null) return '—';
@@ -397,9 +394,9 @@ export default function Dashboard() {
               ))
             ) : (
               <>
-                <StatsCard label="Receita Bruta" value={formatCurrency(finKpis?.grossRevenue ?? 0)} icon={DollarSign} variant="success" />
-                <StatsCard label="Custo Plataforma" value={formatCurrency(finKpis?.platformFee ?? 0)} icon={Percent} variant="warning" />
-                <StatsCard label="Comissão Vendedores" value={formatCurrency(finKpis?.sellersCommission ?? 0)} icon={Users} />
+                <StatsCard label="Receita Bruta" value={formatCurrencyBRL(finKpis?.grossRevenue ?? 0)} icon={DollarSign} variant="success" />
+                <StatsCard label="Custo Plataforma" value={formatCurrencyBRL(finKpis?.platformFee ?? 0)} icon={Percent} variant="warning" />
+                <StatsCard label="Comissão Vendedores" value={formatCurrencyBRL(finKpis?.sellersCommission ?? 0)} icon={Users} />
               </>
             )}
           </div>
