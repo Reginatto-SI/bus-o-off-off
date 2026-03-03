@@ -177,7 +177,8 @@ export default function CompanyRegistration() {
         title: 'Bem-vindo! 🎉',
         description: 'Sua empresa foi cadastrada com sucesso. Comece criando seu primeiro evento!',
       });
-      navigate('/admin/eventos');
+      // Após cadastro + login automático, priorizar visão executiva inicial do Admin.
+      navigate('/admin/dashboard');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Erro inesperado. Tente novamente.';
       setError(errorMessage);
