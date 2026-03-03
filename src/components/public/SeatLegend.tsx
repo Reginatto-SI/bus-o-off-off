@@ -1,27 +1,27 @@
 import { cn } from '@/lib/utils';
-import { Check, User, Ban } from 'lucide-react';
+import { Check, User, Ban, Circle } from 'lucide-react';
 import type { SeatCategory } from '@/types/database';
 
 const statusItems = [
   {
     label: 'Disponível',
-    className: 'bg-white border-gray-300 text-gray-700',
-    icon: null,
+    icon: <Circle className="h-2.5 w-2.5" strokeWidth={2} />,
+    className: 'text-gray-500',
   },
   {
     label: 'Selecionado',
-    className: 'bg-primary border-primary text-primary-foreground',
     icon: <Check className="h-2.5 w-2.5" strokeWidth={3} />,
+    className: 'text-primary',
   },
   {
     label: 'Ocupado',
-    className: 'bg-red-50 border-red-300 text-red-400',
     icon: <User className="h-2.5 w-2.5" />,
+    className: 'text-gray-400',
   },
   {
     label: 'Bloqueado',
-    className: 'bg-amber-50 border-amber-300 text-amber-500',
     icon: <Ban className="h-2.5 w-2.5" />,
+    className: 'text-amber-600/80',
   },
 ];
 
@@ -29,16 +29,16 @@ const categoryLabels: Record<string, string> = {
   convencional: 'Convencional',
   executivo: 'Executivo',
   leito: 'Leito',
-  semi_leito: 'Semi-leito',
-  leito_cama: 'Leito Cama',
+  semi_leito: 'Leito',
+  leito_cama: 'Leito',
 };
 
-const categoryColors: Record<string, string> = {
-  leito: 'bg-yellow-50 border-yellow-500 text-yellow-700',
-  executivo: 'bg-emerald-50 border-emerald-500 text-emerald-700',
-  semi_leito: 'bg-blue-50 border-blue-500 text-blue-700',
-  leito_cama: 'bg-rose-50 border-rose-500 text-rose-700',
-  convencional: 'bg-white border-gray-300 text-gray-700',
+const categoryBorderColors: Record<string, string> = {
+  convencional: 'border-gray-300',
+  executivo: 'border-emerald-400/80',
+  leito: 'border-yellow-500/80',
+  semi_leito: 'border-yellow-500/80',
+  leito_cama: 'border-yellow-500/80',
 };
 
 interface SeatLegendProps {
@@ -46,31 +46,47 @@ interface SeatLegendProps {
 }
 
 export function SeatLegend({ categories }: SeatLegendProps) {
-  const uniqueCategories = categories ? [...new Set(categories)] : [];
-  const showCategories = uniqueCategories.length > 1;
+  void categories;
+
+  // Mantemos os 3 tipos fixos para uma leitura previsível e compacta no mobile.
+  const normalizedCategories: Array<'convencional' | 'executivo' | 'leito'> = [
+    'convencional',
+    'executivo',
+    'leito',
+  ];
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-4 justify-center">
-        {statusItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <div className={cn('w-6 h-6 rounded-lg border-2 flex items-center justify-center', item.className)}>
-              {item.icon}
-            </div>
-            <span>{item.label}</span>
+    <div className="space-y-2">
+      {/* Linha única e compacta: status é prioridade visual, sem caixas para não competir com o mapa. */}
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+        {statusItems.map((item, index) => (
+          <div key={item.label} className="flex items-center gap-1">
+            <span className={cn('inline-flex items-center', item.className)}>{item.icon}</span>
+            <span className="font-normal">{item.label}</span>
+            {index < statusItems.length - 1 && <span className="text-muted-foreground/60">•</span>}
           </div>
         ))}
       </div>
-      {showCategories && (
-        <div className="flex flex-wrap gap-3 justify-center pt-1">
-          {uniqueCategories.map((cat) => (
-            <div key={cat} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className={cn('w-5 h-5 rounded border-2', categoryColors[cat] || categoryColors.convencional)} />
-              <span>{categoryLabels[cat] || cat}</span>
+
+      {/* Bloco secundário de categoria com baixo contraste para manter o foco no mapa. */}
+      <div className="rounded-md bg-muted/25 px-2 py-1.5">
+        <p className="text-[10px] text-muted-foreground/80 text-center">
+          A cor da borda indica o tipo da poltrona.
+        </p>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 justify-center">
+          {normalizedCategories.map((cat) => (
+            <div key={cat} className="flex items-center gap-1 text-[10px] text-muted-foreground/85">
+              <div
+                className={cn(
+                  'w-3.5 h-3.5 rounded-[4px] border bg-white',
+                  categoryBorderColors[cat] || categoryBorderColors.convencional,
+                )}
+              />
+              <span>{categoryLabels[cat]}</span>
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Seat, SeatCategory } from '@/types/database';
 import { SeatButton, SeatState } from './SeatButton';
 import { SeatLegend } from './SeatLegend';
@@ -54,6 +54,27 @@ export function SeatMap({
 
   const seatCategories = seats.map((s) => (s.category || 'convencional') as SeatCategory);
 
+  const availableSeatsByFloor = useMemo(() => {
+    // Vagas vendáveis por piso: total de assentos do piso - ocupados - bloqueados operacionais.
+    // Mantido no front apenas para apresentação dinâmica sem alterar regra de negócio.
+    const blockedSet = new Set(blockedSeatIds);
+    const occupiedSet = new Set(occupiedSeatIds);
+
+    return Array.from({ length: floors }, (_, index) => {
+      const floor = index + 1;
+      const floorSeatList = seats.filter((seat) => seat.floor === floor);
+      const availableCount = floorSeatList.filter((seat) => {
+        if (seat.status === 'bloqueado') return false;
+        if (blockedSet.has(seat.id)) return false;
+        if (occupiedSet.has(seat.id)) return false;
+        return true;
+      }).length;
+
+      return { floor, availableCount };
+    });
+  }, [seats, blockedSeatIds, occupiedSeatIds, floors]);
+
+
   const floorSeats = seats
     .filter((s) => s.floor === activeFloor)
     .sort((a, b) => {
@@ -103,9 +124,17 @@ export function SeatMap({
       {/* Floor selector */}
       {floors > 1 && (
         <Tabs value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
-          <TabsList className="w-full">
-            <TabsTrigger value="1" className="flex-1">Piso inferior</TabsTrigger>
-            <TabsTrigger value="2" className="flex-1">Piso superior</TabsTrigger>
+          <TabsList className="w-full h-auto gap-1 p-1">
+            {availableSeatsByFloor.map(({ floor, availableCount }) => (
+              <TabsTrigger key={floor} value={String(floor)} className="flex-1 h-auto py-2">
+                <span className="flex flex-col leading-tight text-center">
+                  <span>{floor === 1 ? 'Piso inferior' : floor === 2 ? 'Piso superior' : `Piso ${floor}`}</span>
+                  <span className="text-[11px] font-normal text-muted-foreground">
+                    {availableCount} vaga{availableCount === 1 ? '' : 's'} disponível{availableCount === 1 ? '' : 'is'}
+                  </span>
+                </span>
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
       )}
