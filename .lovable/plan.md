@@ -1,43 +1,60 @@
+Diagnóstico completo (comprovado)
 
+- O problema não é só visual: há divergência real entre o layout oficial do veículo e os assentos materializados no banco.
+- Evidência principal do veículo AJY-7E61:
+  - `layout_snapshot` do veículo: 60 assentos vendáveis (36 convencional, 12 executivo, 12 leito).
+  - assentos materializados (`seats`): 11 vendáveis (2 convencional, 9 executivo), nenhum leito.
+- Por isso a Etapa 4/5 (“Passagens”) mostra só convencional/executivo e com contagem errada.
+- Causa raiz técnica:
+  1. a sincronização `layout_snapshot -> seats` insere antes de “limpar/liberar” labels legadas;
+  2. existe unicidade por `(vehicle_id, label)`, então há conflito de label em assentos antigos;
+  3. erros de insert/update/delete na sincronização não são tratados (fluxo pode “dar sucesso” mesmo com falha parcial).
+- Auditoria financeira:
+  - checkout online usa `gross_amount` para gerar cobrança no gateway (correto conceitualmente), mas cálculo/preview hoje pode divergir em cenários de preço misto por categoria + taxas por arredondamento e base incorreta na simulação.
+  - isso precisa ser unificado para garantir valor final exato.
 
-# Fix: Sincronização de Categorias Template → Seats → Evento
+Plano de correção (implementação)
 
-## Problema Raiz
+1. Robustecer sincronização de assentos em `src/pages/admin/Fleet.tsx`
 
-Dois veículos existentes têm `layout_snapshot = NULL` e 49/50 seats todos com categoria "convencional", apesar do template ter 3 categorias (convencional: 36, executivo: 12, leito: 12). Isso acontece porque:
+- Reescrever `syncSeatsFromSnapshot` em fases seguras:
+  - montar estado desejado a partir do snapshot;
+  - identificar assentos “órfãos” (fora do snapshot);
+  - deletar órfãos sem vínculo de ticket;
+  - para órfãos com ticket, bloquear e renomear para label técnica única (liberando labels comerciais);
+  - atualizar assentos que permanecem;
+  - inserir assentos faltantes;
+  - validar resultado final (contagem/categorias) contra snapshot.
+- Tratar erro em todas operações (insert/update/delete): se falhar, lançar erro e não exibir sucesso falso.
+- No “Re-sincronizar assentos”, retornar resumo pós-processamento (totais por categoria) e erro explícito se houver divergência.
 
-1. O snapshot só é gerado na **criação** de veículo novo (condição `!editingId` na linha 655 do Fleet.tsx). Veículos editados nunca recebem snapshot.
-2. Sem snapshot, `syncSeatsFromSnapshot` nunca roda e as categorias dos seats nunca são atualizadas.
-3. Consequência: na aba Passagens do Evento, a query busca categorias da tabela `seats` e encontra apenas "convencional".
+2. Corrigir origem da contagem por categoria no evento em `src/pages/admin/Events.tsx`
 
-## Correções
+- `fetchCategoryPrices` deve derivar categorias/quantidades do `vehicles.layout_snapshot` dos veículos vinculados ao evento (fonte oficial), não da tabela `seats`.
+- Manter fallback para `seats` apenas se snapshot inexistente.
+- Mostrar alerta técnico no admin quando snapshot e `seats` estiverem divergentes (com orientação para reprocessar frota).
 
-### 1. Fleet.tsx — Gerar snapshot também ao editar veículo existente
+3. Unificar cálculo financeiro do preço por categoria (checkout/financeiro)
 
-**Mudança:** Remover a condição `!editingId` da linha 655. Se o veículo tem `template_layout_id` e o snapshot está nulo (ou o template mudou), regenerar o snapshot tanto na criação quanto na edição.
+- Criar helper único em `src/lib/feeCalculator.ts` para cálculo por assento (array de assentos selecionados), aplicando:
+  - preço da categoria;
+  - fallback para preço base;
+  - taxas adicionais;
+  - taxa da plataforma quando repassada ao cliente.
+- Aplicar helper em:
+  - `src/pages/public/Checkout.tsx` (preview + `gross_amount` persistido);
+  - `src/components/admin/NewSaleModal.tsx` (venda manual/reserva com preço por categoria + taxas, mantendo regra de plataforma conforme canal).
+- Garantir que valor mostrado ao usuário = valor salvo em `sales.gross_amount` = valor cobrado no gateway.
 
-Após o save (update ou insert), **sempre** rodar `syncSeatsFromSnapshot` quando houver `template_layout_id`, mesmo que o snapshot já existisse — para re-sincronizar categorias de veículos antigos.
+4. Correção de dados já afetados (sem quebrar histórico)
 
-Lógica simplificada:
-```
-if (form.template_layout_id) {
-  // Buscar items do template e montar snapshot
-  // Salvar snapshot no veículo
-  // Rodar syncSeatsFromSnapshot
-}
-```
+- Após patch, executar re-sincronização dos veículos com template (especialmente AJY-7E61).
+- Preservar tickets históricos (sem apagar vínculos), apenas isolar assentos legados para não conflitar com labels oficiais.
+- Resultado esperado no caso reportado: categorias disponíveis no evento = Convencional, Executivo e Leito, com quantidades corretas do template.
 
-### 2. Fleet.tsx — Botão "Re-sincronizar Layout" para veículos existentes
+Detalhes técnicos (objetivos de qualidade)
 
-Adicionar na aba Capacidade, quando veículo tem template vinculado, um botão discreto "Re-sincronizar assentos do template" que força a regeneração do snapshot e re-sync dos seats. Isso resolve veículos existentes sem precisar editar/salvar.
-
-### 3. Garantir que `syncSeatsFromSnapshot` atualiza categoria dos seats existentes
-
-Já está implementado (linha 180-184 do Fleet.tsx faz `toUpdate.push({ id, label, status, category })`), MAS preciso verificar que o batch update realmente escreve `category`. Vou conferir o bloco de update.
-
-## Arquivos Afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/admin/Fleet.tsx` | Snapshot na edição + botão re-sync + garantir update de category |
-
+- Integridade: nenhuma sincronização “parcial silenciosa”.
+- Observabilidade: mensagens claras de erro/sucesso real.
+- Consistência entre telas: Layout Template -> Veículo -> Evento -> Checkout -> Cobrança.
+- Compatibilidade: eventos antigos continuam funcionais com preço base/fallback.
