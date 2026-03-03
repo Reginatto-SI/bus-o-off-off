@@ -131,6 +131,50 @@ export default function Checkout() {
 
   const usesCategoryPricing = Boolean((event as any)?.use_category_pricing);
   const hasMixedPrices = usesCategoryPricing && selectedSeats.length > 0 && new Set(selectedSeats.map(getSeatPrice)).size > 1;
+
+  const seatLabels = useMemo(
+    () => selectedSeats.map((seatId) => seats.find((seat) => seat.id === seatId)?.label ?? seatId),
+    [selectedSeats, seats]
+  );
+
+  // Comentário de suporte: consolidamos os números do resumo em um único memo para evitar
+  // divergência visual entre as etapas sem alterar as regras atuais de cálculo.
+  const checkoutSummary = useMemo(() => {
+    if (!event || platformFeePercent == null) {
+      return {
+        seatSubtotal: 0,
+        totalFees: 0,
+        grandTotal: 0,
+        hasFeeLines: false,
+      };
+    }
+
+    const selectedCount = selectedSeats.length;
+    const seatsTotal = usesCategoryPricing
+      ? selectedSeats.reduce((sum, seatId) => {
+        const seat = seats.find((s) => s.id === seatId);
+        const catPrice = categoryPrices.find((cp) => cp.category === seat?.category);
+        const seatPrice = catPrice?.price ?? event.unit_price ?? 0;
+        return sum + seatPrice;
+      }, 0)
+      : (event.unit_price ?? 0) * selectedCount;
+
+    const avgUnitPrice = selectedCount > 0
+      ? seatsTotal / selectedCount
+      : (event.unit_price ?? 0);
+
+    const breakdown = calculateFees(avgUnitPrice, eventFees, {
+      passToCustomer: event.pass_platform_fee_to_customer,
+      feePercent: platformFeePercent,
+    });
+
+    return {
+      seatSubtotal: seatsTotal,
+      totalFees: breakdown.totalFees * selectedCount,
+      grandTotal: seatsTotal + (breakdown.totalFees * selectedCount),
+      hasFeeLines: breakdown.fees.length > 0,
+    };
+  }, [event, platformFeePercent, selectedSeats, usesCategoryPricing, eventFees, seats, categoryPrices]);
   const fetchOccupiedSeats = useCallback(async (tripUuid: string, isActive: () => boolean) => {
     setLoadingSeatStatus(true);
     setSeatStatusError(null);
@@ -703,7 +747,7 @@ export default function Checkout() {
 
   return (
     <PublicLayout>
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-6 pb-36">
         {/* Header with back & step indicator */}
         <div className="flex items-center gap-3">
           <Button
@@ -756,6 +800,43 @@ export default function Checkout() {
           </div>
         </div>
 
+        {/* Resumo persistente da compra no corpo da tela (desktop e referência visual geral). */}
+        <div className="rounded-lg border bg-card p-4 space-y-2">
+          <h2 className="text-sm font-semibold">Resumo da compra</h2>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Evento</span>
+            <span className="font-medium text-right">{event.name}</span>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Embarque</span>
+            <span className="font-medium text-right">
+              {location.name}{displayTime ? ` • ${displayTime}` : ''}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Assento{seatLabels.length > 1 ? 's' : ''}</span>
+            <span className="font-medium text-right">{seatLabels.length > 0 ? seatLabels.join(', ') : 'Não selecionado'}</span>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Passagens</span>
+            <span className="font-medium text-right">{selectedSeats.length || quantity}</span>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Passagem</span>
+            <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.seatSubtotal)}</span>
+          </div>
+          {checkoutSummary.hasFeeLines && (
+            <div className="flex justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Taxa da plataforma</span>
+              <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.totalFees)}</span>
+            </div>
+          )}
+          <div className="flex justify-between gap-3 text-sm font-semibold border-t pt-2">
+            <span>Total</span>
+            <span>{formatCurrencyBRL(checkoutSummary.grandTotal)}</span>
+          </div>
+        </div>
+
         {/* ============ STEP 1: Seat Selection ============ */}
         {step === 1 && (
           <>
@@ -783,23 +864,7 @@ export default function Checkout() {
               interactionDisabled={generatingSeats}
             />
 
-            <Button
-              className="w-full h-14 text-lg font-medium"
-              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
-              onClick={handleAdvanceToPassengers}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Verificando assentos...
-                </>
-              ) : (
-                <>
-                  Continuar para identificação dos passageiros
-                  <ChevronRight className="h-5 w-5 ml-1" />
-                </>
-              )}
-            </Button>
+            <div className="h-1" />
           </>
         )}
 
@@ -943,77 +1008,37 @@ export default function Checkout() {
               </div>
             )}
 
-            {/* Fee breakdown summary */}
-            {event && (() => {
-              if (platformFeePercent == null) {
-                return (
-                  <div className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
-                    Não foi possível carregar a taxa da plataforma da empresa para simular o total.
-                  </div>
-                );
-              }
-
-              const breakdown = calculateFees(event.unit_price ?? 0, eventFees, {
-                passToCustomer: event.pass_platform_fee_to_customer,
-                feePercent: platformFeePercent,
-              });
-              const hasActiveFees = breakdown.fees.length > 0;
-
-              // Per-seat pricing display
-              const perSeatPrices = usesCategoryPricing
-                ? selectedSeats.map((seatId) => ({ seatId, price: getSeatPrice(seatId), label: seatLabelMap[seatId] }))
-                : null;
-              const seatsSubtotal = perSeatPrices
-                ? perSeatPrices.reduce((sum, s) => sum + s.price, 0)
-                : (event.unit_price ?? 0) * quantity;
-              const totalFees = breakdown.totalFees * quantity;
-              const grandTotal = seatsSubtotal + totalFees;
-
-              return (
-                <div className="rounded-lg border p-4 space-y-2 bg-muted/30">
-                  {perSeatPrices ? (
-                    perSeatPrices.map((s) => (
-                      <div key={s.seatId} className="flex justify-between text-sm">
-                        <span>Assento {s.label}</span>
-                        <span>{formatCurrencyBRL(s.price)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex justify-between text-sm">
-                      <span>Passagem × {quantity}</span>
-                      <span>{formatCurrencyBRL((event.unit_price ?? 0) * quantity)}</span>
-                    </div>
-                  )}
-                  {hasActiveFees && breakdown.fees.map((fee, idx) => (
-                    <div key={idx} className="flex justify-between text-sm text-muted-foreground">
-                      <span>{fee.name} × {quantity}</span>
-                      <span>{formatCurrencyBRL(fee.amount * quantity)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-base font-semibold pt-1 border-t">
-                    <span>Total</span>
-                    <span>{formatCurrencyBRL(grandTotal)}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <Button
-              className="w-full h-14 text-lg font-medium"
-              disabled={submitting}
-              onClick={handleSubmit}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                'Ir para pagamento'
-              )}
-            </Button>
+            <div className="h-1" />
           </>
         )}
+      </div>
+
+      {/* Barra fixa mobile-first do resumo + CTA para reduzir incerteza ao longo do checkout. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">
+              {seatLabels.length > 0 ? `Assento ${seatLabels.join(', ')}` : 'Selecione seu assento'}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              Total {formatCurrencyBRL(checkoutSummary.grandTotal)}
+            </p>
+          </div>
+
+          {step === 1 ? (
+            <Button
+              className="h-10 px-4"
+              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
+              onClick={handleAdvanceToPassengers}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
+            </Button>
+          ) : (
+            <Button className="h-10 px-4" disabled={submitting} onClick={handleSubmit}>
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir para pagamento'}
+            </Button>
+          )}
+        </div>
       </div>
     </PublicLayout>
   );
