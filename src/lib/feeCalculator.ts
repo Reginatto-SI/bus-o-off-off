@@ -68,3 +68,53 @@ export function calculateFees(
     unitPriceWithFees: Math.round((unitPrice + totalFees) * 100) / 100,
   };
 }
+
+/**
+ * Informação de preço de um assento individual para cálculo unificado.
+ */
+export interface SeatPriceInput {
+  seatId: string;
+  category: string;
+}
+
+/**
+ * Calcula o valor total de um conjunto de assentos selecionados,
+ * aplicando preço por categoria quando disponível, fallback para preço base,
+ * e somando taxas (event fees + plataforma se repassada).
+ *
+ * Garante que o resultado seja exatamente o valor a ser cobrado no gateway.
+ */
+export function calculateSeatsTotal(
+  seats: SeatPriceInput[],
+  unitPrice: number,
+  categoryPricesMap: Map<string, number>,
+  fees: EventFeeInput[],
+  platformFeeConfig?: PlatformFeeConfig,
+): {
+  seatsSubtotal: number;
+  feesTotal: number;
+  grossTotal: number;
+  avgUnitPrice: number;
+  feeBreakdown: FeeBreakdown;
+} {
+  const quantity = seats.length;
+  if (quantity === 0) {
+    const feeBreakdown = calculateFees(unitPrice, fees, platformFeeConfig);
+    return { seatsSubtotal: 0, feesTotal: 0, grossTotal: 0, avgUnitPrice: unitPrice, feeBreakdown };
+  }
+
+  // Preço individual por assento (categoria ou fallback base)
+  const seatsSubtotal = seats.reduce((sum, s) => {
+    const catPrice = categoryPricesMap.get(s.category);
+    return sum + (catPrice != null && catPrice > 0 ? catPrice : unitPrice);
+  }, 0);
+
+  const avgUnitPrice = Math.round((seatsSubtotal / quantity) * 100) / 100;
+
+  // Taxas calculadas sobre o preço médio (por passageiro)
+  const feeBreakdown = calculateFees(avgUnitPrice, fees, platformFeeConfig);
+  const feesTotal = Math.round(feeBreakdown.totalFees * quantity * 100) / 100;
+  const grossTotal = Math.round((seatsSubtotal + feesTotal) * 100) / 100;
+
+  return { seatsSubtotal, feesTotal, grossTotal, avgUnitPrice, feeBreakdown };
+}

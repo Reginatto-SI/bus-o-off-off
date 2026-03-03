@@ -118,12 +118,15 @@ const TEMPLATE_PREVIEW_CATEGORY_COLORS: Record<SeatCategory, string> = {
 
 // Comentário P0: sincronização idempotente layout_snapshot → seats.
 // Garante que assentos no banco reflitam exatamente o snapshot do veículo.
+// Reescrito com fases seguras para evitar conflito de labels (UNIQUE vehicle_id+label).
 async function syncSeatsFromSnapshot(
   vehicleId: string,
   companyId: string,
   snapshot: Record<string, any> | null,
-) {
-  if (!snapshot || !snapshot.items || !Array.isArray(snapshot.items)) return;
+): Promise<{ inserted: number; updated: number; deleted: number; blocked: number; errors: string[] }> {
+  const result = { inserted: 0, updated: 0, deleted: 0, blocked: 0, errors: [] as string[] };
+
+  if (!snapshot || !snapshot.items || !Array.isArray(snapshot.items)) return result;
 
   const items = snapshot.items as Array<{
     floor_number: number;
@@ -134,107 +137,186 @@ async function syncSeatsFromSnapshot(
     is_blocked?: boolean;
   }>;
 
-  // 1. Buscar seats existentes do veículo
-  const { data: existingSeats } = await supabase
+  // === FASE 1: Montar estado desejado ===
+  // Numerar sequencialmente (items já vêm ordenados do snapshot)
+  let seatNumber = 1;
+  const desiredSeats = items.map((item) => {
+    const label = item.is_blocked
+      ? (item.seat_number || 'X')
+      : (item.seat_number || String(seatNumber++));
+    if (!item.is_blocked && !item.seat_number) {
+      // seat_number was auto-assigned
+    }
+    return {
+      floor: item.floor_number,
+      row_number: item.row_number,
+      column_number: item.column_number,
+      label,
+      status: item.is_blocked ? 'bloqueado' as const : 'disponivel' as const,
+      category: item.category || 'convencional',
+      coordKey: `${item.floor_number}-${item.row_number}-${item.column_number}`,
+    };
+  });
+
+  const desiredCoordMap = new Map(desiredSeats.map((s) => [s.coordKey, s]));
+
+  // === FASE 2: Buscar seats existentes do veículo ===
+  const { data: existingSeats, error: fetchErr } = await supabase
     .from('seats')
-    .select('id, floor, row_number, column_number')
+    .select('id, label, floor, row_number, column_number, category, status')
     .eq('vehicle_id', vehicleId);
 
+  if (fetchErr) {
+    result.errors.push(`Erro ao buscar assentos: ${fetchErr.message}`);
+    throw new Error(result.errors[0]);
+  }
+
   const existing = existingSeats ?? [];
-  const existingMap = new Map<string, string>();
-  existing.forEach((s) => {
-    existingMap.set(`${s.floor}-${s.row_number}-${s.column_number}`, s.id);
-  });
 
-  // 2. Numerar sequencialmente (items já vêm ordenados do snapshot)
-  const nonBlockedItems = items.filter((i) => !i.is_blocked);
-  let seatNumber = 1;
-  const labelMap = new Map<number, string>(); // index → label
-  items.forEach((item, idx) => {
-    if (item.is_blocked) {
-      labelMap.set(idx, item.seat_number || 'X');
-    } else {
-      labelMap.set(idx, item.seat_number || String(seatNumber++));
-    }
-  });
+  // === FASE 3: Identificar órfãos (assentos fora do snapshot) ===
+  const orphanSeats = existing.filter((s) => !desiredCoordMap.has(`${s.floor}-${s.row_number}-${s.column_number}`));
+  const orphanIds = orphanSeats.map((s) => s.id);
 
-  const toInsert: Array<{
-    vehicle_id: string;
-    company_id: string;
-    label: string;
-    floor: number;
-    row_number: number;
-    column_number: number;
-    status: string;
-    category: string;
-  }> = [];
-
-  const toUpdate: Array<{ id: string; label: string; status: string; category: string }> = [];
-  const processedKeys = new Set<string>();
-
-  items.forEach((item, idx) => {
-    const key = `${item.floor_number}-${item.row_number}-${item.column_number}`;
-    processedKeys.add(key);
-    const label = labelMap.get(idx) || String(idx + 1);
-    const status = item.is_blocked ? 'bloqueado' : 'disponivel';
-    const category = item.category || 'convencional';
-
-    const existingId = existingMap.get(key);
-    if (existingId) {
-      toUpdate.push({ id: existingId, label, status, category });
-    } else {
-      toInsert.push({
-        vehicle_id: vehicleId,
-        company_id: companyId,
-        label,
-        floor: item.floor_number,
-        row_number: item.row_number,
-        column_number: item.column_number,
-        status,
-        category,
-      });
-    }
-  });
-
-  // 3. Seats que existem no banco mas não no snapshot: verificar se têm tickets vinculados
-  const orphanIds = existing
-    .filter((s) => !processedKeys.has(`${s.floor}-${s.row_number}-${s.column_number}`))
-    .map((s) => s.id);
-
-  // 4. Executar operações
-  if (toInsert.length > 0) {
-    await supabase.from('seats').insert(toInsert);
-  }
-
-  for (const upd of toUpdate) {
-    await supabase
-      .from('seats')
-      .update({ label: upd.label, status: upd.status, category: upd.category })
-      .eq('id', upd.id);
-  }
-
+  // Verificar tickets vinculados a órfãos
+  let linkedSeatIds = new Set<string>();
   if (orphanIds.length > 0) {
-    // Verificar se algum tem ticket vinculado
     const { data: linkedTickets } = await supabase
       .from('tickets')
       .select('seat_id')
       .in('seat_id', orphanIds);
+    linkedSeatIds = new Set((linkedTickets ?? []).filter((t) => t.seat_id).map((t) => t.seat_id!));
+  }
 
-    const linkedSeatIds = new Set((linkedTickets ?? []).map((t) => t.seat_id));
-    const toDelete = orphanIds.filter((id) => !linkedSeatIds.has(id));
-    const toBlock = orphanIds.filter((id) => linkedSeatIds.has(id));
+  // === FASE 4: Deletar/bloquear órfãos PRIMEIRO (libera labels) ===
+  const orphansToDelete = orphanSeats.filter((s) => !linkedSeatIds.has(s.id));
+  const orphansToBlock = orphanSeats.filter((s) => linkedSeatIds.has(s.id));
 
-    if (toDelete.length > 0) {
-      await supabase.from('seats').delete().in('id', toDelete);
-    }
-    if (toBlock.length > 0) {
-      await supabase.from('seats').update({ status: 'bloqueado' }).in('id', toBlock);
+  if (orphansToDelete.length > 0) {
+    const { error: delErr } = await supabase.from('seats').delete().in('id', orphansToDelete.map((s) => s.id));
+    if (delErr) {
+      result.errors.push(`Erro ao deletar órfãos: ${delErr.message}`);
+    } else {
+      result.deleted = orphansToDelete.length;
     }
   }
 
-  // 5. Atualizar capacidade do veículo = assentos não bloqueados
-  const calculatedCapacity = nonBlockedItems.length;
+  // Órfãos com ticket: renomear label para técnica única e bloquear
+  for (const orphan of orphansToBlock) {
+    const techLabel = `_legacy_${orphan.id.slice(0, 8)}`;
+    const { error: blockErr } = await supabase
+      .from('seats')
+      .update({ status: 'bloqueado', label: techLabel })
+      .eq('id', orphan.id);
+    if (blockErr) {
+      result.errors.push(`Erro ao bloquear órfão ${orphan.label}: ${blockErr.message}`);
+    } else {
+      result.blocked++;
+    }
+  }
+
+  // Rebuild existingByLabel after orphan cleanup (orphan labels are now freed)
+  // Re-fetch to get current state
+  const { data: currentSeats } = await supabase
+    .from('seats')
+    .select('id, label, floor, row_number, column_number, category, status')
+    .eq('vehicle_id', vehicleId);
+
+  const currentByCoord = new Map((currentSeats ?? []).map((s) => [`${s.floor}-${s.row_number}-${s.column_number}`, s]));
+  const currentByLabel = new Map((currentSeats ?? []).map((s) => [s.label, s]));
+
+  // === FASE 5: Atualizar assentos que permanecem (mesma coordenada) ===
+  for (const desired of desiredSeats) {
+    const existingSeat = currentByCoord.get(desired.coordKey);
+    if (existingSeat) {
+      // Check if label is changing and new label conflicts with another seat
+      if (existingSeat.label !== desired.label) {
+        const conflicting = currentByLabel.get(desired.label);
+        if (conflicting && conflicting.id !== existingSeat.id) {
+          // Temporarily rename conflicting seat to avoid unique violation
+          const tempLabel = `_tmp_${conflicting.id.slice(0, 8)}`;
+          await supabase.from('seats').update({ label: tempLabel }).eq('id', conflicting.id);
+          currentByLabel.delete(desired.label);
+          currentByLabel.set(tempLabel, { ...conflicting, label: tempLabel });
+        }
+      }
+
+      const needsUpdate =
+        existingSeat.label !== desired.label ||
+        existingSeat.status !== desired.status ||
+        existingSeat.category !== desired.category;
+
+      if (needsUpdate) {
+        const { error: updErr } = await supabase
+          .from('seats')
+          .update({ label: desired.label, status: desired.status, category: desired.category })
+          .eq('id', existingSeat.id);
+        if (updErr) {
+          result.errors.push(`Erro ao atualizar ${desired.label}: ${updErr.message}`);
+        } else {
+          result.updated++;
+          currentByLabel.delete(existingSeat.label);
+          currentByLabel.set(desired.label, { ...existingSeat, label: desired.label });
+        }
+      }
+    }
+  }
+
+  // === FASE 6: Inserir assentos faltantes ===
+  const toInsert = desiredSeats
+    .filter((d) => !currentByCoord.has(d.coordKey))
+    .map((d) => ({
+      vehicle_id: vehicleId,
+      company_id: companyId,
+      label: d.label,
+      floor: d.floor,
+      row_number: d.row_number,
+      column_number: d.column_number,
+      status: d.status,
+      category: d.category,
+    }));
+
+  if (toInsert.length > 0) {
+    // Insert in batches to handle label conflicts gracefully
+    for (const seat of toInsert) {
+      // Check if label still conflicts
+      const conflicting = currentByLabel.get(seat.label);
+      if (conflicting) {
+        const tempLabel = `_tmp_${conflicting.id.slice(0, 8)}`;
+        await supabase.from('seats').update({ label: tempLabel }).eq('id', conflicting.id);
+        currentByLabel.delete(seat.label);
+        currentByLabel.set(tempLabel, { ...conflicting, label: tempLabel });
+      }
+
+      const { error: insErr } = await supabase.from('seats').insert(seat);
+      if (insErr) {
+        result.errors.push(`Erro ao inserir ${seat.label}: ${insErr.message}`);
+      } else {
+        result.inserted++;
+        currentByLabel.set(seat.label, seat as any);
+      }
+    }
+  }
+
+  // === FASE 7: Atualizar capacidade do veículo ===
+  const calculatedCapacity = desiredSeats.filter((s) => s.status === 'disponivel').length;
   await supabase.from('vehicles').update({ capacity: calculatedCapacity }).eq('id', vehicleId);
+
+  // === FASE 8: Validação final ===
+  const { data: finalSeats } = await supabase
+    .from('seats')
+    .select('category, status')
+    .eq('vehicle_id', vehicleId)
+    .not('label', 'like', '_legacy_%')
+    .not('label', 'like', '_tmp_%');
+
+  const finalSellable = (finalSeats ?? []).filter((s) => s.status === 'disponivel').length;
+  const expectedSellable = desiredSeats.filter((s) => s.status === 'disponivel').length;
+
+  if (finalSellable !== expectedSellable) {
+    result.errors.push(`Divergência: esperado ${expectedSellable} vendáveis, encontrado ${finalSellable}`);
+  }
+
+  return result;
 }
 
 const getSeatSidesByType = (type: Vehicle['type']) => {
@@ -729,7 +811,11 @@ export default function Fleet() {
       // Comentário P0: sincronizar seats a partir do layout_snapshot após salvar veículo.
       if (savedVehicleId && vehicleData.layout_snapshot) {
         try {
-          await syncSeatsFromSnapshot(savedVehicleId, activeCompanyId, vehicleData.layout_snapshot as Record<string, any>);
+          const syncResult = await syncSeatsFromSnapshot(savedVehicleId, activeCompanyId, vehicleData.layout_snapshot as Record<string, any>);
+          if (syncResult.errors.length > 0) {
+            console.error('Erros na sincronização:', syncResult.errors);
+            toast.error(`Veículo salvo com ${syncResult.errors.length} erro(s) na sincronização de assentos.`);
+          }
         } catch (syncError) {
           console.error('Erro ao sincronizar assentos:', syncError);
           toast.error('Veículo salvo, mas houve erro ao sincronizar assentos.');
@@ -852,8 +938,14 @@ export default function Fleet() {
         template_layout_version: template.current_version,
       }).eq('id', vehicle.id);
 
-      await syncSeatsFromSnapshot(vehicle.id, activeCompanyId, snapshot);
-      toast.success('Assentos re-sincronizados com sucesso');
+      const syncResult = await syncSeatsFromSnapshot(vehicle.id, activeCompanyId, snapshot);
+      const summary = `Inseridos: ${syncResult.inserted}, Atualizados: ${syncResult.updated}, Removidos: ${syncResult.deleted}, Bloqueados (legado): ${syncResult.blocked}`;
+      if (syncResult.errors.length > 0) {
+        console.error('Erros na re-sincronização:', syncResult.errors);
+        toast.error(`Re-sincronização com ${syncResult.errors.length} erro(s). ${summary}`);
+      } else {
+        toast.success(`Assentos re-sincronizados. ${summary}`);
+      }
       fetchVehicles();
     } catch (err) {
       console.error('Erro ao re-sincronizar:', err);
