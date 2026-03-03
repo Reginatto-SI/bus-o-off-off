@@ -1,101 +1,73 @@
 
 
-# Dashboard Administrativo — Plano de Implementação
+# Correção: Divergência no Mapa de Assentos (Double Deck)
 
-## Resumo
+## Diagnóstico (comprovado via banco)
 
-Criar a rota `/admin/dashboard` com KPIs operacionais (todos os admins) e financeiros (somente Gerente/Developer), gráficos de vendas e rankings, usando componentes existentes (PageHeader, StatsCard, FilterCard, chart.tsx).
+O veículo AJY-7E61 tem **81 seats** no banco, quando deveria ter **64** (60 vendáveis + 4 bloqueados do template).
 
-## Arquivos a criar/modificar
+**Floor 1 (Piso inferior):**
+- Template espera: 12 executivo + 4 bloqueados = 16
+- Banco tem: 12 executivo + 1 "X" bloqueado + **3 _tmp_ + 17 _legacy_** = 33
 
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/admin/Dashboard.tsx` | **Criar** — página principal |
-| `src/App.tsx` | Adicionar rota `/admin/dashboard` |
-| `src/components/layout/AdminSidebar.tsx` | Adicionar item "Dashboard" no topo da navegação |
+**Floor 2 (Piso superior):**
+- Template espera: 36 convencional + 12 leito = 48
+- Banco tem: 48 (correto agora, mas screenshots do user foram antes do último sync)
 
-## 1. Sidebar — Adicionar "Dashboard" como primeiro item
+### Causa raiz
 
-No array `navigationGroups`, inserir um novo grupo `dashboard` antes de `eventos`:
+O `syncSeatsFromSnapshot` acumula lixo a cada re-sync:
 
-```ts
-{
-  id: 'dashboard',
-  label: 'Início',
-  items: [{
-    name: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard, // lucide
-  }]
-}
-```
+1. **_legacy_ seats mantêm coordenadas originais** — na re-sync seguinte, são matched por coordenada e "atualizados" em vez de deletados, mas como o label já virou `_legacy_xxx`, o update tenta mudar o label de volta, cria conflito, e gera MAIS _tmp_ seats.
 
-## 2. App.tsx — Nova rota
+2. **_tmp_ seats nunca são limpos** — são criados na FASE 5 para evitar conflito de label, mas ficam para sempre.
 
-```tsx
-import Dashboard from "./pages/admin/Dashboard";
-// ...
-<Route path="/admin/dashboard" element={<Dashboard />} />
-```
+3. **Cada re-sync piora o problema** — acumula mais _legacy_ e _tmp_, fazendo o público mostrar dezenas de assentos bloqueados falsos.
 
-## 3. Dashboard.tsx — Estrutura da página
+### Impacto no público
 
-### State e filtros
-- `period`: 7 | 30 | 90 (dias)
-- Derivar `dateFrom` = `subDays(now(), period).toISOString()`
-- `canViewFinancials` do AuthContext controla tanto renderização quanto fetch
+O Checkout carrega `select('*').eq('vehicle_id', vehicleId)` — traz TODOS os 81 seats, incluindo 21 lixos. O SeatMap renderiza todos como bloqueados (ícone Ban), poluindo o mapa do piso inferior.
 
-### Queries (todas client-side com Supabase SDK, filtrando por `company_id`)
+## Correção
 
-**KPIs Operacionais** (uma query):
-- Eventos à venda: `events` where `status = 'a_venda'`, `is_archived = false`
-- Próximos eventos (N dias): mesma base + `date between today and today+N`
-- Vendas pagas no período: `sales` where `status = 'pago'`, `created_at` no range
-- Canceladas no período: idem com `status = 'cancelado'`
-- Ocupação média: `sum(quantity) de vendas pagas / sum(capacity) das trips vinculadas`
+### 1. `syncSeatsFromSnapshot` (Fleet.tsx) — Limpar junk ANTES de tudo
 
-**KPIs Financeiros** (só se `canViewFinancials`):
-- Receita bruta: `sum(coalesce(gross_amount, quantity * unit_price))` de vendas pagas
-- Custo plataforma: `sum(platform_fee_total)` de vendas pagas
-- Comissão vendedores: join com sellers para calcular `sum(sale_total * commission_percent / 100)`
+Adicionar **FASE 0** no início da função: deletar todos os seats com label `_legacy_%` ou `_tmp_%` que **não têm tickets vinculados**. Para os que têm tickets, manter como estão (já são _legacy_).
 
-**Gráfico "Vendas por dia"**: agregar vendas pagas por `created_at::date` no período, agrupar no front.
-
-**Gráfico "Distribuição por status"**: count por status (reservado/pago/cancelado) no período.
-
-**Rankings**:
-- Top 5 eventos por quantidade de vendas pagas
-- Top 5 vendedores (incluindo "Sem vendedor" quando `seller_id IS NULL`)
-
-### Layout (grid desktop-first)
+Isso garante que cada re-sync parte de um estado limpo, sem acumular lixo.
 
 ```text
-┌─────────────────────────────────────────────┐
-│ PageHeader: "Dashboard" + FilterCard período│
-├──────┬──────┬──────┬──────┬─────────────────┤
-│ KPI  │ KPI  │ KPI  │ KPI  │ KPI (ocupação) │  ← Operação (todos)
-├──────┴──────┼──────┴──────┼─────────────────┤
-│ KPI Receita │ KPI Plataf. │ KPI Comissão    │  ← Financeiro (Gerente)
-├─────────────┴─────────────┴─────────────────┤
-│ Gráfico Vendas/dia  │  Gráfico Status       │  ← 2 colunas
-├─────────────────────┼───────────────────────┤
-│ Top 5 Eventos       │  Top 5 Vendedores     │  ← 2 colunas
-└─────────────────────┴───────────────────────┘
+FASE 0 (NOVA): DELETE FROM seats WHERE vehicle_id=X AND (label LIKE '_legacy_%' OR label LIKE '_tmp_%') AND id NOT IN (SELECT seat_id FROM tickets WHERE seat_id IS NOT NULL)
 ```
 
-### Componentes reutilizados
-- `AdminLayout` (wrapper)
-- `PageHeader` (título + subtítulo)
-- `StatsCard` (cada KPI)
-- `ChartContainer` + Recharts (`LineChart`, `PieChart`) do `chart.tsx`
-- `Card` para rankings
-- `Skeleton` para loading states
-- `Select` para filtro de período (dentro de um bloco simples, sem FilterCard completo)
+O resto das fases permanece igual (órfãos, update, insert).
 
-### Segurança (duas camadas)
-- **UI**: bloco financeiro só renderiza se `canViewFinancials === true`
-- **Dados**: queries financeiras só executam se `canViewFinancials === true` (nenhum fetch, nenhum payload)
+### 2. Checkout (SeatMap) — Filtrar seats técnicos
 
-### Links de drill-down
-- Rankings linkam para `/admin/vendas` e `/admin/relatorios/vendas` (sem filtros via URL no MVP)
+No Checkout.tsx, ao setar seats, filtrar labels técnicos antes de passar ao SeatMap:
+
+```ts
+const validSeats = existingSeats.filter(s => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_'));
+setSeats(validSeats as Seat[]);
+```
+
+Isso é uma proteção defensiva — se o sync falhar parcialmente, o público não mostra lixo.
+
+### 3. Validação pós-sync
+
+Na FASE 7 existente (validação), adicionar check: se ainda existem seats com `_tmp_` ou `_legacy_` para coordenadas do template, reportar erro. Isso detecta sync incompleto.
+
+## Arquivos afetados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/admin/Fleet.tsx` | FASE 0 na `syncSeatsFromSnapshot` |
+| `src/pages/public/Checkout.tsx` | Filtrar `_legacy_`/`_tmp_` ao setar seats |
+
+## Resultado esperado
+
+Após re-sync:
+- Floor 1: exatamente 16 seats (12 executivo + 4 bloqueados)
+- Floor 2: exatamente 48 seats (36 convencional + 12 leito)
+- Público: mapa limpo sem ícones Ban falsos
 
