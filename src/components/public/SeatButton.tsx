@@ -13,27 +13,27 @@ interface SeatButtonProps {
 
 const stateStyles: Record<SeatState, string> = {
   available:
-    'bg-white border-gray-300 text-gray-700 hover:border-primary/50 hover:bg-primary/5 cursor-pointer',
+    'bg-white text-gray-700 hover:bg-muted/40 cursor-pointer',
   selected:
-    'bg-primary border-primary text-primary-foreground cursor-pointer ring-2 ring-primary/30',
+    'bg-primary text-primary-foreground cursor-pointer ring-2 ring-primary/30',
   occupied:
-    'bg-red-50 border-red-300 text-red-400 cursor-not-allowed',
+    'bg-gray-100 text-gray-500 cursor-not-allowed',
   blocked:
-    'bg-amber-50 border-amber-300 text-amber-500 cursor-not-allowed',
+    'bg-amber-100 text-amber-700 cursor-not-allowed',
 };
 
 const categoryStyles: Record<string, string> = {
-  leito: 'border-yellow-500 bg-yellow-50',
-  executivo: 'border-emerald-500 bg-emerald-50',
-  semi_leito: 'border-blue-500 bg-blue-50',
-  leito_cama: 'border-rose-500 bg-rose-50',
+  convencional: 'border-gray-300',
+  executivo: 'border-emerald-500',
+  leito: 'border-yellow-500',
+  semi_leito: 'border-yellow-500',
+  leito_cama: 'border-yellow-500',
 };
 
 export function SeatButton({ label, state, category, onClick }: SeatButtonProps) {
   const isInteractive = state === 'available' || state === 'selected';
-  const categoryClass = state === 'available' && category && category !== 'convencional'
-    ? categoryStyles[category] || ''
-    : '';
+  // Categoria é informação secundária: controla apenas a borda em todos os status.
+  const categoryClass = categoryStyles[category || 'convencional'] || categoryStyles.convencional;
 
   return (
     <button
