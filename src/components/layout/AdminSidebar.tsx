@@ -349,6 +349,8 @@ export function AdminSidebar() {
                 {(group.standalone || openGroups[group.id]) && group.items.map((item, index) => {
                   const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
                   const itemKey = `${group.id}-${item.href ?? item.name}-${index}`;
+                  // Apenas subitens de grupos recebem recuo extra para reforçar hierarquia visual no menu expandido.
+                  const submenuIndentClass = group.standalone ? 'px-3' : 'pr-3 pl-7';
 
                   if (item.href && !item.disabled) {
                     if (item.openInNewTab) {
@@ -359,7 +361,10 @@ export function AdminSidebar() {
                           target="_blank"
                           rel="noreferrer"
                           onClick={() => handleItemClick(item, onClose)}
-                          className="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#CBD5E1] transition-colors hover:bg-[#1E293B] hover:text-white"
+                          className={cn(
+                            'relative flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium text-[#CBD5E1] transition-colors hover:bg-[#1E293B] hover:text-white',
+                            submenuIndentClass,
+                          )}
                         >
                           <item.icon className="h-4 w-4" />
                           <span className="flex flex-1 items-center gap-2">
@@ -381,7 +386,8 @@ export function AdminSidebar() {
                         to={item.href}
                         onClick={() => handleItemClick(item, onClose)}
                         className={cn(
-                          'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                          'relative flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium transition-colors',
+                          submenuIndentClass,
                           isActive
                             ? 'bg-[#243B63] text-white before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-r before:bg-primary'
                             : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
@@ -402,7 +408,15 @@ export function AdminSidebar() {
                   }
 
                   return (
-                    <button key={itemKey} type="button" className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#64748B] opacity-60" disabled>
+                    <button
+                      key={itemKey}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-lg py-2.5 text-sm font-medium text-[#64748B] opacity-60',
+                        submenuIndentClass,
+                      )}
+                      disabled
+                    >
                       <item.icon className="h-4 w-4" />
                       <span className="flex-1 text-left">{item.name}</span>
                       {item.statusLabel && (
