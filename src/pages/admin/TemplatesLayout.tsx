@@ -106,6 +106,29 @@ const logSupabaseErrorInDev = (context: string, error: PostgrestError | null) =>
   });
 };
 
+
+const extractImageUrlFromDescription = (description: string | null) => {
+  if (!description?.startsWith('[img]')) return null;
+  return description.slice(5).trim() || null;
+};
+
+const stripImageTokenFromDescription = (description: string | null) => {
+  if (!description) return '';
+  if (description.startsWith('[img]')) return '';
+  return description;
+};
+
+const buildTemplateDescriptionPayload = (description: string, imageUrl: string | null) => {
+  const cleanDescription = description.trim();
+
+  // Comentário: mantemos compatibilidade com o formato legado ([img]URL) já usado no projeto.
+  if (imageUrl && !imageUrl.startsWith('blob:')) {
+    return `[img]${imageUrl}`;
+  }
+
+  return cleanDescription || null;
+};
+
 const getDeleteTemplateErrorMessage = (error: PostgrestError) => {
   if (error.code === '42501') {
     return 'Você não tem permissão para excluir templates.';
@@ -116,6 +139,34 @@ const getDeleteTemplateErrorMessage = (error: PostgrestError) => {
   }
 
   return 'Não foi possível excluir o template. Tente novamente.';
+};
+
+const buildFriendlyTemplateError = (error: PostgrestError | null, fallbackMessage: string) => {
+  if (!error) return fallbackMessage;
+
+  if (error.code === '42501') return 'Você não tem permissão para alterar templates de layout.';
+  if (error.code === '23505') return 'Existem dados duplicados no layout (número de assento ou posição já utilizada).';
+  if (error.code === '23503') return 'O template possui vínculo inválido. Atualize a página e tente novamente.';
+  if (error.code === '23514') return 'Há valores fora das regras permitidas (pavimento, linha, coluna ou categoria).';
+
+  if (import.meta.env.DEV) {
+    return `${fallbackMessage} (${error.code} - ${error.message})`;
+  }
+
+  return fallbackMessage;
+};
+
+const logTemplateErrorInDev = (context: string, error: PostgrestError | null, metadata?: Record<string, unknown>) => {
+  if (!error || !import.meta.env.DEV) return;
+
+  // Comentário: em ambiente de desenvolvimento exibimos detalhes de SQL/RLS para agilizar suporte e diagnóstico.
+  console.error(`[TemplatesLayout][${context}]`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    ...metadata,
+  });
 };
 
 export default function TemplatesLayout() {
@@ -416,8 +467,8 @@ export default function TemplatesLayout() {
     setForm({
       name: template.name,
       vehicle_type: template.vehicle_type,
-      description: template.description ?? '',
-      image_url: template.image_url ?? null,
+      description: stripImageTokenFromDescription(template.description),
+      image_url: extractImageUrlFromDescription(template.description),
       status: template.status,
       floors: template.floors,
       grid_rows: template.grid_rows,
@@ -442,6 +493,19 @@ export default function TemplatesLayout() {
   };
 
   const validateItems = () => {
+    const duplicatedPosition = items.find((item, index) => {
+      return items.findIndex((other) => (
+        other.floor_number === item.floor_number
+        && other.row_number === item.row_number
+        && other.column_number === item.column_number
+      )) !== index;
+    });
+
+    if (duplicatedPosition) {
+      toast.error(`Existem assentos duplicados na posição P${duplicatedPosition.floor_number} L${duplicatedPosition.row_number} C${duplicatedPosition.column_number}`);
+      return false;
+    }
+
     const duplicatedByFloor = items.some((item) => {
       if (item.is_blocked || !item.seat_number) return false;
       return items.some((other) =>
@@ -457,15 +521,42 @@ export default function TemplatesLayout() {
       return false;
     }
 
+    const duplicatedGlobally = items.find((item) => {
+      if (item.is_blocked || !item.seat_number) return false;
+
+      return items.some((other) => (
+        other !== item
+        && !other.is_blocked
+        && other.seat_number === item.seat_number
+      ));
+    });
+
+    if (duplicatedGlobally) {
+      toast.error(`Existem assentos com o número ${duplicatedGlobally.seat_number} em mais de um pavimento`);
+      return false;
+    }
+
     const hasInvalidFloor = items.some((item) => item.floor_number > form.floors);
     if (hasInvalidFloor) {
       toast.error('Existem assentos em pavimento inválido');
       return false;
     }
 
+    const outOfGrid = items.find((item) => item.row_number > form.grid_rows || item.column_number > form.grid_columns);
+    if (outOfGrid) {
+      toast.error(`Existe assento fora da grade (P${outOfGrid.floor_number}, linha ${outOfGrid.row_number}, coluna ${outOfGrid.column_number})`);
+      return false;
+    }
+
     const hasSeatWithoutCategory = items.some((item) => !item.is_blocked && !item.category);
     if (hasSeatWithoutCategory) {
       toast.error('Todos os assentos devem ter categoria');
+      return false;
+    }
+
+    const seatWithoutNumber = items.find((item) => !item.is_blocked && !item.seat_number);
+    if (seatWithoutNumber) {
+      toast.error(`Existe assento sem número em P${seatWithoutNumber.floor_number} L${seatWithoutNumber.row_number} C${seatWithoutNumber.column_number}`);
       return false;
     }
 
@@ -515,7 +606,7 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: updateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` } as any).eq('id', editingId);
+      const { error: updateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` }).eq('id', editingId);
 
       if (updateError) {
         toast.error('Erro ao salvar imagem no template.');
@@ -541,7 +632,7 @@ export default function TemplatesLayout() {
     setPendingImageFile(null);
 
     if (editingId && !isTemplateImageLocalPreview(form.image_url)) {
-      const { error } = await supabase.from('template_layouts').update({ description: null } as any).eq('id', editingId);
+      const { error } = await supabase.from('template_layouts').update({ description: null }).eq('id', editingId);
       if (error) {
         toast.error('Erro ao remover imagem de referência.');
         return;
@@ -560,8 +651,7 @@ export default function TemplatesLayout() {
     const payload = {
       name: form.name.trim(),
       vehicle_type: form.vehicle_type,
-      description: form.description.trim() || null,
-      image_url: form.image_url,
+      description: buildTemplateDescriptionPayload(form.description, form.image_url),
       status: form.status,
       floors: form.floors,
       grid_rows: form.grid_rows,
@@ -572,14 +662,16 @@ export default function TemplatesLayout() {
     if (editingId) {
       const { error } = await supabase.from('template_layouts').update(payload).eq('id', editingId);
       if (error) {
-        toast.error('Erro ao atualizar template');
+        logTemplateErrorInDev('save-template-update', error, { editingId, payload });
+        toast.error(buildFriendlyTemplateError(error, 'Erro ao atualizar template'));
         setSaving(false);
         return;
       }
     } else {
       const { data, error } = await supabase.from('template_layouts').insert(payload).select('id').single();
       if (error || !data) {
-        toast.error('Erro ao criar template');
+        logTemplateErrorInDev('save-template-create', error, { payload });
+        toast.error(buildFriendlyTemplateError(error, 'Erro ao criar template'));
         setSaving(false);
         return;
       }
@@ -605,7 +697,7 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` } as any).eq('id', templateId);
+      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` }).eq('id', templateId);
       if (imageUpdateError) {
         toast.error('Erro ao salvar imagem de referência no template');
         setSaving(false);
@@ -617,14 +709,53 @@ export default function TemplatesLayout() {
       setPendingImageFile(null);
     }
 
-    // Comentário: estratégia simples e segura para evitar inconsistência entre grade e itens.
-    await supabase.from('template_layout_items').delete().eq('template_layout_id', templateId);
-    if (items.length > 0) {
-      const { error: itemsError } = await supabase.from('template_layout_items').insert(
-        items.map((item) => ({ ...item, template_layout_id: templateId }))
-      );
-      if (itemsError) {
-        toast.error('Erro ao salvar mapa do template');
+    const sanitizedItems = items.map((item) => ({
+      template_layout_id: templateId,
+      floor_number: item.floor_number,
+      row_number: item.row_number,
+      column_number: item.column_number,
+      seat_number: item.seat_number,
+      category: item.category,
+      tags: item.tags,
+      is_blocked: item.is_blocked,
+    }));
+
+    // Comentário: o upsert evita perda de dados parcial e garante que novos assentos não reutilizem id anterior.
+    const { data: existingItems, error: existingItemsError } = await supabase
+      .from('template_layout_items')
+      .select('id, floor_number, row_number, column_number')
+      .eq('template_layout_id', templateId);
+
+    if (existingItemsError) {
+      logTemplateErrorInDev('save-template-existing-items', existingItemsError, { templateId });
+      toast.error(buildFriendlyTemplateError(existingItemsError, 'Erro ao preparar atualização dos assentos'));
+      setSaving(false);
+      return;
+    }
+
+    if (sanitizedItems.length > 0) {
+      const { error: itemsUpsertError } = await supabase
+        .from('template_layout_items')
+        .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' });
+
+      if (itemsUpsertError) {
+        logTemplateErrorInDev('save-template-items-upsert', itemsUpsertError, { templateId, itemCount: sanitizedItems.length });
+        toast.error(buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
+        setSaving(false);
+        return;
+      }
+    }
+
+    const receivedKeys = new Set(sanitizedItems.map((item) => `${item.floor_number}-${item.row_number}-${item.column_number}`));
+    const idsToDelete = (existingItems ?? [])
+      .filter((item) => !receivedKeys.has(`${item.floor_number}-${item.row_number}-${item.column_number}`))
+      .map((item) => item.id);
+
+    if (idsToDelete.length > 0) {
+      const { error: deleteItemsError } = await supabase.from('template_layout_items').delete().in('id', idsToDelete);
+      if (deleteItemsError) {
+        logTemplateErrorInDev('save-template-items-delete-missing', deleteItemsError, { templateId, idsToDeleteCount: idsToDelete.length });
+        toast.error(buildFriendlyTemplateError(deleteItemsError, 'Erro ao remover assentos antigos do template'));
         setSaving(false);
         return;
       }
@@ -641,15 +772,17 @@ export default function TemplatesLayout() {
     const { data, error } = await supabase.from('template_layouts').insert({
       name: `${template.name} (Cópia)`,
       vehicle_type: template.vehicle_type,
-      description: template.description,
-      image_url: template.image_url,
+      description: buildTemplateDescriptionPayload(stripImageTokenFromDescription(template.description), extractImageUrlFromDescription(template.description)),
       status: 'inativo',
       floors: template.floors,
       grid_rows: template.grid_rows,
       grid_columns: template.grid_columns,
     }).select('id').single();
 
-    if (error || !data) return toast.error('Erro ao duplicar template');
+    if (error || !data) {
+      logTemplateErrorInDev('duplicate-template-create', error, { templateId: template.id });
+      return toast.error(buildFriendlyTemplateError(error, 'Erro ao duplicar template'));
+    }
 
     const { data: sourceItems } = await supabase
       .from('template_layout_items')
@@ -657,7 +790,14 @@ export default function TemplatesLayout() {
       .eq('template_layout_id', template.id);
 
     if ((sourceItems ?? []).length > 0) {
-      await supabase.from('template_layout_items').insert((sourceItems ?? []).map((item) => ({ ...item, template_layout_id: data.id })));
+      const { error: duplicateItemsError } = await supabase
+        .from('template_layout_items')
+        .insert((sourceItems ?? []).map((item) => ({ ...item, template_layout_id: data.id })));
+
+      if (duplicateItemsError) {
+        logTemplateErrorInDev('duplicate-template-items', duplicateItemsError, { sourceTemplateId: template.id, targetTemplateId: data.id });
+        toast.error(buildFriendlyTemplateError(duplicateItemsError, 'Template duplicado, mas houve erro ao copiar assentos'));
+      }
     }
 
     toast.success('Template duplicado');
