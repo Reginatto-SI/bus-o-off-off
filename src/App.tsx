@@ -71,7 +71,9 @@ const App = () => (
             <Route path="/confirmacao/:id" element={<Confirmation />} />
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             <Route path="/v/:code" element={<SellerRedirect />} />
-            <Route path="/cadastro-empresa" element={<CompanyRegistration />} />
+            <Route path="/cadastro" element={<CompanyRegistration />} />
+            {/* Redirect legado para manter links antigos de onboarding público. */}
+            <Route path="/cadastro-empresa" element={<Navigate to="/cadastro" replace />} />
             <Route path="/empresa/:nick" element={<PublicCompanyShowcase />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
