@@ -43,6 +43,10 @@ export interface Company {
   // Comissionamento variável
   platform_fee_percent: number;
   partner_split_percent: number;
+  // Vitrine pública (Fase 1)
+  cover_image_url: string | null;
+  intro_text: string | null;
+  background_style: 'solid' | 'subtle_gradient' | 'cover_overlay';
   // Sistema
   is_active: boolean;
   created_at: string;
@@ -123,6 +127,8 @@ export interface Sponsor {
   contact_name: string | null;
   contact_phone: string | null;
   contact_email: string | null;
+  // Multi-tenant: vincula patrocinador à empresa (obrigatório após migration Fase 1)
+  company_id: string;
   created_at: string;
   updated_at: string;
 }

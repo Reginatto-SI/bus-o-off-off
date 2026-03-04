@@ -70,7 +70,7 @@ const initialFilters: SponsorFilters = {
 const SPONSOR_BANNER_BUCKET = 'event-images';
 
 export default function Sponsors() {
-  const { isGerente, user } = useAuth();
+  const { isGerente, user, activeCompanyId } = useAuth();
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -123,9 +123,13 @@ export default function Sponsors() {
   }, [filters]);
 
   const fetchSponsors = async () => {
+    // Multi-tenant: guard para não buscar sem empresa ativa (evita vazamento para developer)
+    if (!activeCompanyId) return;
+
     const { data, error } = await supabase
       .from('sponsors')
       .select('*')
+      .eq('company_id', activeCompanyId)
       .order('carousel_order', { ascending: true })
       .order('created_at', { ascending: false });
 
@@ -150,7 +154,7 @@ export default function Sponsors() {
 
   useEffect(() => {
     fetchSponsors();
-  }, []);
+  }, [activeCompanyId]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -201,6 +205,7 @@ export default function Sponsors() {
     }
 
     // Comentário: mantemos os campos não utilizados como null para reduzir ruído no banco.
+    // Multi-tenant: company_id é obrigatório e preenchido automaticamente com a empresa ativa.
     const sponsorData = {
       name: form.name.trim(),
       status: form.status,
@@ -219,7 +224,8 @@ export default function Sponsors() {
     if (editingId) {
       ({ error } = await supabase.from('sponsors').update(sponsorData).eq('id', editingId));
     } else {
-      ({ error } = await supabase.from('sponsors').insert([sponsorData]));
+      // Insert: inclui company_id da empresa ativa (multi-tenant obrigatório)
+      ({ error } = await supabase.from('sponsors').insert([{ ...sponsorData, company_id: activeCompanyId! }]));
     }
 
     if (error) {
