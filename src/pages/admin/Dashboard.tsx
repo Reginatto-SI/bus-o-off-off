@@ -372,7 +372,7 @@ export default function Dashboard() {
       <div className="p-4 md:p-6 space-y-6">
         {/* ── Header + Filtro ─────────────────────────── */}
         <PageHeader
-          title="Dashboard"
+          title="Painel"
           description="Visão geral da operação e vendas"
           actions={
             <div className="flex flex-wrap items-center justify-end gap-2">
