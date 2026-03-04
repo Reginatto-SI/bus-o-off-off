@@ -1,73 +1,71 @@
 
 
-# Correção: Divergência no Mapa de Assentos (Double Deck)
+# Refinamento do Módulo de Embarque — Plano de Implementação
 
-## Diagnóstico (comprovado via banco)
+## Análise do estado atual vs solicitado
 
-O veículo AJY-7E61 tem **81 seats** no banco, quando deveria ter **64** (60 vendáveis + 4 bloqueados do template).
+| Item | Status | O que falta |
+|------|--------|-------------|
+| KPI "Faltam" → "Pendentes" | ❌ | Renomear em DriverHome e DriverBoarding |
+| Barra de progresso na Home | ❌ | Adicionar linha "Embarque: X / Total" + Progress |
+| "Próximo embarque" card na Home | ❌ | Buscar primeiro local de embarque com horário |
+| Resumo por local (cards) no Boarding | ❌ | Cards compactos acima da lista |
+| Busca rápida de passageiro | ❌ | Input que filtra por nome/assento/CPF |
+| Botão "Atualizar" no Boarding | ❌ | RefreshCw no header |
+| Auto-refresh a cada 15s | ❌ | `setInterval` + `fetchData` |
+| Dialog com local do passageiro | ❌ | Adicionar `boardingLocationName` ao dialog |
+| Badge "Pendente" (não "Aguardando") | ❌ | Renomear |
+| Link "Ver embarque" após QR scan | ❌ | Botão no overlay do DriverValidate |
+| KPIs e filtro por local já existem | ✅ | — |
+| Check-in manual com dialog já existe | ✅ | — |
+| Toast de feedback já existe | ✅ | — |
+| Flash/torch já existe | ✅ | — |
+| Moldura de scan já existe | ✅ | — |
 
-**Floor 1 (Piso inferior):**
-- Template espera: 12 executivo + 4 bloqueados = 16
-- Banco tem: 12 executivo + 1 "X" bloqueado + **3 _tmp_ + 17 _legacy_** = 33
+## Arquivos a modificar
 
-**Floor 2 (Piso superior):**
-- Template espera: 36 convencional + 12 leito = 48
-- Banco tem: 48 (correto agora, mas screenshots do user foram antes do último sync)
+| Arquivo | Mudanças |
+|---------|----------|
+| `src/pages/driver/DriverHome.tsx` | Renomear "Faltam"→"Pendentes", progress bar, card "Próximo embarque" |
+| `src/pages/driver/DriverBoarding.tsx` | Renomear "Faltam"→"Pendentes", busca rápida, cards resumo por local, botão atualizar, auto-refresh 15s, dialog com local |
+| `src/pages/driver/DriverValidate.tsx` | Botão "Ver embarque" no overlay de sucesso |
 
-### Causa raiz
+## 1. DriverHome — Enriquecimento do painel
 
-O `syncSeatsFromSnapshot` acumula lixo a cada re-sync:
+- Renomear KPI `Faltam` → `Pendentes`
+- Após os KPIs, adicionar linha: `Embarque: {boarded} / {total}` + componente `<Progress value={percent} />`
+- Buscar dados do próximo local de embarque: query `event_boarding_locations` join `boarding_locations` para o `tripId` ativo, ordenado por `departure_time ASC`, pegar o primeiro com passageiros pendentes
+- Card compacto: nome do local + horário + "X passageiros / Y pendentes"
+- Dados do local vêm na mesma `fetchActiveTrip` (adicionar sub-query)
 
-1. **_legacy_ seats mantêm coordenadas originais** — na re-sync seguinte, são matched por coordenada e "atualizados" em vez de deletados, mas como o label já virou `_legacy_xxx`, o update tenta mudar o label de volta, cria conflito, e gera MAIS _tmp_ seats.
+## 2. DriverBoarding — Padrão operacional
 
-2. **_tmp_ seats nunca são limpos** — são criados na FASE 5 para evitar conflito de label, mas ficam para sempre.
+### Header
+- Adicionar botão `RefreshCw` ao lado do título "Embarque" que chama `fetchData()`
 
-3. **Cada re-sync piora o problema** — acumula mais _legacy_ e _tmp_, fazendo o público mostrar dezenas de assentos bloqueados falsos.
+### Auto-refresh
+- `useEffect` com `setInterval(fetchData, 15000)` quando a tela está aberta, cleanup no return
 
-### Impacto no público
+### Busca rápida
+- `Input` com placeholder "Buscar passageiro..." abaixo dos KPIs
+- Filtra `filteredPassengers` por `passengerName`, `seatLabel` (case-insensitive, includes)
+- Funciona em conjunto com filtro de local
 
-O Checkout carrega `select('*').eq('vehicle_id', vehicleId)` — traz TODOS os 81 seats, incluindo 21 lixos. O SeatMap renderiza todos como bloqueados (ícone Ban), poluindo o mapa do piso inferior.
+### Resumo por local (cards compactos)
+- Acima da lista, mapear `locations` em mini-cards:
+  - Nome do local
+  - Total / Embarcados / Pendentes (calculados dos `passengers`)
+- Sem accordion (mantém simples)
 
-## Correção
+### Renomear
+- "Faltam" → "Pendentes" nos KPIs
+- "Aguardando" → "Pendente" na badge
 
-### 1. `syncSeatsFromSnapshot` (Fleet.tsx) — Limpar junk ANTES de tudo
+### Dialog enriquecido
+- Adicionar `boardingLocationName` ao texto de confirmação
 
-Adicionar **FASE 0** no início da função: deletar todos os seats com label `_legacy_%` ou `_tmp_%` que **não têm tickets vinculados**. Para os que têm tickets, manter como estão (já são _legacy_).
+## 3. DriverValidate — Link pós-scan
 
-Isso garante que cada re-sync parte de um estado limpo, sem acumular lixo.
-
-```text
-FASE 0 (NOVA): DELETE FROM seats WHERE vehicle_id=X AND (label LIKE '_legacy_%' OR label LIKE '_tmp_%') AND id NOT IN (SELECT seat_id FROM tickets WHERE seat_id IS NOT NULL)
-```
-
-O resto das fases permanece igual (órfãos, update, insert).
-
-### 2. Checkout (SeatMap) — Filtrar seats técnicos
-
-No Checkout.tsx, ao setar seats, filtrar labels técnicos antes de passar ao SeatMap:
-
-```ts
-const validSeats = existingSeats.filter(s => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_'));
-setSeats(validSeats as Seat[]);
-```
-
-Isso é uma proteção defensiva — se o sync falhar parcialmente, o público não mostra lixo.
-
-### 3. Validação pós-sync
-
-Na FASE 7 existente (validação), adicionar check: se ainda existem seats com `_tmp_` ou `_legacy_` para coordenadas do template, reportar erro. Isso detecta sync incompleto.
-
-## Arquivos afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/admin/Fleet.tsx` | FASE 0 na `syncSeatsFromSnapshot` |
-| `src/pages/public/Checkout.tsx` | Filtrar `_legacy_`/`_tmp_` ao setar seats |
-
-## Resultado esperado
-
-Após re-sync:
-- Floor 1: exatamente 16 seats (12 executivo + 4 bloqueados)
-- Floor 2: exatamente 48 seats (36 convencional + 12 leito)
-- Público: mapa limpo sem ícones Ban falsos
+- No overlay de sucesso, adicionar botão secundário "Ver embarque" que navega para `/motorista/embarque`
+- Manter "Ler próximo" como ação principal
 
