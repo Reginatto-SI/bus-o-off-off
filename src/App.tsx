@@ -31,6 +31,7 @@ import TemplatesLayout from "./pages/admin/TemplatesLayout";
 import SellerDashboard from "./pages/seller/SellerDashboard";
 import DriverHome from "./pages/driver/DriverHome";
 import DriverValidate from "./pages/driver/DriverValidate";
+import DriverBoarding from "./pages/driver/DriverBoarding";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -81,6 +82,7 @@ const App = () => (
             {/* Driver Portal (mobile-first, fora do admin) */}
             <Route path="/motorista" element={<DriverHome />} />
             <Route path="/motorista/validar" element={<DriverValidate />} />
+            <Route path="/motorista/embarque" element={<DriverBoarding />} />
 
             {/* Admin Panel */}
             {/* Redireciona a rota base do admin para o dashboard mantendo o layout e guardas atuais. */}
