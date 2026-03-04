@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -23,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, CheckCircle2, Clock, Loader2, Users } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Loader2, MapPin, RefreshCw, Search, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PassengerRow {
@@ -52,6 +53,7 @@ export default function DriverBoarding() {
   const [passengers, setPassengers] = useState<PassengerRow[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -61,7 +63,6 @@ export default function DriverBoarding() {
     if (!user || !activeCompanyId) return;
     setLoadingData(true);
 
-    // Get driver_id
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('driver_id')
@@ -71,7 +72,6 @@ export default function DriverBoarding() {
 
     const driverId = roleData?.driver_id;
 
-    // Find active trip
     let tripsQuery = supabase
       .from('trips')
       .select('id, event_id, events!inner(status)')
@@ -92,7 +92,6 @@ export default function DriverBoarding() {
     const trip = trips[0];
     setTripId(trip.id);
 
-    // Fetch tickets with sale info
     const { data: tickets } = await supabase
       .from('tickets')
       .select('id, passenger_name, seat_label, boarding_status, qr_code_token, sale_id')
@@ -105,7 +104,6 @@ export default function DriverBoarding() {
       return;
     }
 
-    // Get paid sales with boarding location
     const saleIds = [...new Set(tickets.map(t => t.sale_id))];
     const { data: sales } = await supabase
       .from('sales')
@@ -149,7 +147,6 @@ export default function DriverBoarding() {
 
     setPassengers(rows);
 
-    // Extract unique locations
     const uniqueLocs = new Map<string, string>();
     rows.forEach(r => uniqueLocs.set(r.boardingLocationId, r.boardingLocationName));
     setLocations(Array.from(uniqueLocs, ([id, name]) => ({ id, name })));
@@ -163,16 +160,53 @@ export default function DriverBoarding() {
     }
   }, [user, activeCompanyId, canAccess, fetchData]);
 
+  // Auto-refresh every 15s
+  useEffect(() => {
+    if (!user || !activeCompanyId || !canAccess) return;
+    const interval = setInterval(() => {
+      fetchData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [user, activeCompanyId, canAccess, fetchData]);
+
   const filteredPassengers = useMemo(() => {
-    if (selectedLocation === 'all') return passengers;
-    return passengers.filter(p => p.boardingLocationId === selectedLocation);
-  }, [passengers, selectedLocation]);
+    let list = passengers;
+    if (selectedLocation !== 'all') {
+      list = list.filter(p => p.boardingLocationId === selectedLocation);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        p =>
+          p.passengerName.toLowerCase().includes(q) ||
+          p.seatLabel.toLowerCase().includes(q) ||
+          p.boardingLocationName.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [passengers, selectedLocation, searchQuery]);
 
   const kpis = useMemo(() => {
     const list = filteredPassengers;
     const boarded = list.filter(p => p.boardingStatus === 'checked_in').length;
     return { total: list.length, boarded, remaining: list.length - boarded };
   }, [filteredPassengers]);
+
+  // Location summary cards data
+  const locationSummaries = useMemo(() => {
+    if (locations.length <= 1) return [];
+    return locations.map(loc => {
+      const locPassengers = passengers.filter(p => p.boardingLocationId === loc.id);
+      const boarded = locPassengers.filter(p => p.boardingStatus === 'checked_in').length;
+      return {
+        id: loc.id,
+        name: loc.name,
+        total: locPassengers.length,
+        boarded,
+        pending: locPassengers.length - boarded,
+      };
+    });
+  }, [passengers, locations]);
 
   const handleManualCheckin = async (passenger: PassengerRow) => {
     setProcessing(true);
@@ -192,7 +226,6 @@ export default function DriverBoarding() {
 
     const result = (Array.isArray(data) ? data[0] : data) as any;
     if (result?.result === 'success') {
-      // Update local state
       setPassengers(prev =>
         prev.map(p =>
           p.ticketId === passenger.ticketId ? { ...p, boardingStatus: 'checked_in' } : p
@@ -236,7 +269,9 @@ export default function DriverBoarding() {
             Voltar
           </Button>
           <span className="text-sm font-medium">Embarque</span>
-          <div className="w-16" /> {/* spacer */}
+          <Button variant="ghost" size="icon" onClick={() => fetchData()} aria-label="Atualizar">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
 
         {loadingData ? (
@@ -270,11 +305,22 @@ export default function DriverBoarding() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-orange-600">{kpis.remaining}</p>
-                    <p className="text-xs text-muted-foreground">Faltam</p>
+                    <p className="text-xs text-muted-foreground">Pendentes</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar passageiro..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
             {/* Location filter */}
             {locations.length > 1 && (
@@ -291,6 +337,34 @@ export default function DriverBoarding() {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+
+            {/* Location summary cards */}
+            {locationSummaries.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {locationSummaries.map(loc => (
+                  <Card
+                    key={loc.id}
+                    className="cursor-pointer transition-colors hover:border-primary/50"
+                    onClick={() => setSelectedLocation(loc.id === selectedLocation ? 'all' : loc.id)}
+                  >
+                    <CardContent className="p-3 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3 text-primary shrink-0" />
+                        <p className="text-xs font-medium truncate">{loc.name}</p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="text-green-600 font-medium">{loc.boarded}</span>
+                        <span>/</span>
+                        <span>{loc.total}</span>
+                        {loc.pending > 0 && (
+                          <span className="text-orange-600">· {loc.pending} pend.</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
 
             {/* Passenger list */}
@@ -321,7 +395,7 @@ export default function DriverBoarding() {
                       ) : (
                         <Badge variant="outline" className="shrink-0">
                           <Clock className="mr-1 h-3 w-3" />
-                          Aguardando
+                          Pendente
                         </Badge>
                       )}
                     </CardContent>
@@ -339,7 +413,7 @@ export default function DriverBoarding() {
               <AlertDialogTitle>Confirmar embarque</AlertDialogTitle>
               <AlertDialogDescription>
                 Confirmar embarque de <strong>{confirmPassenger?.passengerName}</strong> (Assento{' '}
-                {confirmPassenger?.seatLabel})?
+                {confirmPassenger?.seatLabel}) — Local: <strong>{confirmPassenger?.boardingLocationName}</strong>?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, CheckCircle2, Loader2, QrCode, RotateCcw, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, QrCode, RotateCcw, Users, Zap } from 'lucide-react';
 
 type ValidationResponse = {
   result: 'success' | 'blocked';
@@ -331,15 +331,27 @@ export default function DriverValidate() {
                 <p><strong>CPF:</strong> {overlay.passenger_cpf_masked ?? '—'}</p>
               </div>
 
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={resetOverlay}>
+              <div className="flex flex-col gap-2">
+                <Button className="w-full" onClick={resetOverlay}>
                   <RotateCcw className="mr-2 h-4 w-4" />
                   {overlay.result === 'success' ? 'Ler próximo' : 'Tentar outro'}
                 </Button>
 
-                {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
+                {overlay.result === 'success' && (
                   <Button
                     variant="outline"
+                    className="w-full"
+                    onClick={() => navigate('/motorista/embarque')}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Ver embarque
+                  </Button>
+                )}
+
+                {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => {
                       if (manualToken.trim()) {
                         handleValidate(manualToken.trim(), 'checkout');
