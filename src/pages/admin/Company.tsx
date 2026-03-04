@@ -13,7 +13,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -137,6 +138,10 @@ export default function CompanyPage() {
     notes: '',
     logo_url: '',
     public_slug: '',
+    // Vitrine pública (Fase 1)
+    cover_image_url: '',
+    intro_text: '',
+    background_style: 'solid' as 'solid' | 'subtle_gradient' | 'cover_overlay',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -274,6 +279,10 @@ export default function CompanyPage() {
       notes: data?.notes ?? '',
       logo_url: data?.logo_url ?? '',
       public_slug: data?.public_slug ?? '',
+      // Vitrine pública (Fase 1): hydrate dos novos campos
+      cover_image_url: data?.cover_image_url ?? '',
+      intro_text: data?.intro_text ?? '',
+      background_style: data?.background_style ?? 'solid',
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -526,6 +535,9 @@ export default function CompanyPage() {
       notes: '',
       logo_url: '',
       public_slug: '',
+      cover_image_url: '',
+      intro_text: '',
+      background_style: 'solid',
     });
   };
 
@@ -643,6 +655,10 @@ export default function CompanyPage() {
       primary_color: brandColors.primary || null,
       accent_color: brandColors.accent || null,
       ticket_color: brandColors.ticket || null,
+      // Vitrine pública (Fase 1): novos campos persistidos
+      cover_image_url: form.cover_image_url?.trim() || null,
+      intro_text: form.intro_text?.trim() || null,
+      background_style: form.background_style,
     };
 
     let error;
@@ -887,6 +903,16 @@ export default function CompanyPage() {
                       <CreditCard className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Pagamentos</span>
                     </TabsTrigger>
+                    {/* Vitrine Pública: aba visível somente para gerente/developer */}
+                    {isGerente && (
+                      <TabsTrigger
+                        value="vitrine"
+                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      >
+                        <Store className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 truncate">Vitrine Pública</span>
+                      </TabsTrigger>
+                    )}
                   </TabsList>
 
                   <TabsContent value="dados" className="mt-0 space-y-4">
@@ -1466,6 +1492,83 @@ export default function CompanyPage() {
                       )}
                     </div>
                   </TabsContent>
+
+                  {/* Vitrine Pública (Fase 1): seção visível somente para gerente/developer.
+                      Campos controlam a personalização da vitrine /empresa/:slug. */}
+                  {isGerente && (
+                    <TabsContent value="vitrine" className="mt-0">
+                      <div className="space-y-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="cover_image_url">URL da imagem de capa (hero)</Label>
+                          <Input
+                            id="cover_image_url"
+                            value={form.cover_image_url}
+                            onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
+                            placeholder="https://exemplo.com/capa.jpg"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Imagem de fundo exibida no topo da vitrine pública. Use uma URL de imagem já hospedada.
+                          </p>
+                          {form.cover_image_url && (
+                            <div className="mt-2 rounded-md border overflow-hidden max-w-md">
+                              <img
+                                src={form.cover_image_url}
+                                alt="Preview da capa"
+                                className="h-32 w-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="intro_text">
+                            Texto de apresentação
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              ({(form.intro_text || '').length}/400)
+                            </span>
+                          </Label>
+                          <Textarea
+                            id="intro_text"
+                            value={form.intro_text}
+                            onChange={(e) => {
+                              if (e.target.value.length <= 400) {
+                                setForm({ ...form, intro_text: e.target.value });
+                              }
+                            }}
+                            rows={3}
+                            placeholder="Breve apresentação da sua empresa para os clientes..."
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Exibido abaixo do hero na vitrine pública. Máximo 400 caracteres.
+                          </p>
+                        </div>
+
+                        {/* Estilo de fundo: enum fechado com 3 opções controladas (evita customização excessiva no MVP). */}
+                        <div className="space-y-2">
+                          <Label>Estilo de fundo da vitrine</Label>
+                          <Select
+                            value={form.background_style}
+                            onValueChange={(value: 'solid' | 'subtle_gradient' | 'cover_overlay') =>
+                              setForm({ ...form, background_style: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o estilo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="solid">Sólido (cor primária)</SelectItem>
+                              <SelectItem value="subtle_gradient">Gradiente suave</SelectItem>
+                              <SelectItem value="cover_overlay">Capa com overlay</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Controla como o hero/topo da vitrine é renderizado. "Capa com overlay" funciona melhor com imagem de capa.
+                          </p>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  )}
                 </Tabs>
               </CardContent>
             </Card>

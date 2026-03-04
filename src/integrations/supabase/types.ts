@@ -104,13 +104,16 @@ export type Database = {
         Row: {
           accent_color: string | null
           address: string | null
+          background_style: string
           city: string | null
           cnpj: string | null
+          cover_image_url: string | null
           created_at: string
           document: string | null
           document_number: string | null
           email: string | null
           id: string
+          intro_text: string | null
           is_active: boolean
           legal_name: string | null
           legal_type: string
@@ -135,13 +138,16 @@ export type Database = {
         Insert: {
           accent_color?: string | null
           address?: string | null
+          background_style?: string
           city?: string | null
           cnpj?: string | null
+          cover_image_url?: string | null
           created_at?: string
           document?: string | null
           document_number?: string | null
           email?: string | null
           id?: string
+          intro_text?: string | null
           is_active?: boolean
           legal_name?: string | null
           legal_type?: string
@@ -166,13 +172,16 @@ export type Database = {
         Update: {
           accent_color?: string | null
           address?: string | null
+          background_style?: string
           city?: string | null
           cnpj?: string | null
+          cover_image_url?: string | null
           created_at?: string
           document?: string | null
           document_number?: string | null
           email?: string | null
           id?: string
+          intro_text?: string | null
           is_active?: boolean
           legal_name?: string | null
           legal_type?: string
@@ -875,6 +884,7 @@ export type Database = {
         Row: {
           banner_url: string | null
           carousel_order: number
+          company_id: string
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
@@ -891,6 +901,7 @@ export type Database = {
         Insert: {
           banner_url?: string | null
           carousel_order?: number
+          company_id: string
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -907,6 +918,7 @@ export type Database = {
         Update: {
           banner_url?: string | null
           carousel_order?: number
+          company_id?: string
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -920,7 +932,15 @@ export type Database = {
           whatsapp_message?: string | null
           whatsapp_phone?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sponsors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       template_layout_items: {
         Row: {
