@@ -1,71 +1,80 @@
 
 
-# Refinamento do Módulo de Embarque — Plano de Implementação
+# Padronizar Mapa de Assentos no Admin — Plano
 
-## Análise do estado atual vs solicitado
+## Problema
 
-| Item | Status | O que falta |
-|------|--------|-------------|
-| KPI "Faltam" → "Pendentes" | ❌ | Renomear em DriverHome e DriverBoarding |
-| Barra de progresso na Home | ❌ | Adicionar linha "Embarque: X / Total" + Progress |
-| "Próximo embarque" card na Home | ❌ | Buscar primeiro local de embarque com horário |
-| Resumo por local (cards) no Boarding | ❌ | Cards compactos acima da lista |
-| Busca rápida de passageiro | ❌ | Input que filtra por nome/assento/CPF |
-| Botão "Atualizar" no Boarding | ❌ | RefreshCw no header |
-| Auto-refresh a cada 15s | ❌ | `setInterval` + `fetchData` |
-| Dialog com local do passageiro | ❌ | Adicionar `boardingLocationName` ao dialog |
-| Badge "Pendente" (não "Aguardando") | ❌ | Renomear |
-| Link "Ver embarque" após QR scan | ❌ | Botão no overlay do DriverValidate |
-| KPIs e filtro por local já existem | ✅ | — |
-| Check-in manual com dialog já existe | ✅ | — |
-| Toast de feedback já existe | ✅ | — |
-| Flash/torch já existe | ✅ | — |
-| Moldura de scan já existe | ✅ | — |
+No `NewSaleModal.tsx` (linhas 356-386), o fetch de tickets traz apenas `seat_id` sem distinguir bloqueios operacionais de ocupação real. Tudo é tratado como `occupiedSeatIds`. O `SeatMap` não recebe `blockedSeatIds`, então bloqueios aparecem como "ocupado" (cinza/usuário) em vez de "bloqueado" (âmbar/ban).
 
-## Arquivos a modificar
+## Correção (único arquivo: `NewSaleModal.tsx`)
 
-| Arquivo | Mudanças |
-|---------|----------|
-| `src/pages/driver/DriverHome.tsx` | Renomear "Faltam"→"Pendentes", progress bar, card "Próximo embarque" |
-| `src/pages/driver/DriverBoarding.tsx` | Renomear "Faltam"→"Pendentes", busca rápida, cards resumo por local, botão atualizar, auto-refresh 15s, dialog com local |
-| `src/pages/driver/DriverValidate.tsx` | Botão "Ver embarque" no overlay de sucesso |
+### 1. Estado novo
+Adicionar `const [blockedSeatIds, setBlockedSeatIds] = useState<string[]>([]);` ao lado de `occupiedSeatIds` (linha ~148).
 
-## 1. DriverHome — Enriquecimento do painel
+### 2. Ajustar fetch (linhas 364-385)
+Alterar a query de tickets para incluir `sale_id`:
+```ts
+supabase.from('tickets').select('seat_id, sale_id').eq('trip_id', selectedTripId)
+```
 
-- Renomear KPI `Faltam` → `Pendentes`
-- Após os KPIs, adicionar linha: `Embarque: {boarded} / {total}` + componente `<Progress value={percent} />`
-- Buscar dados do próximo local de embarque: query `event_boarding_locations` join `boarding_locations` para o `tripId` ativo, ordenado por `departure_time ASC`, pegar o primeiro com passageiros pendentes
-- Card compacto: nome do local + horário + "X passageiros / Y pendentes"
-- Dados do local vêm na mesma `fetchActiveTrip` (adicionar sub-query)
+Adicionar ordenação explícita ao fetch de seats:
+```ts
+supabase.from('seats').select('*')
+  .eq('vehicle_id', selectedVehicle.id)
+  .eq('company_id', activeCompanyId!)
+  .order('floor').order('row_number').order('column_number')
+```
 
-## 2. DriverBoarding — Padrão operacional
+Após obter tickets, buscar as sales correspondentes para separar bloqueios:
+```ts
+const saleIds = [...new Set(ticketsData.map(t => t.sale_id).filter(Boolean))];
+// Buscar sales para identificar bloqueios operacionais
+const { data: salesData } = await supabase
+  .from('sales')
+  .select('id, customer_name, status')
+  .in('id', saleIds);
 
-### Header
-- Adicionar botão `RefreshCw` ao lado do título "Embarque" que chama `fetchData()`
+// Bloqueio operacional: customer_name = 'BLOQUEIO' e status != 'cancelado'
+const blockSaleIds = new Set(
+  (salesData ?? [])
+    .filter(s => s.customer_name === 'BLOQUEIO' && s.status !== 'cancelado')
+    .map(s => s.id)
+);
 
-### Auto-refresh
-- `useEffect` com `setInterval(fetchData, 15000)` quando a tela está aberta, cleanup no return
+const blocked: string[] = [];
+const occupied: string[] = [];
+ticketsData.forEach(t => {
+  if (!t.seat_id) return;
+  if (blockSaleIds.has(t.sale_id)) blocked.push(t.seat_id);
+  else occupied.push(t.seat_id);
+});
 
-### Busca rápida
-- `Input` com placeholder "Buscar passageiro..." abaixo dos KPIs
-- Filtra `filteredPassengers` por `passengerName`, `seatLabel` (case-insensitive, includes)
-- Funciona em conjunto com filtro de local
+setOccupiedSeatIds(occupied);
+setBlockedSeatIds(blocked);
+```
 
-### Resumo por local (cards compactos)
-- Acima da lista, mapear `locations` em mini-cards:
-  - Nome do local
-  - Total / Embarcados / Pendentes (calculados dos `passengers`)
-- Sem accordion (mantém simples)
+### 3. Passar `blockedSeatIds` ao SeatMap (linha ~898-907)
+```tsx
+<SeatMap
+  seats={seats}
+  occupiedSeatIds={occupiedSeatIds}
+  blockedSeatIds={blockedSeatIds}
+  ...
+/>
+```
 
-### Renomear
-- "Faltam" → "Pendentes" nos KPIs
-- "Aguardando" → "Pendente" na badge
+### 4. Filtrar _legacy_/_tmp_ (defesa, como no público)
+Ao setar seats, filtrar labels técnicos:
+```ts
+const validSeats = (seatsRes.data ?? []).filter(
+  (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
+);
+setSeats(validSeats as Seat[]);
+```
 
-### Dialog enriquecido
-- Adicionar `boardingLocationName` ao texto de confirmação
+### 5. Reset blockedSeatIds nos pontos de limpeza
+No reset do useEffect quando `!selectedTripId` (linha 359) e no reset geral ao abrir o modal.
 
-## 3. DriverValidate — Link pós-scan
-
-- No overlay de sucesso, adicionar botão secundário "Ver embarque" que navega para `/motorista/embarque`
-- Manter "Ler próximo" como ação principal
+## Resultado
+Admin e Público usam o mesmo componente `SeatMap` com os mesmos dados de entrada (`occupiedSeatIds` + `blockedSeatIds`), gerando render idêntico.
 
