@@ -106,6 +106,29 @@ const logSupabaseErrorInDev = (context: string, error: PostgrestError | null) =>
   });
 };
 
+
+const extractImageUrlFromDescription = (description: string | null) => {
+  if (!description?.startsWith('[img]')) return null;
+  return description.slice(5).trim() || null;
+};
+
+const stripImageTokenFromDescription = (description: string | null) => {
+  if (!description) return '';
+  if (description.startsWith('[img]')) return '';
+  return description;
+};
+
+const buildTemplateDescriptionPayload = (description: string, imageUrl: string | null) => {
+  const cleanDescription = description.trim();
+
+  // Comentário: mantemos compatibilidade com o formato legado ([img]URL) já usado no projeto.
+  if (imageUrl && !imageUrl.startsWith('blob:')) {
+    return `[img]${imageUrl}`;
+  }
+
+  return cleanDescription || null;
+};
+
 const getDeleteTemplateErrorMessage = (error: PostgrestError) => {
   if (error.code === '42501') {
     return 'Você não tem permissão para excluir templates.';
@@ -444,8 +467,8 @@ export default function TemplatesLayout() {
     setForm({
       name: template.name,
       vehicle_type: template.vehicle_type,
-      description: template.description ?? '',
-      image_url: template.image_url ?? null,
+      description: stripImageTokenFromDescription(template.description),
+      image_url: extractImageUrlFromDescription(template.description),
       status: template.status,
       floors: template.floors,
       grid_rows: template.grid_rows,
@@ -628,8 +651,7 @@ export default function TemplatesLayout() {
     const payload = {
       name: form.name.trim(),
       vehicle_type: form.vehicle_type,
-      description: form.description.trim() || null,
-      image_url: form.image_url,
+      description: buildTemplateDescriptionPayload(form.description, form.image_url),
       status: form.status,
       floors: form.floors,
       grid_rows: form.grid_rows,
@@ -750,8 +772,7 @@ export default function TemplatesLayout() {
     const { data, error } = await supabase.from('template_layouts').insert({
       name: `${template.name} (Cópia)`,
       vehicle_type: template.vehicle_type,
-      description: template.description,
-      image_url: template.image_url,
+      description: buildTemplateDescriptionPayload(stripImageTokenFromDescription(template.description), extractImageUrlFromDescription(template.description)),
       status: 'inativo',
       floors: template.floors,
       grid_rows: template.grid_rows,
