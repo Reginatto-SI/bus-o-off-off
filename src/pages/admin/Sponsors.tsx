@@ -13,6 +13,16 @@ import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard } from '@/components/admin/FilterCard';
 import { ActionsDropdown, ActionItem } from '@/components/admin/ActionsDropdown';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -131,7 +141,8 @@ export default function Sponsors() {
       .select('*')
       .eq('company_id', activeCompanyId)
       .order('carousel_order', { ascending: true })
-      .order('created_at', { ascending: false });
+      // Hardening Fase 1: ordenação ASC para consistência com exibição pública
+      .order('created_at', { ascending: true });
 
     if (error) {
       logSupabaseError({
@@ -222,7 +233,8 @@ export default function Sponsors() {
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('sponsors').update(sponsorData).eq('id', editingId));
+      // Hardening Fase 1: filtro explícito por company_id no update (defense-in-depth)
+      ({ error } = await supabase.from('sponsors').update(sponsorData).eq('id', editingId).eq('company_id', activeCompanyId!));
     } else {
       // Insert: inclui company_id da empresa ativa (multi-tenant obrigatório)
       ({ error } = await supabase.from('sponsors').insert([{ ...sponsorData, company_id: activeCompanyId! }]));
@@ -281,7 +293,9 @@ export default function Sponsors() {
     const { error } = await supabase
       .from('sponsors')
       .update({ status: newStatus })
-      .eq('id', sponsor.id);
+      .eq('id', sponsor.id)
+      // Hardening Fase 1: filtro explícito por company_id (defense-in-depth)
+      .eq('company_id', activeCompanyId!);
 
     if (error) {
       logSupabaseError({
@@ -329,7 +343,9 @@ export default function Sponsors() {
     const { error: updateError } = await supabase
       .from('sponsors')
       .update({ banner_url: publicUrl })
-      .eq('id', editingId);
+      .eq('id', editingId)
+      // Hardening Fase 1: filtro explícito por company_id (defense-in-depth)
+      .eq('company_id', activeCompanyId!);
 
     if (updateError) {
       toast.error('Erro ao salvar URL do banner');
@@ -339,6 +355,39 @@ export default function Sponsors() {
     }
 
     setUploadingImage(false);
+  };
+
+  // Hardening Fase 1: delete com confirmação e filtro por company_id
+  const [deleteTarget, setDeleteTarget] = useState<Sponsor | null>(null);
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !activeCompanyId) return;
+
+    const { error } = await supabase
+      .from('sponsors')
+      .delete()
+      .eq('id', deleteTarget.id)
+      .eq('company_id', activeCompanyId);
+
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao excluir patrocinador (sponsors.delete)',
+        error,
+        context: { action: 'delete', table: 'sponsors', userId: user?.id, sponsorId: deleteTarget.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao excluir patrocinador',
+          error,
+          context: { action: 'delete', table: 'sponsors' },
+        })
+      );
+    } else {
+      toast.success('Patrocinador excluído');
+      fetchSponsors();
+    }
+
+    setDeleteTarget(null);
   };
 
   const getSponsorActions = (sponsor: Sponsor): ActionItem[] => [
@@ -352,6 +401,13 @@ export default function Sponsors() {
       icon: Power,
       onClick: () => handleToggleStatus(sponsor),
       variant: sponsor.status === 'ativo' ? 'destructive' : 'default',
+    },
+    // Hardening Fase 1: CRUD completo — ação de exclusão com confirmação
+    {
+      label: 'Excluir',
+      icon: Trash2,
+      onClick: () => setDeleteTarget(sponsor),
+      variant: 'destructive' as const,
     },
   ];
 
@@ -804,6 +860,24 @@ export default function Sponsors() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Hardening Fase 1: AlertDialog de confirmação para exclusão de patrocinador */}
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir patrocinador</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir <strong>{deleteTarget?.name}</strong>? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );
