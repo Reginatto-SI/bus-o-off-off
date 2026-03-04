@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, CheckCircle2, Loader2, QrCode, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, QrCode, RotateCcw, Zap } from 'lucide-react';
 
 type ValidationResponse = {
   result: 'success' | 'blocked';
@@ -46,7 +46,6 @@ const REASON_MESSAGES: Record<string, string> = {
 export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading } = useAuth();
-  // Normaliza acesso para perfis operacionais (sem depender exclusivamente de role motorista no v1).
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -60,6 +59,8 @@ export default function DriverValidate() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
 
   const reasonLabel = useMemo(() => {
     if (!overlay) return '';
@@ -119,9 +120,21 @@ export default function DriverValidate() {
     setProcessing(false);
   }, [lockScannerTemporarily, processing]);
 
+  // Toggle torch/flash
+  const toggleTorch = useCallback(async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const newState = !torchOn;
+      await (track as any).applyConstraints({ advanced: [{ torch: newState }] as any });
+      setTorchOn(newState);
+    } catch {
+      // torch not supported
+    }
+  }, [torchOn]);
+
   useEffect(() => {
-    // Importante: a câmera deve ser solicitada mesmo sem BarcodeDetector,
-    // para não bloquear teste/uso em navegadores que não têm leitura nativa de QR.
     const startScanner = async () => {
       const hasBarcodeDetector = Boolean(window.BarcodeDetector);
       setScannerSupported(hasBarcodeDetector);
@@ -132,9 +145,7 @@ export default function DriverValidate() {
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-          },
+          video: { facingMode: { ideal: 'environment' } },
           audio: false,
         });
 
@@ -145,22 +156,25 @@ export default function DriverValidate() {
           setCameraReady(true);
           setCameraError(null);
         }
+
+        // Check torch support
+        const track = stream.getVideoTracks()[0];
+        if (track) {
+          const caps = (track as any).getCapabilities?.();
+          if (caps?.torch) setTorchSupported(true);
+        }
       } catch (error) {
         setCameraReady(false);
         setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador para este site.');
-        console.error('[DriverValidate] Falha ao abrir câmera (getUserMedia):', error);
+        console.error('[DriverValidate] Falha ao abrir câmera:', error);
       }
     };
 
     startScanner();
 
     return () => {
-      if (scanIntervalRef.current) {
-        window.clearInterval(scanIntervalRef.current);
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      if (scanIntervalRef.current) window.clearInterval(scanIntervalRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -177,7 +191,7 @@ export default function DriverValidate() {
           await handleValidate(token, 'checkin');
         }
       } catch {
-        // Sem toast para evitar poluição visual durante a leitura contínua.
+        // silent
       }
     }, 300);
 
@@ -203,7 +217,6 @@ export default function DriverValidate() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  // Evita bounce para /admin quando a role ainda está carregando no AuthContext.
   if (!userRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -223,22 +236,53 @@ export default function DriverValidate() {
 
         <Card>
           <CardContent className="space-y-4 p-4">
+            {/* Camera viewport with scan frame overlay */}
             <div className="relative overflow-hidden rounded-xl border bg-black/90">
               <video ref={videoRef} className="aspect-[3/4] w-full object-cover" muted playsInline />
+
+              {/* Scan frame overlay */}
+              {cameraReady && !overlay && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {/* Semi-transparent corners frame */}
+                  <div className="relative h-48 w-48">
+                    {/* Top-left */}
+                    <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white/80 rounded-tl-lg" />
+                    {/* Top-right */}
+                    <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-white/80 rounded-tr-lg" />
+                    {/* Bottom-left */}
+                    <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-white/80 rounded-bl-lg" />
+                    {/* Bottom-right */}
+                    <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-white/80 rounded-br-lg" />
+                  </div>
+                  {/* Instruction text */}
+                  <p className="absolute bottom-4 left-0 right-0 text-center text-xs text-white/90 drop-shadow-md px-4">
+                    Aponte a câmera para o QR Code da passagem
+                  </p>
+                </div>
+              )}
+
               {!cameraReady && (
                 <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-white/80">
                   Preparando câmera...
                 </div>
               )}
+
+              {/* Flash toggle */}
+              {torchSupported && cameraReady && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`absolute right-3 top-3 rounded-full ${torchOn ? 'bg-yellow-400/80 text-black' : 'bg-black/40 text-white'}`}
+                  onClick={toggleTorch}
+                  aria-label={torchOn ? 'Desligar flash' : 'Ligar flash'}
+                >
+                  <Zap className="h-5 w-5" />
+                </Button>
+              )}
             </div>
 
-            {/* Mensagem informativa removida para manter a tela limpa.
-                Exibimos alerta apenas em falha real de câmera/permissão. */}
-
             {cameraError && (
-              <p className="text-sm text-destructive">
-                {cameraError}
-              </p>
+              <p className="text-sm text-destructive">{cameraError}</p>
             )}
 
             <div className="space-y-2">

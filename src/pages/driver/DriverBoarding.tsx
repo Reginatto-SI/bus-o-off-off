@@ -1,0 +1,360 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ArrowLeft, CheckCircle2, Clock, Loader2, Users } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface PassengerRow {
+  ticketId: string;
+  passengerName: string;
+  seatLabel: string;
+  boardingStatus: string;
+  qrCodeToken: string;
+  boardingLocationId: string;
+  boardingLocationName: string;
+}
+
+interface LocationOption {
+  id: string;
+  name: string;
+}
+
+export default function DriverBoarding() {
+  const navigate = useNavigate();
+  const { user, userRole, loading, activeCompanyId } = useAuth();
+  const { toast } = useToast();
+
+  const canAccess =
+    userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+
+  const [passengers, setPassengers] = useState<PassengerRow[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [loadingData, setLoadingData] = useState(true);
+  const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [_tripId, setTripId] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!user || !activeCompanyId) return;
+    setLoadingData(true);
+
+    // Get driver_id
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('driver_id')
+      .eq('user_id', user.id)
+      .eq('company_id', activeCompanyId)
+      .single();
+
+    const driverId = roleData?.driver_id;
+
+    // Find active trip
+    let tripsQuery = supabase
+      .from('trips')
+      .select('id, event_id, events!inner(status)')
+      .eq('company_id', activeCompanyId)
+      .eq('events.status', 'a_venda')
+      .limit(1);
+
+    if (driverId) {
+      tripsQuery = tripsQuery.or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`);
+    }
+
+    const { data: trips } = await tripsQuery;
+    if (!trips || trips.length === 0) {
+      setLoadingData(false);
+      return;
+    }
+
+    const trip = trips[0];
+    setTripId(trip.id);
+
+    // Fetch tickets with sale info
+    const { data: tickets } = await supabase
+      .from('tickets')
+      .select('id, passenger_name, seat_label, boarding_status, qr_code_token, sale_id')
+      .eq('trip_id', trip.id)
+      .eq('company_id', activeCompanyId);
+
+    if (!tickets || tickets.length === 0) {
+      setPassengers([]);
+      setLoadingData(false);
+      return;
+    }
+
+    // Get paid sales with boarding location
+    const saleIds = [...new Set(tickets.map(t => t.sale_id))];
+    const { data: sales } = await supabase
+      .from('sales')
+      .select('id, boarding_location_id, status, boarding_locations!inner(id, name)')
+      .in('id', saleIds)
+      .eq('status', 'pago');
+
+    if (!sales) {
+      setPassengers([]);
+      setLoadingData(false);
+      return;
+    }
+
+    const salesMap = new Map(
+      sales.map((s: any) => [
+        s.id,
+        { blId: s.boarding_location_id, blName: s.boarding_locations?.name ?? '—' },
+      ])
+    );
+
+    const rows: PassengerRow[] = tickets
+      .filter(t => salesMap.has(t.sale_id))
+      .map(t => {
+        const saleInfo = salesMap.get(t.sale_id)!;
+        return {
+          ticketId: t.id,
+          passengerName: t.passenger_name,
+          seatLabel: t.seat_label,
+          boardingStatus: t.boarding_status,
+          qrCodeToken: t.qr_code_token,
+          boardingLocationId: saleInfo.blId,
+          boardingLocationName: saleInfo.blName,
+        };
+      })
+      .sort((a, b) => {
+        const numA = parseInt(a.seatLabel, 10);
+        const numB = parseInt(b.seatLabel, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.seatLabel.localeCompare(b.seatLabel);
+      });
+
+    setPassengers(rows);
+
+    // Extract unique locations
+    const uniqueLocs = new Map<string, string>();
+    rows.forEach(r => uniqueLocs.set(r.boardingLocationId, r.boardingLocationName));
+    setLocations(Array.from(uniqueLocs, ([id, name]) => ({ id, name })));
+
+    setLoadingData(false);
+  }, [user, activeCompanyId]);
+
+  useEffect(() => {
+    if (user && activeCompanyId && canAccess) {
+      fetchData();
+    }
+  }, [user, activeCompanyId, canAccess, fetchData]);
+
+  const filteredPassengers = useMemo(() => {
+    if (selectedLocation === 'all') return passengers;
+    return passengers.filter(p => p.boardingLocationId === selectedLocation);
+  }, [passengers, selectedLocation]);
+
+  const kpis = useMemo(() => {
+    const list = filteredPassengers;
+    const boarded = list.filter(p => p.boardingStatus === 'checked_in').length;
+    return { total: list.length, boarded, remaining: list.length - boarded };
+  }, [filteredPassengers]);
+
+  const handleManualCheckin = async (passenger: PassengerRow) => {
+    setProcessing(true);
+    const { data, error } = await supabase.rpc('validate_ticket_scan', {
+      p_qr_code_token: passenger.qrCodeToken,
+      p_action: 'checkin',
+      p_device_info: navigator.userAgent,
+      p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+    });
+
+    if (error) {
+      toast({ title: 'Erro', description: 'Não foi possível registrar o embarque.', variant: 'destructive' });
+      setProcessing(false);
+      setConfirmPassenger(null);
+      return;
+    }
+
+    const result = (Array.isArray(data) ? data[0] : data) as any;
+    if (result?.result === 'success') {
+      // Update local state
+      setPassengers(prev =>
+        prev.map(p =>
+          p.ticketId === passenger.ticketId ? { ...p, boardingStatus: 'checked_in' } : p
+        )
+      );
+      toast({ title: 'Embarque confirmado', description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
+    } else {
+      const reason = result?.reason_code === 'already_checked_in' ? 'Já embarcado' : 'Embarque bloqueado';
+      toast({ title: reason, variant: 'destructive' });
+    }
+
+    setProcessing(false);
+    setConfirmPassenger(null);
+  };
+
+  // Auth guards
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!canAccess) return <Navigate to="/admin/eventos" replace />;
+
+  return (
+    <div className="min-h-screen bg-background px-4 py-4">
+      <div className="mx-auto w-full max-w-md space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/motorista')}>
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Voltar
+          </Button>
+          <span className="text-sm font-medium">Embarque</span>
+          <div className="w-16" /> {/* spacer */}
+        </div>
+
+        {loadingData ? (
+          <div className="space-y-3">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        ) : passengers.length === 0 ? (
+          <Card>
+            <CardContent className="p-5 text-center">
+              <Users className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Nenhum passageiro encontrado para esta viagem.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* KPIs */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{kpis.total}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{kpis.boarded}</p>
+                    <p className="text-xs text-muted-foreground">Embarcados</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600">{kpis.remaining}</p>
+                    <p className="text-xs text-muted-foreground">Faltam</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Location filter */}
+            {locations.length > 1 && (
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtrar por local" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os locais</SelectItem>
+                  {locations.map(loc => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Passenger list */}
+            <div className="space-y-2">
+              {filteredPassengers.map(p => {
+                const isBoarded = p.boardingStatus === 'checked_in';
+                return (
+                  <Card
+                    key={p.ticketId}
+                    className={`cursor-pointer transition-colors ${isBoarded ? 'border-green-500/40 bg-green-500/5' : ''}`}
+                    onClick={() => {
+                      if (!isBoarded) setConfirmPassenger(p);
+                    }}
+                  >
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted font-bold text-sm">
+                        {p.seatLabel}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{p.passengerName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{p.boardingLocationName}</p>
+                      </div>
+                      {isBoarded ? (
+                        <Badge variant="default" className="bg-green-600 shrink-0">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          Embarcado
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="shrink-0">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Aguardando
+                        </Badge>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Confirm dialog */}
+        <AlertDialog open={!!confirmPassenger} onOpenChange={() => setConfirmPassenger(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar embarque</AlertDialogTitle>
+              <AlertDialogDescription>
+                Confirmar embarque de <strong>{confirmPassenger?.passengerName}</strong> (Assento{' '}
+                {confirmPassenger?.seatLabel})?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={processing}
+                onClick={() => confirmPassenger && handleManualCheckin(confirmPassenger)}
+              >
+                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirmar embarque
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  );
+}
