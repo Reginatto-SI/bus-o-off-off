@@ -24,7 +24,6 @@ import {
   ArrowLeft,
   User,
   Ticket,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
@@ -117,6 +116,7 @@ export default function Checkout() {
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(null);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
 
   // Helper: get price for a seat based on category pricing
@@ -747,7 +747,7 @@ export default function Checkout() {
 
   return (
     <PublicLayout>
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6 pb-36">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-6 pb-32">
         {/* Header with back & step indicator */}
         <div className="flex items-center gap-3">
           <Button
@@ -800,42 +800,52 @@ export default function Checkout() {
           </div>
         </div>
 
-        {/* Resumo persistente da compra no corpo da tela (desktop e referência visual geral). */}
-        <div className="rounded-lg border bg-card p-4 space-y-2">
-          <h2 className="text-sm font-semibold">Resumo da compra</h2>
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Evento</span>
-            <span className="font-medium text-right">{event.name}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Embarque</span>
-            <span className="font-medium text-right">
-              {location.name}{displayTime ? ` • ${displayTime}` : ''}
-            </span>
-          </div>
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Assento{seatLabels.length > 1 ? 's' : ''}</span>
-            <span className="font-medium text-right">{seatLabels.length > 0 ? seatLabels.join(', ') : 'Não selecionado'}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Passagens</span>
-            <span className="font-medium text-right">{selectedSeats.length || quantity}</span>
-          </div>
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Passagem</span>
-            <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.seatSubtotal)}</span>
-          </div>
-          {checkoutSummary.hasFeeLines && (
-            <div className="flex justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">Taxa da plataforma</span>
-              <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.totalFees)}</span>
+        {/* Resumo compacto: mantém transparência de preço sem competir com o conteúdo principal. */}
+        <Collapsible open={isSummaryExpanded} onOpenChange={setIsSummaryExpanded}>
+          <div className="rounded-lg border bg-card px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground truncate">
+                Total: <span className="font-semibold text-foreground">{formatCurrencyBRL(checkoutSummary.grandTotal)}</span>
+                {' '}• Passagens: {selectedSeats.length || quantity}
+                {' '}• Assento: {seatLabels.length > 0 ? seatLabels.join(', ') : '—'}
+              </p>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                  {isSummaryExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}
+                </Button>
+              </CollapsibleTrigger>
             </div>
-          )}
-          <div className="flex justify-between gap-3 text-sm font-semibold border-t pt-2">
-            <span>Total</span>
-            <span>{formatCurrencyBRL(checkoutSummary.grandTotal)}</span>
+
+            <CollapsibleContent className="pt-2 space-y-1.5">
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Embarque</span>
+                <span className="font-medium text-right">{location.name}{displayTime ? ` • ${displayTime}` : ''}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Assento{seatLabels.length > 1 ? 's' : ''}</span>
+                <span className="font-medium text-right">{seatLabels.length > 0 ? seatLabels.join(', ') : 'Não selecionado'}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Passagens</span>
+                <span className="font-medium text-right">{selectedSeats.length || quantity}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Passagem</span>
+                <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.seatSubtotal)}</span>
+              </div>
+              {checkoutSummary.hasFeeLines && (
+                <div className="flex justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">Taxa da plataforma</span>
+                  <span className="font-medium text-right">{formatCurrencyBRL(checkoutSummary.totalFees)}</span>
+                </div>
+              )}
+              <div className="flex justify-between gap-3 text-sm font-semibold border-t pt-2">
+                <span>Total</span>
+                <span>{formatCurrencyBRL(checkoutSummary.grandTotal)}</span>
+              </div>
+            </CollapsibleContent>
           </div>
-        </div>
+        </Collapsible>
 
         {/* ============ STEP 1: Seat Selection ============ */}
         {step === 1 && (
@@ -1013,31 +1023,39 @@ export default function Checkout() {
         )}
       </div>
 
-      {/* Barra fixa mobile-first do resumo + CTA para reduzir incerteza ao longo do checkout. */}
+      {/* Barra fixa mobile: total sempre visível + CTA principal + atalho discreto para o detalhamento. */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">
-              {seatLabels.length > 0 ? `Assento ${seatLabels.join(', ')}` : 'Selecione seu assento'}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              Total {formatCurrencyBRL(checkoutSummary.grandTotal)}
-            </p>
+        <div className="max-w-lg mx-auto px-4 py-2.5 space-y-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold truncate">Total {formatCurrencyBRL(checkoutSummary.grandTotal)}</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {seatLabels.length > 0 ? `Assento ${seatLabels.join(', ')}` : 'Assento não selecionado'}
+              </p>
+            </div>
+
+            {step === 1 ? (
+              <Button
+                className="h-10 px-4"
+                disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
+                onClick={handleAdvanceToPassengers}
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
+              </Button>
+            ) : (
+              <Button className="h-10 px-4" disabled={submitting} onClick={handleSubmit}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir para pagamento'}
+              </Button>
+            )}
           </div>
 
-          {step === 1 ? (
-            <Button
-              className="h-10 px-4"
-              disabled={selectedSeats.length !== quantity || generatingSeats || submitting}
-              onClick={handleAdvanceToPassengers}
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
-            </Button>
-          ) : (
-            <Button className="h-10 px-4" disabled={submitting} onClick={handleSubmit}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir para pagamento'}
-            </Button>
-          )}
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline underline-offset-2"
+            onClick={() => setIsSummaryExpanded((prev) => !prev)}
+          >
+            {isSummaryExpanded ? 'Ocultar resumo' : 'Ver resumo'}
+          </button>
         </div>
       </div>
     </PublicLayout>
