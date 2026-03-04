@@ -6,6 +6,7 @@ export const RESERVED_PUBLIC_SLUGS = new Set([
   'empresa',
   'confirmacao',
   'consultar-passagens',
+  'cadastro',
   'cadastro-empresa',
   'v',
   'vendedor',

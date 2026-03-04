@@ -34,7 +34,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   const mobileLinksAnon = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
-    { to: '/cadastro-empresa', label: 'Quero vender passagens', icon: Building2 },
+    { to: '/cadastro', label: 'Quero vender passagens', icon: Building2 },
     { to: '/login', label: 'Área Administrativa', icon: Settings },
   ];
 
@@ -51,7 +51,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Ticket, end: false },
   ];
 
-  const ctaLink = { to: '/cadastro-empresa', label: 'Quero vender passagens' };
+  const ctaLink = { to: '/cadastro', label: 'Quero vender passagens' };
 
   const handleSignOut = async () => {
     await signOut();
