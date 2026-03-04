@@ -59,14 +59,13 @@ export default function PublicCompanyShowcase() {
 
       // Buscar eventos e patrocinadores em paralelo para reduzir tempo de carregamento
       const [eventsRes, sponsorsRes] = await Promise.all([
+        // Hardening Fase 1: whitelist estrita de colunas para reduzir superfície pública (sem select('*'))
         supabase
           .from('events')
           .select(`
-            *,
+            id, name, date, city, image_url, unit_price, status, is_archived, company_id,
             company:companies!events_company_id_fkey(
-              id,
-              name,
-              logo_url
+              id, name, logo_url, whatsapp
             )
           `)
           .eq('company_id', companyData.id)

@@ -545,9 +545,11 @@ export default function CompanyPage() {
     e.preventDefault();
     setSaving(true);
 
-    const isAdmin = isGerente || isOperador;
-    if (!isAdmin) {
-      toast.error('Você não tem permissão para salvar empresa');
+    // Hardening Fase 1: somente gerente/developer pode editar empresa.
+    // O banco já bloqueia via RLS, mas a UI deve refletir isso para consistência.
+    const canEdit = isGerente || isDeveloper;
+    if (!canEdit) {
+      toast.error('Somente gerentes podem editar dados da empresa');
       setSaving(false);
       return;
     }
@@ -1577,7 +1579,8 @@ export default function CompanyPage() {
               <Button type="button" variant="ghost" onClick={resetForm}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
+              {/* Hardening Fase 1: operador não pode salvar (read-only), alinhado com RLS */}
+              <Button type="submit" disabled={saving || (!isGerente && !isDeveloper)}>
                 {saving ? 'Salvando...' : 'Salvar alterações'}
               </Button>
             </div>
