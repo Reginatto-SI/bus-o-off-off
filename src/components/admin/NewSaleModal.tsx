@@ -146,6 +146,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // Step 2: Seats
   const [seats, setSeats] = useState<Seat[]>([]);
   const [occupiedSeatIds, setOccupiedSeatIds] = useState<string[]>([]);
+  // Bloqueios operacionais separados para render idêntico ao checkout público (âmbar/ban).
+  const [blockedSeatIds, setBlockedSeatIds] = useState<string[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [loadingSeats, setLoadingSeats] = useState(false);
 
@@ -358,6 +360,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     if (!selectedTripId || !selectedVehicle) {
       setSeats([]);
       setOccupiedSeatIds([]);
+      setBlockedSeatIds([]);
       setSelectedSeats([]);
       return;
     }
@@ -368,17 +371,53 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           .from('seats')
           .select('*')
           .eq('vehicle_id', selectedVehicle.id)
-          .eq('company_id', activeCompanyId!),
+          .eq('company_id', activeCompanyId!)
+          // Ordenação idêntica ao checkout público para render simétrico.
+          .order('floor')
+          .order('row_number')
+          .order('column_number'),
         supabase
           .from('tickets')
-          .select('seat_id')
+          .select('seat_id, sale_id')
           .eq('trip_id', selectedTripId),
       ]);
-      setSeats((seatsRes.data ?? []) as Seat[]);
-      const occupied = (ticketsRes.data ?? [])
-        .map((t: any) => t.seat_id)
-        .filter(Boolean) as string[];
+
+      // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
+      const validSeats = (seatsRes.data ?? []).filter(
+        (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
+      );
+      setSeats(validSeats as Seat[]);
+
+      const ticketsData = ticketsRes.data ?? [];
+
+      // Separar bloqueios operacionais de ocupação real (regra espelhada do checkout público).
+      const saleIds = [...new Set(ticketsData.map((t: any) => t.sale_id).filter(Boolean))];
+      let blockSaleIds = new Set<string>();
+
+      if (saleIds.length > 0) {
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select('id, customer_name, status')
+          .in('id', saleIds);
+
+        // Bloqueio operacional: customer_name = 'BLOQUEIO' e status != 'cancelado'
+        blockSaleIds = new Set(
+          (salesData ?? [])
+            .filter((s: any) => s.customer_name === 'BLOQUEIO' && s.status !== 'cancelado')
+            .map((s: any) => s.id)
+        );
+      }
+
+      const blocked: string[] = [];
+      const occupied: string[] = [];
+      ticketsData.forEach((t: any) => {
+        if (!t.seat_id) return;
+        if (blockSaleIds.has(t.sale_id)) blocked.push(t.seat_id);
+        else occupied.push(t.seat_id);
+      });
+
       setOccupiedSeatIds(occupied);
+      setBlockedSeatIds(blocked);
       setSelectedSeats([]);
       setLoadingSeats(false);
     };
@@ -898,6 +937,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       <SeatMap
                         seats={seats}
                         occupiedSeatIds={occupiedSeatIds}
+                        blockedSeatIds={blockedSeatIds}
                         maxSelection={availableCapacity}
                         selectedSeats={selectedSeats}
                         onSelectionChange={setSelectedSeats}
