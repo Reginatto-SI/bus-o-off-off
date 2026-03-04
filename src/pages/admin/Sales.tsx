@@ -1225,44 +1225,47 @@ export default function Sales() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
+          <DialogContent className="admin-modal flex h-[95vh] max-h-[95vh] w-[100vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw] sm:max-w-4xl">
+            <DialogHeader className="admin-modal__header shrink-0 px-6 py-4">
               <DialogTitle>
                 Gerar Passagem
               </DialogTitle>
             </DialogHeader>
-            {ticketGenLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : ticketGenTickets.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum passageiro encontrado.</p>
-            ) : !selectedTicketId && ticketGenTickets.length > 1 ? (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Qual passageiro?</p>
-                {ticketGenTickets.map((ticket) => (
-                  <Button
-                    key={ticket.id}
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setSelectedTicketId(ticket.id)}
-                  >
-                    {ticket.passenger_name} · Poltrona {ticket.seat_label}
-                  </Button>
-                ))}
-              </div>
-            ) : selectedTicketData ? (
-              <div className="space-y-3">
-                {ticketGenTickets.length > 1 && (
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedTicketId(null)}>
-                    ← Trocar passageiro
-                  </Button>
-                )}
-                {/* Reuso intencional do mesmo componente público para manter padrão visual e ações de download. */}
-                <TicketCard ticket={selectedTicketData} allowReservedDownloads />
-              </div>
-            ) : null}
-            <DialogFooter>
+            {/* Área com scroll interno para garantir visualização completa da passagem sem rolar o fundo da tela. */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+              {ticketGenLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : ticketGenTickets.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">Nenhum passageiro encontrado.</p>
+              ) : !selectedTicketId && ticketGenTickets.length > 1 ? (
+                <div className="mx-auto w-full max-w-[600px] space-y-3">
+                  <p className="text-sm font-medium">Qual passageiro?</p>
+                  {ticketGenTickets.map((ticket) => (
+                    <Button
+                      key={ticket.id}
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => setSelectedTicketId(ticket.id)}
+                    >
+                      {ticket.passenger_name} · Poltrona {ticket.seat_label}
+                    </Button>
+                  ))}
+                </div>
+              ) : selectedTicketData ? (
+                <div className="mx-auto w-full max-w-[600px] space-y-3">
+                  {ticketGenTickets.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedTicketId(null)}>
+                      ← Trocar passageiro
+                    </Button>
+                  )}
+                  {/* Reuso intencional do mesmo componente público para manter padrão visual e ações de download. */}
+                  <TicketCard ticket={selectedTicketData} allowReservedDownloads />
+                </div>
+              ) : null}
+            </div>
+            <DialogFooter className="admin-modal__footer shrink-0 px-6 py-4">
               <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); setSelectedTicketId(null); }}>
                 Fechar
               </Button>
