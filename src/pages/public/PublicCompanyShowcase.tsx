@@ -317,6 +317,34 @@ export default function PublicCompanyShowcase() {
                 </section>
               )}
 
+              {/* Carrossel de destaques (top 5 eventos) */}
+              {!loading && events.length > 0 && (
+                <section>
+                  <EventsCarousel events={events.slice(0, 5)} sellerRef={sellerRef} />
+                </section>
+              )}
+
+              {/* Grid de todos os eventos */}
+              <section id="todos-eventos" className="space-y-4 scroll-mt-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
+
+                {loading ? (
+                  <EventCardSkeletonGrid />
+                ) : events.length === 0 ? (
+                  <EmptyState
+                    icon={<Ticket className="h-8 w-8 text-muted-foreground" />}
+                    title="Nenhuma passagem disponível"
+                    description="No momento esta empresa não possui eventos em venda."
+                  />
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {events.map((event) => (
+                      <EventCard key={event.id} event={event} sellerRef={sellerRef} />
+                    ))}
+                  </div>
+                )}
+              </section>
+
               {/* Patrocinadores: seção oculta se não houver ativos */}
               {!loading && (sponsors.length > 0 || showEditUI) && (
                 <section className="space-y-3">
@@ -386,34 +414,6 @@ export default function PublicCompanyShowcase() {
                   ) : null}
                 </section>
               )}
-
-              {/* Carrossel de destaques (top 5 eventos) */}
-              {!loading && events.length > 0 && (
-                <section>
-                  <EventsCarousel events={events.slice(0, 5)} sellerRef={sellerRef} />
-                </section>
-              )}
-
-              {/* Grid de todos os eventos */}
-              <section id="todos-eventos" className="space-y-4 scroll-mt-4">
-                <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
-
-                {loading ? (
-                  <EventCardSkeletonGrid />
-                ) : events.length === 0 ? (
-                  <EmptyState
-                    icon={<Ticket className="h-8 w-8 text-muted-foreground" />}
-                    title="Nenhuma passagem disponível"
-                    description="No momento esta empresa não possui eventos em venda."
-                  />
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {events.map((event) => (
-                      <EventCard key={event.id} event={event} sellerRef={sellerRef} />
-                    ))}
-                  </div>
-                )}
-              </section>
             </div>
           </>
         )}
