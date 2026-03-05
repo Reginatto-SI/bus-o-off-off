@@ -30,6 +30,11 @@ const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+x
 // Comentário: este bucket deve existir no Supabase Storage para permitir o upload da logo.
 const COMPANY_LOGO_BUCKET = 'company-logos';
 
+const COMPANY_COVER_BUCKET = 'company-covers';
+const MAX_COVER_SIZE_MB = 5;
+const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
+const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
 
 function isBucketMissingErrorMessage(message?: string | null) {
   const normalized = (message ?? '').toLowerCase();
@@ -120,7 +125,9 @@ export default function CompanyPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [form, setForm] = useState({
     legal_type: 'PJ' as 'PF' | 'PJ',
@@ -823,6 +830,102 @@ export default function CompanyPage() {
     setLogoUploading(false);
   };
 
+  const handleCoverUpload = async (file?: File) => {
+    if (!file) return;
+    if (!isGerente) {
+      toast.error('Apenas gerentes podem alterar a capa');
+      return;
+    }
+    if (!editingId) {
+      toast.error('Salve a empresa antes de enviar a capa');
+      return;
+    }
+    if (!ALLOWED_COVER_TYPES.includes(file.type)) {
+      toast.error('Formato inválido. Envie JPG, PNG ou WEBP');
+      return;
+    }
+    if (file.size > MAX_COVER_SIZE_BYTES) {
+      toast.error(`A imagem deve ter no máximo ${MAX_COVER_SIZE_MB}MB`);
+      return;
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `cover-${editingId}.${extension}`;
+
+    setCoverUploading(true);
+
+    const { error: uploadError } = await supabase.storage
+      .from(COMPANY_COVER_BUCKET)
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) {
+      logSupabaseError({
+        label: 'Erro ao enviar capa (storage.upload)',
+        error: uploadError,
+        context: { action: 'upload', bucket: COMPANY_COVER_BUCKET, companyId: editingId, userId: user?.id },
+      });
+      if (isBucketMissingErrorMessage(uploadError.message)) {
+        toast.error('Bucket de armazenamento não disponível. Tente novamente em instantes.');
+      } else {
+        toast.error(
+          buildDebugToastMessage({
+            title: 'Erro ao enviar capa',
+            error: uploadError,
+            context: { action: 'upload', bucket: COMPANY_COVER_BUCKET, companyId: editingId },
+          })
+        );
+      }
+      setCoverUploading(false);
+      return;
+    }
+
+    const cacheBusted = Date.now();
+    const { data } = supabase.storage.from(COMPANY_COVER_BUCKET).getPublicUrl(fileName);
+    const publicUrl = data?.publicUrl ? `${data.publicUrl}?v=${cacheBusted}` : null;
+
+    if (!publicUrl) {
+      toast.error('Não foi possível obter a URL da capa');
+      setCoverUploading(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('companies')
+      .update({ cover_image_url: publicUrl })
+      .eq('id', editingId);
+
+    if (updateError) {
+      logSupabaseError({
+        label: 'Erro ao salvar capa (companies.update)',
+        error: updateError,
+        context: { action: 'update', table: 'companies', companyId: editingId, userId: user?.id },
+      });
+      toast.error('Erro ao salvar capa');
+    } else {
+      setForm((prev) => ({ ...prev, cover_image_url: publicUrl }));
+      fetchCompany();
+      toast.success('Imagem de capa atualizada');
+    }
+
+    setCoverUploading(false);
+  };
+
+  const handleRemoveCover = async () => {
+    if (!editingId) return;
+    const { error } = await supabase
+      .from('companies')
+      .update({ cover_image_url: null })
+      .eq('id', editingId);
+
+    if (error) {
+      toast.error('Erro ao remover capa');
+      return;
+    }
+    setForm((prev) => ({ ...prev, cover_image_url: '' }));
+    fetchCompany();
+    toast.success('Imagem de capa removida');
+  };
+
   if (!isGerente && !isOperador) {
     return <Navigate to="/admin/eventos" replace />;
   }
@@ -1501,26 +1604,60 @@ export default function CompanyPage() {
                     <TabsContent value="vitrine" className="mt-0">
                       <div className="space-y-6">
                         <div className="space-y-2">
-                          <Label htmlFor="cover_image_url">URL da imagem de capa (hero)</Label>
-                          <Input
-                            id="cover_image_url"
-                            value={form.cover_image_url}
-                            onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
-                            placeholder="https://exemplo.com/capa.jpg"
+                          <Label>Imagem de capa (hero)</Label>
+                          <input
+                            ref={coverInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              void handleCoverUpload(file);
+                              event.currentTarget.value = '';
+                            }}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Imagem de fundo exibida no topo da vitrine pública. Use uma URL de imagem já hospedada.
-                          </p>
                           {form.cover_image_url && (
-                            <div className="mt-2 rounded-md border overflow-hidden max-w-md">
+                            <div className="mt-1 rounded-md border overflow-hidden" style={{ aspectRatio: '2000/900' }}>
                               <img
                                 src={form.cover_image_url}
                                 alt="Preview da capa"
-                                className="h-32 w-full object-cover"
+                                className="h-full w-full object-cover"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
                             </div>
                           )}
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full sm:w-fit"
+                              onClick={() => coverInputRef.current?.click()}
+                              disabled={coverUploading}
+                            >
+                              {coverUploading ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : null}
+                              {form.cover_image_url ? 'Alterar imagem' : 'Enviar imagem de capa'}
+                            </Button>
+                            {form.cover_image_url && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleRemoveCover}
+                                className="text-destructive"
+                              >
+                                Remover imagem
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Tamanho recomendado: 2000 × 900 pixels. Formatos aceitos: JPG, PNG ou WEBP — Máximo: 5MB.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Dica: Use uma imagem horizontal representando sua empresa ou frota. O centro da imagem será priorizado em telas menores.
+                          </p>
                         </div>
 
                         <div className="space-y-2">

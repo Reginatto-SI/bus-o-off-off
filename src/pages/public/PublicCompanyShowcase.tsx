@@ -119,7 +119,7 @@ export default function PublicCompanyShowcase() {
 
     if (style === 'cover_overlay' && coverUrl) {
       return {
-        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.6)), url(${coverUrl})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url(${coverUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       };
@@ -217,7 +217,11 @@ export default function PublicCompanyShowcase() {
 
             {/* Hero section: personalizada via background_style */}
             <section
-              className="relative py-10 sm:py-14"
+              className={`relative ${
+                company?.background_style === 'cover_overlay' && company?.cover_image_url
+                  ? 'h-[280px] sm:h-[420px]'
+                  : 'py-10 sm:py-14'
+              } flex items-center justify-center`}
               style={loading ? {} : renderHeroStyle()}
             >
               {/* Fase 2: Ícone de edição do hero (capa + estilo) */}
@@ -230,7 +234,7 @@ export default function PublicCompanyShowcase() {
                   Editar aparência
                 </button>
               )}
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3 w-full">
                 {company?.logo_url && (
                   <img
                     src={company.logo_url}
