@@ -1,80 +1,34 @@
 
 
-# Banner Hero — Upload de Imagem + Renderização Responsiva
+# Melhorar Hero da Vitrine — Layout Comercial + CTA
 
-## Resumo
+## Mudanças (somente em `src/pages/public/PublicCompanyShowcase.tsx`)
 
-Substituir o campo de URL por upload direto de imagem no admin e no modal de edição inline, criar um bucket de storage dedicado, e melhorar a renderização do hero na vitrine pública com alturas responsivas e overlay consistente.
+### 1. Título e subtítulo
+- **Título**: `"Excursões e eventos com a {empresa}"` (fallback: `"Excursões e eventos"`)
+- **Subtítulo**: `"Confira os próximos eventos e garanta sua passagem com segurança."`
+- Manter classes condicionais de cor (white para cover_overlay, foreground para outros)
 
----
+### 2. CTA "Ver eventos disponíveis"
+- Botão primário abaixo do subtítulo, com scroll suave até a seção de eventos
+- Adicionar `id="todos-eventos"` na section "Todos os eventos" (linha ~366)
+- `onClick` faz `document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })`
+- Estilo: botão grande, variante com fundo branco semitransparente no modo cover_overlay, ou primary nos outros modos
 
-## Mudanças
+### 3. CTA secundário "Falar no WhatsApp" (condicional)
+- Extrair whatsapp da empresa via `events[0]?.company?.whatsapp` (já vem no select existente, sem nova query)
+- Se existir, renderizar botão outline/ghost ao lado do CTA principal com ícone MessageCircle
+- Link `https://wa.me/{normalizado}` usando `normalizeWhatsappForWaMe` de `src/lib/whatsapp.ts`
+- Se não existir, não renderizar nada
 
-### 1. Storage Bucket (Migration SQL)
+### 4. Layout do conteúdo do hero
+- Aumentar `space-y` do container interno para acomodar os botões
+- Agrupar os dois botões em um `div flex gap-3 justify-center flex-wrap`
 
-Criar bucket `company-covers` (público), seguindo o padrão do `company-logos` existente. Adicionar policy de storage para upload autenticado por gerente.
+### Arquivos
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/public/PublicCompanyShowcase.tsx` | Textos do hero, 2 CTAs, id na section de eventos |
 
-```sql
-INSERT INTO storage.buckets (id, name, public) VALUES ('company-covers', 'company-covers', true);
-
--- Policy: gerente pode fazer upload/update/delete de covers da própria empresa
-CREATE POLICY "Gerentes can manage company covers"
-ON storage.objects FOR ALL
-USING (bucket_id = 'company-covers' AND auth.role() = 'authenticated')
-WITH CHECK (bucket_id = 'company-covers' AND auth.role() = 'authenticated');
-```
-
-### 2. Admin `/admin/empresa` — Aba Vitrine Pública (`Company.tsx`)
-
-Substituir o `<Input>` de URL (linhas 1503-1523) por um componente de upload idêntico ao padrão de logo já existente:
-
-- `<input type="file" accept="image/jpeg,image/png,image/webp" />` (hidden)
-- Botão "Enviar imagem de capa" / "Alterar imagem"
-- Validação: max 5MB, formatos JPG/PNG/WEBP
-- Upload para `company-covers/cover-{companyId}.{ext}` com `upsert: true`
-- Após upload: salvar URL pública em `cover_image_url` e atualizar form state
-- Preview da imagem com aspect ratio ~2000x900 (usando `object-cover`)
-- Texto informativo abaixo:
-  ```
-  Tamanho recomendado: 2000 × 900 pixels
-  Formatos aceitos: JPG, PNG ou WEBP — Máximo: 5MB
-  Dica: Use uma imagem horizontal. O centro será priorizado em telas menores.
-  ```
-- Botão "Remover imagem" quando houver capa (seta `cover_image_url` para null)
-
-### 3. Modal Edição Inline (`EditHeroModal.tsx`)
-
-Substituir o `<Input>` de URL pelo mesmo componente de upload:
-
-- Upload direto para `company-covers/cover-{companyId}.{ext}`
-- Preview inline no modal
-- Manter o select de `background_style`
-- Mesmas validações (5MB, formatos)
-
-### 4. Renderização Responsiva do Hero (`PublicCompanyShowcase.tsx`)
-
-Alterar a section do hero:
-
-- **Alturas responsivas**: `h-[280px] sm:h-[420px]` (substituindo `py-10 sm:py-14`)
-- **Overlay padrão**: quando `background_style === 'cover_overlay'` e há imagem, aplicar `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35))` como overlay (já existe similar, ajustar para 0.35 conforme pedido)
-- **object-fit: cover + object-position: center** na imagem de fundo
-- Centralizar conteúdo vertical com flexbox
-- Manter fallbacks para `solid` e `subtle_gradient` (sem mudança de altura fixa nesses casos, usar padding como hoje)
-
-### 5. Compatibilidade
-
-- O `handleSubmit` em `Company.tsx` continua salvando `cover_image_url` normalmente (agora será URL do storage em vez de URL externa)
-- O modal `EditHeroModal` continua usando `onSave` callback para atualizar state local no Showcase
-- Nenhuma mudança de schema no banco — `cover_image_url` continua sendo text
-
----
-
-## Arquivos
-
-| Arquivo | Ação |
-|---------|------|
-| Migration SQL | Criar bucket `company-covers` + policy |
-| `src/pages/admin/Company.tsx` | Substituir input URL por upload (aba Vitrine) |
-| `src/components/public/showcase/EditHeroModal.tsx` | Substituir input URL por upload |
-| `src/pages/public/PublicCompanyShowcase.tsx` | Hero responsivo com alturas fixas e overlay |
+Nenhuma query, state, useEffect ou componente externo é alterado.
 
