@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Eye, MessageCircle, Pencil, Settings, Ticket, X } from 'lucide-react';
+import { ChevronDown, ExternalLink, Eye, MessageCircle, Pencil, Settings, Ticket, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { EventCard, EventCardSkeletonGrid, EventsCarousel } from '@/components/public';
 import { normalizePublicSlug } from '@/lib/publicSlug';
+import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 import { useAuth } from '@/contexts/AuthContext';
 import { EditHeroModal } from '@/components/public/showcase/EditHeroModal';
 import { EditIntroModal } from '@/components/public/showcase/EditIntroModal';
@@ -106,6 +107,7 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
+  const isCoverOverlay = company?.background_style === 'cover_overlay' && !!company?.cover_image_url;
 
   if (nick !== normalizedNick && normalizedNick) {
     return <Navigate to={`/empresa/${normalizedNick}`} replace />;
@@ -218,7 +220,7 @@ export default function PublicCompanyShowcase() {
             {/* Hero section: personalizada via background_style */}
             <section
               className={`relative ${
-                company?.background_style === 'cover_overlay' && company?.cover_image_url
+                isCoverOverlay
                   ? 'h-[280px] sm:h-[420px]'
                   : 'py-10 sm:py-14'
               } flex items-center justify-center`}
@@ -234,7 +236,7 @@ export default function PublicCompanyShowcase() {
                   Editar aparência
                 </button>
               )}
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3 w-full">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-5 w-full">
                 {company?.logo_url && (
                   <img
                     src={company.logo_url}
@@ -243,19 +245,49 @@ export default function PublicCompanyShowcase() {
                   />
                 )}
                 <h1 className={`text-2xl sm:text-3xl font-bold ${
-                  company?.background_style === 'cover_overlay' && company?.cover_image_url
-                    ? 'text-white'
-                    : 'text-foreground'
+                  isCoverOverlay ? 'text-white' : 'text-foreground'
                 }`}>
-                  {companyDisplayName ? `Vitrine da ${companyDisplayName}` : 'Vitrine da empresa'}
+                  {companyDisplayName ? `Excursões e eventos com a ${companyDisplayName}` : 'Excursões e eventos'}
                 </h1>
-                <p className={`text-sm sm:text-base ${
-                  company?.background_style === 'cover_overlay' && company?.cover_image_url
-                    ? 'text-white/80'
-                    : 'text-muted-foreground'
+                <p className={`text-sm sm:text-base max-w-lg mx-auto ${
+                  isCoverOverlay ? 'text-white/80' : 'text-muted-foreground'
                 }`}>
-                  Eventos disponíveis para compra online
+                  Confira os próximos eventos e garanta sua passagem com segurança.
                 </p>
+                {/* CTAs: scroll para eventos + WhatsApp (condicional) */}
+                {!loading && (
+                  <div className="flex gap-3 justify-center flex-wrap pt-1">
+                    <Button
+                      size="lg"
+                      className={isCoverOverlay
+                        ? 'bg-white/90 text-foreground hover:bg-white shadow-lg'
+                        : ''
+                      }
+                      onClick={() => document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      Ver eventos disponíveis
+                    </Button>
+                    {(() => {
+                      const whatsapp = events[0]?.company?.whatsapp;
+                      const normalized = normalizeWhatsappForWaMe(whatsapp);
+                      if (!normalized) return null;
+                      return (
+                        <Button
+                          size="lg"
+                          variant={isCoverOverlay ? 'outline' : 'ghost'}
+                          className={isCoverOverlay ? 'border-white/60 text-white hover:bg-white/20' : ''}
+                          asChild
+                        >
+                          <a href={`https://wa.me/${normalized}`} target="_blank" rel="noopener noreferrer">
+                            <MessageCircle className="h-4 w-4" />
+                            Falar no WhatsApp
+                          </a>
+                        </Button>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             </section>
 
@@ -363,7 +395,7 @@ export default function PublicCompanyShowcase() {
               )}
 
               {/* Grid de todos os eventos */}
-              <section className="space-y-4">
+              <section id="todos-eventos" className="space-y-4 scroll-mt-4">
                 <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
 
                 {loading ? (
