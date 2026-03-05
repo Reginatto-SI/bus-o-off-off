@@ -76,6 +76,7 @@ interface TicketCardProps {
 export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshStatus, isRefreshing }: TicketCardProps) {
   const { toast } = useToast();
   const qrRef = useRef<HTMLCanvasElement>(null);
+  const ticketContainerRef = useRef<HTMLDivElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
   const canDownload = isPaid || (allowReservedDownloads && ticket.saleStatus === 'reservado');
   const isCancelled = ticket.saleStatus === 'cancelado';
@@ -105,7 +106,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
     const canvas = qrRef.current;
     if (!canvas) return;
     const qrBase64 = canvas.toDataURL('image/png');
-    await generateTicketPdf({ ticket, qrBase64 });
+    await generateTicketPdf({ ticket, qrBase64, ticketElement: ticketContainerRef.current });
   };
 
   const handleDownloadImage = async () => {
@@ -115,7 +116,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
   };
 
   return (
-    <Card className={isCancelled ? 'opacity-60' : ''}>
+    <Card ref={ticketContainerRef} className={isCancelled ? 'opacity-60' : ''}>
       {/* Company accent bar */}
       <div className="h-1.5 rounded-t-lg" style={{ backgroundColor: accentColor }} />
       <CardContent className="p-4 sm:p-6">

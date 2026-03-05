@@ -1,13 +1,36 @@
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { renderTicketVisual } from '@/lib/ticketVisualRenderer';
 
 interface GenerateTicketPdfParams {
   ticket: TicketCardData;
   qrBase64: string;
+  ticketElement?: HTMLElement | null;
 }
 
-export async function generateTicketPdf({ ticket, qrBase64 }: GenerateTicketPdfParams) {
+export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: GenerateTicketPdfParams) {
+  if (ticketElement) {
+    // Captura o DOM real da passagem virtual para garantir PDF fiel ao visual em tela.
+    const domCanvas = await html2canvas(ticketElement, {
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      scale: Math.max(2, window.devicePixelRatio || 1),
+    });
+
+    const domImg = domCanvas.toDataURL('image/png', 1.0);
+    const doc = new jsPDF({
+      orientation: domCanvas.width > domCanvas.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [domCanvas.width, domCanvas.height],
+    });
+
+    doc.addImage(domImg, 'PNG', 0, 0, domCanvas.width, domCanvas.height, undefined, 'FAST');
+    doc.save(`passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.pdf`);
+    return;
+  }
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
