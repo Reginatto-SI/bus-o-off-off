@@ -17,6 +17,8 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       useCORS: true,
       logging: false,
       scale: Math.max(2, window.devicePixelRatio || 1),
+      // Evita exportar ações interativas (ex.: botões "Salvar PDF"/"Salvar QR Code") no arquivo final.
+      ignoreElements: (element) => (element as HTMLElement).dataset?.pdfExclude === 'true',
     });
 
     const domImg = domCanvas.toDataURL('image/png', 1.0);

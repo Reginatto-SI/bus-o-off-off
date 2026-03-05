@@ -333,7 +333,8 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
 
           {/* Actions */}
           {canDownload && (
-            <div className="w-full flex flex-col sm:flex-row gap-2 pt-2">
+            // Mantém ações visíveis na interface, mas permite excluir este bloco do PDF.
+            <div data-pdf-exclude="true" className="w-full flex flex-col sm:flex-row gap-2 pt-2">
               <Button
                 variant="outline"
                 size="sm"
