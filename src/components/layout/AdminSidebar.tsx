@@ -60,12 +60,12 @@ type NavigationGroup = {
 
 const navigationGroups: NavigationGroup[] = [{
   id: 'dashboard',
-  label: 'Dashboard',
+  label: 'Painel',
   icon: LayoutDashboard,
   // O Dashboard é tratado como entrada principal isolada na navegação.
   standalone: true,
   items: [{
-    name: 'Dashboard',
+    name: 'Painel',
     href: '/admin/dashboard',
     icon: LayoutDashboard,
   }],
