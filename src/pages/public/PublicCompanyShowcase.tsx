@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ExternalLink, Eye, MessageCircle, Pencil, Settings, Ticket, X } from 'lucide-react';
+import { Bus, ChevronDown, ClipboardCheck, ExternalLink, Eye, HeadsetIcon, MessageCircle, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -344,6 +344,37 @@ export default function PublicCompanyShowcase() {
                   </div>
                 )}
               </section>
+
+              {/* Seção de confiança — mini-site */}
+              {!loading && company && (
+                <section className="space-y-4">
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center">
+                    Por que viajar com a gente?
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { icon: Bus, label: 'Ônibus confortável e revisado' },
+                      { icon: UserCheck, label: 'Motoristas experientes' },
+                      { icon: ClipboardCheck, label: 'Embarque organizado por lista' },
+                      { icon: ShieldCheck, label: 'Compra segura pelo sistema' },
+                      ...(events[0]?.company?.whatsapp
+                        ? [{ icon: HeadsetIcon, label: 'Suporte rápido via WhatsApp' }]
+                        : []),
+                      { icon: MapPin, label: 'Informações claras do embarque' },
+                    ].map(({ icon: Icon, label }) => (
+                      <div
+                        key={label}
+                        className="flex flex-col items-center gap-2 rounded-lg border bg-card p-4 text-center"
+                      >
+                        <Icon className="h-5 w-5 text-primary" />
+                        <span className="text-xs sm:text-sm text-muted-foreground leading-snug">
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Patrocinadores: seção oculta se não houver ativos */}
               {!loading && (sponsors.length > 0 || showEditUI) && (
