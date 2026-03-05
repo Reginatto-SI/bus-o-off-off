@@ -1,83 +1,80 @@
 
 
-# Fase 2 — Modo Edição Inline na Vitrine Pública
+# Banner Hero — Upload de Imagem + Renderização Responsiva
 
-## Abordagem
+## Resumo
 
-Tudo acontece em um único arquivo principal (`PublicCompanyShowcase.tsx`) com 3 modais extraídos para componentes pequenos. Sem migrations, sem novas tabelas, sem mudanças de RLS — os campos (`cover_image_url`, `intro_text`, `background_style`) e as permissões (gerente pode UPDATE na company dele) já existem.
+Substituir o campo de URL por upload direto de imagem no admin e no modal de edição inline, criar um bucket de storage dedicado, e melhorar a renderização do hero na vitrine pública com alturas responsivas e overlay consistente.
 
-## Implementação
+---
 
-### 1. Detectar permissão de edição (no Showcase)
+## Mudanças
 
-Usar `useAuth()` para obter `isGerente`, `activeCompanyId` e `session`. Condição:
+### 1. Storage Bucket (Migration SQL)
+
+Criar bucket `company-covers` (público), seguindo o padrão do `company-logos` existente. Adicionar policy de storage para upload autenticado por gerente.
+
+```sql
+INSERT INTO storage.buckets (id, name, public) VALUES ('company-covers', 'company-covers', true);
+
+-- Policy: gerente pode fazer upload/update/delete de covers da própria empresa
+CREATE POLICY "Gerentes can manage company covers"
+ON storage.objects FOR ALL
+USING (bucket_id = 'company-covers' AND auth.role() = 'authenticated')
+WITH CHECK (bucket_id = 'company-covers' AND auth.role() = 'authenticated');
 ```
-const canEdit = !!session && isGerente && company?.id === activeCompanyId;
-```
-Se `canEdit` é false, zero UI extra é renderizado.
 
-### 2. Estado local de modo edição
+### 2. Admin `/admin/empresa` — Aba Vitrine Pública (`Company.tsx`)
 
-```ts
-const [editMode, setEditMode] = useState(false);
-const [clientView, setClientView] = useState(false);
-```
-- `editMode` ON + `clientView` OFF = mostra ícones de edição
-- `clientView` ON = esconde tudo (simula visão do cliente)
-- Quando `!canEdit`, ambos ficam false e nada aparece
+Substituir o `<Input>` de URL (linhas 1503-1523) por um componente de upload idêntico ao padrão de logo já existente:
 
-### 3. Barra de controle do gerente
+- `<input type="file" accept="image/jpeg,image/png,image/webp" />` (hidden)
+- Botão "Enviar imagem de capa" / "Alterar imagem"
+- Validação: max 5MB, formatos JPG/PNG/WEBP
+- Upload para `company-covers/cover-{companyId}.{ext}` com `upsert: true`
+- Após upload: salvar URL pública em `cover_image_url` e atualizar form state
+- Preview da imagem com aspect ratio ~2000x900 (usando `object-cover`)
+- Texto informativo abaixo:
+  ```
+  Tamanho recomendado: 2000 × 900 pixels
+  Formatos aceitos: JPG, PNG ou WEBP — Máximo: 5MB
+  Dica: Use uma imagem horizontal. O centro será priorizado em telas menores.
+  ```
+- Botão "Remover imagem" quando houver capa (seta `cover_image_url` para null)
 
-Renderizada apenas quando `canEdit && !clientView`:
-- Faixa discreta no topo (abaixo do header, acima do hero)
-- Conteúdo: Toggle "Modo edição" | Botão "Ver como cliente" | Link "Gerenciar patrocinadores → /admin/patrocinadores"
-- Quando `clientView`: mostrar apenas um botão flutuante "Voltar ao modo edição" para sair da visão de cliente
+### 3. Modal Edição Inline (`EditHeroModal.tsx`)
 
-### 4. Três modais de edição (componentes separados)
+Substituir o `<Input>` de URL pelo mesmo componente de upload:
 
-Criar `src/components/public/showcase/`:
+- Upload direto para `company-covers/cover-{companyId}.{ext}`
+- Preview inline no modal
+- Manter o select de `background_style`
+- Mesmas validações (5MB, formatos)
 
-**A) `EditCoverModal.tsx`**
-- Input URL da capa + preview da imagem
-- Salvar → `supabase.from('companies').update({ cover_image_url }).eq('id', companyId)`
-- Ao salvar com sucesso: atualizar state local `company` + toast
+### 4. Renderização Responsiva do Hero (`PublicCompanyShowcase.tsx`)
 
-**B) `EditIntroModal.tsx`**
-- Textarea com limite 400 chars + contador
-- Salvar → `update({ intro_text })`
+Alterar a section do hero:
 
-**C) `EditBackgroundStyleModal.tsx`**
-- Select com 3 opções (solid, subtle_gradient, cover_overlay)
-- Salvar → `update({ background_style })`
+- **Alturas responsivas**: `h-[280px] sm:h-[420px]` (substituindo `py-10 sm:py-14`)
+- **Overlay padrão**: quando `background_style === 'cover_overlay'` e há imagem, aplicar `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35))` como overlay (já existe similar, ajustar para 0.35 conforme pedido)
+- **object-fit: cover + object-position: center** na imagem de fundo
+- Centralizar conteúdo vertical com flexbox
+- Manter fallbacks para `solid` e `subtle_gradient` (sem mudança de altura fixa nesses casos, usar padding como hoje)
 
-Todos os modais: Dialog do shadcn, botão salvar com loading/disabled, toast sucesso/erro, `onSave` callback que atualiza o state da company no Showcase sem refetch.
+### 5. Compatibilidade
 
-### 5. Ícones de edição nos blocos
+- O `handleSubmit` em `Company.tsx` continua salvando `cover_image_url` normalmente (agora será URL do storage em vez de URL externa)
+- O modal `EditHeroModal` continua usando `onSave` callback para atualizar state local no Showcase
+- Nenhuma mudança de schema no banco — `cover_image_url` continua sendo text
 
-Quando `editMode && !clientView`:
-- **Hero**: ícone lápis no canto superior direito (abre EditCoverModal + EditBackgroundStyleModal agrupados ou separados — vou agrupar em um único "Editar aparência" com os dois campos no mesmo modal para simplificar UX)
-- **Intro text**: ícone lápis ao lado do bloco (abre EditIntroModal)
-- **Patrocinadores**: botão "Gerenciar patrocinadores" linkando para `/admin/patrocinadores`
-
-### 6. Simplificação: agrupar Capa + Estilo em um modal
-
-Em vez de 3 modais, fazer 2:
-- **EditHeroModal**: URL da capa + select de estilo de fundo (são visualmente ligados)
-- **EditIntroModal**: textarea do intro
-
-Isso reduz cliques e é mais intuitivo.
+---
 
 ## Arquivos
 
 | Arquivo | Ação |
 |---------|------|
-| `src/components/public/showcase/EditHeroModal.tsx` | Criar — modal capa + estilo |
-| `src/components/public/showcase/EditIntroModal.tsx` | Criar — modal intro text |
-| `src/pages/public/PublicCompanyShowcase.tsx` | Editar — adicionar barra gerente, ícones edição, state editMode |
-
-## Segurança
-
-- RLS já garante que só gerente pode UPDATE na company dele
-- Frontend só mostra UI de edição quando `company.id === activeCompanyId && isGerente`
-- Nenhum dado novo é exposto; updates usam campos existentes
+| Migration SQL | Criar bucket `company-covers` + policy |
+| `src/pages/admin/Company.tsx` | Substituir input URL por upload (aba Vitrine) |
+| `src/components/public/showcase/EditHeroModal.tsx` | Substituir input URL por upload |
+| `src/pages/public/PublicCompanyShowcase.tsx` | Hero responsivo com alturas fixas e overlay |
 
