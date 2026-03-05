@@ -1,34 +1,27 @@
 
 
-# Melhorar Hero da Vitrine — Layout Comercial + CTA
+# Reordenar seções da vitrine — Eventos antes de Patrocinadores
 
-## Mudanças (somente em `src/pages/public/PublicCompanyShowcase.tsx`)
+## Mudança
 
-### 1. Título e subtítulo
-- **Título**: `"Excursões e eventos com a {empresa}"` (fallback: `"Excursões e eventos"`)
-- **Subtítulo**: `"Confira os próximos eventos e garanta sua passagem com segurança."`
-- Manter classes condicionais de cor (white para cover_overlay, foreground para outros)
+Apenas trocar a ordem dos blocos JSX dentro do `<div className="max-w-7xl...">` (linhas 294-417) em `src/pages/public/PublicCompanyShowcase.tsx`.
 
-### 2. CTA "Ver eventos disponíveis"
-- Botão primário abaixo do subtítulo, com scroll suave até a seção de eventos
-- Adicionar `id="todos-eventos"` na section "Todos os eventos" (linha ~366)
-- `onClick` faz `document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })`
-- Estilo: botão grande, variante com fundo branco semitransparente no modo cover_overlay, ou primary nos outros modos
+### Ordem atual (linhas 296-416)
+1. Intro text (296-318)
+2. Patrocinadores (320-388)
+3. Carrossel destaques (390-395)
+4. Todos os eventos (397-416)
 
-### 3. CTA secundário "Falar no WhatsApp" (condicional)
-- Extrair whatsapp da empresa via `events[0]?.company?.whatsapp` (já vem no select existente, sem nova query)
-- Se existir, renderizar botão outline/ghost ao lado do CTA principal com ícone MessageCircle
-- Link `https://wa.me/{normalizado}` usando `normalizeWhatsappForWaMe` de `src/lib/whatsapp.ts`
-- Se não existir, não renderizar nada
+### Nova ordem
+1. Intro text (sem mudança)
+2. **Carrossel destaques** (mover para cima)
+3. **Todos os eventos** (mover para cima)
+4. **Patrocinadores** (mover para baixo)
 
-### 4. Layout do conteúdo do hero
-- Aumentar `space-y` do container interno para acomodar os botões
-- Agrupar os dois botões em um `div flex gap-3 justify-center flex-wrap`
-
-### Arquivos
+### Arquivo
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/public/PublicCompanyShowcase.tsx` | Textos do hero, 2 CTAs, id na section de eventos |
+| `src/pages/public/PublicCompanyShowcase.tsx` | Reordenar 3 blocos JSX (linhas 320-416) |
 
-Nenhuma query, state, useEffect ou componente externo é alterado.
+Nenhuma query, state, componente ou lógica de edição é alterada. Apenas corte e cola de blocos.
 
