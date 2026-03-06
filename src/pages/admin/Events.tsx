@@ -2482,31 +2482,25 @@ export default function Events() {
                   event.status === 'rascunho' && 'border-dashed',
                 )}
               >
-                {/* Image or Placeholder - 1:1 padrão oficial (1080×1080 recomendado). */}
-                {event.image_url ? (
-                  <div className="aspect-square w-full relative overflow-hidden bg-muted">
-                    <img 
-                      src={event.image_url} 
-                      alt=""
-                      aria-hidden="true"
-                      className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                    />
-                    <img 
-                      src={event.image_url} 
-                      alt={event.name}
-                      className="relative w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="aspect-square w-full bg-gradient-to-br from-muted/50 to-muted flex items-center justify-center">
-                    <div className="text-center">
-                      <Calendar className="h-10 w-10 mx-auto text-muted-foreground/30" />
-                      <span className="text-xl font-bold text-muted-foreground/20 mt-1 block">
-                        {event.name.charAt(0).toUpperCase()}
-                      </span>
+                {/* Image with fallback - 1:1 padrão oficial (1080×1080 recomendado). */}
+                {(() => {
+                  const imgUrl = event.image_url || '/assets/eventos/evento_padrao.png';
+                  return (
+                    <div className="aspect-square w-full relative overflow-hidden bg-muted">
+                      <img 
+                        src={imgUrl} 
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
+                      />
+                      <img 
+                        src={imgUrl} 
+                        alt={event.name}
+                        className="relative w-full h-full object-contain"
+                      />
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-3">
