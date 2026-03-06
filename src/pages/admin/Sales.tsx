@@ -137,7 +137,16 @@ interface SalesEventFilterOption {
   city: string | null;
 }
 
-type SalesSortField = 'created_at' | 'quantity' | 'seat_label' | 'gross_amount' | 'status' | 'event_name';
+type SalesSortField =
+  | 'created_at'
+  | 'event_name'
+  | 'customer_name'
+  | 'trip_id'
+  | 'boarding_location_name'
+  | 'quantity'
+  | 'gross_amount'
+  | 'seller_name'
+  | 'status';
 type SalesSortDirection = 'asc' | 'desc';
 
 const initialFilters: SalesFilters = {
@@ -222,9 +231,8 @@ export default function Sales() {
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
   const [boardingTimeMap, setBoardingTimeMap] = useState<Record<string, string | null>>({});
-  // Estado único de ordenação para manter o comportamento de apenas 1 coluna ativa por vez.
-  const [sortField, setSortField] = useState<SalesSortField>('created_at');
-  const [sortDirection, setSortDirection] = useState<SalesSortDirection>('desc');
+  // Ordenação ativa (nullable): quando null, aplica o padrão da tela (Data da Compra desc).
+  const [sortConfig, setSortConfig] = useState<{ field: SalesSortField; direction: SalesSortDirection } | null>(null);
   const [eventFilterOpen, setEventFilterOpen] = useState(false);
   const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
   const [eventFilterSearch, setEventFilterSearch] = useState('');
@@ -287,15 +295,21 @@ export default function Sales() {
         seller:sellers(*)
       `, { count: 'exact' });
 
-    // A ordenação sempre acontece no backend para respeitar paginação e filtros ativos.
-    if (sortField === 'event_name') {
-      query = query.order('name', { ascending: sortDirection === 'asc', referencedTable: 'events' });
-    } else if (sortField === 'seat_label') {
-      query = query.order('seat_label', { ascending: sortDirection === 'asc', referencedTable: 'tickets' });
-    } else if (sortField === 'gross_amount') {
-      query = query.order('gross_amount', { ascending: sortDirection === 'asc', nullsFirst: false });
+    // Quando não há coluna ativa, volta para a regra padrão da tela: compra mais recente primeiro.
+    const effectiveSortField = sortConfig?.field ?? 'created_at';
+    const effectiveSortDirection = sortConfig?.direction ?? 'desc';
+
+    // A ordenação acontece no backend para manter consistência com filtros e paginação.
+    if (effectiveSortField === 'event_name') {
+      query = query.order('name', { ascending: effectiveSortDirection === 'asc', referencedTable: 'events' });
+    } else if (effectiveSortField === 'seller_name') {
+      query = query.order('name', { ascending: effectiveSortDirection === 'asc', referencedTable: 'sellers', nullsFirst: false });
+    } else if (effectiveSortField === 'boarding_location_name') {
+      query = query.order('name', { ascending: effectiveSortDirection === 'asc', referencedTable: 'boarding_locations' });
+    } else if (effectiveSortField === 'gross_amount') {
+      query = query.order('gross_amount', { ascending: effectiveSortDirection === 'asc', nullsFirst: false });
     } else {
-      query = query.order(sortField, { ascending: sortDirection === 'asc' });
+      query = query.order(effectiveSortField, { ascending: effectiveSortDirection === 'asc' });
     }
 
     if (activeCompanyId) {
@@ -427,7 +441,7 @@ export default function Sales() {
 
   useEffect(() => {
     fetchSales();
-  }, [activeCompanyId, filters, currentPage, rowsPerPage, sortField, sortDirection]);
+  }, [activeCompanyId, filters, currentPage, rowsPerPage, sortConfig]);
 
   useEffect(() => {
     fetchFiltersData();
@@ -498,28 +512,37 @@ export default function Sales() {
 
   const handleSortChange = (field: SalesSortField) => {
     setCurrentPage(1);
-    setSortField((currentField) => {
-      if (currentField === field) {
-        setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
-        return currentField;
+    // Ciclo em 3 etapas: asc -> desc -> padrão (null).
+    setSortConfig((currentSort) => {
+      if (!currentSort || currentSort.field !== field) {
+        return { field, direction: 'asc' };
       }
-
-      setSortDirection('asc');
-      return field;
+      if (currentSort.direction === 'asc') {
+        return { field, direction: 'desc' };
+      }
+      return null;
     });
   };
 
   const renderSortHeader = (label: string, field: SalesSortField) => {
-    const isActive = sortField === field;
+    const isActive = sortConfig?.field === field;
+    const direction = isActive ? sortConfig?.direction : null;
     return (
       <Button
         variant="ghost"
         size="sm"
-        className="-ml-3 h-8 px-3 text-xs font-semibold"
+        className={cn(
+          '-ml-3 h-8 px-3 text-xs font-semibold',
+          isActive && 'bg-muted text-foreground hover:bg-muted/90'
+        )}
         onClick={() => handleSortChange(field)}
       >
         <span>{label}</span>
-        {isActive && (sortDirection === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />)}
+        {isActive ? (
+          direction === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/70" />
+        )}
       </Button>
     );
   };
@@ -1066,13 +1089,13 @@ export default function Sales() {
                   <TableRow>
                     <TableHead>{renderSortHeader('Data da Compra', 'created_at')}</TableHead>
                     <TableHead>{renderSortHeader('Evento', 'event_name')}</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Local Embarque</TableHead>
+                    <TableHead>{renderSortHeader('Cliente', 'customer_name')}</TableHead>
+                    <TableHead>{renderSortHeader('Veículo', 'trip_id')}</TableHead>
+                    <TableHead>{renderSortHeader('Local Embarque', 'boarding_location_name')}</TableHead>
                      <TableHead>{renderSortHeader('Qtd', 'quantity')}</TableHead>
-                     <TableHead>{renderSortHeader('Poltrona(s)', 'seat_label')}</TableHead>
+                     <TableHead>Poltrona(s)</TableHead>
                      {canViewFinancials && <TableHead>{renderSortHeader('Valor', 'gross_amount')}</TableHead>}
-                     <TableHead>Vendedor</TableHead>
+                     <TableHead>{renderSortHeader('Vendedor', 'seller_name')}</TableHead>
                     <TableHead>{renderSortHeader('Status', 'status')}</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
