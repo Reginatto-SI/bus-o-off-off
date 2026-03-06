@@ -1,33 +1,30 @@
 
 
-# Ajuste Visual do Hero da Vitrine Pública
+# Imagem padrão para eventos sem banner
 
-## Mudanças em `src/pages/public/PublicCompanyShowcase.tsx`
+## Mudança
 
-### 1. Ícone WhatsApp customizado (SVG inline)
-- Criar um pequeno componente SVG inline com o ícone oficial do WhatsApp (path do logo) para substituir `MessageCircle`
-- Colocar no próprio arquivo ou em `src/components/ui/WhatsAppIcon.tsx`
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### 2. Botão WhatsApp — estilo verde fixo + micro animação
-- Remover variantes `outline`/`ghost` condicionais
-- Aplicar classes fixas: `bg-[#25D366] text-white hover:bg-[#1DA851] shadow-md hover:shadow-lg transition-all`
-- Adicionar animação CSS `animate-subtle-pulse` no `src/index.css` (keyframe de sombra pulsante suave, ~3s infinite)
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+```
 
-### 3. Logo em container neutro
-- Envolver a `<img>` da logo em um `<div>` com `bg-white rounded-xl p-2 shadow-md inline-block`
-- Garante legibilidade para logos com fundo branco/preto/transparente
+### Componentes afetados
 
-### 4. Layout mobile — botões empilhados
-- Alterar o `div` dos CTAs de `flex gap-3 justify-center flex-wrap` para `flex flex-col sm:flex-row gap-3 justify-center items-center`
-- Botões empilham verticalmente no mobile, lado a lado no desktop
-
-### 5. Manter overlay e hierarquia
-- Nenhuma mudança no overlay (já funciona)
-- Botão "Ver eventos" continua como primário, WhatsApp como secundário verde
-
-### Arquivos
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/public/PublicCompanyShowcase.tsx` | Logo container, botão WhatsApp verde, layout flex-col mobile |
-| `src/index.css` | Keyframe `animate-subtle-pulse` |
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+
+### Lógica simplificada (ambos os cards)
+
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+
+### Imagem padrão
+
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
