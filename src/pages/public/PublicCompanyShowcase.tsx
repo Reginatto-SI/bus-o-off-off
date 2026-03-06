@@ -116,9 +116,12 @@ export default function PublicCompanyShowcase() {
 
   // Hero: renderiza background baseado em cover_image_url + background_style + primary_color
   const renderHeroStyle = (): React.CSSProperties => {
-    const primaryColor = company?.primary_color || '#F97316';
     const style = company?.background_style || 'solid';
     const coverUrl = company?.cover_image_url;
+
+    // Gradiente premium padrão da vitrine pública (usado sempre que não houver capa).
+    // Mantém a aparência clara/elegante e evita hero "vazio" ao remover imagem.
+    const premiumGradient = 'linear-gradient(135deg, #FFF7ED 0%, #FFE9D6 50%, #F8F6F4 100%)';
 
     // Se há capa, SEMPRE exibir como background — style controla intensidade do overlay
     if (coverUrl) {
@@ -130,15 +133,9 @@ export default function PublicCompanyShowcase() {
       };
     }
 
-    // Sem capa: gradiente ou cor sólida
-    if (style === 'subtle_gradient') {
-      return {
-        background: `linear-gradient(135deg, ${primaryColor}22 0%, ${primaryColor}08 50%, transparent 100%)`,
-      };
-    }
-
+    // Sem capa: sempre aplicar gradiente premium como padrão da plataforma.
     return {
-      background: `${primaryColor}15`,
+      background: premiumGradient,
     };
   };
 
