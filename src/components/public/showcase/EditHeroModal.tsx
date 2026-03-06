@@ -16,8 +16,9 @@ interface EditHeroModalProps {
   onOpenChange: (open: boolean) => void;
   companyId: string;
   currentCoverUrl: string | null;
+  useDefaultCover: boolean;
   currentBackgroundStyle: string;
-  onSave: (data: { cover_image_url: string | null; background_style: string }) => void;
+  onSave: (data: { cover_image_url: string | null; use_default_cover: boolean; background_style: string }) => void;
 }
 
 const STYLE_OPTIONS = [
@@ -29,11 +30,13 @@ const STYLE_OPTIONS = [
 const COVER_BUCKET = 'company-covers';
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const DEFAULT_SHOWCASE_COVER_URL = '/assets/vitrine/Img_padrao_vitrine.png';
 
 export function EditHeroModal({
-  open, onOpenChange, companyId, currentCoverUrl, currentBackgroundStyle, onSave,
+  open, onOpenChange, companyId, currentCoverUrl, useDefaultCover, currentBackgroundStyle, onSave,
 }: EditHeroModalProps) {
   const [coverUrl, setCoverUrl] = useState(currentCoverUrl ?? '');
+  const [useDefault, setUseDefault] = useState(useDefaultCover);
   const [bgStyle, setBgStyle] = useState(currentBackgroundStyle);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -42,6 +45,7 @@ export function EditHeroModal({
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
       setCoverUrl(currentCoverUrl ?? '');
+      setUseDefault(useDefaultCover);
       setBgStyle(currentBackgroundStyle);
     }
     onOpenChange(isOpen);
@@ -75,18 +79,29 @@ export function EditHeroModal({
     const cacheBust = Date.now();
     const { data } = supabase.storage.from(COVER_BUCKET).getPublicUrl(fileName);
     const url = data?.publicUrl ? `${data.publicUrl}?v=${cacheBust}` : '';
+    // Quando o usuário sobe imagem própria, ela sempre tem prioridade sobre a padrão.
     setCoverUrl(url);
+    setUseDefault(false);
     setUploading(false);
   };
 
   const handleRemove = () => {
+    // Remove qualquer imagem (personalizada/padrão) e força fallback para gradiente.
     setCoverUrl('');
+    setUseDefault(false);
+  };
+
+  const handleRestoreDefault = () => {
+    // Restaura explicitamente a capa padrão do sistema com 1 clique.
+    setCoverUrl('');
+    setUseDefault(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     const payload = {
       cover_image_url: coverUrl.trim() || null,
+      use_default_cover: useDefault,
       background_style: bgStyle,
     };
 
@@ -106,6 +121,10 @@ export function EditHeroModal({
     onSave(payload);
     onOpenChange(false);
   };
+
+  const hasCustomCover = !!coverUrl.trim();
+  const hasAnyCover = hasCustomCover || useDefault;
+  const previewUrl = hasCustomCover ? coverUrl.trim() : (useDefault ? DEFAULT_SHOWCASE_COVER_URL : '');
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -130,10 +149,10 @@ export function EditHeroModal({
                 e.currentTarget.value = '';
               }}
             />
-            {coverUrl.trim() && (
+            {hasAnyCover && (
               <div className="rounded-md border overflow-hidden" style={{ aspectRatio: '2000/900' }}>
                 <img
-                  src={coverUrl.trim()}
+                  src={previewUrl}
                   alt="Preview da capa"
                   className="h-full w-full object-cover"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -149,11 +168,16 @@ export function EditHeroModal({
                 disabled={uploading || saving}
               >
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {coverUrl.trim() ? 'Alterar imagem' : 'Enviar imagem'}
+                {hasCustomCover ? 'Alterar imagem' : 'Enviar imagem'}
               </Button>
-              {coverUrl.trim() && (
+              {hasAnyCover && (
                 <Button type="button" variant="ghost" size="sm" onClick={handleRemove} className="text-destructive">
                   Remover
+                </Button>
+              )}
+              {!useDefault && (
+                <Button type="button" variant="secondary" size="sm" onClick={handleRestoreDefault}>
+                  Restaurar imagem padrão
                 </Button>
               )}
             </div>
