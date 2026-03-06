@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, MessageCircle } from 'lucide-react';
+import { MapPin, MessageCircle } from 'lucide-react';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
+import { DateBadge } from './DateBadge';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
@@ -64,34 +65,23 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
         {/* Conteúdo sobre o banner */}
         <div className="absolute bottom-0 left-0 right-0 p-4 z-30 space-y-3">
-          {/* Nome e Preço */}
-          <div>
-            <h3 className="text-xl font-bold text-white line-clamp-2">
-              {event.name}
-            </h3>
-            <p className="text-2xl font-bold text-primary mt-1">
-              {formatCurrencyBRL(event.unit_price)}
-            </p>
+          {/* Nome, Data Badge e Preço */}
+          <div className="flex gap-3 items-start">
+            <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xl font-bold text-white line-clamp-2">
+                {event.name}
+              </h3>
+              <p className="text-2xl font-bold text-primary mt-1">
+                {formatCurrencyBRL(event.unit_price)}
+              </p>
+            </div>
           </div>
 
-          {/* Data e Local */}
-          <div className="flex flex-wrap gap-4 text-sm text-white/90">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
-              <span>
-                {(() => {
-                  // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
-                  const localDate = parseDateOnlyAsLocal(event.date);
-                  return localDate
-                    ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(localDate)
-                    : formatDateOnlyBR(event.date, 'dd/MM');
-                })()}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4" />
-              <span>{event.city}</span>
-            </div>
+          {/* Local */}
+          <div className="flex items-center gap-1.5 text-sm text-white/90">
+            <MapPin className="h-4 w-4" />
+            <span>{event.city}</span>
           </div>
         </div>
       </Link>

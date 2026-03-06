@@ -1,4 +1,5 @@
 export { EventCard } from './EventCard';
+export { DateBadge } from './DateBadge';
 export { EventCardFeatured } from './EventCardFeatured';
 export { EventsCarousel } from './EventsCarousel';
 export { EventCardSkeleton, EventCardSkeletonGrid } from './EventCardSkeleton';
