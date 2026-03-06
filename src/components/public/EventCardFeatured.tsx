@@ -15,8 +15,11 @@ interface EventCardFeaturedProps {
   isSoldOut?: boolean;
 }
 
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+
 export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: EventCardFeaturedProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const imageUrl = event.image_url || DEFAULT_EVENT_IMAGE;
   const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
   const whatsappHelpLink = buildWhatsappWaMeLink({
     phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
@@ -32,28 +35,21 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
     <div className="relative overflow-hidden rounded-xl">
       <Link to={linkTo} className="block">
         <AspectRatio ratio={16 / 9}>
-          {event.image_url ? (
-            <div className="relative w-full h-full">
-              {/* Background blur */}
-              <div 
-                className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
-                style={{ backgroundImage: `url(${event.image_url})` }}
-              />
-              {/* Imagem principal */}
-              <img
-                src={event.image_url}
-                alt={event.name}
-                className="relative w-full h-full object-contain z-10"
-              />
-              {/* Overlay escuro */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20" />
-            </div>
-          ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center">
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-              <Calendar className="h-16 w-16 text-muted-foreground/50" />
-            </div>
-          )}
+          <div className="relative w-full h-full">
+            {/* Background blur */}
+            <div 
+              className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
+              style={{ backgroundImage: `url(${imageUrl})` }}
+            />
+            {/* Imagem principal */}
+            <img
+              src={imageUrl}
+              alt={event.name}
+              className="relative w-full h-full object-contain z-10"
+            />
+            {/* Overlay escuro */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20" />
+          </div>
         </AspectRatio>
 
         {/* Badge Esgotado */}

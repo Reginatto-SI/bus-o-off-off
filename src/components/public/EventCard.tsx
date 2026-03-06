@@ -16,8 +16,11 @@ interface EventCardProps {
   isSoldOut?: boolean;
 }
 
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+
 export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const imageUrl = event.image_url || DEFAULT_EVENT_IMAGE;
   const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
   const whatsappHelpLink = buildWhatsappWaMeLink({
     phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
@@ -35,25 +38,19 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         {/* Banner com blur letterbox */}
         <div className="relative">
           <AspectRatio ratio={3 / 2}>
-            {event.image_url ? (
-              <div className="relative w-full h-full">
-                {/* Background blur */}
-                <div 
-                  className="absolute inset-0 bg-cover bg-center blur-xl scale-110 opacity-60"
-                  style={{ backgroundImage: `url(${event.image_url})` }}
-                />
-                {/* Imagem principal */}
-                <img
-                  src={event.image_url}
-                  alt={event.name}
-                  className="relative w-full h-full object-contain z-10"
-                />
-              </div>
-            ) : (
-              <div className="w-full h-full bg-muted flex items-center justify-center">
-                <Calendar className="h-12 w-12 text-muted-foreground/50" />
-              </div>
-            )}
+            <div className="relative w-full h-full">
+              {/* Background blur */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center blur-xl scale-110 opacity-60"
+                style={{ backgroundImage: `url(${imageUrl})` }}
+              />
+              {/* Imagem principal */}
+              <img
+                src={imageUrl}
+                alt={event.name}
+                className="relative w-full h-full object-contain z-10"
+              />
+            </div>
           </AspectRatio>
           
           {/* Badge Esgotado */}

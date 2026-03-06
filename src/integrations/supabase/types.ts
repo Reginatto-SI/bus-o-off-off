@@ -108,7 +108,6 @@ export type Database = {
           city: string | null
           cnpj: string | null
           cover_image_url: string | null
-          use_default_cover: boolean
           created_at: string
           document: string | null
           document_number: string | null
@@ -133,6 +132,7 @@ export type Database = {
           ticket_color: string | null
           trade_name: string | null
           updated_at: string
+          use_default_cover: boolean
           website: string | null
           whatsapp: string | null
         }
@@ -143,7 +143,6 @@ export type Database = {
           city?: string | null
           cnpj?: string | null
           cover_image_url?: string | null
-          use_default_cover?: boolean
           created_at?: string
           document?: string | null
           document_number?: string | null
@@ -168,6 +167,7 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
+          use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null
         }
@@ -178,7 +178,6 @@ export type Database = {
           city?: string | null
           cnpj?: string | null
           cover_image_url?: string | null
-          use_default_cover?: boolean
           created_at?: string
           document?: string | null
           document_number?: string | null
@@ -203,6 +202,7 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
+          use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null
         }
