@@ -45,6 +45,7 @@ export interface Company {
   partner_split_percent: number;
   // Vitrine pública (Fase 1)
   cover_image_url: string | null;
+  use_default_cover: boolean;
   intro_text: string | null;
   background_style: 'solid' | 'subtle_gradient' | 'cover_overlay';
   // Sistema

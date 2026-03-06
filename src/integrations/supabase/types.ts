@@ -108,6 +108,7 @@ export type Database = {
           city: string | null
           cnpj: string | null
           cover_image_url: string | null
+          use_default_cover: boolean
           created_at: string
           document: string | null
           document_number: string | null
@@ -142,6 +143,7 @@ export type Database = {
           city?: string | null
           cnpj?: string | null
           cover_image_url?: string | null
+          use_default_cover?: boolean
           created_at?: string
           document?: string | null
           document_number?: string | null
@@ -176,6 +178,7 @@ export type Database = {
           city?: string | null
           cnpj?: string | null
           cover_image_url?: string | null
+          use_default_cover?: boolean
           created_at?: string
           document?: string | null
           document_number?: string | null

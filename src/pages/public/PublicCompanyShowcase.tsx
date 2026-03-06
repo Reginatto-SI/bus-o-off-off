@@ -29,7 +29,7 @@ interface PublicSponsor {
 // Tipo estrito para dados públicos da empresa (sem select('*'))
 type PublicCompanyData = Pick<
   Company,
-  'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'intro_text' | 'background_style'
+  'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style'
 >;
 
 export default function PublicCompanyShowcase() {
@@ -60,7 +60,7 @@ export default function PublicCompanyShowcase() {
       // Query estrita: somente campos necessários para a vitrine (sem select('*'))
       const { data: companyData } = await supabase
         .from('companies')
-        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, intro_text, background_style')
+        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style')
         .eq('public_slug', normalizedNick)
         .maybeSingle();
 
@@ -108,7 +108,10 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
-  const hasCover = !!company?.cover_image_url;
+  const DEFAULT_SHOWCASE_COVER_URL = '/assets/vitrine/Img_padrao_vitrine.png';
+  // Prioridade do hero: capa personalizada > capa padrão do sistema > gradiente puro (quando removida manualmente)
+  const resolvedCoverUrl = company?.cover_image_url || (company?.use_default_cover ? DEFAULT_SHOWCASE_COVER_URL : null);
+  const hasCover = !!resolvedCoverUrl;
 
   if (nick !== normalizedNick && normalizedNick) {
     return <Navigate to={`/empresa/${normalizedNick}`} replace />;
@@ -117,7 +120,7 @@ export default function PublicCompanyShowcase() {
   // Hero: renderiza background baseado em cover_image_url + background_style + primary_color
   const renderHeroStyle = (): React.CSSProperties => {
     const style = company?.background_style || 'solid';
-    const coverUrl = company?.cover_image_url;
+    const coverUrl = resolvedCoverUrl;
 
     // Gradiente premium padrão da vitrine pública (usado sempre que não houver capa).
     // Mantém a aparência clara/elegante e evita hero "vazio" ao remover imagem.
@@ -153,8 +156,13 @@ export default function PublicCompanyShowcase() {
   };
 
   // Callbacks dos modais — atualizam state local sem refetch
-  const handleHeroSave = (data: { cover_image_url: string | null; background_style: string }) => {
-    setCompany((prev) => prev ? { ...prev, cover_image_url: data.cover_image_url, background_style: data.background_style as PublicCompanyData['background_style'] } : prev);
+  const handleHeroSave = (data: { cover_image_url: string | null; use_default_cover: boolean; background_style: string }) => {
+    setCompany((prev) => prev ? {
+      ...prev,
+      cover_image_url: data.cover_image_url,
+      use_default_cover: data.use_default_cover,
+      background_style: data.background_style as PublicCompanyData['background_style'],
+    } : prev);
   };
 
   const handleIntroSave = (introText: string | null) => {
@@ -459,6 +467,7 @@ export default function PublicCompanyShowcase() {
             onOpenChange={setHeroModalOpen}
             companyId={company.id}
             currentCoverUrl={company.cover_image_url}
+            useDefaultCover={company.use_default_cover}
             currentBackgroundStyle={company.background_style}
             onSave={handleHeroSave}
           />
