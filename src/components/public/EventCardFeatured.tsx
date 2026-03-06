@@ -64,7 +64,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         )}
 
         {/* Conteúdo sobre o banner */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 z-30 space-y-3">
+        <div className="absolute bottom-0 left-0 right-0 p-4 pr-40 z-30 space-y-3">
           {/* Nome, Data Badge e Preço */}
           <div className="flex gap-3 items-start">
             <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
@@ -78,26 +78,27 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             </div>
           </div>
 
-          {/* Local */}
-          <div className="flex items-center gap-1.5 text-sm text-white/90">
-            <MapPin className="h-4 w-4" />
-            <span>{event.city}</span>
+          {/* Metadados secundários no mesmo fluxo para evitar sobreposição com CTAs absolutos do banner. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/90">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <MapPin className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{event.city}</span>
+            </div>
+
+            {whatsappHelpLink && (
+              <a
+                href={whatsappHelpLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-white/85 hover:text-white transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Ajuda no WhatsApp
+              </a>
+            )}
           </div>
         </div>
       </Link>
-
-      {/* CTA secundário de ajuda, visual leve para não disputar atenção com o botão de compra. */}
-      {whatsappHelpLink && (
-        <a
-          href={whatsappHelpLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute bottom-5 left-4 z-30 inline-flex items-center gap-1.5 text-xs text-white/85 hover:text-white transition-colors"
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-          Ajuda no WhatsApp
-        </a>
-      )}
 
       {/* CTA */}
       <div className="absolute bottom-4 right-4 z-30">
