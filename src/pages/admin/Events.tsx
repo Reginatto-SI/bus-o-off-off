@@ -16,6 +16,7 @@ import { parseCityLabel, formatCityLabel } from '@/lib/cityUtils';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -210,6 +211,7 @@ export default function Events() {
   const [showStepErrors, setShowStepErrors] = useState(false);
   const [celebrationDialogOpen, setCelebrationDialogOpen] = useState(false);
   const [publishErrorInCelebration, setPublishErrorInCelebration] = useState<string | null>(null);
+  const [platformFeeTermsDialogOpen, setPlatformFeeTermsDialogOpen] = useState(false);
 
   // Quick status change
   const [closeEventDialogOpen, setCloseEventDialogOpen] = useState(false);
@@ -217,6 +219,16 @@ export default function Events() {
 
   // Sales data for performance indicators
   const [salesByEvent, setSalesByEvent] = useState<Map<string, number>>(new Map());
+
+  // Mantém o aceite sincronizado entre o checkbox e o botão de confirmação do modal de termos.
+  const handleAcceptPlatformFeeTerms = () => {
+    setForm((prev) => ({
+      ...prev,
+      platform_fee_terms_accepted: true,
+      platform_fee_terms_accepted_at: prev.platform_fee_terms_accepted_at ?? new Date().toISOString(),
+    }));
+    setPlatformFeeTermsDialogOpen(false);
+  };
   
   // Data for trips tab
   const [eventTrips, setEventTrips] = useState<TripWithDetails[]>([]);
@@ -3619,9 +3631,20 @@ export default function Events() {
                             onCheckedChange={(checked) => setForm({ ...form, platform_fee_terms_accepted: checked === true, platform_fee_terms_accepted_at: checked === true ? (form.platform_fee_terms_accepted_at ?? new Date().toISOString()) : null })}
                             disabled={isReadOnly}
                           />
-                          <label htmlFor="platform_fee_accepted" className="text-sm leading-relaxed cursor-pointer">
-                            Li e aceito a cobrança da taxa da plataforma (<strong>{hasValidCompanyPlatformFee ? `${companyPlatformFeePercent}%` : 'configuração indisponível'}</strong>) sobre vendas online.
-                          </label>
+                          <div className="text-sm leading-relaxed">
+                            <label htmlFor="platform_fee_accepted" className="cursor-pointer">
+                              Li e aceito a cobrança da taxa da plataforma sobre vendas online.
+                            </label>{' '}
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="h-auto p-0 align-baseline"
+                              onClick={() => setPlatformFeeTermsDialogOpen(true)}
+                              disabled={isReadOnly}
+                            >
+                              Ler termos
+                            </Button>
+                          </div>
                         </div>
                         {!form.platform_fee_terms_accepted && (
                           <p className="text-xs text-orange-600 mt-2 ml-7">
@@ -4172,6 +4195,68 @@ export default function Events() {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de termos da taxa da plataforma para reforçar transparência na etapa de passagens. */}
+        <Dialog open={platformFeeTermsDialogOpen} onOpenChange={setPlatformFeeTermsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh]">
+            <DialogHeader>
+              <DialogTitle>Termos da Taxa da Plataforma</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 overflow-y-auto pr-1 text-sm leading-relaxed">
+              <div>
+                <p className="font-semibold">1. Cobrança da taxa</p>
+                <p className="text-muted-foreground">
+                  A plataforma Smartbus aplica uma taxa sobre vendas realizadas através do checkout online disponibilizado no sistema.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">2. Taxa atual</p>
+                <p className="text-muted-foreground">
+                  A taxa atualmente praticada é de <strong>7,5%</strong> sobre o valor da passagem vendida online.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">3. Aplicação da taxa</p>
+                <p className="text-muted-foreground">
+                  Essa taxa é aplicada automaticamente apenas em vendas realizadas pelo sistema de venda online da plataforma.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">4. Vendas manuais</p>
+                <p className="text-muted-foreground">
+                  Vendas registradas manualmente no painel administrativo podem não estar sujeitas à mesma cobrança automática da plataforma, dependendo do fluxo utilizado.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">5. Atualização de taxas</p>
+                <p className="text-muted-foreground">
+                  A taxa da plataforma poderá ser ajustada futuramente conforme política comercial da plataforma ou acordo com a empresa organizadora.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">6. Aceite</p>
+                <p className="text-muted-foreground">
+                  Ao publicar um evento utilizando o sistema de venda online da plataforma, o organizador declara estar ciente da cobrança da taxa da plataforma.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPlatformFeeTermsDialogOpen(false)}>
+                Fechar
+              </Button>
+              <Button type="button" onClick={handleAcceptPlatformFeeTerms} disabled={isReadOnly}>
+                Li e aceito
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
