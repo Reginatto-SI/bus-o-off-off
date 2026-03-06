@@ -21,6 +21,7 @@ import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
+import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 import { QRCodeSVG } from 'qrcode.react';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -167,98 +168,49 @@ export default function CompanyPage() {
 
   const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${normalizedPublicSlug || 'nick'}`;
 
-  // Comentário: reutiliza a serialização de SVG já adotada no projeto para exportações de QR em alta qualidade.
-  const getShowcaseQrSvgString = () => {
-    const svgElement = showcaseQrRef.current?.querySelector('svg');
-    if (!svgElement) return null;
-    return new XMLSerializer().serializeToString(svgElement);
-  };
-
   const handleDownloadShowcaseQrSvg = () => {
     if (!canRenderShowcaseQr) {
       toast.error('Configure um nick válido para exportar o QR Code');
       return;
     }
 
-    const svgString = getShowcaseQrSvgString();
-    if (!svgString) {
+    const result = downloadShowcaseQrSvg(showcaseQrRef.current, getShowcaseQrFileBaseName());
+    if (result !== 'ok') {
       toast.error('Erro ao gerar SVG do QR Code');
       return;
     }
 
-    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${getShowcaseQrFileBaseName()}.svg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     toast.success('QR Code SVG baixado!');
   };
 
-  const handleDownloadShowcaseQrPng = () => {
+  const handleDownloadShowcaseQrPng = async () => {
     if (!canRenderShowcaseQr) {
       toast.error('Configure um nick válido para exportar o QR Code');
       return;
     }
 
-    const svgString = getShowcaseQrSvgString();
-    if (!svgString) {
+    const result = await downloadShowcaseQrPng(showcaseQrRef.current, getShowcaseQrFileBaseName());
+    if (result === 'missing_svg') {
       toast.error('Erro ao gerar PNG do QR Code');
       return;
     }
 
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-    const img = new window.Image();
+    if (result === 'render_error') {
+      toast.error('Erro ao renderizar PNG do QR Code');
+      return;
+    }
 
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      // Comentário: escala 4x evita borrão no PNG e mantém leitura para impressão.
-      const scale = 4;
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
+    if (result === 'export_error') {
+      toast.error('Erro ao exportar PNG do QR Code');
+      return;
+    }
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        toast.error('Erro ao renderizar PNG do QR Code');
-        return;
-      }
-
-      ctx.scale(scale, scale);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, img.width, img.height);
-      ctx.drawImage(img, 0, 0);
-
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          toast.error('Erro ao exportar PNG do QR Code');
-          return;
-        }
-
-        const pngUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = pngUrl;
-        a.download = `${getShowcaseQrFileBaseName()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(pngUrl);
-        toast.success('QR Code PNG baixado!');
-      }, 'image/png');
-
-      URL.revokeObjectURL(url);
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
+    if (result === 'process_error') {
       toast.error('Erro ao processar QR Code para download');
-    };
+      return;
+    }
 
-    img.src = url;
+    toast.success('QR Code PNG baixado!');
   };
 
   const hydrateFormFromCompany = (data: Company | null) => {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { Bus, ChevronDown, ClipboardCheck, ExternalLink, Eye, HeadsetIcon, MessageCircle, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
+import { Bus, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, EventWithCompany } from '@/types/database';
@@ -14,6 +14,9 @@ import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 import { useAuth } from '@/contexts/AuthContext';
 import { EditHeroModal } from '@/components/public/showcase/EditHeroModal';
 import { EditIntroModal } from '@/components/public/showcase/EditIntroModal';
+import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
+import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 
 // Tipo mínimo para patrocinadores públicos (whitelist estrita de campos)
 interface PublicSponsor {
@@ -48,6 +51,7 @@ export default function PublicCompanyShowcase() {
   const [editMode, setEditMode] = useState(false);
   const [clientView, setClientView] = useState(false);
   const showEditUI = canEdit && editMode && !clientView;
+  const showcaseQrRef = useRef<HTMLDivElement | null>(null);
 
   // Modais
   const [heroModalOpen, setHeroModalOpen] = useState(false);
@@ -108,6 +112,10 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
+  const showcaseSlug = normalizePublicSlug(company?.public_slug || normalizedNick);
+  const showcaseShortLink = showcaseSlug ? `${window.location.origin}/${showcaseSlug}` : '';
+  const canRenderShowcaseQr = showcaseSlug.length > 0;
+  const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${showcaseSlug || 'nick'}`;
   const DEFAULT_SHOWCASE_COVER_URL = '/assets/vitrine/Img_padrao_vitrine.png';
   // Prioridade do hero: capa personalizada > capa padrão do sistema > gradiente puro (quando removida manualmente)
   const resolvedCoverUrl = company?.cover_image_url || (company?.use_default_cover ? DEFAULT_SHOWCASE_COVER_URL : null);
@@ -169,6 +177,61 @@ export default function PublicCompanyShowcase() {
     setCompany((prev) => prev ? { ...prev, intro_text: introText } : prev);
   };
 
+  const handleCopyShowcaseLink = async () => {
+    if (!showcaseShortLink) return;
+    try {
+      await navigator.clipboard.writeText(showcaseShortLink);
+      toast.success('Link da vitrine copiado!');
+    } catch {
+      toast.error('Falha ao copiar link da vitrine');
+    }
+  };
+
+  const handleDownloadShowcaseQrSvg = () => {
+    if (!canRenderShowcaseQr) {
+      toast.error('Nick da vitrine inválido para exportar o QR Code');
+      return;
+    }
+
+    const result = downloadShowcaseQrSvg(showcaseQrRef.current, getShowcaseQrFileBaseName());
+    if (result !== 'ok') {
+      toast.error('Erro ao gerar SVG do QR Code');
+      return;
+    }
+
+    toast.success('QR Code SVG baixado!');
+  };
+
+  const handleDownloadShowcaseQrPng = async () => {
+    if (!canRenderShowcaseQr) {
+      toast.error('Nick da vitrine inválido para exportar o QR Code');
+      return;
+    }
+
+    const result = await downloadShowcaseQrPng(showcaseQrRef.current, getShowcaseQrFileBaseName());
+    if (result === 'missing_svg') {
+      toast.error('Erro ao gerar PNG do QR Code');
+      return;
+    }
+
+    if (result === 'render_error') {
+      toast.error('Erro ao renderizar PNG do QR Code');
+      return;
+    }
+
+    if (result === 'export_error') {
+      toast.error('Erro ao exportar PNG do QR Code');
+      return;
+    }
+
+    if (result === 'process_error') {
+      toast.error('Erro ao processar QR Code para download');
+      return;
+    }
+
+    toast.success('QR Code PNG baixado!');
+  };
+
   return (
     <PublicLayout>
       <div className="space-y-0">
@@ -190,7 +253,7 @@ export default function PublicCompanyShowcase() {
             {/* Fase 2: Barra de controle do gerente — visível apenas para gerente da própria empresa */}
             {canEdit && !clientView && (
               <div className="bg-muted/60 border-b">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-4 flex-wrap text-sm">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-3 flex-wrap text-sm">
                   <div className="flex items-center gap-2">
                     <Settings className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium text-foreground">Modo edição</span>
@@ -210,6 +273,42 @@ export default function PublicCompanyShowcase() {
                       Gerenciar patrocinadores
                     </Link>
                   </Button>
+                  <div className="h-5 w-px bg-border hidden md:block" />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => void handleCopyShowcaseLink()}
+                      disabled={!showcaseShortLink}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copiar link da vitrine
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => void handleDownloadShowcaseQrPng()}
+                      disabled={!canRenderShowcaseQr}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      QR PNG
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleDownloadShowcaseQrSvg}
+                      disabled={!canRenderShowcaseQr}
+                    >
+                      <QrCode className="h-3.5 w-3.5" />
+                      QR SVG
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -301,6 +400,15 @@ export default function PublicCompanyShowcase() {
             </section>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+              {/* Comentário: QR oculto no DOM para reaproveitar a mesma serialização/exportação usada no admin. */}
+              {canEdit && canRenderShowcaseQr && (
+                <div className="sr-only" aria-hidden>
+                  <div ref={showcaseQrRef}>
+                    <QRCodeSVG value={showcaseShortLink} size={220} level="H" includeMargin={false} />
+                  </div>
+                </div>
+              )}
+
               {/* Texto de apresentação: renderiza somente se preenchido */}
               {!loading && (company?.intro_text || showEditUI) && (
                 <section className="relative text-center max-w-2xl mx-auto">
