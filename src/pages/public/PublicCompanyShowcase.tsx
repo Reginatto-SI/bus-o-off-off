@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { Bus, ChevronDown, ClipboardCheck, ExternalLink, Eye, HeadsetIcon, MessageCircle, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
+import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -240,11 +241,13 @@ export default function PublicCompanyShowcase() {
               )}
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-5 w-full">
                 {company?.logo_url && (
-                  <img
-                    src={company.logo_url}
-                    alt={`Logo ${companyDisplayName || ''}`}
-                    className="mx-auto h-16 sm:h-20 w-auto object-contain"
-                  />
+                  <div className="inline-block bg-white rounded-xl p-2 shadow-md">
+                    <img
+                      src={company.logo_url}
+                      alt={`Logo ${companyDisplayName || ''}`}
+                      className="h-16 sm:h-20 w-auto object-contain"
+                    />
+                  </div>
                 )}
                 <h1 className={`text-2xl sm:text-3xl font-bold ${
                   hasCover ? 'text-white' : 'text-foreground'
@@ -258,12 +261,12 @@ export default function PublicCompanyShowcase() {
                 </p>
                 {/* CTAs: scroll para eventos + WhatsApp (condicional) */}
                 {!loading && (
-                  <div className="flex gap-3 justify-center flex-wrap pt-1">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-1">
                     <Button
                       size="lg"
                       className={hasCover
-                        ? 'bg-white/90 text-foreground hover:bg-white shadow-lg'
-                        : ''
+                        ? 'bg-white/90 text-foreground hover:bg-white shadow-lg w-full sm:w-auto'
+                        : 'w-full sm:w-auto'
                       }
                       onClick={() => document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })}
                     >
@@ -277,12 +280,11 @@ export default function PublicCompanyShowcase() {
                       return (
                         <Button
                           size="lg"
-                          variant={hasCover ? 'outline' : 'ghost'}
-                          className={hasCover ? 'border-white/60 text-white hover:bg-white/20' : ''}
+                          className="bg-[#25D366] text-white hover:bg-[#1DA851] shadow-md hover:shadow-lg transition-all animate-subtle-pulse w-full sm:w-auto"
                           asChild
                         >
                           <a href={`https://wa.me/${normalized}`} target="_blank" rel="noopener noreferrer">
-                            <MessageCircle className="h-4 w-4" />
+                            <WhatsAppIcon size={18} />
                             Falar no WhatsApp
                           </a>
                         </Button>
