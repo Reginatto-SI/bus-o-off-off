@@ -107,33 +107,35 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
-  const isCoverOverlay = company?.background_style === 'cover_overlay' && !!company?.cover_image_url;
+  const hasCover = !!company?.cover_image_url;
 
   if (nick !== normalizedNick && normalizedNick) {
     return <Navigate to={`/empresa/${normalizedNick}`} replace />;
   }
 
-  // Hero: renderiza background baseado em background_style + cover_image_url + primary_color
+  // Hero: renderiza background baseado em cover_image_url + background_style + primary_color
   const renderHeroStyle = (): React.CSSProperties => {
     const primaryColor = company?.primary_color || '#F97316';
     const style = company?.background_style || 'solid';
     const coverUrl = company?.cover_image_url;
 
-    if (style === 'cover_overlay' && coverUrl) {
+    // Se há capa, SEMPRE exibir como background — style controla intensidade do overlay
+    if (coverUrl) {
+      const overlayOpacity = style === 'solid' ? 0.45 : style === 'subtle_gradient' ? 0.3 : 0.35;
       return {
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url(${coverUrl})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,${overlayOpacity}), rgba(0,0,0,${overlayOpacity})), url(${coverUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       };
     }
 
+    // Sem capa: gradiente ou cor sólida
     if (style === 'subtle_gradient') {
       return {
         background: `linear-gradient(135deg, ${primaryColor}22 0%, ${primaryColor}08 50%, transparent 100%)`,
       };
     }
 
-    // solid (default)
     return {
       background: `${primaryColor}15`,
     };
@@ -220,8 +222,8 @@ export default function PublicCompanyShowcase() {
             {/* Hero section: personalizada via background_style */}
             <section
               className={`relative ${
-                isCoverOverlay
-                  ? 'h-[280px] sm:h-[420px]'
+                hasCover
+                  ? 'h-[320px] sm:h-[480px]'
                   : 'py-10 sm:py-14'
               } flex items-center justify-center`}
               style={loading ? {} : renderHeroStyle()}
@@ -245,12 +247,12 @@ export default function PublicCompanyShowcase() {
                   />
                 )}
                 <h1 className={`text-2xl sm:text-3xl font-bold ${
-                  isCoverOverlay ? 'text-white' : 'text-foreground'
+                  hasCover ? 'text-white' : 'text-foreground'
                 }`}>
                   {companyDisplayName ? `Excursões e eventos com a ${companyDisplayName}` : 'Excursões e eventos'}
                 </h1>
                 <p className={`text-sm sm:text-base max-w-lg mx-auto ${
-                  isCoverOverlay ? 'text-white/80' : 'text-muted-foreground'
+                  hasCover ? 'text-white/80' : 'text-muted-foreground'
                 }`}>
                   Confira os próximos eventos e garanta sua passagem com segurança.
                 </p>
@@ -259,7 +261,7 @@ export default function PublicCompanyShowcase() {
                   <div className="flex gap-3 justify-center flex-wrap pt-1">
                     <Button
                       size="lg"
-                      className={isCoverOverlay
+                      className={hasCover
                         ? 'bg-white/90 text-foreground hover:bg-white shadow-lg'
                         : ''
                       }
@@ -275,8 +277,8 @@ export default function PublicCompanyShowcase() {
                       return (
                         <Button
                           size="lg"
-                          variant={isCoverOverlay ? 'outline' : 'ghost'}
-                          className={isCoverOverlay ? 'border-white/60 text-white hover:bg-white/20' : ''}
+                          variant={hasCover ? 'outline' : 'ghost'}
+                          className={hasCover ? 'border-white/60 text-white hover:bg-white/20' : ''}
                           asChild
                         >
                           <a href={`https://wa.me/${normalized}`} target="_blank" rel="noopener noreferrer">
