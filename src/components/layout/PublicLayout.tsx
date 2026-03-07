@@ -16,9 +16,10 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface PublicLayoutProps {
   children: ReactNode;
+  hideMyTicketsButton?: boolean;
 }
 
-export function PublicLayout({ children }: PublicLayoutProps) {
+export function PublicLayout({ children, hideMyTicketsButton = false }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -31,9 +32,10 @@ export function PublicLayout({ children }: PublicLayoutProps) {
     'group inline-flex items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-all hover:text-foreground hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
   // Links para usuários NÃO autenticados
+  // Contexto de vitrine em edição reaproveita o mesmo header público, ocultando apenas ação de cliente.
   const mobileLinksAnon = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
-    { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
+    ...(hideMyTicketsButton ? [] : [{ to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search }]),
     { to: '/cadastro', label: 'Quero vender passagens', icon: Building2 },
     { to: '/login', label: 'Área Administrativa', icon: Settings },
   ];
@@ -41,7 +43,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   // Links para usuários autenticados no mobile
   const mobileLinksAuth = [
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
-    { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search },
+    ...(hideMyTicketsButton ? [] : [{ to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search }]),
     ...(isGerente || isOperador
       ? [{ to: '/admin/eventos', label: 'Área Administrativa', icon: Settings }]
       : []),
@@ -49,7 +51,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
   const desktopLinks = [
     { to: '/consultar-passagens', label: 'Minhas Passagens', icon: Ticket, end: false },
-  ];
+  ].filter(() => !hideMyTicketsButton);
 
   const ctaLink = { to: '/cadastro', label: 'Quero vender passagens' };
 
