@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -24,7 +25,7 @@ export function formatDateOnlyBR(dateString: string, pattern = 'dd/MM/yyyy'): st
   const localDate = parseDateOnlyAsLocal(dateString);
   if (!localDate) return dateString;
 
-  return format(localDate, pattern);
+  return format(localDate, pattern, { locale: ptBR });
 }
 
 /**
