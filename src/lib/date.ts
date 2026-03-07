@@ -25,7 +25,7 @@ export function formatDateOnlyBR(dateString: string, pattern = 'dd/MM/yyyy'): st
   const localDate = parseDateOnlyAsLocal(dateString);
   if (!localDate) return dateString;
 
-  return format(localDate, pattern);
+  return format(localDate, pattern, { locale: ptBR });
 }
 
 /**
