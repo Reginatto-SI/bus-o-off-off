@@ -2504,9 +2504,14 @@ export default function Events() {
                 })()}
                 
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <h3 className="font-semibold text-foreground line-clamp-2">{event.name}</h3>
-                    <ActionsDropdown actions={getEventActions(event)} />
+                  <div className="flex items-start gap-3 mb-3">
+                    <DateBadge date={event.date} className="flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <h3 className="font-semibold text-foreground line-clamp-2">{event.name}</h3>
+                        <ActionsDropdown actions={getEventActions(event)} />
+                      </div>
+                    </div>
                   </div>
                   
                   <div className="mb-3 flex items-center gap-1.5">
