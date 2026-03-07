@@ -90,6 +90,28 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           </div>
         </div>
 
+        {/* Empresa organizadora */}
+        {event.company && (
+          <div className="flex items-center gap-2">
+            {event.company.logo_url ? (
+              <img
+                src={event.company.logo_url}
+                alt={event.company.name}
+                className="h-5 w-5 rounded-full object-cover border flex-shrink-0"
+              />
+            ) : (
+              <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <span className="text-[0.5rem] font-bold text-muted-foreground">
+                  {event.company.name?.charAt(0)?.toUpperCase()}
+                </span>
+              </div>
+            )}
+            <span className="text-xs text-muted-foreground truncate">
+              {event.company.name}
+            </span>
+          </div>
+        )}
+
         {/* CTA secundário de suporte sem competir com o botão principal de compra. */}
         {whatsappHelpLink && (
           <div className="flex justify-end pt-1">
