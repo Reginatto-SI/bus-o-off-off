@@ -88,6 +88,7 @@ import { ptBR } from 'date-fns/locale';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { cn } from '@/lib/utils';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
+import { DateBadge } from '@/components/public/DateBadge';
 import { Progress } from '@/components/ui/progress';
 import { useLocation } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
