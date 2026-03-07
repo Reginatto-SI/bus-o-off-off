@@ -85,6 +85,26 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
               <span className="truncate">{event.city}</span>
             </div>
 
+            {/* Empresa organizadora */}
+            {event.company && (
+              <div className="flex items-center gap-1.5 min-w-0">
+                {event.company.logo_url ? (
+                  <img
+                    src={event.company.logo_url}
+                    alt={event.company.name}
+                    className="h-4 w-4 rounded-full object-cover border border-white/30 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="h-4 w-4 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[0.45rem] font-bold text-white">
+                      {event.company.name?.charAt(0)?.toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <span className="text-xs text-white/85 truncate">{event.company.name}</span>
+              </div>
+            )}
+
             {whatsappHelpLink && (
               <a
                 href={whatsappHelpLink}
