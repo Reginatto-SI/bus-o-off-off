@@ -233,7 +233,7 @@ export default function PublicCompanyShowcase() {
   };
 
   return (
-    <PublicLayout>
+    <PublicLayout hideMyTicketsButton={showEditUI}>
       <div className="space-y-0">
         {!loading && !company ? (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
