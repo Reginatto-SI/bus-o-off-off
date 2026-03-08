@@ -1603,7 +1603,7 @@ export default function Events() {
           .update({ paired_trip_id: voltaTrip.id })
           .eq('id', idaTrip.id);
 
-        toast.success('Viagens de Ida e Volta criadas e vinculadas');
+        toast.success('Transporte de Ida e Volta criado');
       } else {
         // Single trip creation - NO departure_time
         const tripData = {
