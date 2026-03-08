@@ -1620,7 +1620,7 @@ export default function Events() {
         const { error } = await supabase.from('trips').insert([tripData]);
         if (error) throw error;
 
-        toast.success('Viagem adicionada');
+        toast.success('Transporte adicionado');
       }
 
       setTripDialogOpen(false);
