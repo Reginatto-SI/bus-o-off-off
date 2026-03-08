@@ -4323,7 +4323,7 @@ export default function Events() {
                   </RadioGroup>
                   {tripForm.trip_creation_type === 'ida_volta' && (
                     <p className="text-xs text-muted-foreground">
-                      Serão criadas duas viagens vinculadas com os mesmos dados.
+                      Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
                     </p>
                   )}
                   {isGroupedTransportPolicy && (
