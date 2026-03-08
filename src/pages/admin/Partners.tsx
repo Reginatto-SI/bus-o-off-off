@@ -60,7 +60,7 @@ export default function Partners() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast.error('Erro ao carregar parceiros');
+      toast.error('Erro ao carregar sócios');
     } else {
       setPartners((data ?? []) as Partner[]);
     }
