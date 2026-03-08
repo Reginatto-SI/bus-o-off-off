@@ -857,7 +857,7 @@ export default function Sponsors() {
       {renderWizardProgress()}
       <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
         {wizardStep === 1 && renderDadosFields()}
-        {wizardStep === 2 && renderBannerFields()}
+        {wizardStep === 2 && renderLogoFields()}
         {wizardStep === 3 && renderRedirecionamentoFields()}
         {wizardStep === 4 && renderContatoFields()}
       </div>
