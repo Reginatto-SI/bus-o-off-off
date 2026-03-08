@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, EventBoardingLocation } from '@/types/database';
+import { Event, Trip, EventBoardingLocation, EventSponsor } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle } from 'lucide-react';
+import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { VehicleCard } from '@/components/public/VehicleCard';
@@ -15,6 +15,7 @@ import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { parseDateOnlyAsLocal } from '@/lib/date';
+import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 
 type TransportPolicy = Event['transport_policy'];
 
@@ -30,6 +31,7 @@ export default function PublicEventDetail() {
   const [event, setEvent] = useState<Event | null>(null);
   const [allTrips, setAllTrips] = useState<Trip[]>([]);
   const [locations, setLocations] = useState<EventBoardingLocation[]>([]);
+  const [eventSponsors, setEventSponsors] = useState<EventSponsor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedTrip, setSelectedTrip] = useState('');
@@ -54,7 +56,7 @@ export default function PublicEventDetail() {
     const fetchData = async () => {
       if (!id) return;
 
-      const [eventRes, tripsRes, locationsRes] = await Promise.all([
+      const [eventRes, tripsRes, locationsRes, sponsorsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).eq('status', 'a_venda').single(),
         supabase.from('trips').select('*, vehicle:vehicles(*)').eq('event_id', id),
         supabase
@@ -62,6 +64,12 @@ export default function PublicEventDetail() {
           .select('*, boarding_location:boarding_locations(*)')
           .eq('event_id', id)
           .order('stop_order', { ascending: true }),
+        supabase
+          .from('event_sponsors')
+          .select('*, sponsor:sponsors(id, name, banner_url, link_type, site_url, whatsapp_phone, whatsapp_message)')
+          .eq('event_id', id)
+          .eq('show_on_event_page', true)
+          .order('display_order', { ascending: true }),
       ]);
 
       if (eventRes.data) {
@@ -87,6 +95,7 @@ export default function PublicEventDetail() {
       const fetchedTrips = (tripsRes.data ?? []) as Trip[];
       setAllTrips(fetchedTrips);
       if (locationsRes.data) setLocations(locationsRes.data as EventBoardingLocation[]);
+      setEventSponsors((sponsorsRes.data ?? []) as unknown as EventSponsor[]);
 
       const initialPolicy = (eventRes.data as Event | null)?.transport_policy ?? 'trecho_independente';
       const grouped = isGroupedPolicy(initialPolicy);
@@ -338,8 +347,37 @@ export default function PublicEventDetail() {
               </section>
             )}
 
+            {/* Patrocinadores do evento */}
+            {eventSponsors.length > 0 && (
+              <section className="space-y-2 pt-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">Patrocinadores</h3>
+                <div className="flex flex-wrap justify-center gap-3">
+                  {eventSponsors.map((es) => {
+                    const sponsor = es.sponsor;
+                    if (!sponsor) return null;
+                    const link = sponsor.link_type === 'whatsapp' && sponsor.whatsapp_phone
+                      ? `https://wa.me/${sponsor.whatsapp_phone.replace(/\D/g, '')}${sponsor.whatsapp_message ? `&text=${encodeURIComponent(sponsor.whatsapp_message)}` : ''}`
+                      : sponsor.link_type === 'site' && sponsor.site_url ? sponsor.site_url : null;
+                    const content = (
+                      <div className="flex flex-col items-center gap-1 rounded-lg border bg-card p-2 w-24 transition-colors hover:bg-muted/50">
+                        {sponsor.banner_url ? (
+                          <img src={sponsor.banner_url} alt={sponsor.name} className="h-8 w-full object-contain" />
+                        ) : (
+                          <span className="text-[10px] font-medium text-muted-foreground text-center line-clamp-2">{sponsor.name}</span>
+                        )}
+                      </div>
+                    );
+                    return link ? (
+                      <a key={es.id} href={link} target="_blank" rel="noopener noreferrer">{content}</a>
+                    ) : (
+                      <div key={es.id}>{content}</div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             <div className="pt-2 space-y-2">
-              {/* Link secundário de suporte para evitar o retorno da jornada em caso de dúvida no checkout. */}
               {whatsappHelpLink && (
                 <div className="flex justify-end">
                   <a
