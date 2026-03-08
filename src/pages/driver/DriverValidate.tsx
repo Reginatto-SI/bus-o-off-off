@@ -502,7 +502,7 @@ export default function DriverValidate() {
         const detected = await detectorRef.current.detect(videoEl);
         const token = detected?.[0]?.rawValue?.trim();
         if (token) {
-          await handleValidate(token, 'checkin');
+          await handleValidate(token, phaseConfig.action);
         }
       } catch { /* silent */ }
     }, 300);
