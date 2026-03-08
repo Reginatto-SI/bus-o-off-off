@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { APP_VERSION } from '@/generated/build-info';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -781,6 +782,10 @@ export default function DriverValidate() {
           </div>
         </details>
 
+        {/* Versão compacta */}
+        <p className="mt-3 text-center text-[10px] text-muted-foreground">
+          Build {APP_VERSION}
+        </p>
       </div>
     </div>
   );

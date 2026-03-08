@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock } from 'lucide-react';
+import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -300,6 +301,11 @@ export default function DriverHome() {
             <Users className="mr-2 h-5 w-5" />
             Ver embarque
           </Button>
+        </div>
+
+        {/* Versão do sistema */}
+        <div className="pt-2">
+          <VersionIndicator />
         </div>
       </div>
     </div>
