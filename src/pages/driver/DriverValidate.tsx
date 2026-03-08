@@ -630,7 +630,7 @@ export default function DriverValidate() {
                     <AlertCircle className="h-14 w-14 text-red-400 mb-2" />
                   )}
                   <h2 className="text-xl font-bold text-white mb-1">
-                    {overlay.result === 'success' ? 'EMBARQUE LIBERADO' : 'PASSAGEM INVÁLIDA'}
+                    {overlay.result === 'success' ? phaseConfig.successTitle : 'PASSAGEM INVÁLIDA'}
                   </h2>
                   <p className="text-sm text-white/70 mb-3">{reasonLabel}</p>
 
