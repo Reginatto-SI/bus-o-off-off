@@ -4437,7 +4437,7 @@ export default function Events() {
               <div className="p-3 bg-muted/50 rounded-lg border border-muted">
                 <p className="text-xs text-muted-foreground flex items-center gap-2">
                   <Info className="h-4 w-4 shrink-0" />
-                  O horário da viagem é definido automaticamente pelo primeiro embarque cadastrado.
+                  O horário do transporte é definido automaticamente pelo primeiro embarque cadastrado.
                 </p>
               </div>
 
