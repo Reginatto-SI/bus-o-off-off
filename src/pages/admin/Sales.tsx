@@ -533,8 +533,8 @@ export default function Sales() {
         variant="ghost"
         size="sm"
         className={cn(
-          '-ml-3 h-8 px-3 text-xs font-semibold',
-          isActive && 'bg-muted text-foreground hover:bg-muted/90'
+          '-ml-3 h-8 px-3 text-xs font-semibold text-primary-foreground hover:text-primary-foreground hover:bg-primary/80',
+          isActive && 'bg-primary/80 text-primary-foreground'
         )}
         onClick={() => handleSortChange(field)}
       >
@@ -542,7 +542,7 @@ export default function Sales() {
         {isActive ? (
           direction === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
         ) : (
-          <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/70" />
+          <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
         )}
       </Button>
     );
