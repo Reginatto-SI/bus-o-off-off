@@ -564,7 +564,12 @@ export default function DriverValidate() {
       <div className="mx-auto w-full max-w-md space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/motorista')}>Voltar</Button>
-          <span className="text-sm text-muted-foreground">Validação QR</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs font-medium">
+              {phaseConfig.label}
+            </Badge>
+            <span className="text-sm text-muted-foreground">Validação QR</span>
+          </div>
         </div>
 
         <Card>
