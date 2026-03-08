@@ -18,7 +18,7 @@ import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock } from 'lucide-
 import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { parseDateOnlyAsLocal } from '@/lib/date';
+import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { getPersistedTripId, setPersistedTripId } from '@/lib/driverTripStorage';
 
 interface TripInfo {
@@ -97,13 +97,57 @@ export default function DriverHome() {
       trips = data;
     }
 
-    const mapped: TripInfo[] = (trips ?? []).map((trip: any) => ({
-      tripId: trip.id,
-      eventId: trip.events.id,
-      eventName: trip.events.name,
-      eventDate: trip.events.date,
-      vehiclePlate: trip.vehicles.plate,
-    }));
+    const tripIds = (trips ?? []).map((t: any) => t.id);
+
+    // Fetch earliest departure_date per trip for boarding window filtering
+    let filteredTripIds = new Set<string>(tripIds);
+    if (tripIds.length > 0) {
+      const { data: eblDates } = await supabase
+        .from('event_boarding_locations')
+        .select('trip_id, departure_date')
+        .in('trip_id', tripIds)
+        .not('departure_date', 'is', null);
+
+      if (eblDates && eblDates.length > 0) {
+        // Get min departure_date per trip
+        const minDateByTrip = new Map<string, string>();
+        eblDates.forEach((row: any) => {
+          const cur = minDateByTrip.get(row.trip_id);
+          if (!cur || row.departure_date < cur) {
+            minDateByTrip.set(row.trip_id, row.departure_date);
+          }
+        });
+
+        // Window: today -1 day to today +5 days
+        const now = new Date();
+        const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+        const toDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const startStr = toDateStr(windowStart);
+        const endStr = toDateStr(windowEnd);
+
+        // Filter: only trips whose min departure_date is within window
+        // Trips without departure_date in ebl keep included (no filtering)
+        const tripsWithDates = new Set(minDateByTrip.keys());
+        filteredTripIds = new Set(
+          tripIds.filter((id: string) => {
+            if (!tripsWithDates.has(id)) return true; // no date info → keep
+            const minDate = minDateByTrip.get(id)!;
+            return minDate >= startStr && minDate <= endStr;
+          })
+        );
+      }
+    }
+
+    const mapped: TripInfo[] = (trips ?? [])
+      .filter((trip: any) => filteredTripIds.has(trip.id))
+      .map((trip: any) => ({
+        tripId: trip.id,
+        eventId: trip.events.id,
+        eventName: trip.events.name,
+        eventDate: trip.events.date,
+        vehiclePlate: trip.vehicles.plate,
+      }));
 
     setAllTrips(mapped);
 
@@ -270,7 +314,7 @@ export default function DriverHome() {
             <SelectContent>
               {allTrips.map(t => (
                 <SelectItem key={t.tripId} value={t.tripId}>
-                  {t.eventName} · {t.vehiclePlate}
+                  {formatDateOnlyBR(t.eventDate)} · {t.eventName} · {t.vehiclePlate}
                 </SelectItem>
               ))}
             </SelectContent>
