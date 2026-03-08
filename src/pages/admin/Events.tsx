@@ -2901,50 +2901,35 @@ export default function Events() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="transport_policy">Política de Transporte do Evento *</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
+                    {/* Política de Transporte — cards selecionáveis (regra macro do evento) */}
+                    <div className="space-y-3">
+                      <Label>Política de Transporte do Evento *</Label>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        {transportPolicyOptions.map((option) => {
+                          const isSelected = form.transport_policy === option.value;
+                          return (
+                            <button
+                              key={option.value}
                               type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground"
-                              aria-label="Entender políticas de transporte"
+                              disabled={isReadOnly}
+                              onClick={() => setForm({ ...form, transport_policy: option.value as TransportPolicy })}
+                              className={cn(
+                                'relative flex flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-all',
+                                isSelected
+                                  ? 'ring-2 ring-primary border-primary bg-primary/5'
+                                  : 'hover:border-primary/50 hover:bg-muted/50',
+                                isReadOnly && 'opacity-60 cursor-not-allowed'
+                              )}
                             >
-                              <Info className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="w-80 space-y-2">
-                            <p className="text-sm font-medium">Como funciona cada política?</p>
-                            <ul className="space-y-2 text-xs text-muted-foreground">
-                              <li><strong className="text-foreground">Venda por Trecho Independente:</strong> ida e volta são selecionadas separadamente.</li>
-                              <li><strong className="text-foreground">Ida Obrigatória + Volta Opcional:</strong> ida entra por padrão e a volta é adicional.</li>
-                              <li><strong className="text-foreground">Pacote Ida + Volta Obrigatório:</strong> a venda exige disponibilidade nos dois trechos.</li>
-                            </ul>
-                          </PopoverContent>
-                        </Popover>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{option.icon}</span>
+                                <span className="font-medium text-sm">{option.label}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{option.description}</p>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <Select
-                        value={form.transport_policy}
-                        onValueChange={(value) => setForm({ ...form, transport_policy: value as TransportPolicy })}
-                        disabled={isReadOnly}
-                      >
-                        <SelectTrigger id="transport_policy">
-                          <SelectValue placeholder="Selecione a política" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {transportPolicyOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {transportPolicyOptions.find((option) => option.value === form.transport_policy)?.description}
-                      </p>
                     </div>
 
                     <div className="grid gap-4 lg:grid-cols-2">
