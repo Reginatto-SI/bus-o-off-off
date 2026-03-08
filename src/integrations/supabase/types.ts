@@ -422,6 +422,64 @@ export type Database = {
           },
         ]
       }
+      event_sponsors: {
+        Row: {
+          company_id: string
+          created_at: string
+          display_order: number
+          event_id: string
+          id: string
+          show_on_event_page: boolean
+          show_on_showcase: boolean
+          show_on_ticket: boolean
+          sponsor_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          display_order?: number
+          event_id: string
+          id?: string
+          show_on_event_page?: boolean
+          show_on_showcase?: boolean
+          show_on_ticket?: boolean
+          sponsor_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          display_order?: number
+          event_id?: string
+          id?: string
+          show_on_event_page?: boolean
+          show_on_showcase?: boolean
+          show_on_ticket?: boolean
+          sponsor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_sponsors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_sponsors_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_sponsors_sponsor_id_fkey"
+            columns: ["sponsor_id"]
+            isOneToOne: false
+            referencedRelation: "sponsors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           allow_online_sale: boolean
