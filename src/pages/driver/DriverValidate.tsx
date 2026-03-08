@@ -3,6 +3,9 @@ import { APP_VERSION } from '@/generated/build-info';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { getPersistedPhase } from '@/lib/driverTripStorage';
+import { PHASE_CONFIG, REASON_MESSAGES } from '@/lib/driverPhaseConfig';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,18 +34,7 @@ declare global {
   }
 }
 
-const REASON_MESSAGES: Record<string, string> = {
-  ok: 'Operação realizada com sucesso',
-  invalid_qr: 'QR inválido',
-  already_checked_in: 'Já embarcado',
-  sale_cancelled: 'Venda cancelada',
-  sale_not_paid: 'Pagamento não confirmado',
-  checkout_without_checkin: 'Saída sem embarque',
-  already_checked_out: 'Saída já registrada',
-  checkout_disabled: 'Saída desabilitada para este evento',
-  not_allowed_company: 'Passagem de outra empresa',
-  invalid_action: 'Ação inválida',
-};
+// REASON_MESSAGES now imported from driverPhaseConfig
 
 /* ------------------------------------------------------------------ */
 /*  Debug state — temporary diagnostic panel for mobile field testing  */
@@ -169,8 +161,12 @@ async function tryDeviceCamera(
 
 export default function DriverValidate() {
   const navigate = useNavigate();
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, activeCompanyId } = useAuth();
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+
+  // Read active phase from localStorage
+  const activePhase = user && activeCompanyId ? getPersistedPhase(user.id, activeCompanyId) : 'ida';
+  const phaseConfig = PHASE_CONFIG[activePhase];
 
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
@@ -209,7 +205,7 @@ export default function DriverValidate() {
 
   /* ---------- RPC validate ---------- */
 
-  const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout') => {
+  const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout' | 'reboard') => {
     if (!qrCodeToken || processing) return;
     setProcessing(true);
     lockScannerTemporarily();
@@ -506,7 +502,7 @@ export default function DriverValidate() {
         const detected = await detectorRef.current.detect(videoEl);
         const token = detected?.[0]?.rawValue?.trim();
         if (token) {
-          await handleValidate(token, 'checkin');
+          await handleValidate(token, phaseConfig.action);
         }
       } catch { /* silent */ }
     }, 300);
@@ -568,7 +564,12 @@ export default function DriverValidate() {
       <div className="mx-auto w-full max-w-md space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/motorista')}>Voltar</Button>
-          <span className="text-sm text-muted-foreground">Validação QR</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs font-medium">
+              {phaseConfig.label}
+            </Badge>
+            <span className="text-sm text-muted-foreground">Validação QR</span>
+          </div>
         </div>
 
         <Card>
@@ -629,7 +630,7 @@ export default function DriverValidate() {
                     <AlertCircle className="h-14 w-14 text-red-400 mb-2" />
                   )}
                   <h2 className="text-xl font-bold text-white mb-1">
-                    {overlay.result === 'success' ? 'EMBARQUE LIBERADO' : 'PASSAGEM INVÁLIDA'}
+                    {overlay.result === 'success' ? phaseConfig.successTitle : 'PASSAGEM INVÁLIDA'}
                   </h2>
                   <p className="text-sm text-white/70 mb-3">{reasonLabel}</p>
 
@@ -648,23 +649,10 @@ export default function DriverValidate() {
                     {overlay.result === 'success' && (
                       <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
                         <Users className="mr-2 h-4 w-4" />
-                        Ver embarque
+                        Lista de passageiros
                       </Button>
                     )}
-                    {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-white/70"
-                        onClick={() => {
-                          if (manualToken.trim()) {
-                            handleValidate(manualToken.trim(), 'checkout');
-                          }
-                        }}
-                      >
-                        Registrar saída (opcional)
-                      </Button>
-                    )}
+                    {/* Remove the old checkout button — now handled by phase selector */}
                   </div>
                 </div>
               )}
@@ -700,7 +688,7 @@ export default function DriverValidate() {
                   type="button"
                   variant="secondary"
                   disabled={!manualToken.trim() || processing}
-                  onClick={() => handleValidate(manualToken.trim(), 'checkin')}
+                  onClick={() => handleValidate(manualToken.trim(), phaseConfig.action)}
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>

@@ -19,7 +19,10 @@ import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
-import { getPersistedTripId, setPersistedTripId } from '@/lib/driverTripStorage';
+import { getPersistedTripId, setPersistedTripId, getPersistedPhase, setPersistedPhase } from '@/lib/driverTripStorage';
+import type { OperationalPhase } from '@/lib/driverTripStorage';
+import { PHASE_CONFIG, getApplicablePhases } from '@/lib/driverPhaseConfig';
+import { useToast } from '@/hooks/use-toast';
 
 interface TripInfo {
   tripId: string;
@@ -27,12 +30,13 @@ interface TripInfo {
   eventName: string;
   eventDate: string;
   vehiclePlate: string;
+  transportPolicy: string;
 }
 
 interface BoardingKpis {
   total: number;
-  boarded: number;
-  remaining: number;
+  done: number;
+  pending: number;
 }
 
 interface NextBoardingInfo {
@@ -45,18 +49,22 @@ interface NextBoardingInfo {
 export default function DriverHome() {
   const navigate = useNavigate();
   const { user, loading, userRole, signOut, profile, activeCompanyId } = useAuth();
+  const { toast } = useToast();
 
   const canAccessDriverPortal =
     userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
 
   const [allTrips, setAllTrips] = useState<TripInfo[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
-  const [kpis, setKpis] = useState<BoardingKpis>({ total: 0, boarded: 0, remaining: 0 });
+  const [activePhase, setActivePhase] = useState<OperationalPhase>('ida');
+  const [kpis, setKpis] = useState<BoardingKpis>({ total: 0, done: 0, pending: 0 });
   const [nextBoarding, setNextBoarding] = useState<NextBoardingInfo | null>(null);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [loadingKpis, setLoadingKpis] = useState(false);
 
   const activeTrip = allTrips.find(t => t.tripId === selectedTripId) ?? null;
+  const applicablePhases = activeTrip ? getApplicablePhases(activeTrip.transportPolicy) : ['ida'] as OperationalPhase[];
+  const phaseConfig = PHASE_CONFIG[activePhase];
 
   /* ---------- Fetch all active trips ---------- */
   const fetchAllTrips = useCallback(async () => {
@@ -72,13 +80,12 @@ export default function DriverHome() {
 
     const driverId = roleData?.driver_id;
 
-    // Try driver-assigned trips first
     let trips: any[] | null = null;
 
     if (driverId) {
       const { data } = await supabase
         .from('trips')
-        .select('id, event_id, events!inner(id, name, date, status), vehicles!inner(plate)')
+        .select('id, event_id, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
@@ -86,11 +93,10 @@ export default function DriverHome() {
       trips = data;
     }
 
-    // If none assigned, get all company trips
     if (!trips || trips.length === 0) {
       const { data } = await supabase
         .from('trips')
-        .select('id, event_id, events!inner(id, name, date, status), vehicles!inner(plate)')
+        .select('id, event_id, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .order('events(date)', { ascending: true });
@@ -99,7 +105,7 @@ export default function DriverHome() {
 
     const tripIds = (trips ?? []).map((t: any) => t.id);
 
-    // Fetch earliest departure_date per trip for boarding window filtering
+    // Boarding window filtering
     let filteredTripIds = new Set<string>(tripIds);
     if (tripIds.length > 0) {
       const { data: eblDates } = await supabase
@@ -109,7 +115,6 @@ export default function DriverHome() {
         .not('departure_date', 'is', null);
 
       if (eblDates && eblDates.length > 0) {
-        // Get min departure_date per trip
         const minDateByTrip = new Map<string, string>();
         eblDates.forEach((row: any) => {
           const cur = minDateByTrip.get(row.trip_id);
@@ -118,7 +123,6 @@ export default function DriverHome() {
           }
         });
 
-        // Window: today -1 day to today +5 days
         const now = new Date();
         const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
         const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
@@ -126,12 +130,10 @@ export default function DriverHome() {
         const startStr = toDateStr(windowStart);
         const endStr = toDateStr(windowEnd);
 
-        // Filter: only trips whose min departure_date is within window
-        // Trips without departure_date in ebl keep included (no filtering)
         const tripsWithDates = new Set(minDateByTrip.keys());
         filteredTripIds = new Set(
           tripIds.filter((id: string) => {
-            if (!tripsWithDates.has(id)) return true; // no date info → keep
+            if (!tripsWithDates.has(id)) return true;
             const minDate = minDateByTrip.get(id)!;
             return minDate >= startStr && minDate <= endStr;
           })
@@ -147,11 +149,11 @@ export default function DriverHome() {
         eventName: trip.events.name,
         eventDate: trip.events.date,
         vehiclePlate: trip.vehicles.plate,
+        transportPolicy: trip.events.transport_policy ?? 'ida_obrigatoria_volta_opcional',
       }));
 
     setAllTrips(mapped);
 
-    // Determine which trip to select
     const persisted = getPersistedTripId(user.id, activeCompanyId);
     const persistedStillValid = persisted && mapped.some(t => t.tripId === persisted);
 
@@ -164,6 +166,10 @@ export default function DriverHome() {
     } else {
       setSelectedTripId(null);
     }
+
+    // Restore persisted phase
+    const savedPhase = getPersistedPhase(user.id, activeCompanyId);
+    setActivePhase(savedPhase);
 
     setLoadingTrips(false);
   }, [user, activeCompanyId]);
@@ -180,7 +186,7 @@ export default function DriverHome() {
       .eq('company_id', activeCompanyId);
 
     if (!tickets || tickets.length === 0) {
-      setKpis({ total: 0, boarded: 0, remaining: 0 });
+      setKpis({ total: 0, done: 0, pending: 0 });
       setNextBoarding(null);
       setLoadingKpis(false);
       return;
@@ -195,44 +201,53 @@ export default function DriverHome() {
 
     const paidSaleIds = new Set(sales?.map(s => s.id) ?? []);
     const paidTickets = tickets.filter(t => paidSaleIds.has(t.sale_id));
-    const boarded = paidTickets.filter(t => t.boarding_status === 'checked_in').length;
-    setKpis({ total: paidTickets.length, boarded, remaining: paidTickets.length - boarded });
 
-    // Next boarding location
-    const { data: eblData } = await supabase
-      .from('event_boarding_locations')
-      .select('id, departure_time, boarding_location_id, boarding_locations!inner(name)')
-      .eq('trip_id', tripId)
-      .eq('company_id', activeCompanyId)
-      .order('departure_time', { ascending: true });
+    // Compute KPIs based on active phase
+    const done = paidTickets.filter(t => phaseConfig.doneStatuses.includes(t.boarding_status)).length;
+    const pending = paidTickets.filter(t => phaseConfig.pendingStatuses.includes(t.boarding_status)).length;
+    // Total for this phase = done + pending (only relevant tickets)
+    const phaseTotal = done + pending;
+    setKpis({ total: phaseTotal, done, pending });
 
-    if (eblData && eblData.length > 0 && sales) {
-      const saleLocationMap = new Map<string, string>();
-      sales.forEach((s: any) => saleLocationMap.set(s.id, s.boarding_location_id));
+    // Next boarding location (only relevant for ida phase)
+    if (activePhase === 'ida') {
+      const { data: eblData } = await supabase
+        .from('event_boarding_locations')
+        .select('id, departure_time, boarding_location_id, boarding_locations!inner(name)')
+        .eq('trip_id', tripId)
+        .eq('company_id', activeCompanyId)
+        .order('departure_time', { ascending: true });
 
-      const locationCounts = new Map<string, { total: number; pending: number }>();
-      paidTickets.forEach(t => {
-        const blId = saleLocationMap.get(t.sale_id);
-        if (!blId) return;
-        const c = locationCounts.get(blId) || { total: 0, pending: 0 };
-        c.total++;
-        if (t.boarding_status !== 'checked_in') c.pending++;
-        locationCounts.set(blId, c);
-      });
+      if (eblData && eblData.length > 0 && sales) {
+        const saleLocationMap = new Map<string, string>();
+        sales.forEach((s: any) => saleLocationMap.set(s.id, s.boarding_location_id));
 
-      const nextLoc = eblData.find((ebl: any) => {
-        const counts = locationCounts.get(ebl.boarding_location_id);
-        return counts && counts.pending > 0;
-      }) as any;
-
-      if (nextLoc) {
-        const counts = locationCounts.get(nextLoc.boarding_location_id)!;
-        setNextBoarding({
-          locationName: nextLoc.boarding_locations?.name ?? '—',
-          departureTime: nextLoc.departure_time,
-          totalPassengers: counts.total,
-          pendingPassengers: counts.pending,
+        const locationCounts = new Map<string, { total: number; pending: number }>();
+        paidTickets.forEach(t => {
+          const blId = saleLocationMap.get(t.sale_id);
+          if (!blId) return;
+          const c = locationCounts.get(blId) || { total: 0, pending: 0 };
+          c.total++;
+          if (t.boarding_status === 'pendente') c.pending++;
+          locationCounts.set(blId, c);
         });
+
+        const nextLoc = eblData.find((ebl: any) => {
+          const counts = locationCounts.get(ebl.boarding_location_id);
+          return counts && counts.pending > 0;
+        }) as any;
+
+        if (nextLoc) {
+          const counts = locationCounts.get(nextLoc.boarding_location_id)!;
+          setNextBoarding({
+            locationName: nextLoc.boarding_locations?.name ?? '—',
+            departureTime: nextLoc.departure_time,
+            totalPassengers: counts.total,
+            pendingPassengers: counts.pending,
+          });
+        } else {
+          setNextBoarding(null);
+        }
       } else {
         setNextBoarding(null);
       }
@@ -241,7 +256,7 @@ export default function DriverHome() {
     }
 
     setLoadingKpis(false);
-  }, [user, activeCompanyId]);
+  }, [user, activeCompanyId, activePhase, phaseConfig]);
 
   /* ---------- Effects ---------- */
   useEffect(() => {
@@ -264,6 +279,14 @@ export default function DriverHome() {
     }
   };
 
+  const handlePhaseChange = (phase: OperationalPhase) => {
+    setActivePhase(phase);
+    if (user && activeCompanyId) {
+      setPersistedPhase(user.id, activeCompanyId, phase);
+    }
+    toast({ title: `Fase alterada para ${PHASE_CONFIG[phase].label}` });
+  };
+
   /* ---------- Guards ---------- */
   if (loading) {
     return (
@@ -283,7 +306,7 @@ export default function DriverHome() {
   if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
 
   const firstName = (profile?.name || user.user_metadata?.name || 'Motorista').split(' ')[0];
-  const progressPercent = kpis.total > 0 ? Math.round((kpis.boarded / kpis.total) * 100) : 0;
+  const progressPercent = kpis.total > 0 ? Math.round((kpis.done / kpis.total) * 100) : 0;
 
   const formatEventDate = (dateStr: string) => {
     const d = parseDateOnlyAsLocal(dateStr);
@@ -319,6 +342,30 @@ export default function DriverHome() {
               ))}
             </SelectContent>
           </Select>
+        )}
+
+        {/* Phase Selector */}
+        {!loadingTrips && activeTrip && applicablePhases.length > 1 && (
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${applicablePhases.length}, 1fr)` }}>
+            {applicablePhases.map(phase => {
+              const cfg = PHASE_CONFIG[phase];
+              const isActive = activePhase === phase;
+              return (
+                <button
+                  key={phase}
+                  type="button"
+                  onClick={() => handlePhaseChange(phase)}
+                  className={`rounded-lg border-2 px-3 py-3 text-center text-sm font-semibold transition-all ${
+                    isActive
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-muted bg-muted/30 text-muted-foreground hover:border-primary/30'
+                  }`}
+                >
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {/* Active Event Card */}
@@ -365,12 +412,12 @@ export default function DriverHome() {
                       <p className="text-xs text-muted-foreground">Total</p>
                     </div>
                     <div className="rounded-lg bg-green-500/10 p-3 text-center">
-                      <p className="text-2xl font-bold text-green-600">{kpis.boarded}</p>
-                      <p className="text-xs text-muted-foreground">Embarcados</p>
+                      <p className="text-2xl font-bold text-green-600">{kpis.done}</p>
+                      <p className="text-xs text-muted-foreground">{phaseConfig.doneLabel}</p>
                     </div>
                     <div className="rounded-lg bg-orange-500/10 p-3 text-center">
-                      <p className="text-2xl font-bold text-orange-600">{kpis.remaining}</p>
-                      <p className="text-xs text-muted-foreground">Pendentes</p>
+                      <p className="text-2xl font-bold text-orange-600">{kpis.pending}</p>
+                      <p className="text-xs text-muted-foreground">{phaseConfig.pendingLabel}</p>
                     </div>
                   </div>
 
@@ -378,14 +425,14 @@ export default function DriverHome() {
                   {kpis.total > 0 && (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Embarque: {kpis.boarded} / {kpis.total}</span>
+                        <span>{phaseConfig.doneLabel}: {kpis.done} / {kpis.total}</span>
                         <span>{progressPercent}%</span>
                       </div>
                       <Progress value={progressPercent} className="h-2" />
                     </div>
                   )}
 
-                  {/* Next boarding location */}
+                  {/* Next boarding location (ida only) */}
                   {nextBoarding && (
                     <div className="rounded-lg border p-3 space-y-1">
                       <p className="text-xs font-medium text-muted-foreground">Próximo embarque</p>
@@ -430,7 +477,7 @@ export default function DriverHome() {
             disabled={!activeTrip}
           >
             <Users className="mr-2 h-5 w-5" />
-            Ver embarque
+            Lista de passageiros
           </Button>
         </div>
 

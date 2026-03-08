@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { getPersistedTripId } from '@/lib/driverTripStorage';
+import { getPersistedTripId, getPersistedPhase } from '@/lib/driverTripStorage';
+import { PHASE_CONFIG } from '@/lib/driverPhaseConfig';
+import type { OperationalPhase } from '@/lib/driverTripStorage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -60,17 +62,21 @@ export default function DriverBoarding() {
   const [processing, setProcessing] = useState(false);
   const [_tripId, setTripId] = useState<string | null>(null);
 
+  // Read phase from localStorage
+  const activePhase: OperationalPhase = user && activeCompanyId
+    ? getPersistedPhase(user.id, activeCompanyId)
+    : 'ida';
+  const phaseConfig = PHASE_CONFIG[activePhase];
+
   const fetchData = useCallback(async () => {
     if (!user || !activeCompanyId) return;
     setLoadingData(true);
 
-    // Use persisted trip from DriverHome if available
     const persistedTripId = getPersistedTripId(user.id, activeCompanyId);
     
     let tripId: string | null = null;
 
     if (persistedTripId) {
-      // Validate that the persisted trip still exists and is active
       const { data } = await supabase
         .from('trips')
         .select('id, events!inner(status)')
@@ -81,7 +87,6 @@ export default function DriverBoarding() {
       if (data && data.length > 0) tripId = data[0].id;
     }
 
-    // Fallback: auto-detect
     if (!tripId) {
       const { data: roleData } = await supabase
         .from('user_roles')
@@ -122,13 +127,12 @@ export default function DriverBoarding() {
       return;
     }
 
-    const trip = { id: tripId };
-    setTripId(trip.id);
+    setTripId(tripId);
 
     const { data: tickets } = await supabase
       .from('tickets')
       .select('id, passenger_name, seat_label, boarding_status, qr_code_token, sale_id')
-      .eq('trip_id', trip.id)
+      .eq('trip_id', tripId)
       .eq('company_id', activeCompanyId);
 
     if (!tickets || tickets.length === 0) {
@@ -193,7 +197,6 @@ export default function DriverBoarding() {
     }
   }, [user, activeCompanyId, canAccess, fetchData]);
 
-  // Auto-refresh every 15s
   useEffect(() => {
     if (!user || !activeCompanyId || !canAccess) return;
     const interval = setInterval(() => {
@@ -221,37 +224,38 @@ export default function DriverBoarding() {
 
   const kpis = useMemo(() => {
     const list = filteredPassengers;
-    const boarded = list.filter(p => p.boardingStatus === 'checked_in').length;
-    return { total: list.length, boarded, remaining: list.length - boarded };
-  }, [filteredPassengers]);
+    const done = list.filter(p => phaseConfig.doneStatuses.includes(p.boardingStatus)).length;
+    const pending = list.filter(p => phaseConfig.pendingStatuses.includes(p.boardingStatus)).length;
+    return { total: done + pending, done, pending };
+  }, [filteredPassengers, phaseConfig]);
 
-  // Location summary cards data
   const locationSummaries = useMemo(() => {
     if (locations.length <= 1) return [];
     return locations.map(loc => {
       const locPassengers = passengers.filter(p => p.boardingLocationId === loc.id);
-      const boarded = locPassengers.filter(p => p.boardingStatus === 'checked_in').length;
+      const done = locPassengers.filter(p => phaseConfig.doneStatuses.includes(p.boardingStatus)).length;
+      const pending = locPassengers.filter(p => phaseConfig.pendingStatuses.includes(p.boardingStatus)).length;
       return {
         id: loc.id,
         name: loc.name,
-        total: locPassengers.length,
-        boarded,
-        pending: locPassengers.length - boarded,
+        total: done + pending,
+        done,
+        pending,
       };
     });
-  }, [passengers, locations]);
+  }, [passengers, locations, phaseConfig]);
 
-  const handleManualCheckin = async (passenger: PassengerRow) => {
+  const handleAction = async (passenger: PassengerRow) => {
     setProcessing(true);
     const { data, error } = await supabase.rpc('validate_ticket_scan', {
       p_qr_code_token: passenger.qrCodeToken,
-      p_action: 'checkin',
+      p_action: phaseConfig.action,
       p_device_info: navigator.userAgent,
       p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
     });
 
     if (error) {
-      toast({ title: 'Erro', description: 'Não foi possível registrar o embarque.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Não foi possível registrar a operação.', variant: 'destructive' });
       setProcessing(false);
       setConfirmPassenger(null);
       return;
@@ -259,20 +263,33 @@ export default function DriverBoarding() {
 
     const result = (Array.isArray(data) ? data[0] : data) as any;
     if (result?.result === 'success') {
+      // Update local state with the new boarding_status
+      const newStatus = result.boarding_status;
       setPassengers(prev =>
         prev.map(p =>
-          p.ticketId === passenger.ticketId ? { ...p, boardingStatus: 'checked_in' } : p
+          p.ticketId === passenger.ticketId ? { ...p, boardingStatus: newStatus } : p
         )
       );
-      toast({ title: 'Embarque confirmado', description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
+      toast({ title: phaseConfig.successTitle, description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
     } else {
-      const reason = result?.reason_code === 'already_checked_in' ? 'Já embarcado' : 'Embarque bloqueado';
+      const reasonMap: Record<string, string> = {
+        already_checked_in: 'Já embarcado',
+        already_checked_out: 'Desembarque já registrado',
+        already_reboarded: 'Já reembarcado',
+        checkout_without_checkin: 'Desembarque sem embarque',
+        reboard_without_checkout: 'Reembarque sem desembarque',
+      };
+      const reason = reasonMap[result?.reason_code] ?? 'Operação bloqueada';
       toast({ title: reason, variant: 'destructive' });
     }
 
     setProcessing(false);
     setConfirmPassenger(null);
   };
+
+  // Helper: is this passenger actionable in current phase?
+  const isActionable = (p: PassengerRow) => phaseConfig.pendingStatuses.includes(p.boardingStatus);
+  const isDone = (p: PassengerRow) => phaseConfig.doneStatuses.includes(p.boardingStatus);
 
   // Auth guards
   if (loading) {
@@ -301,7 +318,12 @@ export default function DriverBoarding() {
             <ArrowLeft className="mr-1 h-4 w-4" />
             Voltar
           </Button>
-          <span className="text-sm font-medium">Embarque</span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs font-medium">
+              {phaseConfig.label}
+            </Badge>
+            <span className="text-sm font-medium">Passageiros</span>
+          </div>
           <Button variant="ghost" size="icon" onClick={() => fetchData()} aria-label="Atualizar">
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -333,12 +355,12 @@ export default function DriverBoarding() {
                     <p className="text-xs text-muted-foreground">Total</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-green-600">{kpis.boarded}</p>
-                    <p className="text-xs text-muted-foreground">Embarcados</p>
+                    <p className="text-2xl font-bold text-green-600">{kpis.done}</p>
+                    <p className="text-xs text-muted-foreground">{phaseConfig.doneLabel}</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-orange-600">{kpis.remaining}</p>
-                    <p className="text-xs text-muted-foreground">Pendentes</p>
+                    <p className="text-2xl font-bold text-orange-600">{kpis.pending}</p>
+                    <p className="text-xs text-muted-foreground">{phaseConfig.pendingLabel}</p>
                   </div>
                 </div>
               </CardContent>
@@ -387,7 +409,7 @@ export default function DriverBoarding() {
                         <p className="text-xs font-medium truncate">{loc.name}</p>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="text-green-600 font-medium">{loc.boarded}</span>
+                        <span className="text-green-600 font-medium">{loc.done}</span>
                         <span>/</span>
                         <span>{loc.total}</span>
                         {loc.pending > 0 && (
@@ -403,13 +425,14 @@ export default function DriverBoarding() {
             {/* Passenger list */}
             <div className="space-y-2">
               {filteredPassengers.map(p => {
-                const isBoarded = p.boardingStatus === 'checked_in';
+                const done = isDone(p);
+                const actionable = isActionable(p);
                 return (
                   <Card
                     key={p.ticketId}
-                    className={`cursor-pointer transition-colors ${isBoarded ? 'border-green-500/40 bg-green-500/5' : ''}`}
+                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5' : ''} ${actionable ? 'cursor-pointer' : ''}`}
                     onClick={() => {
-                      if (!isBoarded) setConfirmPassenger(p);
+                      if (actionable) setConfirmPassenger(p);
                     }}
                   >
                     <CardContent className="flex items-center gap-3 p-3">
@@ -420,15 +443,22 @@ export default function DriverBoarding() {
                         <p className="text-sm font-medium truncate">{p.passengerName}</p>
                         <p className="text-xs text-muted-foreground truncate">{p.boardingLocationName}</p>
                       </div>
-                      {isBoarded ? (
+                      {done ? (
                         <Badge variant="default" className="bg-green-600 shrink-0">
                           <CheckCircle2 className="mr-1 h-3 w-3" />
-                          Embarcado
+                          {phaseConfig.doneBadge}
                         </Badge>
-                      ) : (
+                      ) : actionable ? (
                         <Badge variant="outline" className="shrink-0">
                           <Clock className="mr-1 h-3 w-3" />
-                          Pendente
+                          {phaseConfig.pendingBadge}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="shrink-0 text-xs">
+                          {p.boardingStatus === 'pendente' ? 'Pendente' :
+                           p.boardingStatus === 'checked_in' ? 'Embarcado' :
+                           p.boardingStatus === 'checked_out' ? 'Desembarcou' :
+                           p.boardingStatus === 'reboarded' ? 'Reembarcou' : p.boardingStatus}
                         </Badge>
                       )}
                     </CardContent>
@@ -443,9 +473,9 @@ export default function DriverBoarding() {
         <AlertDialog open={!!confirmPassenger} onOpenChange={() => setConfirmPassenger(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar embarque</AlertDialogTitle>
+              <AlertDialogTitle>{phaseConfig.confirmTitle}</AlertDialogTitle>
               <AlertDialogDescription>
-                Confirmar embarque de <strong>{confirmPassenger?.passengerName}</strong> (Assento{' '}
+                {phaseConfig.confirmAction} de <strong>{confirmPassenger?.passengerName}</strong> (Assento{' '}
                 {confirmPassenger?.seatLabel}) — Local: <strong>{confirmPassenger?.boardingLocationName}</strong>?
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -453,10 +483,10 @@ export default function DriverBoarding() {
               <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 disabled={processing}
-                onClick={() => confirmPassenger && handleManualCheckin(confirmPassenger)}
+                onClick={() => confirmPassenger && handleAction(confirmPassenger)}
               >
                 {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Confirmar embarque
+                {phaseConfig.confirmAction}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
