@@ -33,6 +33,7 @@ interface PublicSponsor {
 type PublicCompanyData = Pick<
   Company,
   'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style'
+  | 'social_instagram' | 'social_facebook' | 'social_tiktok' | 'social_youtube' | 'social_telegram' | 'social_twitter' | 'social_website'
 >;
 
 export default function PublicCompanyShowcase() {
