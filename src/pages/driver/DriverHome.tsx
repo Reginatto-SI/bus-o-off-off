@@ -59,19 +59,31 @@ export default function DriverHome() {
 
     const driverId = roleData?.driver_id;
 
-    let tripsQuery = supabase
-      .from('trips')
-      .select('id, event_id, vehicle_id, events!inner(id, name, date, status), vehicles!inner(plate)')
-      .eq('company_id', activeCompanyId)
-      .eq('events.status', 'a_venda')
-      .order('events(date)', { ascending: true })
-      .limit(1);
+    // Try with driver filter first, then fallback without
+    let trips: any[] | null = null;
 
     if (driverId) {
-      tripsQuery = tripsQuery.or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`);
+      const { data } = await supabase
+        .from('trips')
+        .select('id, event_id, vehicle_id, events!inner(id, name, date, status), vehicles!inner(plate)')
+        .eq('company_id', activeCompanyId)
+        .eq('events.status', 'a_venda')
+        .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
+        .order('events(date)', { ascending: true })
+        .limit(1);
+      trips = data;
     }
 
-    const { data: trips } = await tripsQuery;
+    if (!trips || trips.length === 0) {
+      const { data } = await supabase
+        .from('trips')
+        .select('id, event_id, vehicle_id, events!inner(id, name, date, status), vehicles!inner(plate)')
+        .eq('company_id', activeCompanyId)
+        .eq('events.status', 'a_venda')
+        .order('events(date)', { ascending: true })
+        .limit(1);
+      trips = data;
+    }
 
     if (trips && trips.length > 0) {
       const trip = trips[0] as any;

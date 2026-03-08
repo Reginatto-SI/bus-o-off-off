@@ -72,18 +72,30 @@ export default function DriverBoarding() {
 
     const driverId = roleData?.driver_id;
 
-    let tripsQuery = supabase
-      .from('trips')
-      .select('id, event_id, events!inner(status)')
-      .eq('company_id', activeCompanyId)
-      .eq('events.status', 'a_venda')
-      .limit(1);
+    // Try with driver filter first, then fallback without
+    let trips: any[] | null = null;
 
     if (driverId) {
-      tripsQuery = tripsQuery.or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`);
+      const { data } = await supabase
+        .from('trips')
+        .select('id, event_id, events!inner(status)')
+        .eq('company_id', activeCompanyId)
+        .eq('events.status', 'a_venda')
+        .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
+        .limit(1);
+      trips = data;
     }
 
-    const { data: trips } = await tripsQuery;
+    if (!trips || trips.length === 0) {
+      const { data } = await supabase
+        .from('trips')
+        .select('id, event_id, events!inner(status)')
+        .eq('company_id', activeCompanyId)
+        .eq('events.status', 'a_venda')
+        .limit(1);
+      trips = data;
+    }
+
     if (!trips || trips.length === 0) {
       setLoadingData(false);
       return;
