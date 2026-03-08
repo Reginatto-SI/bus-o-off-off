@@ -303,6 +303,9 @@ export default function CompanyPage() {
       if (data?.capabilities) {
         setCapabilitiesDetail(data.capabilities);
       }
+      if (data?.pix_enabled !== undefined) {
+        setPixEnabled(data.pix_enabled);
+      }
       await fetchCompany();
       return !!data?.capabilities_ready;
     } catch (err) {
