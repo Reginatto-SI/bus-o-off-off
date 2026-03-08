@@ -317,147 +317,137 @@ export default function DriverValidate() {
       console.warn('[CAM] enumerateDevices failed', e);
     }
 
-    // 4. Try constraint chain
+    // 4. Enumerate devices & find back cameras
     let stream: MediaStream | null = null;
     let usedConstraint = 'none';
+    let selectedDeviceId: string | null = null;
+    const attemptResults: AttemptResult[] = [];
 
-    for (let i = 0; i < CAMERA_CONSTRAINTS_CHAIN.length; i++) {
-      const constraints = CAMERA_CONSTRAINTS_CHAIN[i];
-      try {
-        console.log(`[CAM] trying constraint #${i}:`, JSON.stringify(constraints));
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        usedConstraint = `chain[${i}]`;
-        console.log(`[CAM] constraint #${i} SUCCESS`);
-        break;
-      } catch (err: any) {
-        console.warn(`[CAM] constraint #${i} FAILED:`, err?.name, err?.message);
-        updateDebug({ lastError: `constraint[${i}]: ${err?.name}: ${err?.message}` });
-      }
-    }
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+      const backCameras = videoDevices.filter(d =>
+        /back|rear|environment|traseira/i.test(d.label)
+      );
+      const candidateLabels = backCameras.map(d => `${d.label} [${d.deviceId.slice(0, 8)}]`);
+      console.log('[CAM] back camera candidates:', candidateLabels);
+      updateDebug({ candidateBackCameras: candidateLabels });
 
-    // 5. If chain failed, try enumerateDevices fallback
-    if (!stream) {
-      console.log('[CAM] all constraints failed, trying enumerateDevices fallback');
-      try {
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
-        // Prefer back camera
-        const backCam = videoDevices.find(d =>
-          /back|rear|environment|traseira/i.test(d.label)
-        );
-        const target = backCam ?? videoDevices[0];
-        if (target) {
-          console.log('[CAM] fallback device:', target.label, target.deviceId.slice(0, 8));
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: target.deviceId } },
-            audio: false,
-          });
-          usedConstraint = `fallback:${target.label || target.deviceId.slice(0, 8)}`;
+      // Phase 1: Try each back camera by deviceId
+      for (let i = 0; i < backCameras.length; i++) {
+        const cam = backCameras[i];
+        console.log(`[CAM] trying back cam #${i}: ${cam.label} [${cam.deviceId.slice(0, 8)}]`);
+        const result = await tryDeviceCamera(video, cam.deviceId);
+        const attempt: AttemptResult = {
+          label: cam.label || 'unnamed',
+          deviceId: cam.deviceId.slice(0, 8),
+          result: result.ok ? 'success' : (result.reason.includes('track') ? 'track_ended' : (result.reason.includes('no_frames') ? 'no_frames' : 'error')),
+          detail: result.reason,
+        };
+        attemptResults.push(attempt);
+        console.log(`[CAM] back cam #${i} result:`, attempt.result, attempt.detail);
+
+        if (result.ok && result.stream) {
+          stream = result.stream;
+          usedConstraint = `deviceId:${cam.label}`;
+          selectedDeviceId = cam.deviceId;
+          break;
         }
-      } catch (err: any) {
-        console.error('[CAM] enumerateDevices fallback failed:', err);
-        updateDebug({ lastError: `fallback: ${err?.name}: ${err?.message}` });
       }
+
+      // Phase 2: Fallback — facingMode: environment
+      if (!stream) {
+        console.log('[CAM] no back cam worked, trying facingMode environment');
+        try {
+          const envStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } }, audio: false,
+          });
+          // Quick validate
+          const t = envStream.getVideoTracks()[0];
+          video.srcObject = envStream;
+          await video.play().catch(() => {});
+          await new Promise(r => setTimeout(r, 500));
+          if (t?.readyState === 'live' && video.videoWidth > 100) {
+            stream = envStream;
+            usedConstraint = 'facingMode:environment';
+          } else {
+            envStream.getTracks().forEach(t => t.stop());
+            video.srcObject = null;
+            attemptResults.push({ label: 'facingMode:env', deviceId: '-', result: 'no_frames', detail: `${video.videoWidth}x${video.videoHeight}` });
+          }
+        } catch (err: any) {
+          attemptResults.push({ label: 'facingMode:env', deviceId: '-', result: 'error', detail: err?.message });
+        }
+      }
+
+      // Phase 3: Fallback — video: true
+      if (!stream) {
+        console.log('[CAM] trying video:true fallback');
+        try {
+          const anyStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          const t = anyStream.getVideoTracks()[0];
+          video.srcObject = anyStream;
+          await video.play().catch(() => {});
+          await new Promise(r => setTimeout(r, 500));
+          if (t?.readyState === 'live' && video.videoWidth > 100) {
+            stream = anyStream;
+            usedConstraint = 'video:true';
+          } else {
+            anyStream.getTracks().forEach(t => t.stop());
+            video.srcObject = null;
+            attemptResults.push({ label: 'video:true', deviceId: '-', result: 'no_frames', detail: `${video.videoWidth}x${video.videoHeight}` });
+          }
+        } catch (err: any) {
+          attemptResults.push({ label: 'video:true', deviceId: '-', result: 'error', detail: err?.message });
+        }
+      }
+    } catch (enumErr: any) {
+      console.error('[CAM] enumerate failed:', enumErr);
+      updateDebug({ lastError: `enumerate: ${enumErr?.message}` });
     }
 
+    updateDebug({ attemptResults, selectedDeviceId: selectedDeviceId?.slice(0, 8) ?? null });
+
     if (!stream) {
-      const errMsg = 'Não foi possível abrir a câmera. Verifique a permissão do navegador.';
+      const errMsg = 'Nenhuma câmera funcionou. Verifique as permissões ou use o campo manual.';
       setCameraError(errMsg);
       updateDebug({ cameraError: errMsg, streamExists: false });
+      initInProgressRef.current = false;
+      updateDebug({ initInProgress: false });
+      console.log(`[CAM] startCamera #${thisInitId} END — no camera`);
       return;
     }
 
-    // 6. Bind stream
+    // Stream is already bound to video by tryDeviceCamera or fallback
     streamRef.current = stream;
-    video.srcObject = stream;
 
     const tracks = stream.getVideoTracks();
-    console.log('[CAM] stream bound. Tracks:', tracks.length, tracks.map(t => `${t.label} state=${t.readyState}`));
+    console.log('[CAM] ✅ camera selected:', usedConstraint, `${video.videoWidth}×${video.videoHeight}`);
     updateDebug({
       streamExists: true,
       constraintUsed: usedConstraint,
       trackCount: tracks.length,
       trackStates: tracks.map(t => t.readyState),
       trackLabels: tracks.map(t => t.label || 'unnamed'),
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      readyState: video.readyState,
     });
 
-    // 7. Wait for loadedmetadata + play()
-    try {
-      await new Promise<void>((resolve, reject) => {
-        if (video.readyState >= 1) {
-          console.log('[CAM] metadata already loaded (readyState=' + video.readyState + ')');
-          resolve();
-          return;
-        }
-        const onMeta = () => {
-          video.removeEventListener('loadedmetadata', onMeta);
-          console.log('[CAM] loadedmetadata fired');
-          resolve();
-        };
-        video.addEventListener('loadedmetadata', onMeta);
-        setTimeout(() => {
-          video.removeEventListener('loadedmetadata', onMeta);
-          reject(new Error('loadedmetadata timeout (5s)'));
-        }, 5000);
-      });
+    setCameraReady(true);
+    setCameraError(null);
+    updateDebug({ cameraReady: true, cameraError: null });
 
-      console.log('[CAM] calling play()...');
-      await video.play();
-      console.log('[CAM] play() resolved');
-
-      // 8. Frame validation — poll for real frames
-      let frameConfirmed = false;
-      for (let i = 0; i < 30; i++) {
-        // Strict threshold: real cameras always produce > 100px
-        if (video.videoWidth > 100 && video.videoHeight > 100) {
-          frameConfirmed = true;
-          break;
-        }
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      console.log('[CAM] frame check:', frameConfirmed, `${video.videoWidth}×${video.videoHeight}`, 'readyState=' + video.readyState);
-      updateDebug({
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        readyState: video.readyState,
-      });
-
-      if (!frameConfirmed) {
-        /**
-         * STRICT: Do NOT mark cameraReady if no real frames detected.
-         * This prevents the false-positive "camera ready but black screen".
-         */
-        const errMsg = 'Câmera abriu mas sem imagem. Toque em "Tentar novamente".';
-        setCameraReady(false);
-        setCameraError(errMsg);
-        updateDebug({ cameraReady: false, cameraError: errMsg });
-        console.warn('[CAM] NO FRAMES — cameraReady stays false');
-        return;
-      }
-
-      setCameraReady(true);
-      setCameraError(null);
-      updateDebug({ cameraReady: true, cameraError: null });
-      console.log('[CAM] ✅ camera fully ready');
-
-      // Check torch
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const caps = (track as any).getCapabilities?.();
-        if (caps?.torch) setTorchSupported(true);
-      }
-    } catch (err: any) {
-      console.error(`[CAM] init #${thisInitId} failed:`, err);
-      setCameraReady(false);
-      const errMsg = `Erro ao iniciar câmera: ${err?.message || 'desconhecido'}`;
-      setCameraError(errMsg);
-      updateDebug({ cameraReady: false, cameraError: errMsg, lastError: err?.message });
-    } finally {
-      initInProgressRef.current = false;
-      updateDebug({ initInProgress: false });
-      console.log(`[CAM] startCamera #${thisInitId} END`);
+    // Check torch
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      const caps = (track as any).getCapabilities?.();
+      if (caps?.torch) setTorchSupported(true);
     }
+
+    initInProgressRef.current = false;
+    updateDebug({ initInProgress: false });
+    console.log(`[CAM] startCamera #${thisInitId} END — success`);
   }, [stopCurrentStream, updateDebug]);
 
   /* ---------- Camera init effect ---------- */
