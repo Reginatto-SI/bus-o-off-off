@@ -580,7 +580,65 @@ export default function CommercialPartners() {
     </div>
   );
 
-  // ─── Wizard progress bar ───────────────────────────────────────────
+  const renderExibicaoFields = () => {
+    const applyTierDefaults = () => {
+      const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
+      setForm((prev) => ({ ...prev, ...defaults }));
+    };
+
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Defina onde este parceiro será exibido no sistema. Você pode alterar essas opções a qualquer momento.
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={applyTierDefaults} className="mb-4">
+            Sugerir padrão para nível "{TIER_LABELS[form.partner_tier]}"
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-showcase"
+              checked={form.show_on_showcase}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_showcase: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-showcase" className="cursor-pointer">Mostrar na vitrine pública</Label>
+              <p className="text-xs text-muted-foreground">O parceiro aparecerá na seção "Parceiros oficiais" da página pública da empresa.</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-event-page"
+              checked={form.show_on_event_page}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_event_page: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-event-page" className="cursor-pointer">Mostrar na página de eventos</Label>
+              <p className="text-xs text-muted-foreground">O parceiro aparecerá na página de detalhe dos eventos, separado dos patrocinadores.</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-ticket"
+              checked={form.show_on_ticket}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_ticket: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-ticket" className="cursor-pointer">Mostrar na passagem</Label>
+              <p className="text-xs text-muted-foreground">O parceiro pode aparecer de forma discreta no rodapé da passagem gerada.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
 
   const renderWizardProgress = () => (
     <div className="px-6 py-4 border-b border-border">
