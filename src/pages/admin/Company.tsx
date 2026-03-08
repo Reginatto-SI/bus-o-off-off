@@ -1506,6 +1506,25 @@ export default function CompanyPage() {
                             Sua conta Stripe está conectada e pronta para receber pagamentos.
                             A plataforma retém automaticamente <strong>{company?.platform_fee_percent ?? 7.5}%</strong> de comissão sobre cada venda.
                           </p>
+
+                          {/* Indicador de status do Pix */}
+                          {pixEnabled === true && (
+                            <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              <span className="text-sm font-medium text-green-700">Pix habilitado</span>
+                            </div>
+                          )}
+                          {pixEnabled === false && (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4 text-amber-600" />
+                                <span className="text-sm font-medium text-amber-700">Pix não habilitado</span>
+                              </div>
+                              <p className="text-xs text-amber-600">
+                                Para habilitar Pix, acesse <strong>Settings → Payment Methods</strong> no Dashboard do Stripe da sua conta e ative o método Pix.
+                              </p>
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <Button
                               type="button"
