@@ -2618,13 +2618,13 @@ export default function Events() {
                   <div className="px-6 pt-4 pb-2 space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium text-foreground">
-                        Etapa {getStepNumber(activeTab)} de 5 — {WIZARD_TAB_LABELS[activeTab] || 'Geral'}
+                        Etapa {getStepNumber(activeTab)} de {WIZARD_TABS_ORDER.length} — {WIZARD_TAB_LABELS[activeTab] || 'Geral'}
                       </span>
                       <span className="text-muted-foreground text-xs">
-                        {Math.round((getStepNumber(activeTab) / 5) * 100)}%
+                        {Math.round((getStepNumber(activeTab) / WIZARD_TABS_ORDER.length) * 100)}%
                       </span>
                     </div>
-                    <Progress value={(getStepNumber(activeTab) / 5) * 100} className="h-2" />
+                    <Progress value={(getStepNumber(activeTab) / WIZARD_TABS_ORDER.length) * 100} className="h-2" />
                   </div>
                 )}
 
