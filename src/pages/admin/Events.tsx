@@ -1669,7 +1669,7 @@ export default function Events() {
 
     if (sales && sales.length > 0) {
       setTripDeleteBlockReason(
-        `Esta viagem possui passagens vendidas ou reservadas. ` +
+        `Este transporte possui passagens vendidas ou reservadas. ` +
         `Não é possível excluir. Considere marcar o evento como encerrado.`
       );
       setTripToDelete(trip);
