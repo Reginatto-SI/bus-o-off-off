@@ -285,12 +285,6 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
               </div>
             )}
 
-            <div className="border-t pt-2 mt-2 space-y-1 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground text-sm mb-1">Observações Operacionais</p>
-              <p>• É obrigatório apresentar documento oficial com foto no momento do embarque.</p>
-              <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
-            </div>
-
             {/* Parceiros oficiais */}
             {ticket.commercialPartners && ticket.commercialPartners.length > 0 && (
               <div className="border-t pt-2 mt-2 space-y-2">
@@ -334,6 +328,12 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 </div>
               </div>
             )}
+
+            <div className="border-t pt-2 mt-2 space-y-1 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground text-sm mb-1">Observações Operacionais</p>
+              <p>• É obrigatório apresentar documento oficial com foto no momento do embarque.</p>
+              <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
+            </div>
 
             {/* Fee breakdown */}
             {ticket.fees && ticket.fees.length > 0 && (
