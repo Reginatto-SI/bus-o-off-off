@@ -4340,7 +4340,7 @@ export default function Events() {
               ) : (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Ida' : 'Volta'}</span>
+                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : 'Somente Volta'}</span>
                     <span className="ml-2 text-xs">(não pode ser alterado)</span>
                   </p>
                 </div>
