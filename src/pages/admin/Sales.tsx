@@ -795,6 +795,10 @@ export default function Sales() {
         toast.error(data?.error || 'Erro ao criar checkout da taxa');
         return;
       }
+      // Alerta ao admin quando Pix não está habilitado na conta Stripe
+      if (data.pix_available === false) {
+        toast.warning('Pix não está habilitado na sua conta Stripe. O checkout foi aberto apenas com cartão. Para habilitar Pix, acesse Settings → Payment Methods no Dashboard do Stripe.', { duration: 10000 });
+      }
       // Abre o checkout da taxa em nova aba
       window.open(data.url, '_blank');
       toast.info('Checkout da taxa aberto em nova aba. Após o pagamento, atualize a listagem.');

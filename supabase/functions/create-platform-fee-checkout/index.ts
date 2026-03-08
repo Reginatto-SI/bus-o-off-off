@@ -145,7 +145,7 @@ serve(async (req) => {
       company_id: sale.company_id,
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url, pix_available: pixAvailable }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

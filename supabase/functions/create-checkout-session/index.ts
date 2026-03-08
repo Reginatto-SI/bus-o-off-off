@@ -183,7 +183,7 @@ serve(async (req) => {
       .update({ stripe_checkout_session_id: session.id })
       .eq("id", sale.id);
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url, pix_available: pixAvailable }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
