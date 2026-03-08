@@ -4310,7 +4310,7 @@ export default function Events() {
                   >
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="ida" id="trip_type_ida" disabled={isRoundTripMandatoryPolicy} />
-                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Ida</Label>
+                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Somente Ida</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="volta" id="trip_type_volta" disabled={isGroupedTransportPolicy} />
