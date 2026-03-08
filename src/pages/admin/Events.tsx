@@ -2625,6 +2625,7 @@ export default function Events() {
                     { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
                     { value: 'embarques', label: 'Embarques', icon: MapPin, count: editingId ? eventBoardingLocations.length : null },
                     { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
+                    { value: 'patrocinadores', label: 'Patrocinadores', icon: Star, count: null },
                     { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
                   ].map((tab) => {
                     const lockMessage = getTabLockMessage(tab.value);
