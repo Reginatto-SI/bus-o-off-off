@@ -466,9 +466,10 @@ export default function DriverBoarding() {
                 return (
                   <Card
                     key={p.ticketId}
-                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5' : ''} ${actionable ? 'cursor-pointer' : ''}`}
+                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5 cursor-pointer' : ''} ${actionable ? 'cursor-pointer' : ''}`}
                     onClick={() => {
                       if (actionable) setConfirmPassenger(p);
+                      else if (done) setUndoPassenger(p);
                     }}
                   >
                     <CardContent className="flex items-center gap-3 p-3">
