@@ -1411,7 +1411,7 @@ export default function Events() {
   // Trip handlers
   // Helper function for dropdown (without time)
   const getTripLabelWithoutTime = (trip: TripWithDetails) => {
-    const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
+    const type = trip.trip_type === 'ida' ? 'Somente Ida' : 'Somente Volta';
     const vehicleType = trip.vehicle 
       ? vehicleTypeLabels[trip.vehicle.type] 
       : 'Veículo';
@@ -1554,7 +1554,7 @@ export default function Events() {
           .eq('id', editingTripId);
 
         if (error) throw error;
-        toast.success('Viagem atualizada');
+        toast.success('Transporte atualizado');
         setEditingTripId(null);
       } else if (tripForm.trip_creation_type === 'ida_volta') {
         // Create both trips (ida + volta) with pairing - NO departure_time
@@ -1603,7 +1603,7 @@ export default function Events() {
           .update({ paired_trip_id: voltaTrip.id })
           .eq('id', idaTrip.id);
 
-        toast.success('Viagens de Ida e Volta criadas e vinculadas');
+        toast.success('Transporte de Ida e Volta criado');
       } else {
         // Single trip creation - NO departure_time
         const tripData = {
@@ -1620,7 +1620,7 @@ export default function Events() {
         const { error } = await supabase.from('trips').insert([tripData]);
         if (error) throw error;
 
-        toast.success('Viagem adicionada');
+        toast.success('Transporte adicionado');
       }
 
       setTripDialogOpen(false);
@@ -1628,7 +1628,7 @@ export default function Events() {
       fetchEventTrips(editingId);
       fetchEvents();
     } catch (error) {
-      toast.error('Erro ao salvar viagem');
+      toast.error('Erro ao salvar transporte');
       console.error(error);
     }
     setSavingTrip(false);
@@ -1652,7 +1652,7 @@ export default function Events() {
     
     if (tripBoardings.length > 0) {
       setTripDeleteBlockReason(
-        `Esta viagem possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
+        `Este transporte possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
         `Remova ou realoque os embarques antes de excluir.`
       );
       setTripToDelete(trip);
@@ -1669,7 +1669,7 @@ export default function Events() {
 
     if (sales && sales.length > 0) {
       setTripDeleteBlockReason(
-        `Esta viagem possui passagens vendidas ou reservadas. ` +
+        `Este transporte possui passagens vendidas ou reservadas. ` +
         `Não é possível excluir. Considere marcar o evento como encerrado.`
       );
       setTripToDelete(trip);
@@ -1689,9 +1689,9 @@ export default function Events() {
     const { error } = await supabase.from('trips').delete().eq('id', tripToDelete.id);
 
     if (error) {
-      toast.error('Erro ao excluir viagem');
+      toast.error('Erro ao excluir transporte');
     } else {
-      toast.success('Viagem excluída');
+      toast.success('Transporte excluído');
       fetchEventTrips(editingId);
       fetchEvents();
     }
@@ -2854,7 +2854,7 @@ export default function Events() {
                               disabled={isReadOnly}
                             />
                             <p className="text-xs text-muted-foreground">
-                              Local onde o evento acontece (destino final da viagem)
+                              Local onde o evento acontece (destino final do transporte)
                             </p>
                           </div>
                           <div className="space-y-2">
@@ -2971,12 +2971,12 @@ export default function Events() {
                     {!editingId ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Info className="h-8 w-8 mx-auto mb-2" />
-                        <p>Salve o evento primeiro para adicionar viagens.</p>
+                        <p>Salve o evento primeiro para adicionar transportes.</p>
                       </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-between">
-                          <h3 className="font-medium">Viagens do Evento</h3>
+                          <h3 className="font-medium">Transportes do Evento</h3>
                           {!isReadOnly && (
                             <Button
                               type="button"
@@ -2985,7 +2985,7 @@ export default function Events() {
                               onClick={() => setTripDialogOpen(true)}
                             >
                               <Plus className="h-4 w-4 mr-2" />
-                              Adicionar Viagem
+                              Adicionar Transporte
                             </Button>
                           )}
                         </div>
@@ -2997,8 +2997,8 @@ export default function Events() {
                         ) : eventTrips.length === 0 ? (
                           <div className="text-center py-8 text-muted-foreground border rounded-lg">
                             <Bus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>Nenhuma viagem cadastrada</p>
-                            <p className="text-sm">Adicione viagens para este evento</p>
+                            <p>Nenhum transporte cadastrado</p>
+                            <p className="text-sm">Adicione transportes para este evento</p>
                             {!isReadOnly && (
                               <Button
                                 type="button"
@@ -3008,78 +3008,89 @@ export default function Events() {
                                 onClick={() => setTripDialogOpen(true)}
                               >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Adicionar Viagem
+                                Adicionar Transporte
                               </Button>
                             )}
                           </div>
                         ) : (
                           <div className="grid gap-3 lg:grid-cols-2">
-                            {/* Mantemos a ordem visual Ida → Volta para evitar confusão no operador. */}
-                            {sortedEventTrips.map((trip) => {
-                              const pairedTrip = trip.paired_trip_id 
-                                ? eventTrips.find(t => t.id === trip.paired_trip_id) 
-                                : null;
-                              
-                              return (
-                                <Card key={trip.id} className="p-3">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="flex flex-col gap-2">
-                                      <div className="flex items-center gap-4 flex-wrap">
-                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                          trip.trip_type === 'ida' 
-                                            ? 'bg-primary/10 text-primary' 
-                                            : 'bg-secondary text-secondary-foreground'
-                                        }`}>
-                                          {trip.trip_type === 'ida' ? 'IDA' : 'VOLTA'}
-                                        </span>
-                                        {/* Horários removidos: exibimos apenas dados essenciais da frota. */}
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Bus className="h-4 w-4 text-muted-foreground" />
-                                          <span>
-                                            {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                            {/* Agrupamos trips pareadas em um único card de "Transporte" */}
+                            {(() => {
+                              const renderedTripIds = new Set<string>();
+                              return sortedEventTrips.map((trip) => {
+                                if (renderedTripIds.has(trip.id)) return null;
+                                renderedTripIds.add(trip.id);
+
+                                const pairedTrip = trip.paired_trip_id 
+                                  ? eventTrips.find(t => t.id === trip.paired_trip_id) 
+                                  : null;
+                                
+                                // Se esta é a volta de um par já renderizado, pular
+                                if (trip.trip_type === 'volta' && pairedTrip && renderedTripIds.has(pairedTrip.id)) return null;
+                                
+                                if (pairedTrip) renderedTripIds.add(pairedTrip.id);
+
+                                const isPaired = !!pairedTrip;
+                                const badgeLabel = isPaired 
+                                  ? 'IDA E VOLTA' 
+                                  : trip.trip_type === 'ida' ? 'SOMENTE IDA' : 'SOMENTE VOLTA';
+                                const badgeClass = isPaired
+                                  ? 'bg-primary/10 text-primary'
+                                  : trip.trip_type === 'ida'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'bg-secondary text-secondary-foreground';
+                                
+                                return (
+                                  <Card key={trip.id} className="p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-4 flex-wrap">
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${badgeClass}`}>
+                                            {badgeLabel}
                                           </span>
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <Bus className="h-4 w-4 text-muted-foreground" />
+                                            <span>
+                                              {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <Users className="h-4 w-4 text-muted-foreground" />
+                                            <span>{trip.capacity} lugares</span>
+                                          </div>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Users className="h-4 w-4 text-muted-foreground" />
-                                          <span>{trip.capacity} lugares</span>
+                                        <div className="text-xs text-muted-foreground">
+                                          Motorista: {trip.driver?.name ?? 'Não definido'}
+                                          {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
                                         </div>
                                       </div>
-                                      <div className="text-xs text-muted-foreground">
-                                        Motorista: {trip.driver?.name ?? 'Não definido'}
-                                        {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
-                                        {pairedTrip && (
-                                          <span className="ml-2 text-primary">
-                                            [Par: {pairedTrip.trip_type === 'ida' ? 'Ida' : 'Volta'}]
-                                          </span>
-                                        )}
-                                      </div>
+                                      {!isReadOnly && (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => handleEditTrip(trip)}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive hover:text-destructive"
+                                            onClick={() => confirmDeleteTrip(trip)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
-                                    {!isReadOnly && (
-                                      <div className="flex items-center gap-1">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8"
-                                          onClick={() => handleEditTrip(trip)}
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-destructive hover:text-destructive"
-                                          onClick={() => confirmDeleteTrip(trip)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </Card>
-                              );
-                            })}
+                                  </Card>
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </>
@@ -3104,23 +3115,23 @@ export default function Events() {
                     ) : eventTrips.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground border rounded-lg">
                         <Bus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>Adicione viagens primeiro</p>
-                        <p className="text-sm">Cada embarque deve estar vinculado a uma viagem específica.</p>
+                        <p>Adicione transportes primeiro</p>
+                        <p className="text-sm">Cada embarque deve estar vinculado a um transporte específico.</p>
                       </div>
                     ) : (
                       <>
                         <div className="grid gap-4 lg:grid-cols-[40%,1fr] items-end">
                           <div className="space-y-2">
-                            <Label>Viagem Selecionada</Label>
+                            <Label>Selecionar transporte</Label>
                             <Select
                               value={selectedTripIdForBoardings ?? '__none__'}
                               onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecione uma viagem" />
+                                <SelectValue placeholder="Selecione um transporte" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__none__">Todas as viagens</SelectItem>
+                                <SelectItem value="__none__">Todos os transportes</SelectItem>
                                 {boardingTripSelectorOptions.map((option) => (
                                   <SelectItem key={option.value} value={option.value}>
                                     {option.label}
@@ -3165,7 +3176,7 @@ export default function Events() {
                             {selectedTripIdForBoardings 
                               ? isGroupedTransportPolicy
                                 ? 'Embarques do transporte selecionado (Ida + Volta)'
-                                : 'Embarques da viagem selecionada'
+                                : 'Embarques do transporte selecionado'
                               : 'Todos os embarques'
                             }
                           </h3>
@@ -3239,7 +3250,7 @@ export default function Events() {
                                   {selectedTripIdForBoardings 
                                     ? isGroupedTransportPolicy
                                       ? 'Adicione locais para o transporte (ida e volta)'
-                                      : 'Adicione locais para esta viagem'
+                                      : 'Adicione locais para este transporte'
                                     : 'Adicione locais onde os passageiros embarcarão'
                                   }
                                 </p>
@@ -4285,13 +4296,13 @@ export default function Events() {
         <Dialog open={tripDialogOpen} onOpenChange={(open) => { setTripDialogOpen(open); if (!open) resetTripForm(); }}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editingTripId ? 'Editar Viagem' : 'Adicionar Viagem'}</DialogTitle>
+              <DialogTitle>{editingTripId ? 'Editar Transporte' : 'Adicionar Transporte'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSaveTrip} className="space-y-4">
               {/* Trip Type - only show for creation, locked for editing */}
               {!editingTripId ? (
                 <div className="space-y-2">
-                  <Label>Tipo da Viagem *</Label>
+                  <Label>Tipo de Transporte *</Label>
                   <RadioGroup
                     value={tripForm.trip_creation_type}
                     onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
@@ -4299,11 +4310,11 @@ export default function Events() {
                   >
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="ida" id="trip_type_ida" disabled={isRoundTripMandatoryPolicy} />
-                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Ida</Label>
+                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Somente Ida</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="volta" id="trip_type_volta" disabled={isGroupedTransportPolicy} />
-                      <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Volta</Label>
+                      <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Somente Volta</Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
@@ -4312,7 +4323,7 @@ export default function Events() {
                   </RadioGroup>
                   {tripForm.trip_creation_type === 'ida_volta' && (
                     <p className="text-xs text-muted-foreground">
-                      Serão criadas duas viagens vinculadas com os mesmos dados.
+                      Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
                     </p>
                   )}
                   {isGroupedTransportPolicy && (
@@ -4329,7 +4340,7 @@ export default function Events() {
               ) : (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Ida' : 'Volta'}</span>
+                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : 'Somente Volta'}</span>
                     <span className="ml-2 text-xs">(não pode ser alterado)</span>
                   </p>
                 </div>
@@ -4426,7 +4437,7 @@ export default function Events() {
               <div className="p-3 bg-muted/50 rounded-lg border border-muted">
                 <p className="text-xs text-muted-foreground flex items-center gap-2">
                   <Info className="h-4 w-4 shrink-0" />
-                  O horário da viagem é definido automaticamente pelo primeiro embarque cadastrado.
+                  O horário do transporte é definido automaticamente pelo primeiro embarque cadastrado.
                 </p>
               </div>
 
@@ -4463,21 +4474,28 @@ export default function Events() {
             <form onSubmit={handleSaveBoarding} className="space-y-4">
               {/* Link to Trip - Required */}
               <div className="space-y-2">
-                <Label htmlFor="trip_link">Vincular a Viagem *</Label>
+                <Label htmlFor="trip_link">Vincular ao transporte *</Label>
                 <Select
                   value={boardingForm.trip_id || '__none__'}
                   onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value === '__none__' ? '' : value })}
                   required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma viagem *" />
+                    <SelectValue placeholder="Selecione um transporte *" />
                   </SelectTrigger>
                   <SelectContent>
-                    {sortedEventTrips.map((trip) => (
-                      <SelectItem key={trip.id} value={trip.id}>
-                        {getTripLabelWithoutTime(trip)}
-                      </SelectItem>
-                    ))}
+                    {isGroupedTransportPolicy
+                      ? groupedBoardingTripOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))
+                      : sortedEventTrips.map((trip) => (
+                          <SelectItem key={trip.id} value={trip.id}>
+                            {getTripLabelWithoutTime(trip)}
+                          </SelectItem>
+                        ))
+                    }
                   </SelectContent>
                 </Select>
               </div>
