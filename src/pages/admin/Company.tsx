@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, ExternalLink, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store, Share2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
@@ -150,6 +150,14 @@ export default function CompanyPage() {
     cover_image_url: '',
     intro_text: '',
     background_style: 'solid' as 'solid' | 'subtle_gradient' | 'cover_overlay',
+    // Redes sociais
+    social_instagram: '',
+    social_facebook: '',
+    social_tiktok: '',
+    social_youtube: '',
+    social_telegram: '',
+    social_twitter: '',
+    social_website: '',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -242,6 +250,14 @@ export default function CompanyPage() {
       cover_image_url: data?.cover_image_url ?? '',
       intro_text: data?.intro_text ?? '',
       background_style: data?.background_style ?? 'solid',
+      // Redes sociais
+      social_instagram: data?.social_instagram ?? '',
+      social_facebook: data?.social_facebook ?? '',
+      social_tiktok: data?.social_tiktok ?? '',
+      social_youtube: data?.social_youtube ?? '',
+      social_telegram: data?.social_telegram ?? '',
+      social_twitter: data?.social_twitter ?? '',
+      social_website: data?.social_website ?? '',
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -504,6 +520,13 @@ export default function CompanyPage() {
       cover_image_url: '',
       intro_text: '',
       background_style: 'solid',
+      social_instagram: '',
+      social_facebook: '',
+      social_tiktok: '',
+      social_youtube: '',
+      social_telegram: '',
+      social_twitter: '',
+      social_website: '',
     });
   };
 
@@ -627,6 +650,14 @@ export default function CompanyPage() {
       cover_image_url: form.cover_image_url?.trim() || null,
       intro_text: form.intro_text?.trim() || null,
       background_style: form.background_style,
+      // Redes sociais
+      social_instagram: form.social_instagram?.trim() || null,
+      social_facebook: form.social_facebook?.trim() || null,
+      social_tiktok: form.social_tiktok?.trim() || null,
+      social_youtube: form.social_youtube?.trim() || null,
+      social_telegram: form.social_telegram?.trim() || null,
+      social_twitter: form.social_twitter?.trim() || null,
+      social_website: form.social_website?.trim() || null,
     };
 
     let error;
@@ -959,6 +990,13 @@ export default function CompanyPage() {
                     >
                       <Palette className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Identidade Visual</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="redes"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Share2 className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Redes Sociais</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="pagamentos"
@@ -1356,6 +1394,82 @@ export default function CompanyPage() {
                       colors={brandColors}
                       onColorsChange={setBrandColors}
                     />
+                  </TabsContent>
+
+                  <TabsContent value="redes" className="mt-0">
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Adicione os links das redes sociais da sua empresa. Eles serão exibidos na vitrine pública.
+                      </p>
+                      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="social_instagram">Instagram</Label>
+                          <Input
+                            id="social_instagram"
+                            value={form.social_instagram}
+                            onChange={(e) => setForm({ ...form, social_instagram: e.target.value })}
+                            placeholder="https://instagram.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_facebook">Facebook</Label>
+                          <Input
+                            id="social_facebook"
+                            value={form.social_facebook}
+                            onChange={(e) => setForm({ ...form, social_facebook: e.target.value })}
+                            placeholder="https://facebook.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_tiktok">TikTok</Label>
+                          <Input
+                            id="social_tiktok"
+                            value={form.social_tiktok}
+                            onChange={(e) => setForm({ ...form, social_tiktok: e.target.value })}
+                            placeholder="https://tiktok.com/@suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_youtube">YouTube</Label>
+                          <Input
+                            id="social_youtube"
+                            value={form.social_youtube}
+                            onChange={(e) => setForm({ ...form, social_youtube: e.target.value })}
+                            placeholder="https://youtube.com/@suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_telegram">Telegram</Label>
+                          <Input
+                            id="social_telegram"
+                            value={form.social_telegram}
+                            onChange={(e) => setForm({ ...form, social_telegram: e.target.value })}
+                            placeholder="https://t.me/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_twitter">X / Twitter</Label>
+                          <Input
+                            id="social_twitter"
+                            value={form.social_twitter}
+                            onChange={(e) => setForm({ ...form, social_twitter: e.target.value })}
+                            placeholder="https://x.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="social_website">Site oficial</Label>
+                          <Input
+                            id="social_website"
+                            value={form.social_website}
+                            onChange={(e) => setForm({ ...form, social_website: e.target.value })}
+                            placeholder="https://www.suaempresa.com.br"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Todos os campos são opcionais. Insira a URL completa (ex: https://instagram.com/suaempresa).
+                      </p>
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">

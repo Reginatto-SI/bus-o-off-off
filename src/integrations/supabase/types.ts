@@ -197,6 +197,13 @@ export type Database = {
           primary_color: string | null
           public_slug: string | null
           slogan: string | null
+          social_facebook: string | null
+          social_instagram: string | null
+          social_telegram: string | null
+          social_tiktok: string | null
+          social_twitter: string | null
+          social_website: string | null
+          social_youtube: string | null
           state: string | null
           stripe_account_id: string | null
           stripe_onboarding_complete: boolean
@@ -232,6 +239,13 @@ export type Database = {
           primary_color?: string | null
           public_slug?: string | null
           slogan?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_telegram?: string | null
+          social_tiktok?: string | null
+          social_twitter?: string | null
+          social_website?: string | null
+          social_youtube?: string | null
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -267,6 +281,13 @@ export type Database = {
           primary_color?: string | null
           public_slug?: string | null
           slogan?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_telegram?: string | null
+          social_tiktok?: string | null
+          social_twitter?: string | null
+          social_website?: string | null
+          social_youtube?: string | null
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean

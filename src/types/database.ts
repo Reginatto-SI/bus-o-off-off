@@ -51,6 +51,14 @@ export interface Company {
   use_default_cover: boolean;
   intro_text: string | null;
   background_style: 'solid' | 'subtle_gradient' | 'cover_overlay';
+  // Redes sociais
+  social_instagram: string | null;
+  social_facebook: string | null;
+  social_tiktok: string | null;
+  social_youtube: string | null;
+  social_telegram: string | null;
+  social_twitter: string | null;
+  social_website: string | null;
   // Sistema
   is_active: boolean;
   created_at: string;
