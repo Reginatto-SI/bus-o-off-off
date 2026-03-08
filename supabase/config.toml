@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.register-company]
 verify_jwt = false
+
+[functions.create-platform-fee-checkout]
+verify_jwt = false

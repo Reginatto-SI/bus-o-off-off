@@ -566,7 +566,24 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
 
+      // ── Cálculo da taxa da plataforma para vendas manuais ──
+      // Fonte de verdade: company.platform_fee_percent (definido na empresa).
+      // Vendas online usam application_fee via Stripe Connect (platform_fee_status = 'not_applicable').
+      // Vendas manuais precisam de cobrança separada da taxa (platform_fee_status = 'pending').
+      // Bloqueios não representam venda real e ficam como 'not_applicable'.
+      const platformFeePercent = company?.platform_fee_percent ?? 0;
+      const hasPlatformFee = isManual && platformFeePercent > 0 && grossTotal > 0;
+      const platformFeeAmount = hasPlatformFee
+        ? Math.round(grossTotal * (platformFeePercent / 100) * 100) / 100
+        : null;
+
+      // Determinar sale_origin para rastreabilidade
+      const saleOrigin = isBlock ? 'admin_block' : (isManual ? 'admin_manual' : 'admin_manual');
+
       // 1. Insert sale
+      // IMPORTANTE: vendas manuais com taxa aplicável NÃO nascem como 'pago'.
+      // Elas nascem como 'reservado' com platform_fee_status='pending' até a taxa ser quitada.
+      // Isso garante que a plataforma receba sua comissão antes de liberar o status final.
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
         .insert({
@@ -578,10 +595,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
           unit_price: basePrice,
-          status: isManual ? 'pago' : 'reservado',
+          // Vendas manuais com taxa pendente ficam como 'reservado' até taxa ser paga
+          status: (isManual && hasPlatformFee) ? 'reservado' : (isManual ? 'pago' : 'reservado'),
           gross_amount: grossTotal,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
+          // Campos de controle da taxa da plataforma (vendas manuais)
+          sale_origin: saleOrigin,
+          platform_fee_amount: platformFeeAmount,
+          platform_fee_status: hasPlatformFee ? 'pending' : 'not_applicable',
         } as any)
         .select('id')
         .single();
@@ -647,7 +669,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       } as any);
 
       const successMessages: Record<SaleTab, string> = {
-        manual: 'Venda manual criada com sucesso!',
+        manual: hasPlatformFee
+          ? `Venda manual criada! Taxa da plataforma (${formatCurrencyBRL(platformFeeAmount!)}) pendente de pagamento.`
+          : 'Venda manual criada com sucesso!',
         reserva: 'Reserva criada. Você pode marcar como paga depois.',
         bloqueio: 'Poltrona(s) bloqueada(s) com sucesso!',
       };

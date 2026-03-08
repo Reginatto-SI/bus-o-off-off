@@ -82,6 +82,7 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
+  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -738,15 +739,33 @@ export default function Sales() {
   };
 
   // ── Change status (Gerente only) ──
+  // IMPORTANTE: vendas administrativas com taxa pendente (platform_fee_status != 'paid')
+  // não podem ser marcadas como 'pago'. O trigger no banco bloqueia isso,
+  // mas o frontend também valida para dar feedback claro ao usuário.
   const handleChangeStatus = async (sale: Sale, newStatus: SaleStatus) => {
     if (!user || !activeCompanyId) return;
+
+    // Bloqueio frontend: impede marcar como pago se taxa da plataforma está pendente
+    if (newStatus === 'pago') {
+      const feeStatus = (sale as any).platform_fee_status;
+      if (feeStatus && feeStatus !== 'paid' && feeStatus !== 'not_applicable' && feeStatus !== 'waived') {
+        toast.error('Não é possível marcar como pago: taxa da plataforma pendente. Pague a taxa primeiro.');
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('sales')
       .update({ status: newStatus as any })
       .eq('id', sale.id);
 
     if (error) {
-      toast.error('Erro ao alterar status');
+      // O trigger do banco pode bloquear a transição — traduzir mensagem para o usuário
+      if (error.message?.includes('taxa da plataforma pendente')) {
+        toast.error('Não é possível marcar como pago: taxa da plataforma pendente.');
+      } else {
+        toast.error('Erro ao alterar status');
+      }
       return;
     }
 
@@ -762,6 +781,28 @@ export default function Sales() {
 
     toast.success(`Status alterado para ${statusLabels[newStatus]}`);
     fetchSales();
+  };
+
+  // ── Pagar taxa da plataforma (abre Stripe Checkout na conta da plataforma) ──
+  const [payingFee, setPayingFee] = useState(false);
+  const handlePayPlatformFee = async (sale: Sale) => {
+    setPayingFee(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
+        body: { sale_id: sale.id },
+      });
+      if (error || !data?.url) {
+        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+        return;
+      }
+      // Abre o checkout da taxa em nova aba
+      window.open(data.url, '_blank');
+      toast.info('Checkout da taxa aberto em nova aba. Após o pagamento, atualize a listagem.');
+    } catch (err: any) {
+      toast.error('Erro ao iniciar pagamento da taxa');
+    } finally {
+      setPayingFee(false);
+    }
   };
 
   // ── Copy link ──
@@ -849,6 +890,16 @@ export default function Sales() {
     }
 
     if (isGerente) {
+      // Ação: Pagar taxa da plataforma (quando pendente)
+      const feeStatus = (sale as any).platform_fee_status;
+      if (feeStatus === 'pending' || feeStatus === 'failed') {
+        actions.push({
+          label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
+          icon: CreditCard,
+          onClick: () => handlePayPlatformFee(sale),
+        });
+      }
+
       if (sale.status === 'reservado') {
         actions.push({
           label: 'Marcar como Pago',
@@ -1151,7 +1202,20 @@ export default function Sales() {
                         )}
                         <TableCell>{sale.seller?.name ?? '-'}</TableCell>
                         <TableCell>
-                          <StatusBadge status={sale.status} />
+                          <div className="flex flex-col gap-1">
+                            <StatusBadge status={sale.status} />
+                            {/* Indicador visual de taxa pendente para vendas administrativas */}
+                            {(sale as any).platform_fee_status === 'pending' && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500 text-amber-600">
+                                Taxa pendente
+                              </Badge>
+                            )}
+                            {(sale as any).platform_fee_status === 'failed' && (
+                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                Taxa falhou
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <ActionsDropdown actions={getSaleActions(sale)} />
@@ -1376,6 +1440,61 @@ export default function Sales() {
                             value={format(new Date(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           />
                         </div>
+
+                        {/* Bloco de taxa da plataforma (vendas administrativas) */}
+                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && (
+                          <div className="mt-4 p-3 rounded-md border bg-muted/30 space-y-2">
+                            <p className="text-sm font-semibold">Taxa da Plataforma</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">Valor: </span>
+                                <span className="font-medium">{formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Status: </span>
+                                <span className={`font-medium ${
+                                  (detailSale as any).platform_fee_status === 'paid' ? 'text-emerald-600'
+                                  : (detailSale as any).platform_fee_status === 'failed' ? 'text-destructive'
+                                  : 'text-amber-600'
+                                }`}>
+                                  {(detailSale as any).platform_fee_status === 'pending' && 'Pendente'}
+                                  {(detailSale as any).platform_fee_status === 'paid' && 'Pago'}
+                                  {(detailSale as any).platform_fee_status === 'failed' && 'Falhou'}
+                                  {(detailSale as any).platform_fee_status === 'waived' && 'Dispensada'}
+                                </span>
+                              </div>
+                              {(detailSale as any).platform_fee_paid_at && (
+                                <div>
+                                  <span className="text-muted-foreground">Pago em: </span>
+                                  <span className="font-medium">
+                                    {format(new Date((detailSale as any).platform_fee_paid_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                  </span>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-muted-foreground">Origem: </span>
+                                <span className="font-medium">
+                                  {(detailSale as any).sale_origin === 'admin_manual' && 'Venda Manual'}
+                                  {(detailSale as any).sale_origin === 'admin_reservation_conversion' && 'Conversão de Reserva'}
+                                  {(detailSale as any).sale_origin === 'admin_block' && 'Bloqueio'}
+                                </span>
+                              </div>
+                            </div>
+                            {/* CTA para pagar taxa pendente */}
+                            {((detailSale as any).platform_fee_status === 'pending' || (detailSale as any).platform_fee_status === 'failed') && isGerente && (
+                              <Button
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => handlePayPlatformFee(detailSale)}
+                                disabled={payingFee}
+                              >
+                                {payingFee ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                                Pagar Taxa ({formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)})
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
                         {detailSale.cancel_reason && (
                           <div className="mt-4 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                             <p className="text-sm font-medium text-destructive">Motivo do cancelamento:</p>

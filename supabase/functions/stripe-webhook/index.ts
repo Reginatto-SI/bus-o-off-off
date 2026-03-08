@@ -187,6 +187,97 @@ async function processAsyncPaymentFailed(
   }
 }
 
+/**
+ * Processa pagamento confirmado da taxa da plataforma (vendas manuais).
+ * Diferente do fluxo online: aqui o checkout foi feito na conta da plataforma (sem stripeAccount),
+ * e o metadata contém payment_type = 'platform_fee_manual'.
+ */
+async function processPlatformFeePayment(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  session: Stripe.Checkout.Session
+) {
+  const saleId = session.metadata?.sale_id;
+  const paymentType = session.metadata?.payment_type;
+
+  if (!saleId || paymentType !== "platform_fee_manual") {
+    return false; // Não é um pagamento de taxa manual
+  }
+
+  console.log(`Processing platform fee payment for sale ${saleId}`);
+
+  const { error: updateError } = await supabaseAdmin
+    .from("sales")
+    .update({
+      platform_fee_status: "paid",
+      platform_fee_paid_at: new Date().toISOString(),
+      platform_fee_payment_id: session.id,
+    })
+    .eq("id", saleId)
+    .eq("platform_fee_status", "pending"); // Guard de idempotência
+
+  if (updateError) {
+    console.error("Error updating platform fee status:", updateError);
+    return true; // Foi reconhecido como taxa manual, mesmo com erro
+  }
+
+  const { data: sale } = await supabaseAdmin
+    .from("sales")
+    .select("company_id")
+    .eq("id", saleId)
+    .single();
+
+  if (sale) {
+    await supabaseAdmin.from("sale_logs").insert({
+      sale_id: saleId,
+      action: "platform_fee_paid",
+      description: `Taxa da plataforma paga via Stripe (Session: ${session.id}, PI: ${session.payment_intent || 'pix'}).`,
+      company_id: sale.company_id,
+    });
+  }
+
+  console.log(`Platform fee marked as paid for sale ${saleId}`);
+  return true;
+}
+
+/**
+ * Processa falha de pagamento da taxa da plataforma.
+ */
+async function processPlatformFeeFailure(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  session: Stripe.Checkout.Session
+) {
+  const saleId = session.metadata?.sale_id;
+  const paymentType = session.metadata?.payment_type;
+
+  if (!saleId || paymentType !== "platform_fee_manual") {
+    return false;
+  }
+
+  await supabaseAdmin
+    .from("sales")
+    .update({ platform_fee_status: "failed" })
+    .eq("id", saleId)
+    .eq("platform_fee_status", "pending");
+
+  const { data: sale } = await supabaseAdmin
+    .from("sales")
+    .select("company_id")
+    .eq("id", saleId)
+    .single();
+
+  if (sale) {
+    await supabaseAdmin.from("sale_logs").insert({
+      sale_id: saleId,
+      action: "platform_fee_failed",
+      description: `Pagamento da taxa da plataforma falhou (Session: ${session.id}).`,
+      company_id: sale.company_id,
+    });
+  }
+
+  console.log(`Platform fee marked as failed for sale ${saleId}`);
+  return true;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -222,19 +313,32 @@ serve(async (req) => {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      if (session.payment_status === "paid") {
-        await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
-      } else {
-        console.log(`Sale ${session.metadata?.sale_id} — checkout completed but payment_status=${session.payment_status}. Awaiting async payment.`);
+      // Verificar se é pagamento de taxa da plataforma (conta da plataforma, sem connectedAccountId)
+      const isPlatformFee = await processPlatformFeePayment(supabaseAdmin, session);
+      if (!isPlatformFee) {
+        // Fluxo padrão: pagamento de venda via Stripe Connect (Direct Charge)
+        if (session.payment_status === "paid") {
+          await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
+        } else {
+          console.log(`Sale ${session.metadata?.sale_id} — checkout completed but payment_status=${session.payment_status}. Awaiting async payment.`);
+        }
       }
     } else if (event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
-      console.log(`Async payment succeeded for sale ${session.metadata?.sale_id}`);
-      await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
+
+      const isPlatformFee = await processPlatformFeePayment(supabaseAdmin, session);
+      if (!isPlatformFee) {
+        console.log(`Async payment succeeded for sale ${session.metadata?.sale_id}`);
+        await processPaymentConfirmed(supabaseAdmin, stripe, session, connectedAccountId);
+      }
     } else if (event.type === "checkout.session.async_payment_failed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      console.log(`Async payment failed for sale ${session.metadata?.sale_id}`);
-      await processAsyncPaymentFailed(supabaseAdmin, session, connectedAccountId);
+
+      const isPlatformFee = await processPlatformFeeFailure(supabaseAdmin, session);
+      if (!isPlatformFee) {
+        console.log(`Async payment failed for sale ${session.metadata?.sale_id}`);
+        await processAsyncPaymentFailed(supabaseAdmin, session, connectedAccountId);
+      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
