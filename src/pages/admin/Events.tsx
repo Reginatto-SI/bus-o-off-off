@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+// RadioGroup removed — transport type now uses clickable cards
 import {
   Calendar,
   CalendarDays,
@@ -97,7 +97,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+// Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 // Types
@@ -168,21 +168,30 @@ const imageStatusOptions = [
   { value: 'without', label: 'Sem imagem' },
 ];
 
-const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; description: string }> = [
+/**
+ * Política de Transporte do Evento — define a regra macro de como transportes são cadastrados e vendidos.
+ * - ida_volta_obrigatorio: O modal de transporte NÃO exibe seleção de tipo; assume sempre Ida e Volta.
+ * - ida_obrigatoria_volta_opcional: O modal NÃO exibe seleção de tipo; assume sempre Somente Ida.
+ * - trecho_independente (Flexível): O modal EXIBE seleção de tipo, permitindo Ida, Volta ou Ida e Volta.
+ */
+const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; description: string; icon: string }> = [
   {
-    value: 'trecho_independente',
-    label: 'Venda por Trecho Independente',
-    description: 'Ida e volta são vendidos separadamente, com estoque controlado por trecho.',
+    value: 'ida_volta_obrigatorio',
+    label: 'Ida e volta obrigatória',
+    description: 'Venda em pacote único. Ida e volta sempre vinculadas.',
+    icon: '🔗',
   },
   {
     value: 'ida_obrigatoria_volta_opcional',
-    label: 'Ida Obrigatória + Volta Opcional',
-    description: 'Regra padrão: toda venda exige ida, e a volta pode ser adicionada opcionalmente.',
+    label: 'Somente ida',
+    description: 'Evento com operação apenas de ida, sem retorno vinculado.',
+    icon: '➡️',
   },
   {
-    value: 'ida_volta_obrigatorio',
-    label: 'Pacote Ida + Volta Obrigatório',
-    description: 'Venda em pacote único, com validação simultânea de vagas em ida e volta.',
+    value: 'trecho_independente',
+    label: 'Flexível',
+    description: 'Permite cadastrar transportes de ida, volta ou ida e volta conforme necessidade do evento.',
+    icon: '🔀',
   },
 ];
 
@@ -662,9 +671,12 @@ export default function Events() {
   // Computed: is read-only (encerrado)
   const isReadOnly = form.status === 'encerrado';
 
-  // Flags de política usados em validações/effects da tela. Mantidos aqui para evitar uso antes da inicialização.
+  // Flags de política de transporte — a política do evento (Etapa Geral) define a regra macro.
+  // O tipo de transporte por item só aparece na política Flexível (trecho_independente).
   const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
   const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
+  const isSomenteIdaPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional';
+  const isFlexiblePolicy = form.transport_policy === 'trecho_independente';
 
   // Stats calculations
   const stats = useMemo(() => {
@@ -1507,16 +1519,22 @@ export default function Events() {
   useEffect(() => {
     if (!tripDialogOpen || editingTripId) return;
 
-    // Regras guiadas por política: evita criação de configuração incoerente com o modelo comercial do evento.
+    /**
+     * Sincronização automática: a política do evento define o tipo de transporte.
+     * - ida_volta_obrigatorio → sempre ida_volta
+     * - ida_obrigatoria_volta_opcional (Somente ida) → sempre ida
+     * - trecho_independente (Flexível) → sem restrição, o usuário escolhe
+     */
     if (isRoundTripMandatoryPolicy && tripForm.trip_creation_type !== 'ida_volta') {
       setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida_volta' }));
       return;
     }
 
-    if (isGroupedTransportPolicy && tripForm.trip_creation_type === 'volta') {
+    if (isSomenteIdaPolicy && tripForm.trip_creation_type !== 'ida') {
       setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida' }));
+      return;
     }
-  }, [tripDialogOpen, editingTripId, isGroupedTransportPolicy, isRoundTripMandatoryPolicy, tripForm.trip_creation_type]);
+  }, [tripDialogOpen, editingTripId, isRoundTripMandatoryPolicy, isSomenteIdaPolicy, tripForm.trip_creation_type]);
 
   const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2883,50 +2901,35 @@ export default function Events() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="transport_policy">Política de Transporte do Evento *</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
+                    {/* Política de Transporte — cards selecionáveis (regra macro do evento) */}
+                    <div className="space-y-3">
+                      <Label>Política de Transporte do Evento *</Label>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        {transportPolicyOptions.map((option) => {
+                          const isSelected = form.transport_policy === option.value;
+                          return (
+                            <button
+                              key={option.value}
                               type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground"
-                              aria-label="Entender políticas de transporte"
+                              disabled={isReadOnly}
+                              onClick={() => setForm({ ...form, transport_policy: option.value as TransportPolicy })}
+                              className={cn(
+                                'relative flex flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-all',
+                                isSelected
+                                  ? 'ring-2 ring-primary border-primary bg-primary/5'
+                                  : 'hover:border-primary/50 hover:bg-muted/50',
+                                isReadOnly && 'opacity-60 cursor-not-allowed'
+                              )}
                             >
-                              <Info className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="w-80 space-y-2">
-                            <p className="text-sm font-medium">Como funciona cada política?</p>
-                            <ul className="space-y-2 text-xs text-muted-foreground">
-                              <li><strong className="text-foreground">Venda por Trecho Independente:</strong> ida e volta são selecionadas separadamente.</li>
-                              <li><strong className="text-foreground">Ida Obrigatória + Volta Opcional:</strong> ida entra por padrão e a volta é adicional.</li>
-                              <li><strong className="text-foreground">Pacote Ida + Volta Obrigatório:</strong> a venda exige disponibilidade nos dois trechos.</li>
-                            </ul>
-                          </PopoverContent>
-                        </Popover>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{option.icon}</span>
+                                <span className="font-medium text-sm">{option.label}</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{option.description}</p>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <Select
-                        value={form.transport_policy}
-                        onValueChange={(value) => setForm({ ...form, transport_policy: value as TransportPolicy })}
-                        disabled={isReadOnly}
-                      >
-                        <SelectTrigger id="transport_policy">
-                          <SelectValue placeholder="Selecione a política" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {transportPolicyOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {transportPolicyOptions.find((option) => option.value === form.transport_policy)?.description}
-                      </p>
                     </div>
 
                     <div className="grid gap-4 lg:grid-cols-2">
@@ -4299,48 +4302,48 @@ export default function Events() {
               <DialogTitle>{editingTripId ? 'Editar Transporte' : 'Adicionar Transporte'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSaveTrip} className="space-y-4">
-              {/* Trip Type - only show for creation, locked for editing */}
+              {/*
+                * Tipo de Transporte — lógica condicional baseada na política do evento:
+                * - ida_volta_obrigatorio / ida_obrigatoria_volta_opcional: tipo inferido automaticamente, campo oculto.
+                * - trecho_independente (Flexível): o usuário escolhe entre Ida, Volta ou Ida e Volta.
+                */}
               {!editingTripId ? (
-                <div className="space-y-2">
-                  <Label>Tipo de Transporte *</Label>
-                  <RadioGroup
-                    value={tripForm.trip_creation_type}
-                    onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
-                    className="flex flex-wrap gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ida" id="trip_type_ida" disabled={isRoundTripMandatoryPolicy} />
-                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Somente Ida</Label>
+                isFlexiblePolicy ? (
+                  <div className="space-y-2">
+                    <Label>Tipo de Transporte *</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { value: 'ida' as TripCreationType, label: 'Somente Ida', icon: '➡️' },
+                        { value: 'volta' as TripCreationType, label: 'Somente Volta', icon: '⬅️' },
+                        { value: 'ida_volta' as TripCreationType, label: 'Ida e Volta', icon: '🔗' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setTripForm({ ...tripForm, trip_creation_type: opt.value })}
+                          className={cn(
+                            'flex flex-col items-center gap-1 rounded-lg border p-3 text-center transition-all text-xs',
+                            tripForm.trip_creation_type === opt.value
+                              ? 'ring-2 ring-primary border-primary bg-primary/5'
+                              : 'hover:border-primary/50 hover:bg-muted/50'
+                          )}
+                        >
+                          <span className="text-base">{opt.icon}</span>
+                          <span className="font-medium">{opt.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="volta" id="trip_type_volta" disabled={isGroupedTransportPolicy} />
-                      <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Somente Volta</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
-                      <Label htmlFor="trip_type_ida_volta" className="font-normal cursor-pointer">Ida e Volta</Label>
-                    </div>
-                  </RadioGroup>
-                  {tripForm.trip_creation_type === 'ida_volta' && (
-                    <p className="text-xs text-muted-foreground">
-                      Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
-                    </p>
-                  )}
-                  {isGroupedTransportPolicy && (
-                    <p className="text-xs text-muted-foreground">
-                      Nesta política, não permitimos criar somente a volta para evitar incoerência comercial.
-                    </p>
-                  )}
-                  {isRoundTripMandatoryPolicy && (
-                    <p className="text-xs text-muted-foreground">
-                      Pacote obrigatório: use sempre “Ida e Volta” para manter o transporte agrupado.
-                    </p>
-                  )}
-                </div>
+                    {tripForm.trip_creation_type === 'ida_volta' && (
+                      <p className="text-xs text-muted-foreground">
+                        Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
+                      </p>
+                    )}
+                  </div>
+                ) : null /* Políticas não-flexíveis: tipo inferido automaticamente, sem campo visível */
               ) : (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : 'Somente Volta'}</span>
+                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : tripForm.trip_creation_type === 'volta' ? 'Somente Volta' : 'Ida e Volta'}</span>
                     <span className="ml-2 text-xs">(não pode ser alterado)</span>
                   </p>
                 </div>
