@@ -161,8 +161,12 @@ async function tryDeviceCamera(
 
 export default function DriverValidate() {
   const navigate = useNavigate();
-  const { user, userRole, loading } = useAuth();
+  const { user, userRole, loading, activeCompanyId } = useAuth();
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+
+  // Read active phase from localStorage
+  const activePhase = user && activeCompanyId ? getPersistedPhase(user.id, activeCompanyId) : 'ida';
+  const phaseConfig = PHASE_CONFIG[activePhase];
 
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
