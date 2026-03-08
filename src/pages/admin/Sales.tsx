@@ -1440,6 +1440,61 @@ export default function Sales() {
                             value={format(new Date(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           />
                         </div>
+
+                        {/* Bloco de taxa da plataforma (vendas administrativas) */}
+                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && (
+                          <div className="mt-4 p-3 rounded-md border bg-muted/30 space-y-2">
+                            <p className="text-sm font-semibold">Taxa da Plataforma</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">Valor: </span>
+                                <span className="font-medium">{formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Status: </span>
+                                <span className={`font-medium ${
+                                  (detailSale as any).platform_fee_status === 'paid' ? 'text-emerald-600'
+                                  : (detailSale as any).platform_fee_status === 'failed' ? 'text-destructive'
+                                  : 'text-amber-600'
+                                }`}>
+                                  {(detailSale as any).platform_fee_status === 'pending' && 'Pendente'}
+                                  {(detailSale as any).platform_fee_status === 'paid' && 'Pago'}
+                                  {(detailSale as any).platform_fee_status === 'failed' && 'Falhou'}
+                                  {(detailSale as any).platform_fee_status === 'waived' && 'Dispensada'}
+                                </span>
+                              </div>
+                              {(detailSale as any).platform_fee_paid_at && (
+                                <div>
+                                  <span className="text-muted-foreground">Pago em: </span>
+                                  <span className="font-medium">
+                                    {format(new Date((detailSale as any).platform_fee_paid_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                                  </span>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-muted-foreground">Origem: </span>
+                                <span className="font-medium">
+                                  {(detailSale as any).sale_origin === 'admin_manual' && 'Venda Manual'}
+                                  {(detailSale as any).sale_origin === 'admin_reservation_conversion' && 'Conversão de Reserva'}
+                                  {(detailSale as any).sale_origin === 'admin_block' && 'Bloqueio'}
+                                </span>
+                              </div>
+                            </div>
+                            {/* CTA para pagar taxa pendente */}
+                            {((detailSale as any).platform_fee_status === 'pending' || (detailSale as any).platform_fee_status === 'failed') && isGerente && (
+                              <Button
+                                size="sm"
+                                className="mt-2"
+                                onClick={() => handlePayPlatformFee(detailSale)}
+                                disabled={payingFee}
+                              >
+                                {payingFee ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                                Pagar Taxa ({formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)})
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
                         {detailSale.cancel_reason && (
                           <div className="mt-4 p-3 rounded-md bg-destructive/10 border border-destructive/20">
                             <p className="text-sm font-medium text-destructive">Motivo do cancelamento:</p>
