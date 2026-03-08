@@ -95,6 +95,7 @@ export default function PublicEventDetail() {
       const fetchedTrips = (tripsRes.data ?? []) as Trip[];
       setAllTrips(fetchedTrips);
       if (locationsRes.data) setLocations(locationsRes.data as EventBoardingLocation[]);
+      setEventSponsors((sponsorsRes.data ?? []) as unknown as EventSponsor[]);
 
       const initialPolicy = (eventRes.data as Event | null)?.transport_policy ?? 'trecho_independente';
       const grouped = isGroupedPolicy(initialPolicy);
