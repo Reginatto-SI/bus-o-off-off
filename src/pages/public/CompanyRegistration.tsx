@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 
 function formatCNPJ(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 14);
