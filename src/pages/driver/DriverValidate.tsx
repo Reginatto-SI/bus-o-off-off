@@ -186,6 +186,8 @@ export default function DriverValidate() {
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>(INITIAL_DEBUG);
+  const [driverPrefs, setDriverPrefs] = useState(getDriverPreferences);
+  const autoResetTimerRef = useRef<number | null>(null);
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
