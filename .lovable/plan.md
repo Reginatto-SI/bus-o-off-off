@@ -1,30 +1,29 @@
 
 
-# Imagem padrão para eventos sem banner
+## Diagnóstico: Tela piscando a cada 15 segundos
 
-## Mudança
+### Causa raiz
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+Na linha 74 de `DriverBoarding.tsx`, a função `fetchData` faz `setLoadingData(true)` **toda vez** que é chamada — inclusive no auto-refresh de 15 segundos (linha 203-205).
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+Quando `loadingData` fica `true`, o JSX renderiza **Skeletons** (placeholders cinza) no lugar da lista de passageiros. Quando os dados voltam, renderiza a lista de novo. Isso causa o "pisca" visível a cada 15s.
 
-### Componentes afetados
+### Correção
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+Separar o loading inicial do refresh silencioso:
 
-### Lógica simplificada (ambos os cards)
+1. Manter `setLoadingData(true)` apenas no **primeiro carregamento** (quando `passengers` está vazio)
+2. No auto-refresh de 15s, **não** setar `loadingData(true)` — apenas atualizar os dados silenciosamente quando a resposta chegar
+3. Mesma lógica para o botão de refresh manual (RefreshCw): pode usar um indicador discreto (ex: ícone girando) em vez de mostrar skeletons
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+### Implementação
 
-### Imagem padrão
+- Adicionar um parâmetro `silent?: boolean` ao `fetchData`, ou criar um flag `isInitialLoad` via ref
+- Quando `silent = true`, pular o `setLoadingData(true)`
+- O interval e o botão de refresh chamam `fetchData` no modo silencioso
+- O `useEffect` inicial chama no modo normal (com skeleton)
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+### Arquivo alterado
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+- `src/pages/driver/DriverBoarding.tsx` — ~5 linhas de mudança
 
