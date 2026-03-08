@@ -1048,22 +1048,22 @@ export default function Sponsors() {
           </Card>
         )}
 
-        {/* Preview do banner */}
+        {/* Preview da logo */}
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Pré-visualização do banner</DialogTitle>
+              <DialogTitle>Pré-visualização da logo</DialogTitle>
             </DialogHeader>
             {form.banner_url ? (
               <div className="flex justify-center">
                 <img
                   src={form.banner_url}
-                  alt="Pré-visualização do banner do patrocinador"
-                  className="w-full max-w-[720px] rounded-lg border object-contain"
+                  alt="Pré-visualização da logo do patrocinador"
+                  className="max-h-[400px] rounded-lg border object-contain"
                 />
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Nenhum banner selecionado.</p>
+              <p className="text-sm text-muted-foreground">Nenhuma logo selecionada.</p>
             )}
           </DialogContent>
         </Dialog>
