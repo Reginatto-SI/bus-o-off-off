@@ -4296,7 +4296,7 @@ export default function Events() {
         <Dialog open={tripDialogOpen} onOpenChange={(open) => { setTripDialogOpen(open); if (!open) resetTripForm(); }}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editingTripId ? 'Editar Viagem' : 'Adicionar Viagem'}</DialogTitle>
+              <DialogTitle>{editingTripId ? 'Editar Transporte' : 'Adicionar Transporte'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSaveTrip} className="space-y-4">
               {/* Trip Type - only show for creation, locked for editing */}
