@@ -671,9 +671,14 @@ export type Database = {
           gross_amount: number | null
           id: string
           partner_fee_amount: number | null
+          platform_fee_amount: number | null
+          platform_fee_paid_at: string | null
+          platform_fee_payment_id: string | null
+          platform_fee_status: string
           platform_fee_total: number | null
           platform_net_amount: number | null
           quantity: number
+          sale_origin: string
           seller_id: string | null
           status: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id: string | null
@@ -697,9 +702,14 @@ export type Database = {
           gross_amount?: number | null
           id?: string
           partner_fee_amount?: number | null
+          platform_fee_amount?: number | null
+          platform_fee_paid_at?: string | null
+          platform_fee_payment_id?: string | null
+          platform_fee_status?: string
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity: number
+          sale_origin?: string
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
@@ -723,9 +733,14 @@ export type Database = {
           gross_amount?: number | null
           id?: string
           partner_fee_amount?: number | null
+          platform_fee_amount?: number | null
+          platform_fee_paid_at?: string | null
+          platform_fee_payment_id?: string | null
+          platform_fee_status?: string
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity?: number
+          sale_origin?: string
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
