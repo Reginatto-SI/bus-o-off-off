@@ -1,30 +1,40 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Reorganizar layout da aba Dados Gerais dos Parceiros
 
-## Mudança
+### Arquivo: `src/pages/admin/CommercialPartners.tsx`
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+### Mudança no `renderDadosFields` (linhas 446-503)
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+Reorganizar de `grid sm:grid-cols-2` para uma estrutura vertical com 3 blocos:
+
+**Linha 1** — Nome (full width, como já está)
+
+**Linha 2** — Status + Ordem de exibição lado a lado (`grid grid-cols-2 gap-4`)
+
+**Linha 3** — Seção "Nível do parceiro" em `sm:col-span-2` (full width), com:
+- Label "Nível do parceiro" como título da seção
+- Grid `grid-cols-3 gap-3` com os 3 cards ocupando toda a largura
+- Adicionar badges visuais nos títulos dos cards:
+  - Básico → sem ícone
+  - Destaque → ⭐ após o título
+  - Premium → 🔥 após o título
+
+### Estrutura resultante
+
+```text
+┌─────────────────────────────────────────┐
+│ Nome da empresa parceira *              │
+├────────────────────┬────────────────────┤
+│ Status             │ Ordem de exibição  │
+├────────────────────┴────────────────────┤
+│ Nível do parceiro                       │
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│ │ Básico   │ │⭐Destaque│ │🔥Premium │ │
+│ │ desc...  │ │ desc...  │ │ desc...  │ │
+│ └──────────┘ └──────────┘ └──────────┘ │
+└─────────────────────────────────────────┘
 ```
 
-### Componentes afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
-
-### Lógica simplificada (ambos os cards)
-
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
-
-### Imagem padrão
-
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+Sem alteração de dados ou lógica — apenas reorganização visual e adição dos emojis nos títulos dos cards.
 
