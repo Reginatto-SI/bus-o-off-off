@@ -314,7 +314,7 @@ export default function DriverHome() {
             <SelectContent>
               {allTrips.map(t => (
                 <SelectItem key={t.tripId} value={t.tripId}>
-                  {t.eventName} · {t.vehiclePlate}
+                  {formatDateOnlyBR(t.eventDate)} · {t.eventName} · {t.vehiclePlate}
                 </SelectItem>
               ))}
             </SelectContent>
