@@ -156,6 +156,7 @@ export default function DriverBoarding() {
     if (!sales) {
       setPassengers([]);
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
