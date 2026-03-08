@@ -70,9 +70,10 @@ export default function DriverBoarding() {
     : 'ida';
   const phaseConfig = PHASE_CONFIG[activePhase];
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!user || !activeCompanyId) return;
-    setLoadingData(true);
+    if (!silent) setLoadingData(true);
+    if (silent) setRefreshing(true);
 
     const persistedTripId = getPersistedTripId(user.id, activeCompanyId);
     
