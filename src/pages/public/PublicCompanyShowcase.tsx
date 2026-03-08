@@ -82,8 +82,7 @@ export default function PublicCompanyShowcase() {
       setCompany(companyData as PublicCompanyData);
 
       // Buscar eventos e patrocinadores em paralelo para reduzir tempo de carregamento
-      const [eventsRes, sponsorsRes] = await Promise.all([
-        // Hardening Fase 1: whitelist estrita de colunas para reduzir superfície pública (sem select('*'))
+      const [eventsRes, sponsorsRes, partnersRes] = await Promise.all([
         supabase
           .from('events')
           .select(`
@@ -96,13 +95,20 @@ export default function PublicCompanyShowcase() {
           .eq('status', 'a_venda')
           .eq('is_archived', false)
           .order('date', { ascending: true }),
-        // Patrocinadores: select estrito, apenas ativos da empresa, ordenação estável
         supabase
           .from('sponsors')
           .select('id, name, banner_url, link_type, site_url, whatsapp_phone, whatsapp_message')
           .eq('company_id', companyData.id)
           .eq('status', 'ativo')
           .order('carousel_order')
+          .order('created_at'),
+        supabase
+          .from('commercial_partners')
+          .select('*')
+          .eq('company_id', companyData.id)
+          .eq('status', 'ativo')
+          .eq('show_on_showcase', true)
+          .order('display_order', { ascending: true })
           .order('created_at'),
       ]);
 
