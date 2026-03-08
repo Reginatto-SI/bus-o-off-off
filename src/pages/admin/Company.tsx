@@ -250,6 +250,14 @@ export default function CompanyPage() {
       cover_image_url: data?.cover_image_url ?? '',
       intro_text: data?.intro_text ?? '',
       background_style: data?.background_style ?? 'solid',
+      // Redes sociais
+      social_instagram: data?.social_instagram ?? '',
+      social_facebook: data?.social_facebook ?? '',
+      social_tiktok: data?.social_tiktok ?? '',
+      social_youtube: data?.social_youtube ?? '',
+      social_telegram: data?.social_telegram ?? '',
+      social_twitter: data?.social_twitter ?? '',
+      social_website: data?.social_website ?? '',
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
