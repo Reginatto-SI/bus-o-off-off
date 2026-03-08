@@ -838,7 +838,7 @@ export default function Sales() {
     setTicketGenSponsors([]);
 
     const companyId = (sale.event as any)?.company_id || activeCompanyId;
-    const [ticketsRes, boardingRes, feesRes] = await Promise.all([
+    const [ticketsRes, boardingRes, feesRes, partnersRes, sponsorsRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase
         .from('event_boarding_locations')
@@ -852,12 +852,35 @@ export default function Sales() {
         .select('*')
         .eq('event_id', sale.event_id)
         .eq('is_active', true),
+      companyId
+        ? supabase
+            .from('commercial_partners')
+            .select('name, logo_url')
+            .eq('company_id', companyId)
+            .eq('status', 'ativo')
+            .eq('show_on_ticket', true)
+            .order('display_order')
+            .limit(6)
+        : Promise.resolve({ data: [] }),
+      supabase
+        .from('event_sponsors')
+        .select('display_order, sponsor:sponsors(name, banner_url, status)')
+        .eq('event_id', sale.event_id)
+        .eq('show_on_ticket', true)
+        .order('display_order')
+        .limit(6),
     ]);
 
     const fetchedTickets = (ticketsRes.data ?? []) as TicketRecord[];
     setTicketGenTickets(fetchedTickets);
     setTicketGenBoardingTime(boardingRes.data?.departure_time ?? null);
     setTicketGenBoardingDate((boardingRes.data as any)?.departure_date ?? null);
+    setTicketGenPartners((partnersRes.data || []).map((p: any) => ({ name: p.name, logo_url: p.logo_url })));
+    setTicketGenSponsors(
+      ((sponsorsRes.data || []) as any[])
+        .filter((es: any) => es.sponsor?.status === 'ativo')
+        .map((es: any) => ({ name: es.sponsor.name, logo_url: es.sponsor.banner_url }))
+    );
 
     // Calculate fees
     const eventFees: EventFeeInput[] = (feesRes.data || []).map((f: any) => ({
