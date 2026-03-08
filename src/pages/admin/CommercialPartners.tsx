@@ -131,6 +131,9 @@ export default function CommercialPartners() {
     contact_phone: '',
     contact_email: '',
     notes: '',
+    show_on_showcase: true,
+    show_on_event_page: false,
+    show_on_ticket: false,
   });
 
   const stats = useMemo(() => {
