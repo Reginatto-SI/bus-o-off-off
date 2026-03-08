@@ -3820,6 +3820,17 @@ export default function Events() {
                     )}
                   </TabsContent>
 
+                  {/* Tab Patrocinadores */}
+                  <TabsContent value="patrocinadores" className="mt-0">
+                    {editingId ? (
+                      <EventSponsorsTab eventId={editingId} companyId={activeCompanyId!} isReadOnly={isReadOnly} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-8 text-center">
+                        Salve o evento primeiro para vincular patrocinadores.
+                      </p>
+                    )}
+                  </TabsContent>
+
                   {/* Tab Publicação */}
                   <TabsContent value="publicacao" className="mt-0 space-y-4">
                     <div className="space-y-4">
