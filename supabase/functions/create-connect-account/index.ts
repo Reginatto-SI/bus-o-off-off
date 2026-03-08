@@ -90,13 +90,30 @@ serve(async (req) => {
 
     let stripeAccountId = company.stripe_account_id;
 
+    // Validar se a conta Stripe existente ainda é acessível (pode ter sido criada em modo teste).
+    // Se não for, limpar referência e criar nova conta.
+    if (stripeAccountId) {
+      try {
+        await stripe.accounts.retrieve(stripeAccountId);
+      } catch (retrieveError: any) {
+        if (retrieveError?.code === 'account_invalid' || retrieveError?.statusCode === 403) {
+          console.warn(`Stripe account ${stripeAccountId} inaccessível (provável conta de teste). Recriando...`);
+          stripeAccountId = null;
+          await supabaseAdmin
+            .from("companies")
+            .update({ stripe_account_id: null, stripe_onboarding_complete: false })
+            .eq("id", company_id);
+        } else {
+          throw retrieveError;
+        }
+      }
+    }
+
     if (!stripeAccountId) {
       const legalType = company.legal_type === "PF" ? "PF" : "PJ";
       const documentDigits = (company.document_number || company.cnpj || "").replace(/\D/g, "");
       const displayName = (company.trade_name || company.legal_name || company.name || "").trim();
 
-      // Comentário de manutenção: pré-validação garante mensagem amigável no admin,
-      // evitando erro genérico do Stripe quando dados cadastrais mínimos ainda faltam.
       if (legalType === "PF") {
         if (documentDigits.length !== 11) {
           return new Response(
@@ -146,8 +163,6 @@ serve(async (req) => {
         business_type: businessType,
       });
 
-      // Comentário de manutenção: só aplicamos PF/PJ no momento da criação.
-      // Contas já existentes não são recriadas para preservar histórico e onboarding atual.
       const account = await stripe.accounts.create({
         type: "express",
         country: "BR",
