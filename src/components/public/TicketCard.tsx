@@ -291,6 +291,50 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
               <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
             </div>
 
+            {/* Parceiros oficiais */}
+            {ticket.commercialPartners && ticket.commercialPartners.length > 0 && (
+              <div className="border-t pt-2 mt-2 space-y-2">
+                <p className="font-medium text-foreground text-xs">Parceiros oficiais</p>
+                <div className="flex flex-wrap gap-3 items-center">
+                  {ticket.commercialPartners.slice(0, 6).map((p, idx) => (
+                    p.logo_url ? (
+                      <img
+                        key={idx}
+                        src={p.logo_url}
+                        alt={p.name}
+                        className="h-8 max-w-[80px] object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded">{p.name}</span>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Patrocinadores do evento */}
+            {ticket.eventSponsors && ticket.eventSponsors.length > 0 && (
+              <div className="border-t pt-2 mt-2 space-y-2">
+                <p className="font-medium text-foreground text-xs">Patrocinadores do evento</p>
+                <div className="flex flex-wrap gap-3 items-center">
+                  {ticket.eventSponsors.slice(0, 6).map((s, idx) => (
+                    s.logo_url ? (
+                      <img
+                        key={idx}
+                        src={s.logo_url}
+                        alt={s.name}
+                        className="h-8 max-w-[80px] object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded">{s.name}</span>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Fee breakdown */}
             {ticket.fees && ticket.fees.length > 0 && (
               <div className="border-t pt-2 mt-2 space-y-1 text-xs">
