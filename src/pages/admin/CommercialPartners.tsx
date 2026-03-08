@@ -723,6 +723,7 @@ export default function CommercialPartners() {
         {wizardStep === 2 && renderLogoFields()}
         {wizardStep === 3 && renderRedirecionamentoFields()}
         {wizardStep === 4 && renderContatoFields()}
+        {wizardStep === 5 && renderExibicaoFields()}
       </div>
       {renderWizardFooter()}
     </div>
