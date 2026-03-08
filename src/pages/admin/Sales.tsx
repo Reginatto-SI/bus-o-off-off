@@ -1222,10 +1222,30 @@ export default function Sales() {
                           <div className="flex flex-col gap-0.5">
                             <StatusBadge status={sale.status} />
                             {(sale as any).platform_fee_status === 'pending' && (
-                              <span className="text-[10px] text-muted-foreground">Taxa pendente</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground cursor-help">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Taxa pendente
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Taxa da plataforma de {activeCompany?.platform_fee_percent ?? '—'}% sobre o valor da venda
+                                </TooltipContent>
+                              </Tooltip>
                             )}
                             {(sale as any).platform_fee_status === 'failed' && (
-                              <span className="text-[10px] text-destructive">Taxa falhou</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive cursor-help">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Taxa falhou
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Taxa da plataforma de {activeCompany?.platform_fee_percent ?? '—'}% sobre o valor da venda
+                                </TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         </TableCell>
