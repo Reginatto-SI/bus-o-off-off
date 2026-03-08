@@ -62,7 +62,16 @@ export async function renderTicketVisual(
   const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
   const hasSeatMeta = !!(ticket.seatCategory && ticket.seatCategory !== 'convencional') || !!(ticket.vehicleFloors && ticket.vehicleFloors > 1 && ticket.seatFloor);
   const seatMetaHeight = hasSeatMeta ? 60 : 0;
-  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight;
+
+  // Partners/sponsors height calculation
+  const partnersCount = ticket.commercialPartners?.slice(0, 6).filter(p => p.logo_url).length ?? 0;
+  const sponsorsCount = ticket.eventSponsors?.slice(0, 6).filter(s => s.logo_url).length ?? 0;
+  const partnersRows = partnersCount > 0 ? Math.ceil(partnersCount / 3) : 0;
+  const sponsorsRows = sponsorsCount > 0 ? Math.ceil(sponsorsCount / 3) : 0;
+  const partnersBlockHeight = partnersCount > 0 ? 40 + partnersRows * 56 : 0;
+  const sponsorsBlockHeight = sponsorsCount > 0 ? 40 + sponsorsRows * 56 : 0;
+
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
