@@ -1,30 +1,37 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Alerta ao Admin quando Pix não está disponível no Stripe
 
-## Mudança
+### Contexto
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+Hoje a edge function `create-platform-fee-checkout` faz fallback silencioso de `["card", "pix"]` para `["card"]` quando o Pix não está habilitado. O admin nunca fica sabendo. O mesmo padrão existe em `create-checkout-session`.
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+### Solução
 
-### Componentes afetados
+Adicionar um campo `pix_available` na resposta JSON da edge function. Quando o fallback acontecer, retornar `pix_available: false`. No frontend, após abrir o checkout, exibir um toast de aviso informando que o Pix não está habilitado e orientando o admin a ativá-lo no Dashboard do Stripe.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+### Alterações
 
-### Lógica simplificada (ambos os cards)
+**1. Edge Function `create-platform-fee-checkout/index.ts`**
+- Adicionar variável `pixAvailable = true` antes do try/catch
+- No bloco de fallback (quando Pix falha), setar `pixAvailable = false`
+- Incluir `pix_available: pixAvailable` no JSON de resposta junto com `url`
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+**2. Edge Function `create-checkout-session/index.ts`**
+- Mesma lógica: retornar `pix_available` na resposta quando houver fallback
 
-### Imagem padrão
+**3. Frontend `src/pages/admin/Sales.tsx` — `handlePayPlatformFee`**
+- Após receber `data.url`, verificar `data.pix_available === false`
+- Se false, exibir toast de aviso (sonner): "Pix não está habilitado na sua conta Stripe. O checkout foi aberto apenas com cartão. Para habilitar Pix, acesse Settings → Payment Methods no Dashboard do Stripe."
+- Manter o fluxo normal (abrir checkout em nova aba)
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+**4. Frontend `src/pages/public/Checkout.tsx`** (se aplicável)
+- Verificar se o checkout público também consome a resposta da edge function e, se sim, exibir aviso similar na tela admin (não no fluxo público do cliente)
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+### Comportamento esperado
+
+- Checkout funciona normalmente com ou sem Pix
+- Quando Pix não está disponível, o admin vê um toast amarelo de aviso com orientação clara
+- Nenhuma mudança no fluxo do cliente final
+- Nenhuma alteração em banco de dados
 
