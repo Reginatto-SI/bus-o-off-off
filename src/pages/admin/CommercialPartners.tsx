@@ -690,11 +690,11 @@ export default function CommercialPartners() {
       );
     }
 
-    if (wizardStep === 4) {
+    if (wizardStep === 5) {
       return (
         <div className="admin-modal__footer px-6 py-4">
           <div className="flex flex-wrap justify-between gap-3">
-            <Button type="button" variant="outline" onClick={() => setWizardStep(3)}>Voltar</Button>
+            <Button type="button" variant="outline" onClick={() => setWizardStep(4)}>Voltar</Button>
             <Button type="button" disabled={saving} onClick={() => handleWizardStepSave()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finalizar cadastro'}
             </Button>
