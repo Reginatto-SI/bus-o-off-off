@@ -339,6 +339,9 @@ export default function CommercialPartners() {
       contact_phone: partner.contact_phone ?? '',
       contact_email: partner.contact_email ?? '',
       notes: partner.notes ?? '',
+      show_on_showcase: partner.show_on_showcase,
+      show_on_event_page: partner.show_on_event_page,
+      show_on_ticket: partner.show_on_ticket,
     });
     setDialogOpen(true);
   };

@@ -407,6 +407,9 @@ export interface CommercialPartner {
   contact_phone: string | null;
   contact_email: string | null;
   notes: string | null;
+  show_on_showcase: boolean;
+  show_on_event_page: boolean;
+  show_on_ticket: boolean;
   created_at: string;
   updated_at: string;
 }
