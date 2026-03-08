@@ -3115,8 +3115,8 @@ export default function Events() {
                     ) : eventTrips.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground border rounded-lg">
                         <Bus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>Adicione viagens primeiro</p>
-                        <p className="text-sm">Cada embarque deve estar vinculado a uma viagem específica.</p>
+                        <p>Adicione transportes primeiro</p>
+                        <p className="text-sm">Cada embarque deve estar vinculado a um transporte específico.</p>
                       </div>
                     ) : (
                       <>
