@@ -1007,7 +1007,7 @@ export default function Sponsors() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Banner</TableHead>
+                    <TableHead>Logo</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Tipo de link</TableHead>
                     <TableHead>Ordem</TableHead>
