@@ -3786,35 +3786,73 @@ export default function Events() {
                           </div>
                         )}
 
-                        {/* Fee calculation preview */}
-                        {eventFees.filter(f => f.is_active).length > 0 && form.unit_price && (
+                        {/* ─── Simulação financeira (Etapa Passagens) ───
+                           Mostra o impacto completo: base + taxas + comissão + líquido.
+                           Mesma fórmula usada na Publicação e no Stripe. */}
+                        {form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (
                           <Card className="p-3 bg-muted/50">
                             <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
                             <div className="text-sm space-y-0.5">
-                              <div className="flex justify-between">
-                                <span>Passagem</span>
-                                <span>{formatCurrencyBRL(parseCurrencyInputBRL(form.unit_price))}</span>
-                              </div>
-                              {eventFees.filter(f => f.is_active).map(fee => {
+                              {(() => {
                                 const basePrice = parseCurrencyInputBRL(form.unit_price);
-                                const feeAmount = fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value;
-                                return (
-                                  <div key={fee.id} className="flex justify-between text-muted-foreground">
-                                    <span>{fee.name}</span>
-                                    <span>+ {formatCurrencyBRL(feeAmount)}</span>
-                                  </div>
+                                const activeFees = eventFees.filter(f => f.is_active);
+                                const totalAdditionalFees = activeFees.reduce(
+                                  (sum, fee) => sum + (fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value), 0
                                 );
-                              })}
-                              <div className="flex justify-between font-medium border-t pt-1 mt-1">
-                                <span>Total por passageiro</span>
-                                <span>{(() => {
-                                  const basePrice = parseCurrencyInputBRL(form.unit_price);
-                                  const totalFees = eventFees.filter(f => f.is_active).reduce((sum, fee) => {
-                                    return sum + (fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value);
-                                  }, 0);
-                                  return formatCurrencyBRL(basePrice + totalFees);
-                                })()}</span>
-                              </div>
+                                const totalAdditionalFeesRounded = Math.round(totalAdditionalFees * 100) / 100;
+                                const grossPerTicket = Math.round((basePrice + totalAdditionalFeesRounded) * 100) / 100;
+
+                                return (
+                                  <>
+                                    <div className="flex justify-between">
+                                      <span>Passagem</span>
+                                      <span>{formatCurrencyBRL(basePrice)}</span>
+                                    </div>
+                                    {activeFees.map(fee => {
+                                      const feeAmount = fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value;
+                                      return (
+                                        <div key={fee.id} className="flex justify-between text-muted-foreground">
+                                          <span>{fee.name}</span>
+                                          <span>+ {formatCurrencyBRL(feeAmount)}</span>
+                                        </div>
+                                      );
+                                    })}
+                                    <div className="flex justify-between font-medium border-t pt-1 mt-1">
+                                      <span>Total por passageiro</span>
+                                      <span>{formatCurrencyBRL(
+                                        form.pass_platform_fee_to_customer && hasValidCompanyPlatformFee
+                                          ? grossPerTicket + Math.round(grossPerTicket * ((companyPlatformFeePercent as number) / 100) * 100) / 100
+                                          : grossPerTicket
+                                      )}</span>
+                                    </div>
+                                    {/* Comissão da plataforma — visível quando a taxa está configurada */}
+                                    {hasValidCompanyPlatformFee && (() => {
+                                      const feePercent = companyPlatformFeePercent as number;
+                                      const platformFee = Math.round(grossPerTicket * (feePercent / 100) * 100) / 100;
+                                      const organizerNet = form.pass_platform_fee_to_customer
+                                        ? grossPerTicket
+                                        : Math.round((grossPerTicket - platformFee) * 100) / 100;
+                                      return (
+                                        <>
+                                          <Separator className="my-1" />
+                                          <div className="flex justify-between text-muted-foreground">
+                                            <span>Comissão plataforma ({feePercent}%)</span>
+                                            <span>{formatCurrencyBRL(platformFee)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-muted-foreground">
+                                            <span>Responsável</span>
+                                            <span>{form.pass_platform_fee_to_customer ? 'Cliente' : 'Organizador'}</span>
+                                          </div>
+                                          <div className="flex justify-between font-medium text-primary">
+                                            <span>Líquido estimado</span>
+                                            <span>{formatCurrencyBRL(organizerNet)}</span>
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </Card>
                         )}
@@ -3875,7 +3913,10 @@ export default function Events() {
                         </Select>
                       </div>
 
-                      {/* Resumo Financeiro do Evento */}
+                      {/* ─── Resumo Financeiro do Evento (Etapa Publicação) ───
+                         Cálculo centralizado: comissão da plataforma incide sobre o valor BRUTO
+                         cobrado do cliente (preço base + taxas adicionais), garantindo consistência
+                         com o valor enviado ao Stripe (gross_amount). */}
                       {editingId && form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (
                         <Card className="p-4">
                           <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
@@ -3886,37 +3927,65 @@ export default function Events() {
                             {(() => {
                               const basePrice = parseCurrencyInputBRL(form.unit_price);
                               if (!hasValidCompanyPlatformFee) {
-                            return (
-                              <Alert variant="destructive">
-                                <AlertTriangle className="h-4 w-4" />
-                                <AlertDescription>
-                                  Não foi possível carregar a taxa da plataforma da empresa. Ajuste em /admin/empresa para liberar a simulação.
-                                </AlertDescription>
-                              </Alert>
-                            );
-                          }
+                                return (
+                                  <Alert variant="destructive">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                      Não foi possível carregar a taxa da plataforma da empresa. Ajuste em /admin/empresa para liberar a simulação.
+                                    </AlertDescription>
+                                  </Alert>
+                                );
+                              }
 
-                          const platformFee = Math.round(basePrice * ((companyPlatformFeePercent as number) / 100) * 100) / 100;
-                              const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
-                              const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+                              // Soma das taxas adicionais ativas (fixas ou percentuais)
+                              const totalAdditionalFees = eventFees
+                                .filter(f => f.is_active)
+                                .reduce((sum, fee) => sum + (fee.fee_type === 'percent' ? basePrice * fee.value / 100 : fee.value), 0);
+                              const totalAdditionalFeesRounded = Math.round(totalAdditionalFees * 100) / 100;
+
+                              // Valor bruto cobrado do cliente ANTES de eventual repasse da taxa da plataforma
+                              const grossPerTicket = Math.round((basePrice + totalAdditionalFeesRounded) * 100) / 100;
+
+                              // Comissão da plataforma incide sobre o bruto (base + taxas adicionais)
+                              const feePercent = companyPlatformFeePercent as number;
+                              const platformFee = Math.round(grossPerTicket * (feePercent / 100) * 100) / 100;
+
+                              // Valor final ao cliente e líquido da empresa dependem de quem absorve a comissão
+                              const clientPrice = form.pass_platform_fee_to_customer
+                                ? Math.round((grossPerTicket + platformFee) * 100) / 100
+                                : grossPerTicket;
+                              const organizerNet = form.pass_platform_fee_to_customer
+                                ? grossPerTicket
+                                : Math.round((grossPerTicket - platformFee) * 100) / 100;
 
                               return (
                                 <>
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Preço ao cliente</span>
-                                    <span className="font-medium">{formatCurrencyBRL(clientPrice)}</span>
+                                    <span className="text-muted-foreground">Preço base da passagem</span>
+                                    <span>{formatCurrencyBRL(basePrice)}</span>
                                   </div>
+                                  {totalAdditionalFeesRounded > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Taxas adicionais</span>
+                                      <span>+ {formatCurrencyBRL(totalAdditionalFeesRounded)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between font-medium">
+                                    <span>Valor final ao cliente</span>
+                                    <span>{formatCurrencyBRL(clientPrice)}</span>
+                                  </div>
+                                  <Separator className="my-1" />
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Taxa da plataforma ({companyPlatformFeePercent}%)</span>
+                                    <span className="text-muted-foreground">Comissão da plataforma ({feePercent}%)</span>
                                     <span>{formatCurrencyBRL(platformFee)}</span>
                                   </div>
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Quem paga a taxa</span>
+                                    <span className="text-muted-foreground">Responsável pela comissão</span>
                                     <span>{form.pass_platform_fee_to_customer ? 'Cliente' : 'Organizador'}</span>
                                   </div>
                                   <Separator className="my-1" />
                                   <div className="flex justify-between font-medium text-primary">
-                                    <span>Valor líquido estimado por ingresso</span>
+                                    <span>Líquido estimado por ingresso</span>
                                     <span>{formatCurrencyBRL(organizerNet)}</span>
                                   </div>
                                   <div className="flex justify-between">
