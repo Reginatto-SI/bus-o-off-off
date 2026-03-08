@@ -1,37 +1,30 @@
 
 
-## Plano: Adicionar tooltip com info da taxa na coluna Status
+# Imagem padrão para eventos sem banner
 
-### Alteração
+## Mudança
 
-Arquivo: `src/pages/admin/Sales.tsx`, linhas 1222-1227.
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-Substituir os `<span>` de "Taxa pendente" e "Taxa falhou" por um bloco com ícone de info (`AlertCircle` ou `HelpCircle` do lucide-react) + texto, envolvido por um `Tooltip` (já importado no projeto).
-
-O tooltip exibirá: `"Taxa da plataforma de {X}% sobre o valor da venda"`, onde X vem de `activeCompany?.platform_fee_percent`.
-
-### Implementação
-
-```tsx
-{(sale as any).platform_fee_status === 'pending' && (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground cursor-help">
-        <AlertCircle className="h-3 w-3" />
-        Taxa pendente
-      </span>
-    </TooltipTrigger>
-    <TooltipContent>
-      Taxa da plataforma de {activeCompany?.platform_fee_percent ?? '—'}% sobre o valor da venda
-    </TooltipContent>
-  </Tooltip>
-)}
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-Mesmo padrão para `failed`, trocando texto/cor.
+### Componentes afetados
 
-### Dependências
-- `Tooltip`, `TooltipTrigger`, `TooltipContent` — já importados via `TooltipProvider` no App.tsx
-- `AlertCircle` do lucide-react — verificar se já está importado, senão adicionar ao import existente
-- `activeCompany` — já disponível no componente
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+
+### Lógica simplificada (ambos os cards)
+
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+
+### Imagem padrão
+
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
