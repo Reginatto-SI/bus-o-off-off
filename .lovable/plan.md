@@ -1,30 +1,33 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Refinamento de UX na tela de consulta de passagens
 
-## Mudança
+### Arquivo: `src/pages/public/TicketLookup.tsx`
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+### Mudanças pontuais (apenas textos e espaçamento)
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+#### 1. Ícone e cabeçalho (linhas 302-308)
+- Reduzir ícone de `w-16 h-16` para `w-14 h-14` e de `h-8 w-8` para `h-7 w-7`
+- Reduzir espaço entre ícone e título de `mb-4` para `mb-3`
+- Título: `"Consultar Passagens"` → `"Encontrar minha passagem"`
+- Subtítulo: → `"Informe o evento e o CPF utilizado na compra para localizar suas passagens."`
 
-### Componentes afetados
+#### 2. Card header (linha 312)
+- `"Buscar Passagens"` → remover o CardTitle ou manter algo mais leve como manter sem alteração (o card já tem contexto pelo cabeçalho). Manter `"Buscar Passagens"` como está para não quebrar estrutura — o foco é nos campos.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+#### 3. Label do evento (linha 316)
+- `"Evento"` → `"Evento da viagem"`
+- Placeholder (linha 329): `"Selecione o evento"` → `"Selecionar evento"`
 
-### Lógica simplificada (ambos os cards)
+#### 4. Campo CPF (linhas 341-348)
+- Manter label `"CPF do Passageiro"`
+- Adicionar texto auxiliar abaixo do Input: `<p className="text-xs text-muted-foreground mt-1">Use o CPF do passageiro ou o CPF utilizado na compra.</p>`
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+#### 5. Botão (linhas 351-358)
+- Texto: `"Buscar Passagens"` → `"Ver minhas passagens"`
 
-### Imagem padrão
+#### 6. Dica no rodapé do card (após o botão, antes do fechamento de CardContent)
+- Adicionar: `<p className="text-xs text-muted-foreground text-center pt-2">Dica: utilize o CPF informado no momento da compra da passagem.</p>`
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+### Nenhuma alteração de lógica, API, rotas ou banco de dados.
 
