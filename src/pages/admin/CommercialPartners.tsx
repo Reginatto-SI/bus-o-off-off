@@ -49,6 +49,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Briefcase,
   Check,
@@ -56,7 +57,6 @@ import {
   Image,
   Globe,
   Loader2,
-  
   Star,
   Pencil,
   Phone,
