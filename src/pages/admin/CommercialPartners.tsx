@@ -602,21 +602,26 @@ export default function CommercialPartners() {
   );
 
   const renderExibicaoFields = () => {
-    const applyTierDefaults = () => {
-      const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
-      setForm((prev) => ({ ...prev, ...defaults }));
-    };
+    // Verifica se a configuração atual diverge do padrão do nível selecionado.
+    // Se divergir, exibe um aviso visual discreto informando personalização manual.
+    const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
+    const isCustomized =
+      form.show_on_showcase !== defaults.show_on_showcase ||
+      form.show_on_event_page !== defaults.show_on_event_page ||
+      form.show_on_ticket !== defaults.show_on_ticket;
 
     return (
       <div className="space-y-5">
-        <div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Defina onde este parceiro será exibido no sistema. Você pode alterar essas opções a qualquer momento.
-          </p>
-          <Button type="button" variant="outline" size="sm" onClick={applyTierDefaults} className="mb-4">
-            Sugerir padrão para nível "{TIER_LABELS[form.partner_tier]}"
-          </Button>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          A configuração abaixo foi definida automaticamente com base no nível <strong>{TIER_LABELS[form.partner_tier]}</strong>. Você pode ajustar manualmente se necessário.
+        </p>
+
+        {isCustomized && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <span className="mt-0.5">⚠️</span>
+            <span>Configuração de exibição personalizada — as opções abaixo diferem do padrão do nível "{TIER_LABELS[form.partner_tier]}".</span>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="flex items-start gap-3">
@@ -626,7 +631,10 @@ export default function CommercialPartners() {
               onCheckedChange={(checked) => setForm({ ...form, show_on_showcase: !!checked })}
             />
             <div>
-              <Label htmlFor="cp-showcase" className="cursor-pointer">Mostrar na vitrine pública</Label>
+              <Label htmlFor="cp-showcase" className="cursor-pointer">
+                Mostrar na vitrine pública
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Básico, Destaque e Premium)</span>
+              </Label>
               <p className="text-xs text-muted-foreground">O parceiro aparecerá na seção "Parceiros oficiais" da página pública da empresa.</p>
             </div>
           </div>
@@ -638,7 +646,10 @@ export default function CommercialPartners() {
               onCheckedChange={(checked) => setForm({ ...form, show_on_event_page: !!checked })}
             />
             <div>
-              <Label htmlFor="cp-event-page" className="cursor-pointer">Mostrar na página de eventos</Label>
+              <Label htmlFor="cp-event-page" className="cursor-pointer">
+                Mostrar na página de eventos
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Destaque e Premium)</span>
+              </Label>
               <p className="text-xs text-muted-foreground">O parceiro aparecerá na página de detalhe dos eventos, separado dos patrocinadores.</p>
             </div>
           </div>
@@ -650,7 +661,10 @@ export default function CommercialPartners() {
               onCheckedChange={(checked) => setForm({ ...form, show_on_ticket: !!checked })}
             />
             <div>
-              <Label htmlFor="cp-ticket" className="cursor-pointer">Mostrar na passagem</Label>
+              <Label htmlFor="cp-ticket" className="cursor-pointer">
+                Mostrar na passagem
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(Premium)</span>
+              </Label>
               <p className="text-xs text-muted-foreground">O parceiro pode aparecer de forma discreta no rodapé da passagem gerada.</p>
             </div>
           </div>
