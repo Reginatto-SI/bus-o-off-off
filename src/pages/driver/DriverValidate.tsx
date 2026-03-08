@@ -370,8 +370,9 @@ export default function DriverValidate() {
 
       // Phase 2: Fallback — facingMode: environment
       if (!stream) {
-        console.log('[CAM] no back cam worked, trying facingMode environment');
-        try {
+        console.log('[CAM] no back cam worked, waiting 1s before fallbacks…');
+        await new Promise(r => setTimeout(r, 1000));
+        console.log('[CAM] trying facingMode environment');
           const envStream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: 'environment' } }, audio: false,
           });
