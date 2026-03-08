@@ -92,6 +92,18 @@ export default function Confirmation() {
           if (companyData) {
             setCompany(companyData as CompanyInfo);
             companyFeePercent = companyData.platform_fee_percent != null ? Number(companyData.platform_fee_percent) : null;
+
+            // Fetch commercial partners for ticket
+            const { data: partnersData } = await supabase
+              .from('commercial_partners')
+              .select('name, logo_url')
+              .eq('company_id', companyId)
+              .eq('status', 'ativo')
+              .eq('show_on_ticket', true)
+              .order('display_order')
+              .limit(6);
+            setCommercialPartners((partnersData || []).map((p: any) => ({ name: p.name, logo_url: p.logo_url })));
+          }
           }
         }
 
