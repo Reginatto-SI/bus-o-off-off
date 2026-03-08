@@ -15,12 +15,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,8 +37,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, Star, Loader2, Pencil } from 'lucide-react';
+import { Plus, Trash2, Star, Loader2, Pencil, ChevronsUpDown, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface EventSponsorsTabProps {
   eventId: string;
@@ -48,6 +55,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
   const [editingLink, setEditingLink] = useState<EventSponsor | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<EventSponsor | null>(null);
+  const [sponsorPopoverOpen, setSponsorPopoverOpen] = useState(false);
 
   const [form, setForm] = useState({
     sponsor_id: '',
@@ -85,6 +93,8 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
 
   const linkedSponsorIds = new Set(eventSponsors.map((es) => es.sponsor_id));
   const unlinkedSponsors = availableSponsors.filter((s) => !linkedSponsorIds.has(s.id));
+
+  const selectedSponsorName = unlinkedSponsors.find((s) => s.id === form.sponsor_id)?.name;
 
   const resetForm = () => {
     setEditingLink(null);
@@ -210,7 +220,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
           </p>
         </div>
         {!isReadOnly && (
-          <Button size="sm" onClick={handleOpenAdd} disabled={unlinkedSponsors.length === 0}>
+          <Button type="button" size="sm" onClick={handleOpenAdd} disabled={unlinkedSponsors.length === 0}>
             <Plus className="h-4 w-4 mr-1" />
             Adicionar
           </Button>
@@ -267,10 +277,10 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
                 </div>
                 {!isReadOnly && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(link)}>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(link)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(link)}>
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(link)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -291,16 +301,43 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
             {!editingLink && (
               <div className="space-y-2">
                 <Label>Patrocinador *</Label>
-                <Select value={form.sponsor_id} onValueChange={(v) => setForm({ ...form, sponsor_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um patrocinador" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unlinkedSponsors.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={sponsorPopoverOpen} onOpenChange={setSponsorPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={sponsorPopoverOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {selectedSponsorName || 'Selecione um patrocinador...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Pesquisar patrocinador..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum patrocinador encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {unlinkedSponsors.map((s) => (
+                            <CommandItem
+                              key={s.id}
+                              value={s.name}
+                              onSelect={() => {
+                                setForm({ ...form, sponsor_id: s.id });
+                                setSponsorPopoverOpen(false);
+                              }}
+                            >
+                              <Check className={cn('mr-2 h-4 w-4', form.sponsor_id === s.id ? 'opacity-100' : 'opacity-0')} />
+                              {s.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 
@@ -343,7 +380,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleSubmit} disabled={saving}>
+            <Button type="button" onClick={handleSubmit} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               {editingLink ? 'Salvar' : 'Vincular'}
             </Button>
