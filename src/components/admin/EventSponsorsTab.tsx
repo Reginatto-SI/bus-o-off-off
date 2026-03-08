@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Sponsor, EventSponsor } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -41,6 +40,34 @@ import { Plus, Trash2, Star, Loader2, Pencil, ChevronsUpDown, Check } from 'luci
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+// --- Tier system ---
+
+type SponsorTier = 'bronze' | 'prata' | 'ouro';
+
+const SPONSOR_TIERS: { value: SponsorTier; label: string; emoji: string; description: string; locations: string[] }[] = [
+  { value: 'bronze', label: 'Bronze', emoji: '🥉', description: 'Visibilidade básica no evento.', locations: ['Página do evento'] },
+  { value: 'prata', label: 'Prata', emoji: '🥈', description: 'Maior visibilidade para o patrocinador.', locations: ['Página do evento', 'Vitrine pública'] },
+  { value: 'ouro', label: 'Ouro', emoji: '🥇', description: 'Máxima visibilidade dentro do sistema.', locations: ['Página do evento', 'Vitrine pública', 'Passagem'] },
+];
+
+const TIER_VISIBILITY: Record<SponsorTier, { show_on_event_page: boolean; show_on_showcase: boolean; show_on_ticket: boolean }> = {
+  bronze: { show_on_event_page: true, show_on_showcase: false, show_on_ticket: false },
+  prata:  { show_on_event_page: true, show_on_showcase: true,  show_on_ticket: false },
+  ouro:   { show_on_event_page: true, show_on_showcase: true,  show_on_ticket: true },
+};
+
+function inferTier(flags: { show_on_event_page: boolean; show_on_showcase: boolean; show_on_ticket: boolean }): SponsorTier {
+  if (flags.show_on_ticket) return 'ouro';
+  if (flags.show_on_showcase) return 'prata';
+  return 'bronze';
+}
+
+function getTierInfo(tier: SponsorTier) {
+  return SPONSOR_TIERS.find((t) => t.value === tier)!;
+}
+
+// --- Component ---
+
 interface EventSponsorsTabProps {
   eventId: string;
   companyId: string;
@@ -59,9 +86,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
 
   const [form, setForm] = useState({
     sponsor_id: '',
-    show_on_event_page: true,
-    show_on_showcase: false,
-    show_on_ticket: false,
+    sponsor_tier: 'bronze' as SponsorTier,
     display_order: '1',
   });
 
@@ -100,9 +125,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
     setEditingLink(null);
     setForm({
       sponsor_id: '',
-      show_on_event_page: true,
-      show_on_showcase: false,
-      show_on_ticket: false,
+      sponsor_tier: 'bronze',
       display_order: '1',
     });
   };
@@ -116,9 +139,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
     setEditingLink(link);
     setForm({
       sponsor_id: link.sponsor_id,
-      show_on_event_page: link.show_on_event_page,
-      show_on_showcase: link.show_on_showcase,
-      show_on_ticket: link.show_on_ticket,
+      sponsor_tier: inferTier(link),
       display_order: String(link.display_order),
     });
     setDialogOpen(true);
@@ -128,14 +149,13 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
     setSaving(true);
 
     const orderValue = parseInt(form.display_order, 10) || 1;
+    const visibility = TIER_VISIBILITY[form.sponsor_tier];
 
     if (editingLink) {
       const { error } = await supabase
         .from('event_sponsors')
         .update({
-          show_on_event_page: form.show_on_event_page,
-          show_on_showcase: form.show_on_showcase,
-          show_on_ticket: form.show_on_ticket,
+          ...visibility,
           display_order: orderValue,
         })
         .eq('id', editingLink.id)
@@ -162,9 +182,7 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
           event_id: eventId,
           sponsor_id: form.sponsor_id,
           company_id: companyId,
-          show_on_event_page: form.show_on_event_page,
-          show_on_showcase: form.show_on_showcase,
-          show_on_ticket: form.show_on_ticket,
+          ...visibility,
           display_order: orderValue,
         });
 
@@ -245,49 +263,45 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
 
       {eventSponsors.length > 0 && (
         <div className="space-y-2">
-          {eventSponsors.map((link) => (
-            <Card key={link.id}>
-              <CardContent className="p-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  {link.sponsor?.banner_url ? (
-                    <img
-                      src={link.sponsor.banner_url}
-                      alt={link.sponsor?.name || ''}
-                      className="h-10 w-16 rounded object-contain bg-muted"
-                    />
-                  ) : (
-                    <div className="h-10 w-16 rounded bg-muted flex items-center justify-center">
-                      <Star className="h-4 w-4 text-muted-foreground" />
+          {eventSponsors.map((link) => {
+            const tier = inferTier(link);
+            const tierInfo = getTierInfo(tier);
+            return (
+              <Card key={link.id}>
+                <CardContent className="p-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {link.sponsor?.banner_url ? (
+                      <img
+                        src={link.sponsor.banner_url}
+                        alt={link.sponsor?.name || ''}
+                        className="h-10 w-16 rounded object-contain bg-muted"
+                      />
+                    ) : (
+                      <div className="h-10 w-16 rounded bg-muted flex items-center justify-center">
+                        <Star className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{link.sponsor?.name || 'Patrocinador'}</p>
+                      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+                        {tierInfo.emoji} {tierInfo.label}
+                      </span>
+                    </div>
+                  </div>
+                  {!isReadOnly && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(link)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(link)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">{link.sponsor?.name || 'Patrocinador'}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-0.5">
-                      {link.show_on_event_page && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Página do evento</span>
-                      )}
-                      {link.show_on_showcase && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Vitrine</span>
-                      )}
-                      {link.show_on_ticket && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Passagem</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {!isReadOnly && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEdit(link)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(link)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -341,30 +355,35 @@ export function EventSponsorsTab({ eventId, companyId, isReadOnly }: EventSponso
               </div>
             )}
 
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Onde exibir</Label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={form.show_on_event_page}
-                    onCheckedChange={(v) => setForm({ ...form, show_on_event_page: Boolean(v) })}
-                  />
-                  <span className="text-sm">Mostrar na página do evento</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={form.show_on_showcase}
-                    onCheckedChange={(v) => setForm({ ...form, show_on_showcase: Boolean(v) })}
-                  />
-                  <span className="text-sm">Mostrar na vitrine pública</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={form.show_on_ticket}
-                    onCheckedChange={(v) => setForm({ ...form, show_on_ticket: Boolean(v) })}
-                  />
-                  <span className="text-sm">Mostrar na passagem</span>
-                </label>
+            {/* Tier selection cards */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Nível do patrocínio</Label>
+              <div className="grid grid-cols-3 gap-3">
+                {SPONSOR_TIERS.map((tier) => (
+                  <button
+                    key={tier.value}
+                    type="button"
+                    onClick={() => setForm({ ...form, sponsor_tier: tier.value })}
+                    className={cn(
+                      'flex flex-col items-center text-center rounded-lg border p-3 transition-all cursor-pointer',
+                      form.sponsor_tier === tier.value
+                        ? 'ring-2 ring-primary bg-primary/5 border-primary'
+                        : 'border-border hover:border-primary/40'
+                    )}
+                  >
+                    <span className="text-2xl mb-1">{tier.emoji}</span>
+                    <span className="text-sm font-semibold">{tier.label}</span>
+                    <span className="text-[10px] text-muted-foreground mt-1 leading-tight">{tier.description}</span>
+                    <ul className="mt-2 space-y-0.5">
+                      {tier.locations.map((loc) => (
+                        <li key={loc} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Check className="h-3 w-3 text-primary shrink-0" />
+                          {loc}
+                        </li>
+                      ))}
+                    </ul>
+                  </button>
+                ))}
               </div>
             </div>
 
