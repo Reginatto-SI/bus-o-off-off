@@ -503,6 +503,71 @@ export default function PublicCompanyShowcase() {
                 </section>
               )}
 
+              {/* Parceiros oficiais: seção visível se houver parceiros com show_on_showcase */}
+              {!loading && (commercialPartners.length > 0 || showEditUI) && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider text-center">
+                      Parceiros oficiais
+                    </h2>
+                    {showEditUI && (
+                      <Button variant="ghost" size="sm" asChild className="gap-1 h-6 text-xs">
+                        <Link to="/admin/parceiros">
+                          <Pencil className="h-3 w-3" />
+                          Gerenciar
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                  {commercialPartners.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {commercialPartners.map((partner) => {
+                        const link = partner.website_url;
+                        const content = (
+                          <div className="flex flex-col items-center gap-2 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 h-full">
+                            {partner.logo_url ? (
+                              <img
+                                src={partner.logo_url}
+                                alt={partner.name}
+                                className="h-12 w-full object-contain"
+                              />
+                            ) : (
+                              <span className="text-xs font-medium text-muted-foreground text-center line-clamp-2">
+                                {partner.name}
+                              </span>
+                            )}
+                            {link && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3" />
+                                Site
+                              </span>
+                            )}
+                          </div>
+                        );
+
+                        return link ? (
+                          <a
+                            key={partner.id}
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            {content}
+                          </a>
+                        ) : (
+                          <div key={partner.id}>{content}</div>
+                        );
+                      })}
+                    </div>
+                  ) : showEditUI ? (
+                    <p className="text-center text-muted-foreground/50 text-sm italic">
+                      Nenhum parceiro ativo com exibição na vitrine. Use "Gerenciar" para configurar.
+                    </p>
+                  ) : null}
+                </section>
+              )}
+
               {/* Patrocinadores: seção oculta se não houver ativos */}
               {!loading && (sponsors.length > 0 || showEditUI) && (
                 <section className="space-y-3">
