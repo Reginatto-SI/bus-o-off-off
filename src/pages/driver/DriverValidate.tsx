@@ -34,18 +34,7 @@ declare global {
   }
 }
 
-const REASON_MESSAGES: Record<string, string> = {
-  ok: 'Operação realizada com sucesso',
-  invalid_qr: 'QR inválido',
-  already_checked_in: 'Já embarcado',
-  sale_cancelled: 'Venda cancelada',
-  sale_not_paid: 'Pagamento não confirmado',
-  checkout_without_checkin: 'Saída sem embarque',
-  already_checked_out: 'Saída já registrada',
-  checkout_disabled: 'Saída desabilitada para este evento',
-  not_allowed_company: 'Passagem de outra empresa',
-  invalid_action: 'Ação inválida',
-};
+// REASON_MESSAGES now imported from driverPhaseConfig
 
 /* ------------------------------------------------------------------ */
 /*  Debug state — temporary diagnostic panel for mobile field testing  */
