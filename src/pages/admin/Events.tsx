@@ -4302,48 +4302,48 @@ export default function Events() {
               <DialogTitle>{editingTripId ? 'Editar Transporte' : 'Adicionar Transporte'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSaveTrip} className="space-y-4">
-              {/* Trip Type - only show for creation, locked for editing */}
+              {/*
+                * Tipo de Transporte — lógica condicional baseada na política do evento:
+                * - ida_volta_obrigatorio / ida_obrigatoria_volta_opcional: tipo inferido automaticamente, campo oculto.
+                * - trecho_independente (Flexível): o usuário escolhe entre Ida, Volta ou Ida e Volta.
+                */}
               {!editingTripId ? (
-                <div className="space-y-2">
-                  <Label>Tipo de Transporte *</Label>
-                  <RadioGroup
-                    value={tripForm.trip_creation_type}
-                    onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
-                    className="flex flex-wrap gap-4"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ida" id="trip_type_ida" disabled={isRoundTripMandatoryPolicy} />
-                      <Label htmlFor="trip_type_ida" className="font-normal cursor-pointer">Somente Ida</Label>
+                isFlexiblePolicy ? (
+                  <div className="space-y-2">
+                    <Label>Tipo de Transporte *</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { value: 'ida' as TripCreationType, label: 'Somente Ida', icon: '➡️' },
+                        { value: 'volta' as TripCreationType, label: 'Somente Volta', icon: '⬅️' },
+                        { value: 'ida_volta' as TripCreationType, label: 'Ida e Volta', icon: '🔗' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setTripForm({ ...tripForm, trip_creation_type: opt.value })}
+                          className={cn(
+                            'flex flex-col items-center gap-1 rounded-lg border p-3 text-center transition-all text-xs',
+                            tripForm.trip_creation_type === opt.value
+                              ? 'ring-2 ring-primary border-primary bg-primary/5'
+                              : 'hover:border-primary/50 hover:bg-muted/50'
+                          )}
+                        >
+                          <span className="text-base">{opt.icon}</span>
+                          <span className="font-medium">{opt.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="volta" id="trip_type_volta" disabled={isGroupedTransportPolicy} />
-                      <Label htmlFor="trip_type_volta" className="font-normal cursor-pointer">Somente Volta</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ida_volta" id="trip_type_ida_volta" />
-                      <Label htmlFor="trip_type_ida_volta" className="font-normal cursor-pointer">Ida e Volta</Label>
-                    </div>
-                  </RadioGroup>
-                  {tripForm.trip_creation_type === 'ida_volta' && (
-                    <p className="text-xs text-muted-foreground">
-                      Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
-                    </p>
-                  )}
-                  {isGroupedTransportPolicy && (
-                    <p className="text-xs text-muted-foreground">
-                      Nesta política, não permitimos criar somente a volta para evitar incoerência comercial.
-                    </p>
-                  )}
-                  {isRoundTripMandatoryPolicy && (
-                    <p className="text-xs text-muted-foreground">
-                      Pacote obrigatório: use sempre “Ida e Volta” para manter o transporte agrupado.
-                    </p>
-                  )}
-                </div>
+                    {tripForm.trip_creation_type === 'ida_volta' && (
+                      <p className="text-xs text-muted-foreground">
+                        Serão criados dois trajetos vinculados (ida e volta) com os mesmos dados.
+                      </p>
+                    )}
+                  </div>
+                ) : null /* Políticas não-flexíveis: tipo inferido automaticamente, sem campo visível */
               ) : (
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : 'Somente Volta'}</span>
+                    Tipo: <span className="font-medium text-foreground">{tripForm.trip_creation_type === 'ida' ? 'Somente Ida' : tripForm.trip_creation_type === 'volta' ? 'Somente Volta' : 'Ida e Volta'}</span>
                     <span className="ml-2 text-xs">(não pode ser alterado)</span>
                   </p>
                 </div>
