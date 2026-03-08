@@ -260,6 +260,7 @@ export default function CommercialPartners() {
       toast.error(buildDebugToastMessage({ title: 'Erro ao criar parceiro', error, context: { action: 'insert', table: 'commercial_partners' } }));
     } else {
       setEditingId(data.id);
+      setForm((prev) => ({ ...prev, ...defaults }));
       toast.success('Parceiro criado. Continue o cadastro.');
       setWizardStep(2);
     }
