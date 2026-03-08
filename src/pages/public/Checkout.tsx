@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { formatPhoneBR } from '@/lib/phone';
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
