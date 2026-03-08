@@ -88,7 +88,14 @@ const WIZARD_STEPS = [
   { label: 'Logo', icon: Image },
   { label: 'Redirecionamento', icon: Globe },
   { label: 'Contato', icon: Phone },
+  { label: 'Exibição', icon: Eye },
 ] as const;
+
+const TIER_VISIBILITY_DEFAULTS: Record<CommercialPartnerTier, { show_on_showcase: boolean; show_on_event_page: boolean; show_on_ticket: boolean }> = {
+  basico: { show_on_showcase: true, show_on_event_page: false, show_on_ticket: false },
+  destaque: { show_on_showcase: true, show_on_event_page: true, show_on_ticket: false },
+  premium: { show_on_showcase: true, show_on_event_page: true, show_on_ticket: true },
+};
 
 const TIER_LABELS: Record<CommercialPartnerTier, string> = {
   basico: 'Básico',
