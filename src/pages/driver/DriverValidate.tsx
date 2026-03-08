@@ -205,7 +205,7 @@ export default function DriverValidate() {
 
   /* ---------- RPC validate ---------- */
 
-  const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout') => {
+  const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout' | 'reboard') => {
     if (!qrCodeToken || processing) return;
     setProcessing(true);
     lockScannerTemporarily();
