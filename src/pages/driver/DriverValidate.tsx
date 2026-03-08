@@ -652,20 +652,7 @@ export default function DriverValidate() {
                         Lista de passageiros
                       </Button>
                     )}
-                    {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-white/70"
-                        onClick={() => {
-                          if (manualToken.trim()) {
-                            handleValidate(manualToken.trim(), 'checkout');
-                          }
-                        }}
-                      >
-                        Registrar saída (opcional)
-                      </Button>
-                    )}
+                    {/* Remove the old checkout button — now handled by phase selector */}
                   </div>
                 </div>
               )}
