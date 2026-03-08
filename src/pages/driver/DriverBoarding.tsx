@@ -192,6 +192,7 @@ export default function DriverBoarding() {
     setLocations(Array.from(uniqueLocs, ([id, name]) => ({ id, name })));
 
     setLoadingData(false);
+    setRefreshing(false);
   }, [user, activeCompanyId]);
 
   useEffect(() => {
