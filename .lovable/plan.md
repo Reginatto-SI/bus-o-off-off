@@ -1,30 +1,69 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Níveis de Patrocínio no Vínculo de Evento
 
-## Mudança
+### Arquivo: `src/components/admin/EventSponsorsTab.tsx`
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+### 1. Constantes de nível
 
-### Constante
+Adicionar no topo do arquivo:
+
 ```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+type SponsorTier = 'bronze' | 'prata' | 'ouro';
+
+const SPONSOR_TIERS: { value: SponsorTier; label: string; emoji: string; description: string }[] = [
+  { value: 'bronze', label: 'Bronze', emoji: '🥉', description: 'Visibilidade básica no evento.' },
+  { value: 'prata', label: 'Prata', emoji: '🥈', description: 'Maior visibilidade para o patrocinador.' },
+  { value: 'ouro', label: 'Ouro', emoji: '🥇', description: 'Máxima visibilidade dentro do sistema.' },
+];
+
+const TIER_VISIBILITY: Record<SponsorTier, { show_on_event_page: boolean; show_on_showcase: boolean; show_on_ticket: boolean }> = {
+  bronze: { show_on_event_page: true, show_on_showcase: false, show_on_ticket: false },
+  prata:  { show_on_event_page: true, show_on_showcase: true,  show_on_ticket: false },
+  ouro:   { show_on_event_page: true, show_on_showcase: true,  show_on_ticket: true },
+};
+
+// Função para inferir o nível a partir dos checkboxes existentes
+function inferTier(flags: { show_on_event_page: boolean; show_on_showcase: boolean; show_on_ticket: boolean }): SponsorTier {
+  if (flags.show_on_ticket) return 'ouro';
+  if (flags.show_on_showcase) return 'prata';
+  return 'bronze';
+}
 ```
 
-### Componentes afetados
+### 2. Estado do formulário
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+Adicionar `sponsor_tier: SponsorTier` ao `form` state. Valor default: `'bronze'`. No `resetForm`, resetar para `'bronze'`. No `handleOpenEdit`, inferir o tier com `inferTier(link)`.
 
-### Lógica simplificada (ambos os cards)
+### 3. Modal — substituir checkboxes por cards de nível (linhas 344-369)
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+Substituir a seção "Onde exibir" com checkboxes por:
 
-### Imagem padrão
+- Label: **Nível do patrocínio**
+- Grid `grid-cols-3 gap-3` com 3 cards clicáveis (mesmo padrão visual dos Parceiros Comerciais)
+- Cada card: emoji + label + descrição + lista de locais incluídos
+- Card selecionado: `ring-2 ring-primary bg-primary/5`
+- Ao clicar, setar `sponsor_tier` e aplicar automaticamente os 3 booleans de visibilidade via `TIER_VISIBILITY`
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+Os checkboxes deixam de existir na interface; os booleans são controlados exclusivamente pelo nível.
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+### 4. Lista de patrocinadores — badge de nível (linhas 265-274)
+
+Substituir os badges individuais (Página do evento / Vitrine / Passagem) por um único badge com emoji e label do nível:
+
+```tsx
+<span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+  {TIER_EMOJI} {TIER_LABEL}
+</span>
+```
+
+Inferir o nível a partir dos flags existentes usando `inferTier()`.
+
+### 5. Persistência
+
+Nenhuma alteração no banco de dados. Os 3 campos booleanos (`show_on_event_page`, `show_on_showcase`, `show_on_ticket`) continuam sendo gravados normalmente — o nível é apenas uma abstração visual que controla esses campos.
+
+### Resultado
+
+O modal passa de checkboxes técnicos para cards comerciais com níveis claros (Bronze 🥉 / Prata 🥈 / Ouro 🥇), e a listagem mostra o nível diretamente no badge.
 
