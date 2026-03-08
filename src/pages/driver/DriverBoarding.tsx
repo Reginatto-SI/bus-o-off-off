@@ -264,7 +264,6 @@ export default function DriverBoarding() {
 
     const result = (Array.isArray(data) ? data[0] : data) as any;
     if (result?.result === 'success') {
-      // Update local state with the new boarding_status
       const newStatus = result.boarding_status;
       setPassengers(prev =>
         prev.map(p =>
@@ -286,6 +285,42 @@ export default function DriverBoarding() {
 
     setProcessing(false);
     setConfirmPassenger(null);
+  };
+
+  const handleUndo = async (passenger: PassengerRow) => {
+    setProcessing(true);
+    const { data, error } = await supabase.rpc('validate_ticket_scan', {
+      p_qr_code_token: passenger.qrCodeToken,
+      p_action: phaseConfig.undoAction,
+      p_device_info: navigator.userAgent,
+      p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+    });
+
+    if (error) {
+      toast({ title: 'Erro', description: 'Não foi possível desfazer a operação.', variant: 'destructive' });
+      setProcessing(false);
+      setUndoPassenger(null);
+      return;
+    }
+
+    const result = (Array.isArray(data) ? data[0] : data) as any;
+    if (result?.result === 'success') {
+      const newStatus = result.boarding_status;
+      setPassengers(prev =>
+        prev.map(p =>
+          p.ticketId === passenger.ticketId ? { ...p, boardingStatus: newStatus } : p
+        )
+      );
+      toast({ title: phaseConfig.undoSuccessTitle, description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
+    } else {
+      const reason = result?.reason_code === 'undo_not_applicable'
+        ? 'Operação não pode ser desfeita nesta fase'
+        : 'Não foi possível desfazer';
+      toast({ title: reason, variant: 'destructive' });
+    }
+
+    setProcessing(false);
+    setUndoPassenger(null);
   };
 
   // Helper: is this passenger actionable in current phase?
