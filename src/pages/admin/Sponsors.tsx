@@ -66,7 +66,7 @@ import {
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 
-// Comentário: patrocinadores são globais (não vinculados a eventos) e aparecem no carrossel do app.
+// Cadastro base de patrocinadores reutilizáveis — podem ser vinculados a eventos com controle de exibição.
 interface SponsorFilters {
   search: string;
   status: 'all' | Sponsor['status'];
