@@ -21,6 +21,11 @@ export type PhaseConfig = {
   /** Confirmation dialog */
   confirmTitle: string;
   confirmAction: string;
+  /** Undo operation */
+  undoAction: 'undo_checkin' | 'undo_checkout' | 'undo_reboard';
+  undoTitle: string;
+  undoConfirmText: string;
+  undoSuccessTitle: string;
 };
 
 export const PHASE_CONFIG: Record<OperationalPhase, PhaseConfig> = {
