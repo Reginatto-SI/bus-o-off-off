@@ -971,6 +971,8 @@ export default function Sales() {
         ticketGenBoardingDate,
         ticketGenFees,
         ticketGenTotalPaid,
+        ticketGenPartners.length > 0 ? ticketGenPartners : undefined,
+        ticketGenSponsors.length > 0 ? ticketGenSponsors : undefined,
       )
     : null;
 
