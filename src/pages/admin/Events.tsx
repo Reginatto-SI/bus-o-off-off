@@ -1628,7 +1628,7 @@ export default function Events() {
       fetchEventTrips(editingId);
       fetchEvents();
     } catch (error) {
-      toast.error('Erro ao salvar viagem');
+      toast.error('Erro ao salvar transporte');
       console.error(error);
     }
     setSavingTrip(false);
