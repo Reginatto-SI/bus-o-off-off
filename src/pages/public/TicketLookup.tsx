@@ -326,7 +326,7 @@ export default function TicketLookup() {
                 </div>
               ) : (
                 <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecionar evento" /></SelectTrigger>
                   <SelectContent>
                     {events?.map((e: any) => (
                       <SelectItem key={e.id} value={e.id} className="truncate">
