@@ -56,6 +56,8 @@ export default function Confirmation() {
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
+  const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
   // Ref para evitar chamada dupla ao verify-payment-status durante polling
   const verifyCalledRef = useRef(false);
 
