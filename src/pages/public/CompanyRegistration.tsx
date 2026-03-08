@@ -307,7 +307,7 @@ export default function CompanyRegistration() {
                       <Input
                         id="phone"
                         value={phone}
-                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
                         placeholder="(00) 00000-0000"
                         maxLength={15}
                         className="h-9"

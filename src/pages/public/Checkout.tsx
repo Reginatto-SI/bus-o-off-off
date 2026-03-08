@@ -58,12 +58,8 @@ function formatCpfMask(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-function formatPhoneMask(value: string): string {
-  const d = value.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-}
+// Comentário: formatPhoneMask substituído por formatPhoneBR de @/lib/phone.ts (fonte única de verdade).
+const formatPhoneMask = formatPhoneBR;
 
 // Comentário P0: generateSeatLayout removido. Assentos devem ser materializados no banco via
 // sincronização do layout_snapshot em /admin/frota. O checkout nunca cria assentos localmente.

@@ -55,13 +55,8 @@ const formatCpfInput = (value: string) => {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 };
 
-const formatPhoneInput = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-};
+// Comentário: formatPhoneInput substituído por formatPhoneBR de @/lib/phone.ts (fonte única de verdade).
+const formatPhoneInput = formatPhoneBR;
 
 const formatCepInput = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 8);
