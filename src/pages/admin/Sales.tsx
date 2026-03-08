@@ -271,6 +271,8 @@ export default function Sales() {
   const [ticketGenLoading, setTicketGenLoading] = useState(false);
   const [ticketGenFees, setTicketGenFees] = useState<{ name: string; amount: number }[] | undefined>(undefined);
   const [ticketGenTotalPaid, setTicketGenTotalPaid] = useState<number | undefined>(undefined);
+  const [ticketGenPartners, setTicketGenPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
+  const [ticketGenSponsors, setTicketGenSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [
