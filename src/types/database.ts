@@ -12,6 +12,9 @@ export type SponsorStatus = 'ativo' | 'inativo';
 export type SponsorLinkType = 'site' | 'whatsapp';
 export type PartnerStatus = 'ativo' | 'inativo';
 
+export type CommercialPartnerStatus = 'ativo' | 'inativo';
+export type CommercialPartnerTier = 'basico' | 'destaque' | 'premium';
+
 export type CompanyLegalType = 'PF' | 'PJ';
 
 export interface Company {
