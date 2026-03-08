@@ -29,17 +29,7 @@ function formatCPF(value: string) {
     .replace(/\.(\d{3})(\d)/, '.$1-$2');
 }
 
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 10) {
-    return digits
-      .replace(/^(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{4})(\d)/, '$1-$2');
-  }
-  return digits
-    .replace(/^(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d)/, '$1-$2');
-}
+// Comentário: formatPhone substituído por formatPhoneBR de @/lib/phone.ts (fonte única de verdade).
 
 const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
