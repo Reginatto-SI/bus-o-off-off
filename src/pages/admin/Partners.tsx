@@ -117,9 +117,9 @@ export default function Partners() {
     }
 
     if (error) {
-      toast.error('Erro ao salvar parceiro');
+      toast.error('Erro ao salvar sócio');
     } else {
-      toast.success(editingId ? 'Parceiro atualizado' : 'Parceiro cadastrado');
+      toast.success(editingId ? 'Sócio atualizado' : 'Sócio cadastrado');
       setModalOpen(false);
       fetchPartners();
     }
