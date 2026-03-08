@@ -870,13 +870,19 @@ export default function Sales() {
 
   // ── Actions dropdown ──
   const getSaleActions = (sale: Sale): ActionItem[] => {
+    const feeStatus = (sale as any).platform_fee_status;
+    const feePending = feeStatus === 'pending' || feeStatus === 'failed';
+
     const actions: ActionItem[] = [
       { label: 'Ver Detalhes', icon: Eye, onClick: () => openDetail(sale) },
-      { label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) },
     ];
 
-    // Ticket generation action (hidden for BLOQUEIO and cancelled sales)
-    if (sale.status !== 'cancelado' && sale.customer_name !== 'BLOQUEIO') {
+    if (!feePending) {
+      actions.push({ label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) });
+    }
+
+    // Ticket generation action (hidden for BLOQUEIO, cancelled sales, and pending fees)
+    if (sale.status !== 'cancelado' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
       actions.push({
         label: 'Gerar Passagem',
         icon: FileText,
@@ -895,8 +901,7 @@ export default function Sales() {
 
     if (isGerente) {
       // Ação: Pagar taxa da plataforma (quando pendente)
-      const feeStatus = (sale as any).platform_fee_status;
-      if (feeStatus === 'pending' || feeStatus === 'failed') {
+      if (feePending) {
         actions.push({
           label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
           icon: CreditCard,
@@ -904,7 +909,7 @@ export default function Sales() {
         });
       }
 
-      if (sale.status === 'reservado') {
+      if (sale.status === 'reservado' && !feePending) {
         actions.push({
           label: 'Marcar como Pago',
           icon: CheckCircle,
