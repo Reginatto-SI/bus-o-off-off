@@ -1,30 +1,64 @@
 
 
-# Imagem padrão para eventos sem banner
+## Diagnóstico confirmado pela evidência do debug panel
 
-## Mudança
+### O que o debug mostra
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
-
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+```text
+permission: granted        ← OK
+stream: ✅                  ← criou
+tracks: 1 — [ended]        ← MORTA — algo matou o stream
+videoSize: 2×2              ← NÃO É frame real (nenhuma câmera produz 2×2)
+readyState: 4               ← browser diz "tem dados" mas é lixo
+cameraReady: ✅             ← FALSO POSITIVO (2 > 0 passa no check)
 ```
 
-### Componentes afetados
+### Duas causas raiz
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+**Causa 1 — Race condition entre init e visibilitychange**
 
-### Lógica simplificada (ambos os cards)
+Quando o Android abre o dialog de permissão da câmera, o browser pode disparar `visibilitychange: hidden`. O handler chama `stopCurrentStream()` ou `startCamera()` em paralelo com a inicialização em andamento. Resultado: uma chamada mata o stream da outra.
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+```text
+1. Effect → startCamera() → getUserMedia() (async, aguardando permissão)
+2. Dialog de permissão aparece → visibilitychange:hidden → stopCurrentStream()
+3. Permissão concedida → stream criado → bind no video
+4. visibilitychange:visible → startCamera() → stopCurrentStream() MATA o stream do passo 3
+5. Novo getUserMedia... mas o stream anterior já morreu
+```
 
-### Imagem padrão
+**Causa 2 — Threshold de frame muito baixo**
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+O check `videoWidth > 0` aceita 2×2 como "frame real". Isso é um resíduo do elemento `<video>` com CSS de tamanho mínimo, não um frame de câmera. O `cameraReady` vira `true` sem imagem real.
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+---
+
+### Correção (arquivo único: `DriverValidate.tsx`)
+
+#### Fix 1 — Guard de inicialização com ref
+Adicionar `initInProgressRef = useRef(false)`. Se `startCamera` já está rodando, ignorar chamadas subsequentes. Previne a race condition entre effect e visibility handler.
+
+#### Fix 2 — Não matar stream durante inicialização
+O handler de `visibilitychange:hidden` só deve chamar `stopCurrentStream()` se `initInProgressRef.current === false`. Se a câmera está sendo inicializada (e.g. dialog de permissão aberto), não interferir.
+
+#### Fix 3 — Threshold de frame realista
+Trocar `videoWidth > 0` por `videoWidth > 100 && videoHeight > 100`. Nenhuma câmera real produz menos que 100px. Elimina o falso positivo de 2×2.
+
+#### Fix 4 — Atualizar debug panel com mais dados
+- Mostrar `initInProgress` no painel
+- Mostrar timestamp do último init
+- Mostrar contador de quantas vezes `startCamera` foi chamada
+- Mostrar track state em tempo real (não só no momento do init)
+
+#### Fix 5 — Log de visibilitychange
+Adicionar log `[CAM] visibilitychange → ${state}, initInProgress=${ref}` para confirmar se o handler está interferindo.
+
+---
+
+### Resumo
+
+- 1 arquivo: `src/pages/driver/DriverValidate.tsx`
+- Race condition confirmada por evidência (`tracks: ended` + `videoSize: 2×2`)
+- Guard de init + threshold de frame + proteção de visibility
+- Debug panel melhorado para validar fix no celular
 
