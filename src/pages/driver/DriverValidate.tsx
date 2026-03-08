@@ -781,6 +781,10 @@ export default function DriverValidate() {
           </div>
         </details>
 
+        {/* Versão compacta */}
+        <p className="mt-3 text-center text-[10px] text-muted-foreground">
+          Build {(() => { try { return require('@/generated/build-info').APP_VERSION; } catch { return ''; } })()}
+        </p>
       </div>
     </div>
   );

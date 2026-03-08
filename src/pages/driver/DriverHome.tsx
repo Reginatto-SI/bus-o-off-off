@@ -302,6 +302,11 @@ export default function DriverHome() {
             Ver embarque
           </Button>
         </div>
+
+        {/* Versão do sistema */}
+        <div className="pt-2">
+          <VersionIndicator />
+        </div>
       </div>
     </div>
   );

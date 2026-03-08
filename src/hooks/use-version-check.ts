@@ -50,8 +50,29 @@ export function useVersionCheck() {
     return () => window.clearInterval(interval);
   }, [checkForUpdates]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (!availableVersion) return;
+
+    // Limpar Cache Storage (PWA / service worker caches)
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (e) {
+      console.debug("Falha ao limpar caches", e);
+    }
+
+    // Unregister service workers
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch (e) {
+      console.debug("Falha ao remover service workers", e);
+    }
+
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set("v", availableVersion);
     window.location.replace(currentUrl.toString());
