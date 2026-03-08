@@ -127,6 +127,7 @@ export default function DriverBoarding() {
 
     if (!tripId) {
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
