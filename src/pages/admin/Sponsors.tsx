@@ -82,7 +82,7 @@ const SPONSOR_BANNER_BUCKET = 'event-images';
 
 const WIZARD_STEPS = [
   { label: 'Dados', icon: User },
-  { label: 'Banner', icon: Image },
+  { label: 'Logo', icon: Image },
   { label: 'Redirecionamento', icon: Link2 },
   { label: 'Contato', icon: Phone },
 ] as const;
@@ -436,7 +436,7 @@ export default function Sponsors() {
       .upload(fileName, file);
 
     if (uploadError) {
-      toast.error('Erro ao fazer upload do banner');
+      toast.error('Erro ao fazer upload da logo');
       setUploadingImage(false);
       return;
     }
@@ -452,10 +452,10 @@ export default function Sponsors() {
       .eq('company_id', activeCompanyId!);
 
     if (updateError) {
-      toast.error('Erro ao salvar URL do banner');
+      toast.error('Erro ao salvar URL da logo');
     } else {
       setForm((prev) => ({ ...prev, banner_url: publicUrl }));
-      toast.success('Banner enviado com sucesso');
+      toast.success('Logo enviada com sucesso');
     }
 
     setUploadingImage(false);
@@ -565,14 +565,14 @@ export default function Sponsors() {
     </div>
   );
 
-  const renderBannerFields = () => (
+  const renderLogoFields = () => (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Banner do patrocinador</Label>
+        <Label>Logo do patrocinador</Label>
         {form.banner_url ? (
           <div className="space-y-2">
             <label
-              className="group relative block h-[150px] w-full max-w-[600px] overflow-hidden rounded-lg border bg-muted cursor-pointer"
+              className="group relative block h-[200px] w-[200px] overflow-hidden rounded-lg border bg-muted cursor-pointer"
             >
               <img
                 src={form.banner_url}
@@ -582,7 +582,7 @@ export default function Sponsors() {
               />
               <img
                 src={form.banner_url}
-                alt="Banner do patrocinador"
+                alt="Logo do patrocinador"
                 className="relative h-full w-full object-contain"
               />
               <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
@@ -591,7 +591,7 @@ export default function Sponsors() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  aria-label="Visualizar banner"
+                  aria-label="Visualizar logo"
                   onClick={(e) => {
                     e.preventDefault();
                     setImagePreviewOpen(true);
@@ -604,7 +604,7 @@ export default function Sponsors() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive hover:text-destructive"
-                  aria-label="Remover banner"
+                  aria-label="Remover logo"
                   onClick={async (e) => {
                     e.preventDefault();
                     if (editingId) {
@@ -614,7 +614,7 @@ export default function Sponsors() {
                         .eq('id', editingId);
                     }
                     setForm((prev) => ({ ...prev, banner_url: null }));
-                    toast.success('Banner removido');
+                    toast.success('Logo removida');
                   }}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -644,7 +644,7 @@ export default function Sponsors() {
           </div>
         ) : (
           <label
-            className={`flex h-[150px] w-full max-w-[600px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+            className={`flex h-[200px] w-[200px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
               !editingId
                 ? 'border-muted-foreground/15 cursor-not-allowed'
                 : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
@@ -664,18 +664,15 @@ export default function Sponsors() {
             )}
             <p className="text-sm text-muted-foreground">
               {uploadingImage
-                ? 'Enviando banner...'
+                ? 'Enviando logo...'
                 : !editingId
                   ? 'Salve o patrocinador primeiro'
-                  : 'Adicionar banner (600×150)'}
+                  : 'Adicionar logo (512×512)'}
             </p>
-            <p className="text-xs text-muted-foreground/70">Tamanho ideal: 600×150px</p>
+            <p className="text-xs text-muted-foreground/70">Tamanho ideal: 512×512px · PNG ou JPG · Fundo transparente recomendado</p>
           </label>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Tamanho ideal do arquivo: 600×150px (4:1). Mantemos o preview no tamanho real quando possível.
-      </p>
     </div>
   );
 
@@ -860,7 +857,7 @@ export default function Sponsors() {
       {renderWizardProgress()}
       <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
         {wizardStep === 1 && renderDadosFields()}
-        {wizardStep === 2 && renderBannerFields()}
+        {wizardStep === 2 && renderLogoFields()}
         {wizardStep === 3 && renderRedirecionamentoFields()}
         {wizardStep === 4 && renderContatoFields()}
       </div>
@@ -888,7 +885,7 @@ export default function Sponsors() {
             className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
           >
             <Image className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">Banner</span>
+            <span className="min-w-0 truncate">Logo</span>
           </TabsTrigger>
           <TabsTrigger
             value="redirecionamento"
@@ -908,7 +905,7 @@ export default function Sponsors() {
 
         <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
-          <TabsContent value="banner" className="mt-0">{renderBannerFields()}</TabsContent>
+          <TabsContent value="banner" className="mt-0">{renderLogoFields()}</TabsContent>
           <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
           <TabsContent value="contato" className="mt-0">{renderContatoFields()}</TabsContent>
         </div>
@@ -1010,7 +1007,7 @@ export default function Sponsors() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Banner</TableHead>
+                    <TableHead>Logo</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Tipo de link</TableHead>
                     <TableHead>Ordem</TableHead>
@@ -1023,15 +1020,15 @@ export default function Sponsors() {
                     <TableRow key={sponsor.id}>
                       <TableCell>
                         {sponsor.banner_url ? (
-                          <div className="h-10 w-24 overflow-hidden rounded-md border bg-muted">
+                          <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted">
                             <img
                               src={sponsor.banner_url}
-                              alt={`Banner ${sponsor.name}`}
-                              className="h-full w-full object-cover"
+                              alt={`Logo ${sponsor.name}`}
+                              className="h-full w-full object-contain"
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sem banner</span>
+                          <span className="text-xs text-muted-foreground">Sem logo</span>
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{sponsor.name}</TableCell>
@@ -1051,22 +1048,22 @@ export default function Sponsors() {
           </Card>
         )}
 
-        {/* Preview do banner */}
+        {/* Preview da logo */}
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Pré-visualização do banner</DialogTitle>
+              <DialogTitle>Pré-visualização da logo</DialogTitle>
             </DialogHeader>
             {form.banner_url ? (
               <div className="flex justify-center">
                 <img
                   src={form.banner_url}
-                  alt="Pré-visualização do banner do patrocinador"
-                  className="w-full max-w-[720px] rounded-lg border object-contain"
+                  alt="Pré-visualização da logo do patrocinador"
+                  className="max-h-[400px] rounded-lg border object-contain"
                 />
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Nenhum banner selecionado.</p>
+              <p className="text-sm text-muted-foreground">Nenhuma logo selecionada.</p>
             )}
           </DialogContent>
         </Dialog>
