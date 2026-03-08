@@ -61,6 +61,10 @@ type DebugInfo = {
   constraintUsed: string;
   lastError: string | null;
   devices: string[];
+  initInProgress: boolean;
+  initCount: number;
+  lastInitAt: string | null;
+  liveTrackStates: string[];
 };
 
 const INITIAL_DEBUG: DebugInfo = {
@@ -78,6 +82,10 @@ const INITIAL_DEBUG: DebugInfo = {
   constraintUsed: 'none',
   lastError: null,
   devices: [],
+  initInProgress: false,
+  initCount: 0,
+  lastInitAt: null,
+  liveTrackStates: [],
 };
 
 /**
@@ -98,6 +106,8 @@ export default function DriverValidate() {
 
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const initInProgressRef = useRef(false);
+  const initCountRef = useRef(0);
   const scanIntervalRef = useRef<number | null>(null);
 
   const [processing, setProcessing] = useState(false);
@@ -196,9 +206,20 @@ export default function DriverValidate() {
   /* ---------- startCamera — core init routine ---------- */
 
   const startCamera = useCallback(async (video: HTMLVideoElement) => {
+    // Guard: prevent concurrent initializations (race condition fix)
+    if (initInProgressRef.current) {
+      console.log('[CAM] startCamera SKIPPED — init already in progress');
+      return;
+    }
+    initInProgressRef.current = true;
+    initCountRef.current += 1;
+    const thisInitId = initCountRef.current;
+    const initTimestamp = new Date().toISOString().slice(11, 23);
+    console.log(`[CAM] startCamera #${thisInitId} BEGIN at ${initTimestamp}`);
+
     stopCurrentStream();
     setCameraError(null);
-    updateDebug({ ...INITIAL_DEBUG });
+    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: thisInitId, lastInitAt: initTimestamp });
 
     // 1. Check permission
     try {
@@ -320,7 +341,8 @@ export default function DriverValidate() {
       // 8. Frame validation — poll for real frames
       let frameConfirmed = false;
       for (let i = 0; i < 30; i++) {
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
+        // Strict threshold: real cameras always produce > 100px
+        if (video.videoWidth > 100 && video.videoHeight > 100) {
           frameConfirmed = true;
           break;
         }
@@ -359,11 +381,15 @@ export default function DriverValidate() {
         if (caps?.torch) setTorchSupported(true);
       }
     } catch (err: any) {
-      console.error('[CAM] init failed:', err);
+      console.error(`[CAM] init #${thisInitId} failed:`, err);
       setCameraReady(false);
       const errMsg = `Erro ao iniciar câmera: ${err?.message || 'desconhecido'}`;
       setCameraError(errMsg);
       updateDebug({ cameraReady: false, cameraError: errMsg, lastError: err?.message });
+    } finally {
+      initInProgressRef.current = false;
+      updateDebug({ initInProgress: false });
+      console.log(`[CAM] startCamera #${thisInitId} END`);
     }
   }, [stopCurrentStream, updateDebug]);
 
@@ -380,12 +406,18 @@ export default function DriverValidate() {
   useEffect(() => {
     if (!videoEl) return;
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[CAM] tab visible → restart');
+      const state = document.visibilityState;
+      const inProgress = initInProgressRef.current;
+      console.log(`[CAM] visibilitychange → ${state}, initInProgress=${inProgress}`);
+      if (state === 'visible') {
         startCamera(videoEl);
       } else {
-        console.log('[CAM] tab hidden → stop');
-        stopCurrentStream();
+        // Do NOT kill the stream if init is in progress (e.g. permission dialog open on Android)
+        if (!inProgress) {
+          stopCurrentStream();
+        } else {
+          console.log('[CAM] hidden ignored — init in progress (permission dialog?)');
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -421,6 +453,9 @@ export default function DriverValidate() {
   useEffect(() => {
     if (!videoEl) return;
     const id = window.setInterval(() => {
+      const liveTrackStates = streamRef.current
+        ? streamRef.current.getVideoTracks().map(t => t.readyState)
+        : [];
       setDebugInfo(prev => ({
         ...prev,
         videoWidth: videoEl.videoWidth,
@@ -428,6 +463,7 @@ export default function DriverValidate() {
         readyState: videoEl.readyState,
         cameraReady,
         cameraError,
+        liveTrackStates,
       }));
     }, 1000);
     return () => window.clearInterval(id);
@@ -615,6 +651,7 @@ export default function DriverValidate() {
             <p><strong>permission:</strong> {debugInfo.permission}</p>
             <p><strong>stream:</strong> {debugInfo.streamExists ? '✅' : '❌'}</p>
             <p><strong>tracks:</strong> {debugInfo.trackCount} — [{debugInfo.trackStates.join(', ')}]</p>
+            <p><strong>liveTrackStates:</strong> [{debugInfo.liveTrackStates.join(', ')}]</p>
             <p><strong>labels:</strong> {debugInfo.trackLabels.join(', ') || '—'}</p>
             <p><strong>constraint:</strong> {debugInfo.constraintUsed}</p>
             <p><strong>videoSize:</strong> {debugInfo.videoWidth}×{debugInfo.videoHeight}</p>
@@ -622,6 +659,9 @@ export default function DriverValidate() {
             <p><strong>cameraReady:</strong> {debugInfo.cameraReady ? '✅' : '❌'}</p>
             <p><strong>cameraError:</strong> {debugInfo.cameraError ?? '—'}</p>
             <p><strong>scanner:</strong> {debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}</p>
+            <p><strong>initInProgress:</strong> {debugInfo.initInProgress ? '⏳ sim' : 'não'}</p>
+            <p><strong>initCount:</strong> {debugInfo.initCount}</p>
+            <p><strong>lastInitAt:</strong> {debugInfo.lastInitAt ?? '—'}</p>
             <p><strong>lastError:</strong> {debugInfo.lastError ?? '—'}</p>
             <p><strong>devices:</strong></p>
             {debugInfo.devices.length > 0 ? (
