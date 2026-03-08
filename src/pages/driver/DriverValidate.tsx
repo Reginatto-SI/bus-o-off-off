@@ -647,6 +647,35 @@ export default function DriverValidate() {
         {/* ========== TEMPORARY DEBUG PANEL ========== */}
         <details className="rounded-lg border border-muted bg-muted/20 p-2 text-xs">
           <summary className="cursor-pointer font-mono text-muted-foreground">🔧 Debug câmera</summary>
+          <button
+            type="button"
+            className="mt-2 mb-1 w-full rounded border border-muted bg-background px-2 py-1 font-mono text-xs active:bg-muted"
+            onClick={() => {
+              const lines = [
+                `permission: ${debugInfo.permission}`,
+                `stream: ${debugInfo.streamExists ? '✅' : '❌'}`,
+                `tracks: ${debugInfo.trackCount} — [${debugInfo.trackStates.join(', ')}]`,
+                `liveTrackStates: [${debugInfo.liveTrackStates.join(', ')}]`,
+                `labels: ${debugInfo.trackLabels.join(', ') || '—'}`,
+                `constraint: ${debugInfo.constraintUsed}`,
+                `videoSize: ${debugInfo.videoWidth}×${debugInfo.videoHeight}`,
+                `readyState: ${debugInfo.readyState}`,
+                `cameraReady: ${debugInfo.cameraReady ? '✅' : '❌'}`,
+                `cameraError: ${debugInfo.cameraError ?? '—'}`,
+                `scanner: ${debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}`,
+                `initInProgress: ${debugInfo.initInProgress ? '⏳ sim' : 'não'}`,
+                `initCount: ${debugInfo.initCount}`,
+                `lastInitAt: ${debugInfo.lastInitAt ?? '—'}`,
+                `lastError: ${debugInfo.lastError ?? '—'}`,
+                `devices: ${debugInfo.devices.length > 0 ? debugInfo.devices.join(' | ') : 'nenhum'}`,
+                `--- userAgent: ${navigator.userAgent}`,
+              ];
+              navigator.clipboard.writeText(lines.join('\n')).then(() => {
+                const btn = document.activeElement as HTMLButtonElement;
+                if (btn) { btn.textContent = '✅ Copiado!'; setTimeout(() => { btn.textContent = '📋 Copiar log'; }, 2000); }
+              });
+            }}
+          >📋 Copiar log</button>
           <div className="mt-2 space-y-1 font-mono text-muted-foreground break-all">
             <p><strong>permission:</strong> {debugInfo.permission}</p>
             <p><strong>stream:</strong> {debugInfo.streamExists ? '✅' : '❌'}</p>
