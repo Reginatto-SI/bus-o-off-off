@@ -406,12 +406,18 @@ export default function DriverValidate() {
   useEffect(() => {
     if (!videoEl) return;
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[CAM] tab visible → restart');
+      const state = document.visibilityState;
+      const inProgress = initInProgressRef.current;
+      console.log(`[CAM] visibilitychange → ${state}, initInProgress=${inProgress}`);
+      if (state === 'visible') {
         startCamera(videoEl);
       } else {
-        console.log('[CAM] tab hidden → stop');
-        stopCurrentStream();
+        // Do NOT kill the stream if init is in progress (e.g. permission dialog open on Android)
+        if (!inProgress) {
+          stopCurrentStream();
+        } else {
+          console.log('[CAM] hidden ignored — init in progress (permission dialog?)');
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
