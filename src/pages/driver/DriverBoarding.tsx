@@ -61,6 +61,7 @@ export default function DriverBoarding() {
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
   const [undoPassenger, setUndoPassenger] = useState<PassengerRow | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [_tripId, setTripId] = useState<string | null>(null);
 
   // Read phase from localStorage
@@ -69,9 +70,10 @@ export default function DriverBoarding() {
     : 'ida';
   const phaseConfig = PHASE_CONFIG[activePhase];
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!user || !activeCompanyId) return;
-    setLoadingData(true);
+    if (!silent) setLoadingData(true);
+    if (silent) setRefreshing(true);
 
     const persistedTripId = getPersistedTripId(user.id, activeCompanyId);
     
@@ -125,6 +127,7 @@ export default function DriverBoarding() {
 
     if (!tripId) {
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
@@ -139,6 +142,7 @@ export default function DriverBoarding() {
     if (!tickets || tickets.length === 0) {
       setPassengers([]);
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
@@ -152,6 +156,7 @@ export default function DriverBoarding() {
     if (!sales) {
       setPassengers([]);
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
@@ -190,6 +195,7 @@ export default function DriverBoarding() {
     setLocations(Array.from(uniqueLocs, ([id, name]) => ({ id, name })));
 
     setLoadingData(false);
+    setRefreshing(false);
   }, [user, activeCompanyId]);
 
   useEffect(() => {
@@ -201,7 +207,7 @@ export default function DriverBoarding() {
   useEffect(() => {
     if (!user || !activeCompanyId || !canAccess) return;
     const interval = setInterval(() => {
-      fetchData();
+      fetchData(true);
     }, 15000);
     return () => clearInterval(interval);
   }, [user, activeCompanyId, canAccess, fetchData]);
@@ -360,8 +366,8 @@ export default function DriverBoarding() {
             </Badge>
             <span className="text-sm font-medium">Passageiros</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => fetchData()} aria-label="Atualizar">
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={() => fetchData(true)} aria-label="Atualizar" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
 
