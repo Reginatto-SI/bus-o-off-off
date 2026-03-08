@@ -303,6 +303,74 @@ export async function renderTicketVisual(
   y += 26;
   ctx.fillText('• Recomenda-se chegar com antecedência mínima de 10 minutos.', cardX + 34, y);
 
+  // Commercial Partners section
+  const visiblePartners = (ticket.commercialPartners || []).slice(0, 6).filter(p => p.logo_url);
+  if (visiblePartners.length > 0) {
+    y += 10;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 18px Inter, Arial, sans-serif';
+    ctx.fillText('Parceiros oficiais', cardX + 34, y);
+    y += 28;
+
+    const logoSize = 44;
+    const logoGap = 16;
+    let logoX = cardX + 34;
+    for (let i = 0; i < visiblePartners.length; i++) {
+      if (i > 0 && i % 3 === 0) {
+        logoX = cardX + 34;
+        y += logoSize + logoGap;
+      }
+      try {
+        const img = await loadImage(visiblePartners[i].logo_url!);
+        ctx.drawImage(img, logoX, y, logoSize, logoSize);
+      } catch { /* skip failed logos */ }
+      logoX += logoSize + logoGap;
+    }
+    y += logoSize;
+  }
+
+  // Event Sponsors section
+  const visibleSponsors = (ticket.eventSponsors || []).slice(0, 6).filter(s => s.logo_url);
+  if (visibleSponsors.length > 0) {
+    y += 10;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 18px Inter, Arial, sans-serif';
+    ctx.fillText('Patrocinadores do evento', cardX + 34, y);
+    y += 28;
+
+    const logoSize = 44;
+    const logoGap = 16;
+    let logoX = cardX + 34;
+    for (let i = 0; i < visibleSponsors.length; i++) {
+      if (i > 0 && i % 3 === 0) {
+        logoX = cardX + 34;
+        y += logoSize + logoGap;
+      }
+      try {
+        const img = await loadImage(visibleSponsors[i].logo_url!);
+        ctx.drawImage(img, logoX, y, logoSize, logoSize);
+      } catch { /* skip failed logos */ }
+      logoX += logoSize + logoGap;
+    }
+    y += logoSize;
+  }
+
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {
     y += 10;
