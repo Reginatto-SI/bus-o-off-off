@@ -1,33 +1,30 @@
 
 
-## Bug: CHECK constraint on `ticket_validations.action` blocks undo operations
+# Imagem padrão para eventos sem banner
 
-### Root Cause
+## Mudança
 
-The `ticket_validations` table (created in `20260403000000_add_driver_qr_validation_flow.sql`) has a CHECK constraint on line 22:
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-```sql
-action text NOT NULL CHECK (action IN ('checkin', 'checkout'))
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-This constraint only allows `checkin` and `checkout`. The new actions `reboard`, `undo_checkin`, `undo_checkout`, and `undo_reboard` are rejected, causing the 400 error the user sees.
+### Componentes afetados
 
-### Fix
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-One SQL migration to drop the old constraint and add a new one with all valid actions:
+### Lógica simplificada (ambos os cards)
 
-```sql
-ALTER TABLE public.ticket_validations
-  DROP CONSTRAINT ticket_validations_action_check;
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-ALTER TABLE public.ticket_validations
-  ADD CONSTRAINT ticket_validations_action_check
-  CHECK (action IN ('checkin', 'checkout', 'reboard', 'undo_checkin', 'undo_checkout', 'undo_reboard'));
-```
+### Imagem padrão
 
-### Files
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-- **New migration SQL** — alter CHECK constraint on `ticket_validations.action`
-
-No frontend changes needed. The code is already correct; only the DB constraint is blocking.
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
