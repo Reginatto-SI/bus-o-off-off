@@ -73,6 +73,8 @@ export default function PublicCompanyShowcase() {
         setCompany(null);
         setEvents([]);
         setSponsors([]);
+        setCommercialPartners([]);
+        setLoading(false);
         setLoading(false);
         return;
       }
