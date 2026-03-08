@@ -162,12 +162,12 @@ export default function Partners() {
         ) : partners.length === 0 ? (
           <EmptyState
             icon={<Handshake className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum parceiro cadastrado"
-            description="Cadastre um parceiro para dividir a comissão da plataforma automaticamente"
+            title="Nenhum sócio cadastrado"
+            description="Cadastre um sócio para dividir a comissão da plataforma automaticamente via Stripe Connect."
             action={
               <Button onClick={openNew}>
                 <Plus className="h-4 w-4 mr-2" />
-                Novo Parceiro
+                Novo Sócio
               </Button>
             }
           />
