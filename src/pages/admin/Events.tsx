@@ -168,21 +168,30 @@ const imageStatusOptions = [
   { value: 'without', label: 'Sem imagem' },
 ];
 
-const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; description: string }> = [
+/**
+ * Política de Transporte do Evento — define a regra macro de como transportes são cadastrados e vendidos.
+ * - ida_volta_obrigatorio: O modal de transporte NÃO exibe seleção de tipo; assume sempre Ida e Volta.
+ * - ida_obrigatoria_volta_opcional: O modal NÃO exibe seleção de tipo; assume sempre Somente Ida.
+ * - trecho_independente (Flexível): O modal EXIBE seleção de tipo, permitindo Ida, Volta ou Ida e Volta.
+ */
+const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; description: string; icon: string }> = [
   {
-    value: 'trecho_independente',
-    label: 'Venda por Trecho Independente',
-    description: 'Ida e volta são vendidos separadamente, com estoque controlado por trecho.',
+    value: 'ida_volta_obrigatorio',
+    label: 'Ida e volta obrigatória',
+    description: 'Venda em pacote único. Ida e volta sempre vinculadas.',
+    icon: '🔗',
   },
   {
     value: 'ida_obrigatoria_volta_opcional',
-    label: 'Ida Obrigatória + Volta Opcional',
-    description: 'Regra padrão: toda venda exige ida, e a volta pode ser adicionada opcionalmente.',
+    label: 'Somente ida',
+    description: 'Evento com operação apenas de ida, sem retorno vinculado.',
+    icon: '➡️',
   },
   {
-    value: 'ida_volta_obrigatorio',
-    label: 'Pacote Ida + Volta Obrigatório',
-    description: 'Venda em pacote único, com validação simultânea de vagas em ida e volta.',
+    value: 'trecho_independente',
+    label: 'Flexível',
+    description: 'Permite cadastrar transportes de ida, volta ou ida e volta conforme necessidade do evento.',
+    icon: '🔀',
   },
 ];
 
