@@ -1,30 +1,45 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Adicionar emojis de nível na coluna Nível da tabela
 
-## Mudança
+### Arquivo: `src/pages/admin/CommercialPartners.tsx`
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+### Mudança
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+Na tabela de listagem (linha 933), adicionar os mesmos emojis usados nos cards de seleção ao lado do label do nível:
+
+- **Básico** → sem emoji (como nos cards)
+- **Destaque** → ⭐
+- **Premium** → 🔥
+
+Alterar a linha 933 de:
+```
+{TIER_LABELS[partner.partner_tier]}
+```
+Para incluir o emoji correspondente, reutilizando um mapa constante `TIER_EMOJIS` (ou inline):
+
+```
+{TIER_LABELS[partner.partner_tier]}{partner.partner_tier === 'destaque' ? ' ⭐' : partner.partner_tier === 'premium' ? ' 🔥' : ''}
 ```
 
-### Componentes afetados
+Alternativamente, criar um mapa `TIER_EMOJIS` junto ao `TIER_LABELS` para manter consistência com os cards:
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+```ts
+const TIER_EMOJIS: Record<CommercialPartnerTier, string> = {
+  basico: '',
+  destaque: ' ⭐',
+  premium: ' 🔥',
+};
+```
 
-### Lógica simplificada (ambos os cards)
+E usar `{TIER_LABELS[tier]}{TIER_EMOJIS[tier]}` tanto nos cards quanto na tabela.
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+### Resultado
 
-### Imagem padrão
+A coluna "Nível" na tabela passará a exibir:
+- `Básico`
+- `Destaque ⭐`
+- `Premium 🔥`
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+Mantendo consistência visual entre a tabela e os cards do modal.
 
