@@ -885,7 +885,7 @@ export default function Sponsors() {
             className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
           >
             <Image className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">Banner</span>
+            <span className="min-w-0 truncate">Logo</span>
           </TabsTrigger>
           <TabsTrigger
             value="redirecionamento"
