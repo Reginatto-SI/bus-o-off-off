@@ -43,14 +43,51 @@ const REASON_MESSAGES: Record<string, string> = {
   invalid_action: 'Ação inválida',
 };
 
+/* ------------------------------------------------------------------ */
+/*  Debug state — temporary diagnostic panel for mobile field testing  */
+/* ------------------------------------------------------------------ */
+type DebugInfo = {
+  permission: string;
+  streamExists: boolean;
+  trackCount: number;
+  trackStates: string[];
+  trackLabels: string[];
+  videoWidth: number;
+  videoHeight: number;
+  readyState: number;
+  cameraReady: boolean;
+  cameraError: string | null;
+  scannerSupported: boolean;
+  constraintUsed: string;
+  lastError: string | null;
+  devices: string[];
+};
+
+const INITIAL_DEBUG: DebugInfo = {
+  permission: 'unknown',
+  streamExists: false,
+  trackCount: 0,
+  trackStates: [],
+  trackLabels: [],
+  videoWidth: 0,
+  videoHeight: 0,
+  readyState: 0,
+  cameraReady: false,
+  cameraError: null,
+  scannerSupported: false,
+  constraintUsed: 'none',
+  lastError: null,
+  devices: [],
+};
+
 /**
- * CONSTRAINT CHAIN for camera:
- * 1. Try rear camera with facingMode: { ideal: 'environment' }
- * 2. Fallback: any camera without facingMode constraint
- * This handles devices where environment constraint fails.
+ * CONSTRAINT CHAIN — simplified (no resolution hints).
+ * Some Android devices accept width/height constraints but return
+ * a stream that never produces frames. Removing resolution ideals
+ * forces the device to pick its native resolution which always works.
  */
 const CAMERA_CONSTRAINTS_CHAIN: MediaStreamConstraints[] = [
-  { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+  { video: { facingMode: { ideal: 'environment' } }, audio: false },
   { video: true, audio: false },
 ];
 
@@ -72,12 +109,8 @@ export default function DriverValidate() {
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>(INITIAL_DEBUG);
 
-  /**
-   * videoEl via callback ref (useState, not useRef).
-   * The camera-init effect depends on this — it only fires once the
-   * <video> element is actually in the DOM (after auth resolves).
-   */
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
   const reasonLabel = useMemo(() => {
@@ -85,14 +118,21 @@ export default function DriverValidate() {
     return REASON_MESSAGES[overlay.reason_code] ?? 'Validação bloqueada';
   }, [overlay]);
 
+  /* ---------- helpers ---------- */
+
+  const updateDebug = useCallback((patch: Partial<DebugInfo>) => {
+    setDebugInfo(prev => ({ ...prev, ...patch }));
+  }, []);
+
   const lockScannerTemporarily = useCallback(() => {
     setScanLocked(true);
     window.setTimeout(() => setScanLocked(false), 1000);
   }, []);
 
+  /* ---------- RPC validate ---------- */
+
   const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout') => {
     if (!qrCodeToken || processing) return;
-
     setProcessing(true);
     lockScannerTemporarily();
 
@@ -105,38 +145,25 @@ export default function DriverValidate() {
 
     if (error) {
       setOverlay({
-        result: 'blocked',
-        reason_code: 'rpc_error',
-        checkout_enabled: false,
-        passenger_name: null,
-        seat_label: null,
-        event_name: null,
-        boarding_label: null,
-        passenger_cpf_masked: null,
-        boarding_status: null,
+        result: 'blocked', reason_code: 'rpc_error', checkout_enabled: false,
+        passenger_name: null, seat_label: null, event_name: null,
+        boarding_label: null, passenger_cpf_masked: null, boarding_status: null,
       });
       setProcessing(false);
       return;
     }
 
     const payload = (Array.isArray(data) ? data[0] : data) as ValidationResponse | null;
-
-    setOverlay(
-      payload ?? {
-        result: 'blocked',
-        reason_code: 'invalid_response',
-        checkout_enabled: false,
-        passenger_name: null,
-        seat_label: null,
-        event_name: null,
-        boarding_label: null,
-        passenger_cpf_masked: null,
-        boarding_status: null,
-      }
-    );
+    setOverlay(payload ?? {
+      result: 'blocked', reason_code: 'invalid_response', checkout_enabled: false,
+      passenger_name: null, seat_label: null, event_name: null,
+      boarding_label: null, passenger_cpf_masked: null, boarding_status: null,
+    });
     setManualToken(qrCodeToken);
     setProcessing(false);
   }, [lockScannerTemporarily, processing]);
+
+  /* ---------- torch ---------- */
 
   const toggleTorch = useCallback(async () => {
     if (!streamRef.current) return;
@@ -149,12 +176,10 @@ export default function DriverValidate() {
     } catch { /* torch not supported */ }
   }, [torchOn]);
 
-  /**
-   * stopCurrentStream — stops all tracks on the current stream
-   * and clears the scan interval. Must be called before opening a
-   * new stream or when cleaning up on unmount / visibility change.
-   */
+  /* ---------- stopCurrentStream ---------- */
+
   const stopCurrentStream = useCallback(() => {
+    console.log('[CAM] stopCurrentStream');
     if (scanIntervalRef.current) {
       window.clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
@@ -168,82 +193,133 @@ export default function DriverValidate() {
     setTorchSupported(false);
   }, []);
 
-  /**
-   * startCamera — the core initialization routine.
-   *
-   * KEY DESIGN DECISIONS:
-   * 1. Always clean up the previous stream first (avoids leaked tracks).
-   * 2. Try constraints in a chain: rear camera first, then any camera.
-   * 3. After getting the stream, assign srcObject and call play().
-   * 4. ONLY set cameraReady=true AFTER confirming real frames exist
-   *    (videoWidth > 0). This prevents the false-positive "ready but
-   *    black" state that was the original bug.
-   * 5. If play() fails or no frames appear within 3s, show an error
-   *    with a retry button instead of a silent black screen.
-   */
+  /* ---------- startCamera — core init routine ---------- */
+
   const startCamera = useCallback(async (video: HTMLVideoElement) => {
     stopCurrentStream();
     setCameraError(null);
+    updateDebug({ ...INITIAL_DEBUG });
 
-    // Setup BarcodeDetector if available
+    // 1. Check permission
+    try {
+      const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      console.log('[CAM] permission state:', perm.state);
+      updateDebug({ permission: perm.state });
+    } catch {
+      console.log('[CAM] permissions API not available');
+      updateDebug({ permission: 'api_unavailable' });
+    }
+
+    // 2. Setup BarcodeDetector
     const hasBarcodeDetector = Boolean(window.BarcodeDetector);
     setScannerSupported(hasBarcodeDetector);
+    updateDebug({ scannerSupported: hasBarcodeDetector });
     if (hasBarcodeDetector && window.BarcodeDetector) {
       detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
     }
 
-    // Try each constraint set in order until one works
+    // 3. Enumerate devices for debug
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+      const deviceLabels = videoDevices.map(d => `${d.label || 'unnamed'} [${d.deviceId.slice(0, 8)}]`);
+      console.log('[CAM] videoinput devices:', deviceLabels);
+      updateDebug({ devices: deviceLabels });
+    } catch (e) {
+      console.warn('[CAM] enumerateDevices failed', e);
+    }
+
+    // 4. Try constraint chain
     let stream: MediaStream | null = null;
-    for (const constraints of CAMERA_CONSTRAINTS_CHAIN) {
+    let usedConstraint = 'none';
+
+    for (let i = 0; i < CAMERA_CONSTRAINTS_CHAIN.length; i++) {
+      const constraints = CAMERA_CONSTRAINTS_CHAIN[i];
       try {
+        console.log(`[CAM] trying constraint #${i}:`, JSON.stringify(constraints));
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        usedConstraint = `chain[${i}]`;
+        console.log(`[CAM] constraint #${i} SUCCESS`);
         break;
-      } catch (err) {
-        console.warn('[DriverValidate] Constraint falhou:', constraints, err);
+      } catch (err: any) {
+        console.warn(`[CAM] constraint #${i} FAILED:`, err?.name, err?.message);
+        updateDebug({ lastError: `constraint[${i}]: ${err?.name}: ${err?.message}` });
+      }
+    }
+
+    // 5. If chain failed, try enumerateDevices fallback
+    if (!stream) {
+      console.log('[CAM] all constraints failed, trying enumerateDevices fallback');
+      try {
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+        // Prefer back camera
+        const backCam = videoDevices.find(d =>
+          /back|rear|environment|traseira/i.test(d.label)
+        );
+        const target = backCam ?? videoDevices[0];
+        if (target) {
+          console.log('[CAM] fallback device:', target.label, target.deviceId.slice(0, 8));
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: target.deviceId } },
+            audio: false,
+          });
+          usedConstraint = `fallback:${target.label || target.deviceId.slice(0, 8)}`;
+        }
+      } catch (err: any) {
+        console.error('[CAM] enumerateDevices fallback failed:', err);
+        updateDebug({ lastError: `fallback: ${err?.name}: ${err?.message}` });
       }
     }
 
     if (!stream) {
-      setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador.');
+      const errMsg = 'Não foi possível abrir a câmera. Verifique a permissão do navegador.';
+      setCameraError(errMsg);
+      updateDebug({ cameraError: errMsg, streamExists: false });
       return;
     }
 
+    // 6. Bind stream
     streamRef.current = stream;
     video.srcObject = stream;
 
-    /**
-     * Wait for loadedmetadata + play() to confirm the video is actually
-     * rendering frames. A stream can be "created" successfully but produce
-     * no visible output if srcObject assignment or play() silently fails.
-     */
+    const tracks = stream.getVideoTracks();
+    console.log('[CAM] stream bound. Tracks:', tracks.length, tracks.map(t => `${t.label} state=${t.readyState}`));
+    updateDebug({
+      streamExists: true,
+      constraintUsed: usedConstraint,
+      trackCount: tracks.length,
+      trackStates: tracks.map(t => t.readyState),
+      trackLabels: tracks.map(t => t.label || 'unnamed'),
+    });
+
+    // 7. Wait for loadedmetadata + play()
     try {
       await new Promise<void>((resolve, reject) => {
+        if (video.readyState >= 1) {
+          console.log('[CAM] metadata already loaded (readyState=' + video.readyState + ')');
+          resolve();
+          return;
+        }
         const onMeta = () => {
           video.removeEventListener('loadedmetadata', onMeta);
+          console.log('[CAM] loadedmetadata fired');
           resolve();
         };
-        // If metadata already loaded (re-init scenario), resolve immediately
-        if (video.readyState >= 1) {
-          resolve();
-        } else {
-          video.addEventListener('loadedmetadata', onMeta);
-          // Timeout: if metadata never fires in 5s, reject
-          setTimeout(() => {
-            video.removeEventListener('loadedmetadata', onMeta);
-            reject(new Error('loadedmetadata timeout'));
-          }, 5000);
-        }
+        video.addEventListener('loadedmetadata', onMeta);
+        setTimeout(() => {
+          video.removeEventListener('loadedmetadata', onMeta);
+          reject(new Error('loadedmetadata timeout (5s)'));
+        }, 5000);
       });
 
+      console.log('[CAM] calling play()...');
       await video.play();
+      console.log('[CAM] play() resolved');
 
-      /**
-       * FRAME VALIDATION: After play(), check that videoWidth > 0.
-       * Some devices report play() success but render black until a
-       * frame is decoded. We poll briefly (up to 2s) to confirm.
-       */
+      // 8. Frame validation — poll for real frames
       let frameConfirmed = false;
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 30; i++) {
         if (video.videoWidth > 0 && video.videoHeight > 0) {
           frameConfirmed = true;
           break;
@@ -251,83 +327,85 @@ export default function DriverValidate() {
         await new Promise(r => setTimeout(r, 100));
       }
 
+      console.log('[CAM] frame check:', frameConfirmed, `${video.videoWidth}×${video.videoHeight}`, 'readyState=' + video.readyState);
+      updateDebug({
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        readyState: video.readyState,
+      });
+
       if (!frameConfirmed) {
-        console.warn('[DriverValidate] Stream aberto mas sem frames reais (videoWidth=0)');
-        // Still mark as ready — on some emulators/devices this is expected
-        // but the camera IS working. The user will see if it's black.
+        /**
+         * STRICT: Do NOT mark cameraReady if no real frames detected.
+         * This prevents the false-positive "camera ready but black screen".
+         */
+        const errMsg = 'Câmera abriu mas sem imagem. Toque em "Tentar novamente".';
+        setCameraReady(false);
+        setCameraError(errMsg);
+        updateDebug({ cameraReady: false, cameraError: errMsg });
+        console.warn('[CAM] NO FRAMES — cameraReady stays false');
+        return;
       }
 
       setCameraReady(true);
       setCameraError(null);
+      updateDebug({ cameraReady: true, cameraError: null });
+      console.log('[CAM] ✅ camera fully ready');
 
-      // Check torch support
+      // Check torch
       const track = stream.getVideoTracks()[0];
       if (track) {
         const caps = (track as any).getCapabilities?.();
         if (caps?.torch) setTorchSupported(true);
       }
-    } catch (err) {
-      console.error('[DriverValidate] Falha ao iniciar preview:', err);
+    } catch (err: any) {
+      console.error('[CAM] init failed:', err);
       setCameraReady(false);
-      setCameraError('Câmera aberta mas sem imagem. Toque em "Tentar novamente".');
+      const errMsg = `Erro ao iniciar câmera: ${err?.message || 'desconhecido'}`;
+      setCameraError(errMsg);
+      updateDebug({ cameraReady: false, cameraError: errMsg, lastError: err?.message });
     }
-  }, [stopCurrentStream]);
+  }, [stopCurrentStream, updateDebug]);
 
-  /**
-   * Camera init effect — runs when <video> element appears in the DOM.
-   * Uses videoEl (callback ref state) so it only fires after auth
-   * resolves and the JSX with <video> is rendered.
-   */
+  /* ---------- Camera init effect ---------- */
+
   useEffect(() => {
     if (!videoEl) return;
-
     startCamera(videoEl);
-
-    return () => {
-      stopCurrentStream();
-    };
+    return () => { stopCurrentStream(); };
   }, [videoEl, startCamera, stopCurrentStream]);
 
-  /**
-   * VISIBILITY CHANGE handler — re-opens camera when user returns
-   * to the app/tab (critical for PWA and mobile multitasking).
-   * When the page becomes hidden, we stop the stream to free the
-   * camera for other apps. When visible again, we restart.
-   */
+  /* ---------- Visibility change ---------- */
+
   useEffect(() => {
     if (!videoEl) return;
-
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        console.log('[DriverValidate] Tab voltou ao foco, reiniciando câmera');
+        console.log('[CAM] tab visible → restart');
         startCamera(videoEl);
       } else {
-        console.log('[DriverValidate] Tab saiu do foco, liberando câmera');
+        console.log('[CAM] tab hidden → stop');
         stopCurrentStream();
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [videoEl, startCamera, stopCurrentStream]);
 
-  /**
-   * QR scanning loop — runs every 300ms when camera is ready and
-   * BarcodeDetector is supported.
-   */
+  /* ---------- QR scanning loop ---------- */
+
   useEffect(() => {
     if (!scannerSupported || !cameraReady || !videoEl || overlay || processing) return;
 
     scanIntervalRef.current = window.setInterval(async () => {
       if (!videoEl || !detectorRef.current || scanLocked || processing || overlay) return;
-
       try {
         const detected = await detectorRef.current.detect(videoEl);
         const token = detected?.[0]?.rawValue?.trim();
         if (token) {
           await handleValidate(token, 'checkin');
         }
-      } catch { /* silent — detection can fail between frames */ }
+      } catch { /* silent */ }
     }, 300);
 
     return () => {
@@ -337,6 +415,23 @@ export default function DriverValidate() {
       }
     };
   }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, videoEl]);
+
+  /* ---------- Keep debug in sync ---------- */
+
+  useEffect(() => {
+    if (!videoEl) return;
+    const id = window.setInterval(() => {
+      setDebugInfo(prev => ({
+        ...prev,
+        videoWidth: videoEl.videoWidth,
+        videoHeight: videoEl.videoHeight,
+        readyState: videoEl.readyState,
+        cameraReady,
+        cameraError,
+      }));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [videoEl, cameraReady, cameraError]);
 
   const resetOverlay = () => {
     setOverlay(null);
@@ -351,7 +446,6 @@ export default function DriverValidate() {
       </div>
     );
   }
-
   if (!user) return <Navigate to="/login" replace />;
   if (!userRole) {
     return (
@@ -373,7 +467,7 @@ export default function DriverValidate() {
         <Card>
           <CardContent className="space-y-4 p-4">
             {/* Camera viewport */}
-            <div className="relative overflow-hidden rounded-xl border bg-black/90">
+            <div className="relative overflow-hidden rounded-xl border bg-black/90" style={{ minHeight: '300px' }}>
               <video
                 ref={setVideoEl}
                 className="aspect-[3/4] w-full object-cover"
@@ -384,7 +478,7 @@ export default function DriverValidate() {
                 webkit-playsinline="true"
               />
 
-              {/* Scan frame overlay — only when camera has real frames */}
+              {/* Scan frame overlay */}
               {cameraReady && !overlay && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="relative h-48 w-48">
@@ -420,7 +514,7 @@ export default function DriverValidate() {
               )}
             </div>
 
-            {/* Camera error with retry button */}
+            {/* Camera error with retry */}
             {cameraError && (
               <div className="space-y-2">
                 <p className="text-sm text-destructive">{cameraError}</p>
@@ -436,7 +530,7 @@ export default function DriverValidate() {
               </div>
             )}
 
-            {/* Manual token fallback — always visible */}
+            {/* Manual token fallback */}
             <div className="space-y-2">
               <Label htmlFor="manual-token">Token do QR (fallback)</Label>
               <div className="flex gap-2">
@@ -490,11 +584,7 @@ export default function DriverValidate() {
                 </Button>
 
                 {overlay.result === 'success' && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => navigate('/motorista/embarque')}
-                  >
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/motorista/embarque')}>
                     <Users className="mr-2 h-4 w-4" />
                     Ver embarque
                   </Button>
@@ -517,6 +607,31 @@ export default function DriverValidate() {
             </CardContent>
           </Card>
         )}
+
+        {/* ========== TEMPORARY DEBUG PANEL ========== */}
+        <details className="rounded-lg border border-muted bg-muted/20 p-2 text-xs">
+          <summary className="cursor-pointer font-mono text-muted-foreground">🔧 Debug câmera</summary>
+          <div className="mt-2 space-y-1 font-mono text-muted-foreground break-all">
+            <p><strong>permission:</strong> {debugInfo.permission}</p>
+            <p><strong>stream:</strong> {debugInfo.streamExists ? '✅' : '❌'}</p>
+            <p><strong>tracks:</strong> {debugInfo.trackCount} — [{debugInfo.trackStates.join(', ')}]</p>
+            <p><strong>labels:</strong> {debugInfo.trackLabels.join(', ') || '—'}</p>
+            <p><strong>constraint:</strong> {debugInfo.constraintUsed}</p>
+            <p><strong>videoSize:</strong> {debugInfo.videoWidth}×{debugInfo.videoHeight}</p>
+            <p><strong>readyState:</strong> {debugInfo.readyState}</p>
+            <p><strong>cameraReady:</strong> {debugInfo.cameraReady ? '✅' : '❌'}</p>
+            <p><strong>cameraError:</strong> {debugInfo.cameraError ?? '—'}</p>
+            <p><strong>scanner:</strong> {debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}</p>
+            <p><strong>lastError:</strong> {debugInfo.lastError ?? '—'}</p>
+            <p><strong>devices:</strong></p>
+            {debugInfo.devices.length > 0 ? (
+              <ul className="ml-3 list-disc">
+                {debugInfo.devices.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
+            ) : <p className="ml-3">nenhum listado</p>}
+          </div>
+        </details>
+
       </div>
     </div>
   );
