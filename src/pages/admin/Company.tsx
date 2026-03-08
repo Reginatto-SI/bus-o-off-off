@@ -281,6 +281,7 @@ export default function CompanyPage() {
 
   const [capabilitiesReady, setCapabilitiesReady] = useState<boolean | null>(null);
   const [capabilitiesDetail, setCapabilitiesDetail] = useState<{ transfers: string; card_payments: string } | null>(null);
+  const [pixEnabled, setPixEnabled] = useState<boolean | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const pollingRef = useRef(false);
 
