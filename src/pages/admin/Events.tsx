@@ -2985,7 +2985,7 @@ export default function Events() {
                               onClick={() => setTripDialogOpen(true)}
                             >
                               <Plus className="h-4 w-4 mr-2" />
-                              Adicionar Viagem
+                              Adicionar Transporte
                             </Button>
                           )}
                         </div>
