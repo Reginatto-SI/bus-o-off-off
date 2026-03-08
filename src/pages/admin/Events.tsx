@@ -1652,7 +1652,7 @@ export default function Events() {
     
     if (tripBoardings.length > 0) {
       setTripDeleteBlockReason(
-        `Esta viagem possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
+        `Este transporte possui ${tripBoardings.length} embarque(s) vinculado(s). ` +
         `Remova ou realoque os embarques antes de excluir.`
       );
       setTripToDelete(trip);
