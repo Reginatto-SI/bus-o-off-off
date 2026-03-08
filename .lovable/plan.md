@@ -1,48 +1,30 @@
 
 
-## Diagnostico: Camera preta no scanner do motorista
+# Imagem padrão para eventos sem banner
 
-### Causa raiz identificada
+## Mudança
 
-O `useEffect` que inicializa a camera roda **uma unica vez no mount** (`[]` deps). Porem, quando o componente monta, o estado `loading` do AuthContext ainda e `true`, e o componente retorna um `<Loader2>` — o elemento `<video>` **nao existe no DOM ainda**.
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-Fluxo do bug:
-
-```text
-1. Componente monta → useEffect dispara startScanner()
-2. loading=true → JSX renderiza <Loader2>, NÃO renderiza <video>
-3. startScanner() chama getUserMedia() → stream criado com sucesso
-4. videoRef.current é NULL → srcObject nunca é atribuído
-5. setCameraReady(true) nunca é chamado
-6. loading termina → <video> aparece, mas stream já foi perdido
-7. Resultado: tela preta
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-O `videoRef` so e atribuido ao `<video>` quando a auth resolve e o JSX completo e renderizado. Mas a essa altura o effect ja rodou e falhou silenciosamente no `if (videoRef.current)`.
+### Componentes afetados
 
-### Correcao
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-**Arquivo**: `src/pages/driver/DriverValidate.tsx`
+### Lógica simplificada (ambos os cards)
 
-1. **Separar a inicializacao da camera do mount** — usar um segundo `useEffect` que observa quando o `<video>` esta pronto (apos auth resolver), ou adicionar `loading` e `userRole` como dependencias para re-tentar.
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-2. **Solucao mais simples e segura**: mover a logica de camera para um effect que depende de um flag `videoMounted` (set via callback ref), ou simplesmente adicionar um state `videoReady` que so e `true` apos o JSX com `<video>` ser renderizado.
+### Imagem padrão
 
-Implementacao concreta:
-- Trocar `useRef<HTMLVideoElement>` por um **callback ref** que, quando o `<video>` e montado, dispara a inicializacao da camera
-- Ou: adicionar `user` e `userRole` como deps do effect, para que ele re-execute quando a auth resolver e o `<video>` existir no DOM
-- Garantir cleanup correto do stream anterior antes de re-inicializar
-- Adicionar `autoPlay` ao `<video>` como fallback extra para mobile
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-3. **Melhorias menores para robustez mobile**:
-- Adicionar `webkit-playsinline` para Safari iOS antigo
-- Fallback de `facingMode` se a constraint falhar (tentar sem constraint)
-- Log mais claro no console para depuracao
-
-### Resumo
-
-- 1 arquivo modificado: `DriverValidate.tsx`
-- Causa: race condition entre useEffect e renderizacao condicional da auth
-- Fix: garantir que a camera so inicia quando o `<video>` esta no DOM
-- 0 alteracoes de banco, 0 edge functions
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
