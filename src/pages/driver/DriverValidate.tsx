@@ -61,6 +61,10 @@ type DebugInfo = {
   constraintUsed: string;
   lastError: string | null;
   devices: string[];
+  initInProgress: boolean;
+  initCount: number;
+  lastInitAt: string | null;
+  liveTrackStates: string[];
 };
 
 const INITIAL_DEBUG: DebugInfo = {
@@ -78,6 +82,10 @@ const INITIAL_DEBUG: DebugInfo = {
   constraintUsed: 'none',
   lastError: null,
   devices: [],
+  initInProgress: false,
+  initCount: 0,
+  lastInitAt: null,
+  liveTrackStates: [],
 };
 
 /**
