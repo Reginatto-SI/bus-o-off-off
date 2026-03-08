@@ -1,30 +1,81 @@
 
 
-# Imagem padrão para eventos sem banner
+## Diagnóstico profundo — Câmera preta no scanner do motorista
 
-## Mudança
+### Análise do código atual
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+O código já usa callback ref (`useState` + `setVideoEl`), constraint chain com fallback, e aguarda `loadedmetadata` + `play()` + polling de `videoWidth`. Estruturalmente está correto. O problema provável está em **detalhes de implementação** que não são visíveis sem dados reais do dispositivo.
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+### Suspeitas mais fortes (em ordem de probabilidade)
+
+**1. Resolution constraints silenciosamente quebram o stream em Android**
+A primeira constraint inclui `width: { ideal: 1280 }, height: { ideal: 720 }`. Alguns Android aceitam a constraint, retornam um stream, mas as tracks ficam com `readyState: 'live'` sem produzir frames. O fallback (`video: true`) nunca roda porque a primeira constraint não lança erro.
+
+**2. `frameConfirmed = false` mas `cameraReady` é setado `true` mesmo assim**
+Linhas 254-260: quando o polling não confirma frames, o código apenas loga um warning e segue marcando `cameraReady = true`. A UI mostra o overlay "Aponte a câmera" sobre um preview preto.
+
+**3. Falta de evidência real** — sem dados do dispositivo é impossível confirmar qual etapa falha.
+
+---
+
+### Plano de correção (arquivo único: `DriverValidate.tsx`)
+
+#### Etapa 1 — Painel de diagnóstico temporário
+
+Adicionar um bloco colapsável (toggle) no final da tela que mostre em tempo real:
+
+- `permission`: resultado de `navigator.permissions.query({name:'camera'})`
+- `stream`: existe / null
+- `tracks`: quantidade, estado (`live`/`ended`), label, deviceId
+- `videoWidth × videoHeight`
+- `video.readyState`
+- `cameraReady` / `cameraError`
+- `scannerSupported` (BarcodeDetector disponível?)
+- constraint usada (qual da cadeia funcionou)
+- último erro capturado
+
+Isto será um `<details>` com `<summary>` discreto tipo "🔧 Debug" no rodapé — não altera o layout principal. Permite diagnosticar no celular real sem console.
+
+#### Etapa 2 — Remover resolution constraints
+
+Mudar a constraint chain para:
+
+```typescript
+const CAMERA_CONSTRAINTS_CHAIN: MediaStreamConstraints[] = [
+  { video: { facingMode: { ideal: 'environment' } }, audio: false },
+  { video: true, audio: false },
+];
 ```
 
-### Componentes afetados
+Elimina `width/height` ideal que pode causar stream sem frames em Android.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+#### Etapa 3 — Não marcar `cameraReady` sem frames
 
-### Lógica simplificada (ambos os cards)
+Quando `frameConfirmed` for `false` após o polling, NÃO marcar `cameraReady = true`. Em vez disso, setar `cameraError` com mensagem e botão "Tentar novamente". Isso evita o falso positivo de "câmera pronta" com tela preta.
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+#### Etapa 4 — Log estruturado em cada etapa
 
-### Imagem padrão
+Adicionar `console.log` com prefixo `[CAM]` em cada ponto crítico:
+- antes de `getUserMedia`
+- após stream criado (com track info)
+- após `srcObject` atribuído
+- após `loadedmetadata`
+- após `play()`
+- resultado do polling de frames
+- erro capturado
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+#### Etapa 5 — Fallback por `enumerateDevices`
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+Se ambas constraints falharem, tentar `enumerateDevices()` para listar `videoinput` disponíveis e abrir explicitamente pelo `deviceId` da câmera traseira (label contendo "back"/"rear"/"environment").
+
+---
+
+### Resumo
+
+- 1 arquivo modificado: `src/pages/driver/DriverValidate.tsx`
+- Painel de debug temporário para diagnóstico em celular real
+- Constraints simplificadas (sem resolution)
+- `cameraReady` só sobe com frames confirmados
+- Fallback extra via `enumerateDevices`
+- 0 alterações de banco, 0 edge functions
 
