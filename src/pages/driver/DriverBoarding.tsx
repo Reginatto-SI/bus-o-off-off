@@ -204,7 +204,7 @@ export default function DriverBoarding() {
   useEffect(() => {
     if (!user || !activeCompanyId || !canAccess) return;
     const interval = setInterval(() => {
-      fetchData();
+      fetchData(true);
     }, 15000);
     return () => clearInterval(interval);
   }, [user, activeCompanyId, canAccess, fetchData]);
