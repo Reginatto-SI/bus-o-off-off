@@ -14,8 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock } from 'lucide-react';
+import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock, Settings } from 'lucide-react';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
