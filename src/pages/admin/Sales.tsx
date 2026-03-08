@@ -533,8 +533,8 @@ export default function Sales() {
         variant="ghost"
         size="sm"
         className={cn(
-          '-ml-3 h-8 px-3 text-xs font-semibold',
-          isActive && 'bg-muted text-foreground hover:bg-muted/90'
+          '-ml-3 h-8 px-3 text-xs font-semibold text-primary-foreground hover:text-primary-foreground hover:bg-primary/80',
+          isActive && 'bg-primary/80 text-primary-foreground'
         )}
         onClick={() => handleSortChange(field)}
       >
@@ -542,7 +542,7 @@ export default function Sales() {
         {isActive ? (
           direction === 'asc' ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />
         ) : (
-          <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/70" />
+          <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
         )}
       </Button>
     );
@@ -1142,73 +1142,78 @@ export default function Sales() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{renderSortHeader('Data da Compra', 'created_at')}</TableHead>
+                    <TableHead className="whitespace-nowrap">{renderSortHeader('Data', 'created_at')}</TableHead>
                     <TableHead>{renderSortHeader('Evento', 'event_name')}</TableHead>
                     <TableHead>{renderSortHeader('Cliente', 'customer_name')}</TableHead>
-                    <TableHead>{renderSortHeader('Veículo', 'trip_id')}</TableHead>
-                    <TableHead>{renderSortHeader('Local Embarque', 'boarding_location_name')}</TableHead>
-                     <TableHead>{renderSortHeader('Qtd', 'quantity')}</TableHead>
-                     <TableHead>Poltrona(s)</TableHead>
-                     {canViewFinancials && <TableHead>{renderSortHeader('Valor', 'gross_amount')}</TableHead>}
-                     <TableHead>{renderSortHeader('Vendedor', 'seller_name')}</TableHead>
-                    <TableHead>{renderSortHeader('Status', 'status')}</TableHead>
-                    <TableHead className="w-[60px]">Ações</TableHead>
+                    <TableHead>{renderSortHeader('Embarque', 'boarding_location_name')}</TableHead>
+                    <TableHead>{renderSortHeader('Passagem', 'quantity')}</TableHead>
+                    {canViewFinancials && <TableHead className="whitespace-nowrap">{renderSortHeader('Valor', 'gross_amount')}</TableHead>}
+                    <TableHead className="whitespace-nowrap">{renderSortHeader('Status', 'status')}</TableHead>
+                    <TableHead className="w-[50px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sales.map((sale) => {
                     const vehicle = (sale.trip as any)?.vehicle;
+                    const seatLabels = seatLabelsMap[sale.id];
+                    const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
                     return (
                       <TableRow key={sale.id}>
                         <TableCell className="text-sm whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
-                        <TableCell>{formatEventDisplayName(sale.event) || '-'}</TableCell>
+                        <TableCell className="text-sm">{formatEventDisplayName(sale.event) || '-'}</TableCell>
                         <TableCell>
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <p className="font-medium">{sale.customer_name}</p>
+                              <p className="font-medium text-sm">{sale.customer_name}</p>
                               {sale.customer_name === 'BLOQUEIO' && (
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">Bloqueio</Badge>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground">{sale.customer_cpf}</p>
+                            <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
+                            {sale.seller?.name && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Vend: {sale.seller.name}</p>
+                            )}
                           </div>
                         </TableCell>
+                        {/* Embarque: veículo + local agrupados */}
                         <TableCell>
-                          {vehicle
-                            ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
-                            : '-'}
+                          <div className="space-y-0.5">
+                            <p className="text-sm font-medium">
+                              {vehicle
+                                ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
+                                : '-'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{getSaleBoardingLabel(sale)}</p>
+                          </div>
                         </TableCell>
-                        <TableCell>{getSaleBoardingLabel(sale)}</TableCell>
-                        <TableCell>{sale.quantity}</TableCell>
+                        {/* Passagem: quantidade + poltronas agrupados */}
                         <TableCell>
-                          {(() => {
-                            const labels = seatLabelsMap[sale.id];
-                            const { display, full } = formatSeatLabels(labels ?? []);
-                            if (!labels || labels.length <= 3) return <span className="text-sm">{display}</span>;
-                            return (
+                          <div className="space-y-0.5">
+                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? 'passagem' : 'passagens'}</p>
+                            {seatLabels && seatLabels.length > 3 ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="text-sm cursor-help">{display}</span>
+                                    <p className="text-xs text-muted-foreground cursor-help">Poltr. {seatsDisplay}</p>
                                   </TooltipTrigger>
-                                  <TooltipContent><p>{full}</p></TooltipContent>
+                                  <TooltipContent><p>{seatsFull}</p></TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            );
-                          })()}
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Poltr. {seatsDisplay}</p>
+                            )}
+                          </div>
                         </TableCell>
                         {canViewFinancials && (
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium whitespace-nowrap text-sm">
                             {formatCurrencyBRL((sale.quantity * sale.unit_price))}
                           </TableCell>
                         )}
-                        <TableCell>{sale.seller?.name ?? '-'}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <StatusBadge status={sale.status} />
-                            {/* Indicador visual de taxa pendente para vendas administrativas */}
                             {(sale as any).platform_fee_status === 'pending' && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500 text-amber-600">
                                 Taxa pendente
