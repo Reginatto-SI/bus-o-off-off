@@ -589,7 +589,7 @@ export default function CommercialPartners() {
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor="cp-phone">Telefone</Label>
-        <Input id="cp-phone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} />
+        <Input id="cp-phone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: formatPhoneBR(e.target.value) })} placeholder="(00) 00000-0000" maxLength={15} inputMode="tel" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="cp-email">E-mail</Label>

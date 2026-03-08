@@ -515,8 +515,10 @@ export default function Sellers() {
                               <Input
                                 id="phone"
                                 value={form.phone}
-                                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                                onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
                                 placeholder="(00) 00000-0000"
+                                maxLength={15}
+                                inputMode="tel"
                               />
                             </div>
                             <div className="space-y-2">

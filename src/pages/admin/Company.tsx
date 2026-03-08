@@ -1349,8 +1349,10 @@ export default function CompanyPage() {
                         <Input
                           id="phone"
                           value={form.phone}
-                          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                          placeholder="(11) 99999-9999"
+                          onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                          inputMode="tel"
                         />
                       </div>
                       <div className="space-y-2">
@@ -1358,8 +1360,10 @@ export default function CompanyPage() {
                         <Input
                           id="whatsapp"
                           value={form.whatsapp}
-                          onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                          placeholder="(11) 99999-9999"
+                          onChange={(e) => setForm({ ...form, whatsapp: formatPhoneBR(e.target.value) })}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                          inputMode="tel"
                         />
                       </div>
                       <div className="space-y-2 md:col-span-2 lg:col-span-3">
