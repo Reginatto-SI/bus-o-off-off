@@ -1554,7 +1554,7 @@ export default function Events() {
           .eq('id', editingTripId);
 
         if (error) throw error;
-        toast.success('Viagem atualizada');
+        toast.success('Transporte atualizado');
         setEditingTripId(null);
       } else if (tripForm.trip_creation_type === 'ida_volta') {
         // Create both trips (ida + volta) with pairing - NO departure_time
