@@ -33,6 +33,7 @@ import SellerDashboard from "./pages/seller/SellerDashboard";
 import DriverHome from "./pages/driver/DriverHome";
 import DriverValidate from "./pages/driver/DriverValidate";
 import DriverBoarding from "./pages/driver/DriverBoarding";
+import DriverPreferences from "./pages/driver/DriverPreferences";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
