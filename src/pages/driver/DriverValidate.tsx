@@ -619,6 +619,55 @@ export default function DriverValidate() {
                   <Zap className="h-5 w-5" />
                 </Button>
               )}
+
+              {/* ===== SCAN RESULT OVERLAY ===== */}
+              {overlay && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/75 p-6">
+                  {overlay.result === 'success' ? (
+                    <CheckCircle2 className="h-14 w-14 text-green-400 mb-2" />
+                  ) : (
+                    <AlertCircle className="h-14 w-14 text-red-400 mb-2" />
+                  )}
+                  <h2 className="text-xl font-bold text-white mb-1">
+                    {overlay.result === 'success' ? 'EMBARQUE LIBERADO' : 'PASSAGEM INVÁLIDA'}
+                  </h2>
+                  <p className="text-sm text-white/70 mb-3">{reasonLabel}</p>
+
+                  <div className="w-full max-w-xs space-y-1 rounded-lg bg-white/10 p-3 text-sm text-white/90">
+                    <p><strong>Passageiro:</strong> {overlay.passenger_name ?? '—'}</p>
+                    <p><strong>Assento:</strong> {overlay.seat_label ?? '—'}</p>
+                    <p><strong>Evento:</strong> {overlay.event_name ?? '—'}</p>
+                    {overlay.boarding_label && <p><strong>Embarque:</strong> {overlay.boarding_label}</p>}
+                  </div>
+
+                  <div className="mt-4 flex w-full max-w-xs flex-col gap-2">
+                    <Button className="h-12 w-full text-base" onClick={resetOverlay}>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      {overlay.result === 'success' ? 'Ler próximo' : 'Tentar novamente'}
+                    </Button>
+                    {overlay.result === 'success' && (
+                      <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Ver embarque
+                      </Button>
+                    )}
+                    {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-white/70"
+                        onClick={() => {
+                          if (manualToken.trim()) {
+                            handleValidate(manualToken.trim(), 'checkout');
+                          }
+                        }}
+                      >
+                        Registrar saída (opcional)
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Camera error with retry */}
@@ -659,61 +708,6 @@ export default function DriverValidate() {
             </div>
           </CardContent>
         </Card>
-
-        {overlay && (
-          <Card className={overlay.result === 'success' ? 'border-green-500' : 'border-red-500'}>
-            <CardContent className="space-y-3 p-4">
-              <div className="flex items-center gap-2">
-                {overlay.result === 'success' ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <AlertCircle className="h-5 w-5 text-red-600" />
-                )}
-                <h2 className="text-lg font-semibold">
-                  {overlay.result === 'success' ? 'Embarque liberado' : 'Bloqueado'}
-                </h2>
-              </div>
-
-              <p className="text-sm text-muted-foreground">{reasonLabel}</p>
-
-              <div className="space-y-1 rounded-lg bg-muted/40 p-3 text-sm">
-                <p><strong>Passageiro:</strong> {overlay.passenger_name ?? '—'}</p>
-                <p><strong>Assento:</strong> {overlay.seat_label ?? '—'}</p>
-                <p><strong>Evento:</strong> {overlay.event_name ?? '—'}</p>
-                <p><strong>Embarque:</strong> {overlay.boarding_label ?? '—'}</p>
-                <p><strong>CPF:</strong> {overlay.passenger_cpf_masked ?? '—'}</p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Button className="w-full" onClick={resetOverlay}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  {overlay.result === 'success' ? 'Ler próximo' : 'Tentar outro'}
-                </Button>
-
-                {overlay.result === 'success' && (
-                  <Button variant="outline" className="w-full" onClick={() => navigate('/motorista/embarque')}>
-                    <Users className="mr-2 h-4 w-4" />
-                    Ver embarque
-                  </Button>
-                )}
-
-                {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (manualToken.trim()) {
-                        handleValidate(manualToken.trim(), 'checkout');
-                      }
-                    }}
-                  >
-                    Registrar saída (opcional)
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* ========== TEMPORARY DEBUG PANEL ========== */}
         <details className="rounded-lg border border-muted bg-muted/20 p-2 text-xs">
