@@ -239,6 +239,7 @@ export default function CommercialPartners() {
     setSaving(true);
 
     const orderValue = Number.parseInt(form.display_order, 10);
+    const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
     const { data, error } = await supabase
       .from('commercial_partners')
       .insert([{
@@ -247,6 +248,9 @@ export default function CommercialPartners() {
         display_order: Number.isNaN(orderValue) ? 1 : orderValue,
         partner_tier: form.partner_tier,
         company_id: activeCompanyId!,
+        show_on_showcase: defaults.show_on_showcase,
+        show_on_event_page: defaults.show_on_event_page,
+        show_on_ticket: defaults.show_on_ticket,
       }])
       .select('id')
       .single();
