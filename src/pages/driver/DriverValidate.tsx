@@ -453,6 +453,9 @@ export default function DriverValidate() {
   useEffect(() => {
     if (!videoEl) return;
     const id = window.setInterval(() => {
+      const liveTrackStates = streamRef.current
+        ? streamRef.current.getVideoTracks().map(t => t.readyState)
+        : [];
       setDebugInfo(prev => ({
         ...prev,
         videoWidth: videoEl.videoWidth,
@@ -460,6 +463,7 @@ export default function DriverValidate() {
         readyState: videoEl.readyState,
         cameraReady,
         cameraError,
+        liveTrackStates,
       }));
     }, 1000);
     return () => window.clearInterval(id);
