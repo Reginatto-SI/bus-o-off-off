@@ -405,6 +405,19 @@ export interface EventFee {
   updated_at: string;
 }
 
+export interface EventSponsor {
+  id: string;
+  event_id: string;
+  sponsor_id: string;
+  company_id: string;
+  show_on_event_page: boolean;
+  show_on_showcase: boolean;
+  show_on_ticket: boolean;
+  display_order: number;
+  created_at: string;
+  sponsor?: Sponsor;
+}
+
 export interface EventWithCompany extends Event {
   company?: {
     id: string;

@@ -420,7 +420,7 @@ export default function Sponsors() {
       <div className="page-container">
         <PageHeader
           title="Patrocinadores"
-          description="Gerencie os patrocinadores globais do carrossel do app"
+          description="Cadastre os patrocinadores da sua empresa. Depois, vincule-os aos eventos para definir onde serão exibidos."
           actions={
             <Dialog
               open={dialogOpen}
