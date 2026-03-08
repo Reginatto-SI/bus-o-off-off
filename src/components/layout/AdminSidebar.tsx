@@ -110,6 +110,11 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Image,
     roles: ['gerente']
   }, {
+    name: 'Parceiros',
+    href: '/admin/parceiros',
+    icon: Briefcase,
+    roles: ['gerente']
+  }, {
     name: 'Sócios',
     href: '/admin/socios',
     icon: Handshake,
