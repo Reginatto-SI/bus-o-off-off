@@ -31,6 +31,7 @@ export default function PublicEventDetail() {
   const [event, setEvent] = useState<Event | null>(null);
   const [allTrips, setAllTrips] = useState<Trip[]>([]);
   const [locations, setLocations] = useState<EventBoardingLocation[]>([]);
+  const [eventSponsors, setEventSponsors] = useState<EventSponsor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedTrip, setSelectedTrip] = useState('');
