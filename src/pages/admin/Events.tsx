@@ -4302,7 +4302,7 @@ export default function Events() {
               {/* Trip Type - only show for creation, locked for editing */}
               {!editingTripId ? (
                 <div className="space-y-2">
-                  <Label>Tipo da Viagem *</Label>
+                  <Label>Tipo de Transporte *</Label>
                   <RadioGroup
                     value={tripForm.trip_creation_type}
                     onValueChange={(value: TripCreationType) => setTripForm({ ...tripForm, trip_creation_type: value })}
