@@ -489,7 +489,13 @@ export default function CommercialPartners() {
             <button
               key={tier.value}
               type="button"
-              onClick={() => setForm({ ...form, partner_tier: tier.value })}
+              // Ao trocar o nível, aplica automaticamente os defaults de visibilidade
+              // correspondentes (TIER_VISIBILITY_DEFAULTS). O usuário ainda pode
+              // personalizar manualmente na aba Exibição depois.
+              onClick={() => {
+                const defaults = TIER_VISIBILITY_DEFAULTS[tier.value];
+                setForm({ ...form, partner_tier: tier.value, ...defaults });
+              }}
               className={`rounded-lg border p-3 text-left transition-all cursor-pointer hover:border-primary/60 ${
                 form.partner_tier === tier.value
                   ? 'border-primary ring-2 ring-primary bg-primary/5'
