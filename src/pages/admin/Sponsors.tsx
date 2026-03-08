@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Check,
   Eye,
   Image,
   Link2,
@@ -79,6 +80,13 @@ const initialFilters: SponsorFilters = {
 
 const SPONSOR_BANNER_BUCKET = 'event-images';
 
+const WIZARD_STEPS = [
+  { label: 'Dados', icon: User },
+  { label: 'Banner', icon: Image },
+  { label: 'Redirecionamento', icon: Link2 },
+  { label: 'Contato', icon: Phone },
+] as const;
+
 export default function Sponsors() {
   const { isGerente, user, activeCompanyId } = useAuth();
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
@@ -90,6 +98,11 @@ export default function Sponsors() {
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dados');
   const [filters, setFilters] = useState<SponsorFilters>(initialFilters);
+
+  // Wizard state
+  const [wizardStep, setWizardStep] = useState(1);
+  const [isCreateWizardMode, setIsCreateWizardMode] = useState(false);
+
   const [form, setForm] = useState({
     name: '',
     status: 'ativo' as Sponsor['status'],
@@ -133,7 +146,6 @@ export default function Sponsors() {
   }, [filters]);
 
   const fetchSponsors = async () => {
-    // Multi-tenant: guard para não buscar sem empresa ativa (evita vazamento para developer)
     if (!activeCompanyId) return;
 
     const { data, error } = await supabase
@@ -141,7 +153,6 @@ export default function Sponsors() {
       .select('*')
       .eq('company_id', activeCompanyId)
       .order('carousel_order', { ascending: true })
-      // Hardening Fase 1: ordenação ASC para consistência com exibição pública
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -171,6 +182,8 @@ export default function Sponsors() {
     setEditingId(null);
     setUploadingImage(false);
     setActiveTab('dados');
+    setWizardStep(1);
+    setIsCreateWizardMode(false);
     setForm({
       name: '',
       status: 'ativo',
@@ -186,6 +199,112 @@ export default function Sponsors() {
     });
   };
 
+  const buildSponsorData = () => {
+    const orderValue = Number.parseInt(form.carousel_order, 10);
+    return {
+      name: form.name.trim(),
+      status: form.status,
+      carousel_order: Number.isNaN(orderValue) ? 1 : orderValue,
+      banner_url: form.banner_url,
+      link_type: form.link_type,
+      site_url: form.link_type === 'site' ? form.site_url.trim() || null : null,
+      whatsapp_phone: form.link_type === 'whatsapp' ? form.whatsapp_phone.trim() || null : null,
+      whatsapp_message: form.link_type === 'whatsapp' ? form.whatsapp_message.trim() || null : null,
+      contact_name: form.contact_name.trim() || null,
+      contact_phone: form.contact_phone.trim() || null,
+      contact_email: form.contact_email.trim() || null,
+    };
+  };
+
+  /** Wizard Step 1: Insert new sponsor and get ID */
+  const handleWizardStep1Save = async () => {
+    if (!form.name.trim()) {
+      toast.error('Nome do patrocinador é obrigatório');
+      return;
+    }
+
+    const orderValue = Number.parseInt(form.carousel_order, 10);
+    if (Number.isNaN(orderValue) || orderValue < 0) {
+      toast.error('Informe uma ordem válida para o carrossel');
+      return;
+    }
+
+    setSaving(true);
+
+    const { data, error } = await supabase
+      .from('sponsors')
+      .insert([{
+        name: form.name.trim(),
+        status: form.status,
+        carousel_order: orderValue,
+        company_id: activeCompanyId!,
+      }])
+      .select('id')
+      .single();
+
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao criar patrocinador (wizard step 1)',
+        error,
+        context: { action: 'insert', table: 'sponsors', userId: user?.id },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao criar patrocinador',
+          error,
+          context: { action: 'insert', table: 'sponsors' },
+        })
+      );
+    } else {
+      setEditingId(data.id);
+      toast.success('Patrocinador criado. Continue o cadastro.');
+      setWizardStep(2);
+    }
+
+    setSaving(false);
+  };
+
+  /** Wizard Steps 2-4: Update current sponsor with form data */
+  const handleWizardStepSave = async (nextStep?: number) => {
+    if (!editingId) return;
+
+    setSaving(true);
+
+    const sponsorData = buildSponsorData();
+
+    const { error } = await supabase
+      .from('sponsors')
+      .update(sponsorData)
+      .eq('id', editingId)
+      .eq('company_id', activeCompanyId!);
+
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao salvar patrocinador (wizard step save)',
+        error,
+        context: { action: 'update', table: 'sponsors', userId: user?.id, editingId },
+      });
+      toast.error(
+        buildDebugToastMessage({
+          title: 'Erro ao salvar patrocinador',
+          error,
+          context: { action: 'update', table: 'sponsors' },
+        })
+      );
+    } else if (nextStep) {
+      setWizardStep(nextStep);
+    } else {
+      // Finalizar
+      toast.success('Patrocinador cadastrado com sucesso!');
+      setDialogOpen(false);
+      resetForm();
+      fetchSponsors();
+    }
+
+    setSaving(false);
+  };
+
+  /** Edit mode: standard save (tabs livres) */
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -203,40 +322,18 @@ export default function Sponsors() {
       return;
     }
 
-    if (form.link_type === 'site' && !form.site_url.trim()) {
-      toast.error('Informe a URL do site');
-      setSaving(false);
-      return;
-    }
-
     if (form.link_type === 'whatsapp' && !form.whatsapp_phone.trim()) {
       toast.error('Informe o telefone do WhatsApp');
       setSaving(false);
       return;
     }
 
-    // Comentário: mantemos os campos não utilizados como null para reduzir ruído no banco.
-    // Multi-tenant: company_id é obrigatório e preenchido automaticamente com a empresa ativa.
-    const sponsorData = {
-      name: form.name.trim(),
-      status: form.status,
-      carousel_order: orderValue,
-      banner_url: form.banner_url,
-      link_type: form.link_type,
-      site_url: form.link_type === 'site' ? form.site_url.trim() : null,
-      whatsapp_phone: form.link_type === 'whatsapp' ? form.whatsapp_phone.trim() : null,
-      whatsapp_message: form.link_type === 'whatsapp' ? form.whatsapp_message.trim() || null : null,
-      contact_name: form.contact_name.trim() || null,
-      contact_phone: form.contact_phone.trim() || null,
-      contact_email: form.contact_email.trim() || null,
-    };
+    const sponsorData = buildSponsorData();
 
     let error;
     if (editingId) {
-      // Hardening Fase 1: filtro explícito por company_id no update (defense-in-depth)
       ({ error } = await supabase.from('sponsors').update(sponsorData).eq('id', editingId).eq('company_id', activeCompanyId!));
     } else {
-      // Insert: inclui company_id da empresa ativa (multi-tenant obrigatório)
       ({ error } = await supabase.from('sponsors').insert([{ ...sponsorData, company_id: activeCompanyId! }]));
     }
 
@@ -272,6 +369,8 @@ export default function Sponsors() {
   const handleEdit = (sponsor: Sponsor) => {
     setEditingId(sponsor.id);
     setActiveTab('dados');
+    setIsCreateWizardMode(false);
+    setWizardStep(1);
     setForm({
       name: sponsor.name,
       status: sponsor.status,
@@ -288,13 +387,19 @@ export default function Sponsors() {
     setDialogOpen(true);
   };
 
+  const handleNewSponsor = () => {
+    resetForm();
+    setIsCreateWizardMode(true);
+    setWizardStep(1);
+    setDialogOpen(true);
+  };
+
   const handleToggleStatus = async (sponsor: Sponsor) => {
     const newStatus = sponsor.status === 'ativo' ? 'inativo' : 'ativo';
     const { error } = await supabase
       .from('sponsors')
       .update({ status: newStatus })
       .eq('id', sponsor.id)
-      // Hardening Fase 1: filtro explícito por company_id (defense-in-depth)
       .eq('company_id', activeCompanyId!);
 
     if (error) {
@@ -344,7 +449,6 @@ export default function Sponsors() {
       .from('sponsors')
       .update({ banner_url: publicUrl })
       .eq('id', editingId)
-      // Hardening Fase 1: filtro explícito por company_id (defense-in-depth)
       .eq('company_id', activeCompanyId!);
 
     if (updateError) {
@@ -357,7 +461,6 @@ export default function Sponsors() {
     setUploadingImage(false);
   };
 
-  // Hardening Fase 1: delete com confirmação e filtro por company_id
   const [deleteTarget, setDeleteTarget] = useState<Sponsor | null>(null);
 
   const handleDelete = async () => {
@@ -402,7 +505,6 @@ export default function Sponsors() {
       onClick: () => handleToggleStatus(sponsor),
       variant: sponsor.status === 'ativo' ? 'destructive' : 'default',
     },
-    // Hardening Fase 1: CRUD completo — ação de exclusão com confirmação
     {
       label: 'Excluir',
       icon: Trash2,
@@ -414,6 +516,415 @@ export default function Sponsors() {
   if (!isGerente) {
     return <Navigate to="/admin/eventos" replace />;
   }
+
+  // ─── Shared form field renderers ───────────────────────────────────
+
+  const renderDadosFields = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="name">Nome do patrocinador *</Label>
+        <Input
+          id="name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
+          placeholder="Ex: Banco Parceiro"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <Select
+          value={form.status}
+          onValueChange={(value: Sponsor['status']) =>
+            setForm({ ...form, status: value })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ativo">Ativo</SelectItem>
+            <SelectItem value="inativo">Inativo</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="carousel_order">Ordem no carrossel *</Label>
+        <Input
+          id="carousel_order"
+          type="number"
+          min="0"
+          value={form.carousel_order}
+          onChange={(e) => setForm({ ...form, carousel_order: e.target.value })}
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Quanto menor o número, mais à esquerda no carrossel.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderBannerFields = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Banner do patrocinador</Label>
+        {form.banner_url ? (
+          <div className="space-y-2">
+            <label
+              className="group relative block h-[150px] w-full max-w-[600px] overflow-hidden rounded-lg border bg-muted cursor-pointer"
+            >
+              <img
+                src={form.banner_url}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover blur-xl scale-110 opacity-40"
+              />
+              <img
+                src={form.banner_url}
+                alt="Banner do patrocinador"
+                className="relative h-full w-full object-contain"
+              />
+              <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label="Visualizar banner"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setImagePreviewOpen(true);
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  aria-label="Remover banner"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (editingId) {
+                      await supabase
+                        .from('sponsors')
+                        .update({ banner_url: null })
+                        .eq('id', editingId);
+                    }
+                    setForm((prev) => ({ ...prev, banner_url: null }));
+                    toast.success('Banner removido');
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingImage || !editingId}
+                onChange={(e) => handleImageUpload(e.target.files?.[0])}
+              />
+            </label>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingImage || !editingId}
+                onChange={(e) => handleImageUpload(e.target.files?.[0])}
+              />
+              <Button type="button" variant="outline" size="sm" disabled={uploadingImage}>
+                <Upload className="h-4 w-4 mr-1" />
+                Trocar
+              </Button>
+            </label>
+          </div>
+        ) : (
+          <label
+            className={`flex h-[150px] w-full max-w-[600px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+              !editingId
+                ? 'border-muted-foreground/15 cursor-not-allowed'
+                : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
+            }`}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploadingImage || !editingId}
+              onChange={(e) => handleImageUpload(e.target.files?.[0])}
+            />
+            {uploadingImage ? (
+              <Loader2 className="h-6 w-6 text-primary animate-spin" />
+            ) : (
+              <Image className="h-6 w-6 text-muted-foreground/50" />
+            )}
+            <p className="text-sm text-muted-foreground">
+              {uploadingImage
+                ? 'Enviando banner...'
+                : !editingId
+                  ? 'Salve o patrocinador primeiro'
+                  : 'Adicionar banner (600×150)'}
+            </p>
+            <p className="text-xs text-muted-foreground/70">Tamanho ideal: 600×150px</p>
+          </label>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Tamanho ideal do arquivo: 600×150px (4:1). Mantemos o preview no tamanho real quando possível.
+      </p>
+    </div>
+  );
+
+  const renderRedirecionamentoFields = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Tipo de redirecionamento</Label>
+        <Select
+          value={form.link_type}
+          onValueChange={(value: Sponsor['link_type']) =>
+            setForm({ ...form, link_type: value })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="site">Site</SelectItem>
+            <SelectItem value="whatsapp">WhatsApp</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {form.link_type === 'site' ? (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="site_url">URL do site</Label>
+          <Input
+            id="site_url"
+            value={form.site_url}
+            onChange={(e) => setForm({ ...form, site_url: e.target.value })}
+            placeholder="https://www.patrocinador.com.br"
+          />
+          <p className="text-xs text-muted-foreground">Opcional. Nem todo patrocinador possui site.</p>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp_phone">Telefone WhatsApp</Label>
+            <Input
+              id="whatsapp_phone"
+              value={form.whatsapp_phone}
+              onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })}
+              placeholder="+55 11 99999-9999"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="whatsapp_message">Mensagem padrão (opcional)</Label>
+            <Textarea
+              id="whatsapp_message"
+              value={form.whatsapp_message}
+              onChange={(e) => setForm({ ...form, whatsapp_message: e.target.value })}
+              rows={3}
+              placeholder="Olá! Vi o banner no app e gostaria de saber mais."
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderContatoFields = () => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="contact_name">Nome do contato</Label>
+        <Input
+          id="contact_name"
+          value={form.contact_name}
+          onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="contact_phone">Telefone</Label>
+        <Input
+          id="contact_phone"
+          value={form.contact_phone}
+          onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+        />
+      </div>
+      <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="contact_email">E-mail</Label>
+        <Input
+          id="contact_email"
+          type="email"
+          value={form.contact_email}
+          onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+
+  // ─── Wizard progress bar ───────────────────────────────────────────
+
+  const renderWizardProgress = () => (
+    <div className="px-6 py-4 border-b border-border">
+      <div className="flex items-center justify-between">
+        {WIZARD_STEPS.map((step, index) => {
+          const stepNumber = index + 1;
+          const isCompleted = wizardStep > stepNumber;
+          const isCurrent = wizardStep === stepNumber;
+          const StepIcon = step.icon;
+
+          return (
+            <div key={step.label} className="flex items-center flex-1 last:flex-initial">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                    isCompleted
+                      ? 'bg-primary text-primary-foreground'
+                      : isCurrent
+                        ? 'bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2 ring-offset-background'
+                        : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {isCompleted ? <Check className="h-4 w-4" /> : stepNumber}
+                </div>
+                <span className={`text-xs font-medium hidden sm:block ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {step.label}
+                </span>
+              </div>
+              {index < WIZARD_STEPS.length - 1 && (
+                <div
+                  className={`mx-2 h-0.5 flex-1 rounded-full transition-colors ${
+                    isCompleted ? 'bg-primary' : 'bg-muted'
+                  }`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ─── Wizard footer buttons ─────────────────────────────────────────
+
+  const renderWizardFooter = () => {
+    if (wizardStep === 1) {
+      return (
+        <div className="admin-modal__footer px-6 py-4">
+          <div className="flex flex-wrap justify-end gap-3">
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button type="button" disabled={saving} onClick={handleWizardStep1Save}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar e continuar'}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (wizardStep === 4) {
+      return (
+        <div className="admin-modal__footer px-6 py-4">
+          <div className="flex flex-wrap justify-between gap-3">
+            <Button type="button" variant="outline" onClick={() => setWizardStep(3)}>Voltar</Button>
+            <Button type="button" disabled={saving} onClick={() => handleWizardStepSave()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finalizar cadastro'}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Steps 2 and 3
+    return (
+      <div className="admin-modal__footer px-6 py-4">
+        <div className="flex flex-wrap justify-between gap-3">
+          <Button type="button" variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>Voltar</Button>
+          <Button type="button" disabled={saving} onClick={() => handleWizardStepSave(wizardStep + 1)}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Modal content ─────────────────────────────────────────────────
+
+  const renderWizardContent = () => (
+    <div className="flex h-full flex-col overflow-hidden">
+      {renderWizardProgress()}
+      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+        {wizardStep === 1 && renderDadosFields()}
+        {wizardStep === 2 && renderBannerFields()}
+        {wizardStep === 3 && renderRedirecionamentoFields()}
+        {wizardStep === 4 && renderContatoFields()}
+      </div>
+      {renderWizardFooter()}
+    </div>
+  );
+
+  const renderEditContent = () => (
+    <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex h-full flex-col overflow-hidden"
+      >
+        <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+          <TabsTrigger
+            value="dados"
+            className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+          >
+            <User className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">Dados gerais</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="banner"
+            className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+          >
+            <Image className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">Banner</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="redirecionamento"
+            className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+          >
+            <Link2 className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">Redirecionamento</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="contato"
+            className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+          >
+            <Phone className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">Contato</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+          <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
+          <TabsContent value="banner" className="mt-0">{renderBannerFields()}</TabsContent>
+          <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
+          <TabsContent value="contato" className="mt-0">{renderContatoFields()}</TabsContent>
+        </div>
+      </Tabs>
+      <div className="admin-modal__footer px-6 py-4">
+        <div className="flex flex-wrap justify-end gap-3">
+          <DialogClose asChild>
+            <Button type="button" variant="outline">Cancelar</Button>
+          </DialogClose>
+          <Button type="submit" disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
 
   return (
     <AdminLayout>
@@ -430,331 +941,30 @@ export default function Sponsors() {
               }}
             >
               <DialogTrigger asChild>
-                <Button>
+                <Button onClick={handleNewSponsor}>
                   <Plus className="h-4 w-4 mr-2" />
                   Adicionar patrocinador
                 </Button>
               </DialogTrigger>
-              {/* Comentário: modal segue o padrão da Frota (/admin/frota) com abas e footer fixo. */}
               <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
                 <DialogHeader className="admin-modal__header px-6 py-4">
-                  <DialogTitle>{editingId ? 'Editar' : 'Novo'} patrocinador</DialogTitle>
+                  <DialogTitle>
+                    {isCreateWizardMode ? 'Novo patrocinador' : 'Editar patrocinador'}
+                  </DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
-                  <Tabs
-                    value={activeTab}
-                    onValueChange={setActiveTab}
-                    className="flex h-full flex-col overflow-hidden"
-                  >
-                    <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                      <TabsTrigger
-                        value="dados"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <User className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Dados gerais</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="banner"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <Image className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Banner</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="redirecionamento"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <Link2 className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Redirecionamento</span>
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="contato"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                      >
-                        <Phone className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Contato</span>
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                      <TabsContent value="dados" className="mt-0">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor="name">Nome do patrocinador *</Label>
-                            <Input
-                              id="name"
-                              value={form.name}
-                              onChange={(e) => setForm({ ...form, name: e.target.value })}
-                              required
-                              placeholder="Ex: Banco Parceiro"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Status</Label>
-                            <Select
-                              value={form.status}
-                              onValueChange={(value: Sponsor['status']) =>
-                                setForm({ ...form, status: value })
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="ativo">Ativo</SelectItem>
-                                <SelectItem value="inativo">Inativo</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="carousel_order">Ordem no carrossel *</Label>
-                            <Input
-                              id="carousel_order"
-                              type="number"
-                              min="0"
-                              value={form.carousel_order}
-                              onChange={(e) => setForm({ ...form, carousel_order: e.target.value })}
-                              required
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Quanto menor o número, mais à esquerda no carrossel.
-                            </p>
-                          </div>
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="banner" className="mt-0">
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label>Banner do patrocinador</Label>
-                            {form.banner_url ? (
-                              <div className="space-y-2">
-                                <label
-                                  className={`group relative block h-[150px] w-full max-w-[600px] overflow-hidden rounded-lg border bg-muted cursor-pointer`}
-                                >
-                                  {/* Comentário: blur de fundo para destacar o banner principal (mesmo padrão do evento). */}
-                                  <img
-                                    src={form.banner_url}
-                                    alt=""
-                                    aria-hidden="true"
-                                    className="absolute inset-0 h-full w-full object-cover blur-xl scale-110 opacity-40"
-                                  />
-                                  <img
-                                    src={form.banner_url}
-                                    alt="Banner do patrocinador"
-                                    className="relative h-full w-full object-contain"
-                                  />
-                                  <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7"
-                                      aria-label="Visualizar banner"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        setImagePreviewOpen(true);
-                                      }}
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-destructive hover:text-destructive"
-                                      aria-label="Remover banner"
-                                      onClick={async (e) => {
-                                        e.preventDefault();
-                                        if (editingId) {
-                                          await supabase
-                                            .from('sponsors')
-                                            .update({ banner_url: null })
-                                            .eq('id', editingId);
-                                        }
-                                        setForm((prev) => ({ ...prev, banner_url: null }));
-                                        toast.success('Banner removido');
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    disabled={uploadingImage || !editingId}
-                                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                                  />
-                                </label>
-                                <label className="inline-flex">
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    disabled={uploadingImage || !editingId}
-                                    onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                                  />
-                                  <Button type="button" variant="outline" size="sm" disabled={uploadingImage}>
-                                    <Upload className="h-4 w-4 mr-1" />
-                                    Trocar
-                                  </Button>
-                                </label>
-                              </div>
-                            ) : (
-                              <label
-                                className={`flex h-[150px] w-full max-w-[600px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
-                                  !editingId
-                                    ? 'border-muted-foreground/15 cursor-not-allowed'
-                                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
-                                }`}
-                              >
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  disabled={uploadingImage || !editingId}
-                                  onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                                />
-                                {uploadingImage ? (
-                                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
-                                ) : (
-                                  <Image className="h-6 w-6 text-muted-foreground/50" />
-                                )}
-                                <p className="text-sm text-muted-foreground">
-                                  {uploadingImage
-                                    ? 'Enviando banner...'
-                                    : !editingId
-                                      ? 'Salve o patrocinador primeiro'
-                                      : 'Adicionar banner (600×150)'}
-                                </p>
-                                <p className="text-xs text-muted-foreground/70">Tamanho ideal: 600×150px</p>
-                              </label>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Tamanho ideal do arquivo: 600×150px (4:1). Mantemos o preview no tamanho real quando possível.
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Este banner será exibido no carrossel do topo do aplicativo.
-                          </p>
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="redirecionamento" className="mt-0">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label>Tipo de redirecionamento</Label>
-                            <Select
-                              value={form.link_type}
-                              onValueChange={(value: Sponsor['link_type']) =>
-                                setForm({ ...form, link_type: value })
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="site">Site</SelectItem>
-                                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {form.link_type === 'site' ? (
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="site_url">URL do site</Label>
-                              <Input
-                                id="site_url"
-                                value={form.site_url}
-                                onChange={(e) => setForm({ ...form, site_url: e.target.value })}
-                                placeholder="https://www.patrocinador.com.br"
-                              />
-                            </div>
-                          ) : (
-                            <>
-                              <div className="space-y-2">
-                                <Label htmlFor="whatsapp_phone">Telefone WhatsApp</Label>
-                                <Input
-                                  id="whatsapp_phone"
-                                  value={form.whatsapp_phone}
-                                  onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })}
-                                  placeholder="+55 11 99999-9999"
-                                />
-                              </div>
-                              <div className="space-y-2 sm:col-span-2">
-                                <Label htmlFor="whatsapp_message">Mensagem padrão (opcional)</Label>
-                                <Textarea
-                                  id="whatsapp_message"
-                                  value={form.whatsapp_message}
-                                  onChange={(e) => setForm({ ...form, whatsapp_message: e.target.value })}
-                                  rows={3}
-                                  placeholder="Olá! Vi o banner no app e gostaria de saber mais."
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </TabsContent>
-
-                      <TabsContent value="contato" className="mt-0">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="contact_name">Nome do contato</Label>
-                            <Input
-                              id="contact_name"
-                              value={form.contact_name}
-                              onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="contact_phone">Telefone</Label>
-                            <Input
-                              id="contact_phone"
-                              value={form.contact_phone}
-                              onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
-                            />
-                          </div>
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor="contact_email">E-mail</Label>
-                            <Input
-                              id="contact_email"
-                              type="email"
-                              value={form.contact_email}
-                              onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      </TabsContent>
-                    </div>
-                  </Tabs>
-                  <div className="admin-modal__footer px-6 py-4">
-                    <div className="flex flex-wrap justify-end gap-3">
-                      <DialogClose asChild>
-                        <Button type="button" variant="outline">
-                          Cancelar
-                        </Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={saving}>
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                      </Button>
-                    </div>
-                  </div>
-                </form>
+                {isCreateWizardMode ? renderWizardContent() : renderEditContent()}
               </DialogContent>
             </Dialog>
           }
         />
 
-        {/* Comentário: KPIs seguem o padrão visual da Frota. */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatsCard label="Total de patrocinadores" value={stats.total} icon={Image} />
           <StatsCard label="Patrocinadores ativos" value={stats.ativos} icon={Image} variant="success" />
           <StatsCard label="Patrocinadores inativos" value={stats.inativos} icon={Image} variant="destructive" />
         </div>
 
-        {/* Comentário: card de filtros segue o mesmo layout e comportamento de /admin/frota. */}
         <FilterCard
           className="mb-6"
           searchValue={filters.search}
@@ -786,9 +996,9 @@ export default function Sponsors() {
           <EmptyState
             icon={<Star className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum patrocinador encontrado"
-            description="Cadastre patrocinadores para aparecerem no carrossel do app"
+            description="Cadastre patrocinadores base para vincular aos seus eventos."
             action={
-              <Button onClick={() => setDialogOpen(true)}>
+              <Button onClick={handleNewSponsor}>
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar patrocinador
               </Button>
@@ -841,7 +1051,7 @@ export default function Sponsors() {
           </Card>
         )}
 
-        {/* Preview do banner seguindo padrão de modal do evento */}
+        {/* Preview do banner */}
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
@@ -861,7 +1071,7 @@ export default function Sponsors() {
           </DialogContent>
         </Dialog>
 
-        {/* Hardening Fase 1: AlertDialog de confirmação para exclusão de patrocinador */}
+        {/* AlertDialog de confirmação para exclusão */}
         <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
