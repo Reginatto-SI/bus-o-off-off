@@ -209,10 +209,10 @@ export default function Sponsors() {
       banner_url: form.banner_url,
       link_type: form.link_type,
       site_url: form.link_type === 'site' ? form.site_url.trim() || null : null,
-      whatsapp_phone: form.link_type === 'whatsapp' ? form.whatsapp_phone.trim() || null : null,
+      whatsapp_phone: form.link_type === 'whatsapp' ? normalizePhoneForStorage(form.whatsapp_phone) || null : null,
       whatsapp_message: form.link_type === 'whatsapp' ? form.whatsapp_message.trim() || null : null,
       contact_name: form.contact_name.trim() || null,
-      contact_phone: form.contact_phone.trim() || null,
+      contact_phone: normalizePhoneForStorage(form.contact_phone) || null,
       contact_email: form.contact_email.trim() || null,
     };
   };
