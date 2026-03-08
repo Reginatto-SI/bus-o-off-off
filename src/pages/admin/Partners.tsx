@@ -135,7 +135,7 @@ export default function Partners() {
     <AdminLayout>
       <div className="page-container">
         <PageHeader
-          title="Parceiros"
+          title="Sócios da Plataforma"
           metadata={
             <div className="space-y-2">
               {/* Identificação visual discreta para reforçar que esta é uma área técnica do sistema. */}
@@ -146,11 +146,11 @@ export default function Partners() {
               <p className="text-xs text-muted-foreground">Área técnica restrita ao desenvolvedor do sistema.</p>
             </div>
           }
-          description="Gerencie os parceiros da plataforma e seus percentuais de comissão"
+          description="Configure os sócios da plataforma e defina o percentual da comissão da plataforma que será repassado automaticamente via Stripe."
           actions={
             <Button onClick={openNew}>
               <Plus className="h-4 w-4 mr-2" />
-              Novo Parceiro
+              Novo Sócio
             </Button>
           }
         />
