@@ -46,6 +46,13 @@ const REASON_MESSAGES: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 /*  Debug state — temporary diagnostic panel for mobile field testing  */
 /* ------------------------------------------------------------------ */
+type AttemptResult = {
+  label: string;
+  deviceId: string;
+  result: 'success' | 'track_ended' | 'no_frames' | 'error';
+  detail?: string;
+};
+
 type DebugInfo = {
   permission: string;
   streamExists: boolean;
@@ -65,6 +72,9 @@ type DebugInfo = {
   initCount: number;
   lastInitAt: string | null;
   liveTrackStates: string[];
+  selectedDeviceId: string | null;
+  candidateBackCameras: string[];
+  attemptResults: AttemptResult[];
 };
 
 const INITIAL_DEBUG: DebugInfo = {
@@ -86,6 +96,9 @@ const INITIAL_DEBUG: DebugInfo = {
   initCount: 0,
   lastInitAt: null,
   liveTrackStates: [],
+  selectedDeviceId: null,
+  candidateBackCameras: [],
+  attemptResults: [],
 };
 
 /**
