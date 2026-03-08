@@ -649,7 +649,7 @@ export default function DriverValidate() {
                     {overlay.result === 'success' && (
                       <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
                         <Users className="mr-2 h-4 w-4" />
-                        Ver embarque
+                        Lista de passageiros
                       </Button>
                     )}
                     {overlay.result === 'success' && overlay.checkout_enabled && overlay.boarding_status === 'checked_in' && (
