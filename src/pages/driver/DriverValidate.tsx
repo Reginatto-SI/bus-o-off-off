@@ -688,7 +688,7 @@ export default function DriverValidate() {
                   type="button"
                   variant="secondary"
                   disabled={!manualToken.trim() || processing}
-                  onClick={() => handleValidate(manualToken.trim(), 'checkin')}
+                  onClick={() => handleValidate(manualToken.trim(), phaseConfig.action)}
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>
