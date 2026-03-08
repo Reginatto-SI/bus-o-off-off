@@ -436,7 +436,7 @@ export default function Sponsors() {
       .upload(fileName, file);
 
     if (uploadError) {
-      toast.error('Erro ao fazer upload do banner');
+      toast.error('Erro ao fazer upload da logo');
       setUploadingImage(false);
       return;
     }
