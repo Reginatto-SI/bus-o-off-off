@@ -581,12 +581,13 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'publicacao'] as const;
+  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'patrocinadores', 'publicacao'] as const;
   const WIZARD_TAB_LABELS: Record<string, string> = {
     geral: 'Geral',
     viagens: 'Frotas',
     embarques: 'Embarques',
     passagens: 'Passagens',
+    patrocinadores: 'Patrocinadores',
     publicacao: 'Publicação',
   };
 
