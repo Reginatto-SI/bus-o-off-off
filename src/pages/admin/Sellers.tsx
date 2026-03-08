@@ -316,7 +316,7 @@ export default function Sellers() {
     const payload = {
       name: form.name,
       cpf: form.cpf || null,
-      phone: form.phone || null,
+      phone: normalizePhoneForStorage(form.phone) || null,
       email: form.email || null,
       commission_percent: commissionValue,
       pix_key: form.pix_key || null,
