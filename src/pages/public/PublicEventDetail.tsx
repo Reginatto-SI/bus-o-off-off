@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, EventBoardingLocation } from '@/types/database';
+import { Event, Trip, EventBoardingLocation, EventSponsor } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle } from 'lucide-react';
+import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { VehicleCard } from '@/components/public/VehicleCard';
@@ -15,6 +15,7 @@ import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { parseDateOnlyAsLocal } from '@/lib/date';
+import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 
 type TransportPolicy = Event['transport_policy'];
 
