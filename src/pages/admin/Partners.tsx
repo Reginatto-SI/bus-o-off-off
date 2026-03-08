@@ -60,7 +60,7 @@ export default function Partners() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast.error('Erro ao carregar parceiros');
+      toast.error('Erro ao carregar sócios');
     } else {
       setPartners((data ?? []) as Partner[]);
     }
@@ -117,16 +117,16 @@ export default function Partners() {
     }
 
     if (error) {
-      toast.error('Erro ao salvar parceiro');
+      toast.error('Erro ao salvar sócio');
     } else {
-      toast.success(editingId ? 'Parceiro atualizado' : 'Parceiro cadastrado');
+      toast.success(editingId ? 'Sócio atualizado' : 'Sócio cadastrado');
       setModalOpen(false);
       fetchPartners();
     }
     setSaving(false);
   };
 
-  // Proteção de rota no front-end: página de parceiros é exclusiva para perfil developer.
+  // Proteção de rota no front-end: página de sócios é exclusiva para perfil developer.
   if (!isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
@@ -135,7 +135,7 @@ export default function Partners() {
     <AdminLayout>
       <div className="page-container">
         <PageHeader
-          title="Parceiros"
+          title="Sócios da Plataforma"
           metadata={
             <div className="space-y-2">
               {/* Identificação visual discreta para reforçar que esta é uma área técnica do sistema. */}
@@ -146,11 +146,11 @@ export default function Partners() {
               <p className="text-xs text-muted-foreground">Área técnica restrita ao desenvolvedor do sistema.</p>
             </div>
           }
-          description="Gerencie os parceiros da plataforma e seus percentuais de comissão"
+          description="Configure os sócios da plataforma e defina o percentual da comissão da plataforma que será repassado automaticamente via Stripe."
           actions={
             <Button onClick={openNew}>
               <Plus className="h-4 w-4 mr-2" />
-              Novo Parceiro
+              Novo Sócio
             </Button>
           }
         />
@@ -162,12 +162,12 @@ export default function Partners() {
         ) : partners.length === 0 ? (
           <EmptyState
             icon={<Handshake className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum parceiro cadastrado"
-            description="Cadastre um parceiro para dividir a comissão da plataforma automaticamente"
+            title="Nenhum sócio cadastrado"
+            description="Cadastre um sócio para dividir a comissão da plataforma automaticamente via Stripe Connect."
             action={
               <Button onClick={openNew}>
                 <Plus className="h-4 w-4 mr-2" />
-                Novo Parceiro
+                Novo Sócio
               </Button>
             }
           />
@@ -212,7 +212,7 @@ export default function Partners() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar Parceiro' : 'Novo Parceiro'}</DialogTitle>
+              <DialogTitle>{editingId ? 'Editar Sócio' : 'Novo Sócio'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -220,7 +220,7 @@ export default function Partners() {
                 <Input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Nome do parceiro"
+                  placeholder="Nome do sócio"
                 />
               </div>
               <div className="space-y-2">
@@ -231,7 +231,7 @@ export default function Partners() {
                   placeholder="acct_..."
                 />
                 <p className="text-xs text-muted-foreground">
-                  ID da conta Stripe Connect do parceiro para recebimento automático
+                  ID da conta Stripe Connect do sócio para recebimento automático da participação na comissão da plataforma.
                 </p>
               </div>
               <div className="space-y-2">
@@ -245,7 +245,7 @@ export default function Partners() {
                   onChange={(e) => setForm({ ...form, split_percent: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Referência global. O valor efetivo é configurado por empresa.
+                  Percentual da comissão da plataforma que será repassado automaticamente ao sócio.
                 </p>
               </div>
               <div className="space-y-2">

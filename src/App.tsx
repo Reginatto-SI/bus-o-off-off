@@ -101,7 +101,8 @@ const App = () => (
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
-            <Route path="/admin/parceiros" element={<Partners />} />
+            <Route path="/admin/socios" element={<Partners />} />
+            <Route path="/admin/parceiros" element={<Navigate to="/admin/socios" replace />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/templates-layout" element={<TemplatesLayout />} />

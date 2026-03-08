@@ -1,28 +1,30 @@
 
 
-## Plano: Renomear "Parceiros" → "Sócios da Plataforma"
+# Imagem padrão para eventos sem banner
 
-Alteração puramente de nomenclatura/textos em 3 arquivos + rota. Sem mudança de lógica.
+## Mudança
 
-### 1. `src/App.tsx`
-- Rota `/admin/parceiros` → `/admin/socios`
-- Adicionar redirect `/admin/parceiros` → `/admin/socios` para links antigos
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### 2. `src/components/layout/AdminSidebar.tsx`
-- `name: 'Parceiros'` → `name: 'Sócios'`
-- `href: '/admin/parceiros'` → `href: '/admin/socios'`
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+```
 
-### 3. `src/pages/admin/Partners.tsx`
-Textos a atualizar:
-- Título: "Parceiros" → "Sócios da Plataforma"
-- Descrição: atualizar para texto sobre divisão de receita da comissão
-- Toast erro: "parceiros" → "sócios"
-- Empty state: "Nenhum parceiro cadastrado" → "Nenhum sócio cadastrado"
-- Empty state descrição: atualizar para contexto de divisão de comissão
-- Modal título: "Novo/Editar Parceiro" → "Novo/Editar Sócio"
-- Placeholder nome: "Nome do parceiro" → "Nome do sócio"
-- Descrição Stripe: atualizar para mencionar participação na comissão
-- Descrição Split: atualizar para "Percentual da comissão da plataforma repassado ao sócio"
-- Redirect guard comentário: atualizar
-- Botão: "Novo Parceiro" → "Novo Sócio"
+### Componentes afetados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+
+### Lógica simplificada (ambos os cards)
+
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+
+### Imagem padrão
+
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
