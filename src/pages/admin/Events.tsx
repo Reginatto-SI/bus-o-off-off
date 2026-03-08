@@ -1689,9 +1689,9 @@ export default function Events() {
     const { error } = await supabase.from('trips').delete().eq('id', tripToDelete.id);
 
     if (error) {
-      toast.error('Erro ao excluir viagem');
+      toast.error('Erro ao excluir transporte');
     } else {
-      toast.success('Viagem excluída');
+      toast.success('Transporte excluído');
       fetchEventTrips(editingId);
       fetchEvents();
     }
