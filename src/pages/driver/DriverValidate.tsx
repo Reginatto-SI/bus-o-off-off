@@ -341,7 +341,8 @@ export default function DriverValidate() {
       // 8. Frame validation — poll for real frames
       let frameConfirmed = false;
       for (let i = 0; i < 30; i++) {
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
+        // Strict threshold: real cameras always produce > 100px
+        if (video.videoWidth > 100 && video.videoHeight > 100) {
           frameConfirmed = true;
           break;
         }
