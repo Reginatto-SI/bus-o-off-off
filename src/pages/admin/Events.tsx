@@ -3122,7 +3122,7 @@ export default function Events() {
                       <>
                         <div className="grid gap-4 lg:grid-cols-[40%,1fr] items-end">
                           <div className="space-y-2">
-                            <Label>Viagem Selecionada</Label>
+                            <Label>Selecionar transporte</Label>
                             <Select
                               value={selectedTripIdForBoardings ?? '__none__'}
                               onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
