@@ -61,6 +61,7 @@ export default function DriverBoarding() {
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
   const [undoPassenger, setUndoPassenger] = useState<PassengerRow | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [_tripId, setTripId] = useState<string | null>(null);
 
   // Read phase from localStorage
