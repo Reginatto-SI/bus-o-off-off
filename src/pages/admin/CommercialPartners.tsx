@@ -56,7 +56,7 @@ import {
   Image,
   Globe,
   Loader2,
-  Instagram,
+  
   Star,
   Pencil,
   Phone,
