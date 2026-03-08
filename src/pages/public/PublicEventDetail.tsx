@@ -377,7 +377,7 @@ export default function PublicEventDetail() {
               </section>
             )}
 
-              {/* Link secundário de suporte para evitar o retorno da jornada em caso de dúvida no checkout. */}
+            <div className="pt-2 space-y-2">
               {whatsappHelpLink && (
                 <div className="flex justify-end">
                   <a
