@@ -244,7 +244,7 @@ serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ onboarding_url: accountLink.url }),
+      JSON.stringify({ onboarding_url: accountLink.url, pix_enabled: pixEnabled }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
