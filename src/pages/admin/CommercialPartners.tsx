@@ -225,6 +225,9 @@ export default function CommercialPartners() {
       contact_phone: form.contact_phone.trim() || null,
       contact_email: form.contact_email.trim() || null,
       notes: form.notes.trim() || null,
+      show_on_showcase: form.show_on_showcase,
+      show_on_event_page: form.show_on_event_page,
+      show_on_ticket: form.show_on_ticket,
     };
   };
 
