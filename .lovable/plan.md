@@ -1,30 +1,45 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Substituir dropdown de Nível do Parceiro por cards selecionáveis
 
-## Mudança
+### Arquivo a modificar
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+`src/pages/admin/CommercialPartners.tsx`
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+### Mudança
+
+Substituir o bloco `<Select>` de "Nível do parceiro" (linhas 468-478) por 3 cards clicáveis lado a lado com título e descrição.
+
+### Implementação
+
+Criar um grid de 3 colunas com cards clicáveis. Cada card:
+- Borda destacada (ex: `border-primary ring-2 ring-primary`) quando selecionado
+- Título em negrito
+- Descrição curta em `text-muted-foreground text-xs`
+- `cursor-pointer` e hover state
+
+Dados dos cards:
+
+| Valor | Título | Descrição |
+|-------|--------|-----------|
+| `basico` | Básico | Exibição padrão na vitrine da empresa. O parceiro aparece na lista de parceiros oficiais. |
+| `destaque` | Destaque | Maior visibilidade na vitrine. Pode aparecer antes dos parceiros básicos. |
+| `premium` | Premium | Máximo destaque na vitrine. Aparece nas posições prioritárias e possui maior visibilidade no sistema. |
+
+O click no card faz `setForm({ ...form, partner_tier: value })`, mantendo compatibilidade total com o fluxo existente.
+
+### Layout
+
+```text
+┌────────────┐ ┌────────────┐ ┌────────────┐
+│  Básico    │ │  Destaque  │ │  Premium   │
+│  descrição │ │  descrição │ │  descrição │
+└────────────┘ └────────────┘ └────────────┘
 ```
 
-### Componentes afetados
+Grid responsivo: `grid grid-cols-3 gap-3` (desktop) ou `grid-cols-1` em telas muito pequenas (mas admin é desktop-first, então priorizar 3 colunas).
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+### Sem alteração de dados
 
-### Lógica simplificada (ambos os cards)
-
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
-
-### Imagem padrão
-
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+O valor continua sendo `basico | destaque | premium` — apenas a UI de seleção muda.
 
