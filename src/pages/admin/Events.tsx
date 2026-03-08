@@ -3014,72 +3014,83 @@ export default function Events() {
                           </div>
                         ) : (
                           <div className="grid gap-3 lg:grid-cols-2">
-                            {/* Mantemos a ordem visual Ida → Volta para evitar confusão no operador. */}
-                            {sortedEventTrips.map((trip) => {
-                              const pairedTrip = trip.paired_trip_id 
-                                ? eventTrips.find(t => t.id === trip.paired_trip_id) 
-                                : null;
-                              
-                              return (
-                                <Card key={trip.id} className="p-3">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="flex flex-col gap-2">
-                                      <div className="flex items-center gap-4 flex-wrap">
-                                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                          trip.trip_type === 'ida' 
-                                            ? 'bg-primary/10 text-primary' 
-                                            : 'bg-secondary text-secondary-foreground'
-                                        }`}>
-                                          {trip.trip_type === 'ida' ? 'IDA' : 'VOLTA'}
-                                        </span>
-                                        {/* Horários removidos: exibimos apenas dados essenciais da frota. */}
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Bus className="h-4 w-4 text-muted-foreground" />
-                                          <span>
-                                            {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                            {/* Agrupamos trips pareadas em um único card de "Transporte" */}
+                            {(() => {
+                              const renderedTripIds = new Set<string>();
+                              return sortedEventTrips.map((trip) => {
+                                if (renderedTripIds.has(trip.id)) return null;
+                                renderedTripIds.add(trip.id);
+
+                                const pairedTrip = trip.paired_trip_id 
+                                  ? eventTrips.find(t => t.id === trip.paired_trip_id) 
+                                  : null;
+                                
+                                // Se esta é a volta de um par já renderizado, pular
+                                if (trip.trip_type === 'volta' && pairedTrip && renderedTripIds.has(pairedTrip.id)) return null;
+                                
+                                if (pairedTrip) renderedTripIds.add(pairedTrip.id);
+
+                                const isPaired = !!pairedTrip;
+                                const badgeLabel = isPaired 
+                                  ? 'IDA E VOLTA' 
+                                  : trip.trip_type === 'ida' ? 'SOMENTE IDA' : 'SOMENTE VOLTA';
+                                const badgeClass = isPaired
+                                  ? 'bg-primary/10 text-primary'
+                                  : trip.trip_type === 'ida'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'bg-secondary text-secondary-foreground';
+                                
+                                return (
+                                  <Card key={trip.id} className="p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-4 flex-wrap">
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${badgeClass}`}>
+                                            {badgeLabel}
                                           </span>
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <Bus className="h-4 w-4 text-muted-foreground" />
+                                            <span>
+                                              {trip.vehicle ? `${vehicleTypeLabels[trip.vehicle.type]} ${trip.vehicle.plate}` : 'Veículo não definido'}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-sm">
+                                            <Users className="h-4 w-4 text-muted-foreground" />
+                                            <span>{trip.capacity} lugares</span>
+                                          </div>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Users className="h-4 w-4 text-muted-foreground" />
-                                          <span>{trip.capacity} lugares</span>
+                                        <div className="text-xs text-muted-foreground">
+                                          Motorista: {trip.driver?.name ?? 'Não definido'}
+                                          {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
                                         </div>
                                       </div>
-                                      <div className="text-xs text-muted-foreground">
-                                        Motorista: {trip.driver?.name ?? 'Não definido'}
-                                        {trip.assistant_driver && ` | Ajudante: ${trip.assistant_driver.name}`}
-                                        {pairedTrip && (
-                                          <span className="ml-2 text-primary">
-                                            [Par: {pairedTrip.trip_type === 'ida' ? 'Ida' : 'Volta'}]
-                                          </span>
-                                        )}
-                                      </div>
+                                      {!isReadOnly && (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8"
+                                            onClick={() => handleEditTrip(trip)}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-destructive hover:text-destructive"
+                                            onClick={() => confirmDeleteTrip(trip)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
-                                    {!isReadOnly && (
-                                      <div className="flex items-center gap-1">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8"
-                                          onClick={() => handleEditTrip(trip)}
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-destructive hover:text-destructive"
-                                          onClick={() => confirmDeleteTrip(trip)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </Card>
-                              );
-                            })}
+                                  </Card>
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </>
