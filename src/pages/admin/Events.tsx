@@ -3128,7 +3128,7 @@ export default function Events() {
                               onValueChange={(value) => setSelectedTripIdForBoardings(value === '__none__' ? null : value)}
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="Selecione uma viagem" />
+                                <SelectValue placeholder="Selecione um transporte" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__none__">Todas as viagens</SelectItem>
