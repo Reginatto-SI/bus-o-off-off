@@ -930,7 +930,7 @@ export default function CommercialPartners() {
                               ? 'bg-primary/10 text-primary'
                               : 'bg-muted text-muted-foreground'
                         }`}>
-                          {TIER_LABELS[partner.partner_tier]}
+                          {TIER_LABELS[partner.partner_tier]}{partner.partner_tier === 'destaque' ? ' ⭐' : partner.partner_tier === 'premium' ? ' 🔥' : ''}
                         </span>
                       </TableCell>
                       <TableCell>{partner.display_order}</TableCell>
