@@ -209,6 +209,8 @@ export default function TicketLookup() {
       if (error) throw error;
 
       const ticketResults = data?.tickets || [];
+      const commercialPartners = data?.commercialPartners || [];
+      const eventSponsorsData = data?.eventSponsors || [];
       const eventFees: EventFeeInput[] = (data?.eventFees || []).map((f: any) => ({
         name: f.name,
         fee_type: f.fee_type as 'fixed' | 'percent',
