@@ -50,6 +50,9 @@ export interface TicketCardData {
   seatCategory?: string | null;
   seatFloor?: number | null;
   vehicleFloors?: number | null;
+  // Parceiros e patrocinadores (modelo único global)
+  commercialPartners?: { name: string; logo_url: string | null }[];
+  eventSponsors?: { name: string; logo_url: string | null }[];
 }
 
 function maskCpf(cpf: string): string {
