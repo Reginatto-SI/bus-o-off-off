@@ -4484,11 +4484,18 @@ export default function Events() {
                     <SelectValue placeholder="Selecione um transporte *" />
                   </SelectTrigger>
                   <SelectContent>
-                    {sortedEventTrips.map((trip) => (
-                      <SelectItem key={trip.id} value={trip.id}>
-                        {getTripLabelWithoutTime(trip)}
-                      </SelectItem>
-                    ))}
+                    {isGroupedTransportPolicy
+                      ? groupedBoardingTripOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))
+                      : sortedEventTrips.map((trip) => (
+                          <SelectItem key={trip.id} value={trip.id}>
+                            {getTripLabelWithoutTime(trip)}
+                          </SelectItem>
+                        ))
+                    }
                   </SelectContent>
                 </Select>
               </div>
