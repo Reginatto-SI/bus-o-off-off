@@ -738,15 +738,33 @@ export default function Sales() {
   };
 
   // ── Change status (Gerente only) ──
+  // IMPORTANTE: vendas administrativas com taxa pendente (platform_fee_status != 'paid')
+  // não podem ser marcadas como 'pago'. O trigger no banco bloqueia isso,
+  // mas o frontend também valida para dar feedback claro ao usuário.
   const handleChangeStatus = async (sale: Sale, newStatus: SaleStatus) => {
     if (!user || !activeCompanyId) return;
+
+    // Bloqueio frontend: impede marcar como pago se taxa da plataforma está pendente
+    if (newStatus === 'pago') {
+      const feeStatus = (sale as any).platform_fee_status;
+      if (feeStatus && feeStatus !== 'paid' && feeStatus !== 'not_applicable' && feeStatus !== 'waived') {
+        toast.error('Não é possível marcar como pago: taxa da plataforma pendente. Pague a taxa primeiro.');
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('sales')
       .update({ status: newStatus as any })
       .eq('id', sale.id);
 
     if (error) {
-      toast.error('Erro ao alterar status');
+      // O trigger do banco pode bloquear a transição — traduzir mensagem para o usuário
+      if (error.message?.includes('taxa da plataforma pendente')) {
+        toast.error('Não é possível marcar como pago: taxa da plataforma pendente.');
+      } else {
+        toast.error('Erro ao alterar status');
+      }
       return;
     }
 
@@ -762,6 +780,28 @@ export default function Sales() {
 
     toast.success(`Status alterado para ${statusLabels[newStatus]}`);
     fetchSales();
+  };
+
+  // ── Pagar taxa da plataforma (abre Stripe Checkout na conta da plataforma) ──
+  const [payingFee, setPayingFee] = useState(false);
+  const handlePayPlatformFee = async (sale: Sale) => {
+    setPayingFee(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
+        body: { sale_id: sale.id },
+      });
+      if (error || !data?.url) {
+        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+        return;
+      }
+      // Abre o checkout da taxa em nova aba
+      window.open(data.url, '_blank');
+      toast.info('Checkout da taxa aberto em nova aba. Após o pagamento, atualize a listagem.');
+    } catch (err: any) {
+      toast.error('Erro ao iniciar pagamento da taxa');
+    } finally {
+      setPayingFee(false);
+    }
   };
 
   // ── Copy link ──
