@@ -2976,7 +2976,7 @@ export default function Events() {
                     ) : (
                       <>
                         <div className="flex items-center justify-between">
-                          <h3 className="font-medium">Viagens do Evento</h3>
+                          <h3 className="font-medium">Transportes do Evento</h3>
                           {!isReadOnly && (
                             <Button
                               type="button"
