@@ -56,6 +56,8 @@ export default function Confirmation() {
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
+  const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
   // Ref para evitar chamada dupla ao verify-payment-status durante polling
   const verifyCalledRef = useRef(false);
 
@@ -90,6 +92,31 @@ export default function Confirmation() {
           if (companyData) {
             setCompany(companyData as CompanyInfo);
             companyFeePercent = companyData.platform_fee_percent != null ? Number(companyData.platform_fee_percent) : null;
+
+            // Fetch commercial partners for ticket
+            const { data: partnersData } = await supabase
+              .from('commercial_partners')
+              .select('name, logo_url')
+              .eq('company_id', companyId)
+              .eq('status', 'ativo')
+              .eq('show_on_ticket', true)
+              .order('display_order')
+              .limit(6);
+            setCommercialPartners((partnersData || []).map((p: any) => ({ name: p.name, logo_url: p.logo_url })));
+
+            // Fetch event sponsors for ticket
+            const { data: esData } = await supabase
+              .from('event_sponsors')
+              .select('display_order, sponsor:sponsors(name, banner_url, status)')
+              .eq('event_id', saleRes.data.event_id)
+              .eq('show_on_ticket', true)
+              .order('display_order')
+              .limit(6);
+            setEventSponsors(
+              (esData || [])
+                .filter((es: any) => es.sponsor?.status === 'ativo')
+                .map((es: any) => ({ name: es.sponsor.name, logo_url: es.sponsor.banner_url }))
+            );
           }
         }
 
@@ -260,6 +287,8 @@ export default function Confirmation() {
       seatCategory: seatInfo?.category || null,
       seatFloor: seatInfo?.floor || null,
       vehicleFloors: vehicleFloors,
+      commercialPartners: commercialPartners.length > 0 ? commercialPartners : undefined,
+      eventSponsors: eventSponsors.length > 0 ? eventSponsors : undefined,
     };
   });
 

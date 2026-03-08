@@ -189,8 +189,37 @@ serve(async (req) => {
       );
     }
 
+    // 7. Fetch commercial partners for ticket display
+    let commercialPartners: { name: string; logo_url: string | null }[] = [];
+    if (firstCompanyId) {
+      const { data: partnersData } = await supabaseAdmin
+        .from("commercial_partners")
+        .select("name, logo_url")
+        .eq("company_id", firstCompanyId)
+        .eq("status", "ativo")
+        .eq("show_on_ticket", true)
+        .order("display_order", { ascending: true })
+        .limit(6);
+      commercialPartners = (partnersData || []).map((p: any) => ({ name: p.name, logo_url: p.logo_url }));
+    }
+
+    // 8. Fetch event sponsors for ticket display
+    let eventSponsors: { name: string; logo_url: string | null }[] = [];
+    {
+      const { data: esData } = await supabaseAdmin
+        .from("event_sponsors")
+        .select("display_order, sponsor:sponsors(name, banner_url, status)")
+        .eq("event_id", event_id)
+        .eq("show_on_ticket", true)
+        .order("display_order", { ascending: true })
+        .limit(6);
+      eventSponsors = (esData || [])
+        .filter((es: any) => es.sponsor?.status === "ativo")
+        .map((es: any) => ({ name: es.sponsor.name, logo_url: es.sponsor.banner_url }));
+    }
+
     return new Response(
-      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer, platformFeePercent }),
+      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer, platformFeePercent, commercialPartners, eventSponsors }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

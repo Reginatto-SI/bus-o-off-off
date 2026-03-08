@@ -62,7 +62,16 @@ export async function renderTicketVisual(
   const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
   const hasSeatMeta = !!(ticket.seatCategory && ticket.seatCategory !== 'convencional') || !!(ticket.vehicleFloors && ticket.vehicleFloors > 1 && ticket.seatFloor);
   const seatMetaHeight = hasSeatMeta ? 60 : 0;
-  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight;
+
+  // Partners/sponsors height calculation
+  const partnersCount = ticket.commercialPartners?.slice(0, 6).filter(p => p.logo_url).length ?? 0;
+  const sponsorsCount = ticket.eventSponsors?.slice(0, 6).filter(s => s.logo_url).length ?? 0;
+  const partnersRows = partnersCount > 0 ? Math.ceil(partnersCount / 3) : 0;
+  const sponsorsRows = sponsorsCount > 0 ? Math.ceil(sponsorsCount / 3) : 0;
+  const partnersBlockHeight = partnersCount > 0 ? 40 + partnersRows * 56 : 0;
+  const sponsorsBlockHeight = sponsorsCount > 0 ? 40 + sponsorsRows * 56 : 0;
+
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -293,6 +302,74 @@ export async function renderTicketVisual(
   ctx.fillText('• É obrigatório apresentar documento oficial com foto no momento do embarque.', cardX + 34, y);
   y += 26;
   ctx.fillText('• Recomenda-se chegar com antecedência mínima de 10 minutos.', cardX + 34, y);
+
+  // Commercial Partners section
+  const visiblePartners = (ticket.commercialPartners || []).slice(0, 6).filter(p => p.logo_url);
+  if (visiblePartners.length > 0) {
+    y += 10;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 18px Inter, Arial, sans-serif';
+    ctx.fillText('Parceiros oficiais', cardX + 34, y);
+    y += 28;
+
+    const logoSize = 44;
+    const logoGap = 16;
+    let logoX = cardX + 34;
+    for (let i = 0; i < visiblePartners.length; i++) {
+      if (i > 0 && i % 3 === 0) {
+        logoX = cardX + 34;
+        y += logoSize + logoGap;
+      }
+      try {
+        const img = await loadImage(visiblePartners[i].logo_url!);
+        ctx.drawImage(img, logoX, y, logoSize, logoSize);
+      } catch { /* skip failed logos */ }
+      logoX += logoSize + logoGap;
+    }
+    y += logoSize;
+  }
+
+  // Event Sponsors section
+  const visibleSponsors = (ticket.eventSponsors || []).slice(0, 6).filter(s => s.logo_url);
+  if (visibleSponsors.length > 0) {
+    y += 10;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 18px Inter, Arial, sans-serif';
+    ctx.fillText('Patrocinadores do evento', cardX + 34, y);
+    y += 28;
+
+    const logoSize = 44;
+    const logoGap = 16;
+    let logoX = cardX + 34;
+    for (let i = 0; i < visibleSponsors.length; i++) {
+      if (i > 0 && i % 3 === 0) {
+        logoX = cardX + 34;
+        y += logoSize + logoGap;
+      }
+      try {
+        const img = await loadImage(visibleSponsors[i].logo_url!);
+        ctx.drawImage(img, logoX, y, logoSize, logoSize);
+      } catch { /* skip failed logos */ }
+      logoX += logoSize + logoGap;
+    }
+    y += logoSize;
+  }
 
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {
