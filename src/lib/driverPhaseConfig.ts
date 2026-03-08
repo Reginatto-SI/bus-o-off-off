@@ -110,6 +110,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   invalid_action: 'Ação inválida',
   already_reboarded: 'Já reembarcado',
   reboard_without_checkout: 'Reembarque sem desembarque',
+  undo_not_applicable: 'Operação não pode ser desfeita nesta fase',
   rpc_error: 'Erro de comunicação',
   invalid_response: 'Resposta inválida',
 };
