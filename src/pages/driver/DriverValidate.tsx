@@ -381,11 +381,15 @@ export default function DriverValidate() {
         if (caps?.torch) setTorchSupported(true);
       }
     } catch (err: any) {
-      console.error('[CAM] init failed:', err);
+      console.error(`[CAM] init #${thisInitId} failed:`, err);
       setCameraReady(false);
       const errMsg = `Erro ao iniciar câmera: ${err?.message || 'desconhecido'}`;
       setCameraError(errMsg);
       updateDebug({ cameraReady: false, cameraError: errMsg, lastError: err?.message });
+    } finally {
+      initInProgressRef.current = false;
+      updateDebug({ initInProgress: false });
+      console.log(`[CAM] startCamera #${thisInitId} END`);
     }
   }, [stopCurrentStream, updateDebug]);
 
