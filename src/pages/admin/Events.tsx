@@ -542,6 +542,13 @@ export default function Events() {
       return null;
     }
 
+    if (tabValue === 'patrocinadores') {
+      if (!effectiveEventId) {
+        return 'Salve o evento na aba Geral para liberar Patrocinadores.';
+      }
+      return null;
+    }
+
     if (tabValue === 'publicacao') {
       if (!isGeralComplete) {
         return `Complete ${geralMissingFields.join(', ')} na aba Geral para liberar Publicação.`;
