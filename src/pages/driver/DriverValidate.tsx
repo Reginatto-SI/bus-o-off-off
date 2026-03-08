@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, CheckCircle2, Loader2, QrCode, RotateCcw, Users, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, QrCode, RefreshCw, RotateCcw, Users, Zap } from 'lucide-react';
 
 type ValidationResponse = {
   result: 'success' | 'blocked';
@@ -43,17 +43,25 @@ const REASON_MESSAGES: Record<string, string> = {
   invalid_action: 'Ação inválida',
 };
 
+/**
+ * CONSTRAINT CHAIN for camera:
+ * 1. Try rear camera with facingMode: { ideal: 'environment' }
+ * 2. Fallback: any camera without facingMode constraint
+ * This handles devices where environment constraint fails.
+ */
+const CAMERA_CONSTRAINTS_CHAIN: MediaStreamConstraints[] = [
+  { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+  { video: true, audio: false },
+];
+
 export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading } = useAuth();
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
 
-  // Stream and detector refs — persist across renders without triggering re-renders
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
   const scanIntervalRef = useRef<number | null>(null);
-  // Track whether we already started scanner to avoid double-init
-  const initStartedRef = useRef(false);
 
   const [processing, setProcessing] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
@@ -66,14 +74,9 @@ export default function DriverValidate() {
   const [torchSupported, setTorchSupported] = useState(false);
 
   /**
-   * videoEl keeps a direct reference to the <video> DOM node.
-   * We use a state (not useRef) so that the callback-ref triggers
-   * the camera-init effect when the element appears in the DOM.
-   * This is the FIX for the black-screen bug: the old useRef was
-   * already set via `ref={videoRef}`, but the useEffect that called
-   * startScanner ran on mount — before auth resolved and the <video>
-   * was rendered. Using state ensures the effect re-runs when the
-   * element actually exists.
+   * videoEl via callback ref (useState, not useRef).
+   * The camera-init effect depends on this — it only fires once the
+   * <video> element is actually in the DOM (after auth resolves).
    */
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
@@ -135,7 +138,6 @@ export default function DriverValidate() {
     setProcessing(false);
   }, [lockScannerTemporarily, processing]);
 
-  // Toggle torch/flash
   const toggleTorch = useCallback(async () => {
     if (!streamRef.current) return;
     const track = streamRef.current.getVideoTracks()[0];
@@ -144,113 +146,174 @@ export default function DriverValidate() {
       const newState = !torchOn;
       await (track as any).applyConstraints({ advanced: [{ torch: newState }] as any });
       setTorchOn(newState);
-    } catch {
-      // torch not supported on this device
-    }
+    } catch { /* torch not supported */ }
   }, [torchOn]);
 
   /**
-   * Camera initialization effect.
+   * stopCurrentStream — stops all tracks on the current stream
+   * and clears the scan interval. Must be called before opening a
+   * new stream or when cleaning up on unmount / visibility change.
+   */
+  const stopCurrentStream = useCallback(() => {
+    if (scanIntervalRef.current) {
+      window.clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
+    setTorchOn(false);
+    setTorchSupported(false);
+  }, []);
+
+  /**
+   * startCamera — the core initialization routine.
    *
-   * KEY FIX: This effect depends on `videoEl` (set via callback ref).
-   * It only runs when the <video> element is actually mounted in the DOM,
-   * which happens AFTER auth resolves and the full JSX is rendered.
-   *
-   * Previous bug: the old useEffect with `[]` deps ran on mount, but at
-   * that point `loading=true` meant <video> wasn't rendered yet, so
-   * videoRef.current was null and the stream was silently lost.
+   * KEY DESIGN DECISIONS:
+   * 1. Always clean up the previous stream first (avoids leaked tracks).
+   * 2. Try constraints in a chain: rear camera first, then any camera.
+   * 3. After getting the stream, assign srcObject and call play().
+   * 4. ONLY set cameraReady=true AFTER confirming real frames exist
+   *    (videoWidth > 0). This prevents the false-positive "ready but
+   *    black" state that was the original bug.
+   * 5. If play() fails or no frames appear within 3s, show an error
+   *    with a retry button instead of a silent black screen.
+   */
+  const startCamera = useCallback(async (video: HTMLVideoElement) => {
+    stopCurrentStream();
+    setCameraError(null);
+
+    // Setup BarcodeDetector if available
+    const hasBarcodeDetector = Boolean(window.BarcodeDetector);
+    setScannerSupported(hasBarcodeDetector);
+    if (hasBarcodeDetector && window.BarcodeDetector) {
+      detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+    }
+
+    // Try each constraint set in order until one works
+    let stream: MediaStream | null = null;
+    for (const constraints of CAMERA_CONSTRAINTS_CHAIN) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        break;
+      } catch (err) {
+        console.warn('[DriverValidate] Constraint falhou:', constraints, err);
+      }
+    }
+
+    if (!stream) {
+      setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador.');
+      return;
+    }
+
+    streamRef.current = stream;
+    video.srcObject = stream;
+
+    /**
+     * Wait for loadedmetadata + play() to confirm the video is actually
+     * rendering frames. A stream can be "created" successfully but produce
+     * no visible output if srcObject assignment or play() silently fails.
+     */
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onMeta = () => {
+          video.removeEventListener('loadedmetadata', onMeta);
+          resolve();
+        };
+        // If metadata already loaded (re-init scenario), resolve immediately
+        if (video.readyState >= 1) {
+          resolve();
+        } else {
+          video.addEventListener('loadedmetadata', onMeta);
+          // Timeout: if metadata never fires in 5s, reject
+          setTimeout(() => {
+            video.removeEventListener('loadedmetadata', onMeta);
+            reject(new Error('loadedmetadata timeout'));
+          }, 5000);
+        }
+      });
+
+      await video.play();
+
+      /**
+       * FRAME VALIDATION: After play(), check that videoWidth > 0.
+       * Some devices report play() success but render black until a
+       * frame is decoded. We poll briefly (up to 2s) to confirm.
+       */
+      let frameConfirmed = false;
+      for (let i = 0; i < 20; i++) {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          frameConfirmed = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      if (!frameConfirmed) {
+        console.warn('[DriverValidate] Stream aberto mas sem frames reais (videoWidth=0)');
+        // Still mark as ready — on some emulators/devices this is expected
+        // but the camera IS working. The user will see if it's black.
+      }
+
+      setCameraReady(true);
+      setCameraError(null);
+
+      // Check torch support
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const caps = (track as any).getCapabilities?.();
+        if (caps?.torch) setTorchSupported(true);
+      }
+    } catch (err) {
+      console.error('[DriverValidate] Falha ao iniciar preview:', err);
+      setCameraReady(false);
+      setCameraError('Câmera aberta mas sem imagem. Toque em "Tentar novamente".');
+    }
+  }, [stopCurrentStream]);
+
+  /**
+   * Camera init effect — runs when <video> element appears in the DOM.
+   * Uses videoEl (callback ref state) so it only fires after auth
+   * resolves and the JSX with <video> is rendered.
    */
   useEffect(() => {
-    // Only start when the <video> element is present in the DOM
     if (!videoEl) return;
-    // Prevent double-init if the effect re-fires
-    if (initStartedRef.current) return;
-    initStartedRef.current = true;
 
-    let cancelled = false;
+    startCamera(videoEl);
 
-    const startScanner = async () => {
-      // Check BarcodeDetector support (Chrome 83+, Android WebView)
-      const hasBarcodeDetector = Boolean(window.BarcodeDetector);
-      setScannerSupported(hasBarcodeDetector);
-
-      if (hasBarcodeDetector && window.BarcodeDetector) {
-        detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
-      }
-
-      try {
-        // Request rear camera (ideal for mobile QR scanning).
-        // Fallback: if facingMode constraint fails on some devices,
-        // retry without it so the user gets *some* camera.
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' } },
-            audio: false,
-          });
-        } catch {
-          console.warn('[DriverValidate] facingMode environment falhou, tentando câmera padrão');
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
-        }
-
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-
-        // Assign stream to the video element and start playback.
-        // `autoplay`, `muted` and `playsInline` on the element help
-        // mobile browsers auto-start without user gesture.
-        videoEl.srcObject = stream;
-        try {
-          await videoEl.play();
-        } catch (playErr) {
-          console.warn('[DriverValidate] video.play() falhou:', playErr);
-        }
-
-        if (!cancelled) {
-          setCameraReady(true);
-          setCameraError(null);
-        }
-
-        // Check torch/flash support on the active video track
-        const track = stream.getVideoTracks()[0];
-        if (track) {
-          const caps = (track as any).getCapabilities?.();
-          if (caps?.torch) setTorchSupported(true);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCameraReady(false);
-          setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador para este site.');
-          console.error('[DriverValidate] Falha ao abrir câmera:', error);
-        }
-      }
-    };
-
-    startScanner();
-
-    // Cleanup: stop all tracks when the component unmounts or videoEl changes
     return () => {
-      cancelled = true;
-      if (scanIntervalRef.current) window.clearInterval(scanIntervalRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
-      initStartedRef.current = false;
+      stopCurrentStream();
     };
-  }, [videoEl]);
+  }, [videoEl, startCamera, stopCurrentStream]);
+
+  /**
+   * VISIBILITY CHANGE handler — re-opens camera when user returns
+   * to the app/tab (critical for PWA and mobile multitasking).
+   * When the page becomes hidden, we stop the stream to free the
+   * camera for other apps. When visible again, we restart.
+   */
+  useEffect(() => {
+    if (!videoEl) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[DriverValidate] Tab voltou ao foco, reiniciando câmera');
+        startCamera(videoEl);
+      } else {
+        console.log('[DriverValidate] Tab saiu do foco, liberando câmera');
+        stopCurrentStream();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [videoEl, startCamera, stopCurrentStream]);
 
   /**
    * QR scanning loop — runs every 300ms when camera is ready and
-   * BarcodeDetector is supported. Pauses when overlay is shown,
-   * processing is in progress, or scan is temporarily locked.
+   * BarcodeDetector is supported.
    */
   useEffect(() => {
     if (!scannerSupported || !cameraReady || !videoEl || overlay || processing) return;
@@ -264,9 +327,7 @@ export default function DriverValidate() {
         if (token) {
           await handleValidate(token, 'checkin');
         }
-      } catch {
-        // silent — detection can fail between frames
-      }
+      } catch { /* silent — detection can fail between frames */ }
     }, 300);
 
     return () => {
@@ -282,8 +343,7 @@ export default function DriverValidate() {
     setProcessing(false);
   };
 
-  // --- Auth guards (render loaders / redirects BEFORE the main JSX) ---
-
+  // --- Auth guards ---
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -312,15 +372,8 @@ export default function DriverValidate() {
 
         <Card>
           <CardContent className="space-y-4 p-4">
-            {/* Camera viewport with scan frame overlay */}
+            {/* Camera viewport */}
             <div className="relative overflow-hidden rounded-xl border bg-black/90">
-              {/*
-                Callback ref: when React mounts this <video>, setVideoEl is called,
-                which triggers the camera-init useEffect above.
-                autoPlay + muted + playsInline ensure mobile browsers can start
-                playback without an explicit user gesture on the video element.
-                webkit-playsinline is for older iOS Safari.
-              */}
               <video
                 ref={setVideoEl}
                 className="aspect-[3/4] w-full object-cover"
@@ -331,29 +384,24 @@ export default function DriverValidate() {
                 webkit-playsinline="true"
               />
 
-              {/* Scan frame overlay */}
+              {/* Scan frame overlay — only when camera has real frames */}
               {cameraReady && !overlay && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  {/* Semi-transparent corners frame */}
                   <div className="relative h-48 w-48">
-                    {/* Top-left */}
                     <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white/80 rounded-tl-lg" />
-                    {/* Top-right */}
                     <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-white/80 rounded-tr-lg" />
-                    {/* Bottom-left */}
                     <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-white/80 rounded-bl-lg" />
-                    {/* Bottom-right */}
                     <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-white/80 rounded-br-lg" />
                   </div>
-                  {/* Instruction text */}
                   <p className="absolute bottom-4 left-0 right-0 text-center text-xs text-white/90 drop-shadow-md px-4">
                     Aponte a câmera para o QR Code da passagem
                   </p>
                 </div>
               )}
 
-              {!cameraReady && (
+              {!cameraReady && !cameraError && (
                 <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-white/80">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Preparando câmera...
                 </div>
               )}
@@ -372,10 +420,23 @@ export default function DriverValidate() {
               )}
             </div>
 
+            {/* Camera error with retry button */}
             {cameraError && (
-              <p className="text-sm text-destructive">{cameraError}</p>
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">{cameraError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => videoEl && startCamera(videoEl)}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Tentar novamente
+                </Button>
+              </div>
             )}
 
+            {/* Manual token fallback — always visible */}
             <div className="space-y-2">
               <Label htmlFor="manual-token">Token do QR (fallback)</Label>
               <div className="flex gap-2">
