@@ -540,10 +540,36 @@ export default function DriverValidate() {
     return () => window.clearInterval(id);
   }, [videoEl, cameraReady, cameraError]);
 
-  const resetOverlay = () => {
+  const resetOverlay = useCallback(() => {
+    if (autoResetTimerRef.current) {
+      window.clearTimeout(autoResetTimerRef.current);
+      autoResetTimerRef.current = null;
+    }
     setOverlay(null);
     setProcessing(false);
-  };
+    // Re-read prefs in case user changed them
+    setDriverPrefs(getDriverPreferences());
+  }, []);
+
+  // Trigger feedback + auto-reset when overlay appears
+  useEffect(() => {
+    if (!overlay) return;
+    const prefs = driverPrefs;
+    const isSuccess = overlay.result === 'success';
+    if (prefs.soundEnabled) playBeep(isSuccess);
+    if (prefs.vibrationEnabled) vibrateDevice(isSuccess);
+    if (prefs.scanMode === 'auto') {
+      autoResetTimerRef.current = window.setTimeout(() => {
+        resetOverlay();
+      }, 2000);
+    }
+    return () => {
+      if (autoResetTimerRef.current) {
+        window.clearTimeout(autoResetTimerRef.current);
+        autoResetTimerRef.current = null;
+      }
+    };
+  }, [overlay, driverPrefs, resetOverlay]);
 
   // --- Auth guards ---
   if (loading) {
