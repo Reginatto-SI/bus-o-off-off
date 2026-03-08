@@ -66,7 +66,7 @@ export default function PublicCompanyShowcase() {
       // Query estrita: somente campos necessários para a vitrine (sem select('*'))
       const { data: companyData } = await supabase
         .from('companies')
-        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style')
+        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website')
         .eq('public_slug', normalizedNick)
         .maybeSingle();
 
