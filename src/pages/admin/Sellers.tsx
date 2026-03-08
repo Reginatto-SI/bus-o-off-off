@@ -356,7 +356,7 @@ export default function Sellers() {
     setForm({
       name: seller.name,
       cpf: seller.cpf || '',
-      phone: seller.phone || '',
+      phone: formatPhoneBR(seller.phone || ''),
       email: seller.email || '',
       commission_percent: seller.commission_percent.toString(),
       pix_key: seller.pix_key || '',
