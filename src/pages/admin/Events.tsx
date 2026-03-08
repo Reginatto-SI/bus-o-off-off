@@ -1411,7 +1411,7 @@ export default function Events() {
   // Trip handlers
   // Helper function for dropdown (without time)
   const getTripLabelWithoutTime = (trip: TripWithDetails) => {
-    const type = trip.trip_type === 'ida' ? 'Ida' : 'Volta';
+    const type = trip.trip_type === 'ida' ? 'Somente Ida' : 'Somente Volta';
     const vehicleType = trip.vehicle 
       ? vehicleTypeLabels[trip.vehicle.type] 
       : 'Veículo';
