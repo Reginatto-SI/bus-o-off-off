@@ -565,14 +565,14 @@ export default function Sponsors() {
     </div>
   );
 
-  const renderBannerFields = () => (
+  const renderLogoFields = () => (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Banner do patrocinador</Label>
+        <Label>Logo do patrocinador</Label>
         {form.banner_url ? (
           <div className="space-y-2">
             <label
-              className="group relative block h-[150px] w-full max-w-[600px] overflow-hidden rounded-lg border bg-muted cursor-pointer"
+              className="group relative block h-[200px] w-[200px] overflow-hidden rounded-lg border bg-muted cursor-pointer"
             >
               <img
                 src={form.banner_url}
@@ -582,7 +582,7 @@ export default function Sponsors() {
               />
               <img
                 src={form.banner_url}
-                alt="Banner do patrocinador"
+                alt="Logo do patrocinador"
                 className="relative h-full w-full object-contain"
               />
               <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
@@ -591,7 +591,7 @@ export default function Sponsors() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  aria-label="Visualizar banner"
+                  aria-label="Visualizar logo"
                   onClick={(e) => {
                     e.preventDefault();
                     setImagePreviewOpen(true);
@@ -604,7 +604,7 @@ export default function Sponsors() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive hover:text-destructive"
-                  aria-label="Remover banner"
+                  aria-label="Remover logo"
                   onClick={async (e) => {
                     e.preventDefault();
                     if (editingId) {
@@ -614,7 +614,7 @@ export default function Sponsors() {
                         .eq('id', editingId);
                     }
                     setForm((prev) => ({ ...prev, banner_url: null }));
-                    toast.success('Banner removido');
+                    toast.success('Logo removida');
                   }}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -644,7 +644,7 @@ export default function Sponsors() {
           </div>
         ) : (
           <label
-            className={`flex h-[150px] w-full max-w-[600px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+            className={`flex h-[200px] w-[200px] flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
               !editingId
                 ? 'border-muted-foreground/15 cursor-not-allowed'
                 : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
@@ -664,18 +664,15 @@ export default function Sponsors() {
             )}
             <p className="text-sm text-muted-foreground">
               {uploadingImage
-                ? 'Enviando banner...'
+                ? 'Enviando logo...'
                 : !editingId
                   ? 'Salve o patrocinador primeiro'
-                  : 'Adicionar banner (600×150)'}
+                  : 'Adicionar logo (512×512)'}
             </p>
-            <p className="text-xs text-muted-foreground/70">Tamanho ideal: 600×150px</p>
+            <p className="text-xs text-muted-foreground/70">Tamanho ideal: 512×512px · PNG ou JPG · Fundo transparente recomendado</p>
           </label>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Tamanho ideal do arquivo: 600×150px (4:1). Mantemos o preview no tamanho real quando possível.
-      </p>
     </div>
   );
 
