@@ -1202,7 +1202,20 @@ export default function Sales() {
                         )}
                         <TableCell>{sale.seller?.name ?? '-'}</TableCell>
                         <TableCell>
-                          <StatusBadge status={sale.status} />
+                          <div className="flex flex-col gap-1">
+                            <StatusBadge status={sale.status} />
+                            {/* Indicador visual de taxa pendente para vendas administrativas */}
+                            {(sale as any).platform_fee_status === 'pending' && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500 text-amber-600">
+                                Taxa pendente
+                              </Badge>
+                            )}
+                            {(sale as any).platform_fee_status === 'failed' && (
+                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                Taxa falhou
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <ActionsDropdown actions={getSaleActions(sale)} />
