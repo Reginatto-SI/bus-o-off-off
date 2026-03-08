@@ -452,10 +452,10 @@ export default function Sponsors() {
       .eq('company_id', activeCompanyId!);
 
     if (updateError) {
-      toast.error('Erro ao salvar URL do banner');
+      toast.error('Erro ao salvar URL da logo');
     } else {
       setForm((prev) => ({ ...prev, banner_url: publicUrl }));
-      toast.success('Banner enviado com sucesso');
+      toast.success('Logo enviada com sucesso');
     }
 
     setUploadingImage(false);
