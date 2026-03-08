@@ -150,6 +150,14 @@ export default function CompanyPage() {
     cover_image_url: '',
     intro_text: '',
     background_style: 'solid' as 'solid' | 'subtle_gradient' | 'cover_overlay',
+    // Redes sociais
+    social_instagram: '',
+    social_facebook: '',
+    social_tiktok: '',
+    social_youtube: '',
+    social_telegram: '',
+    social_twitter: '',
+    social_website: '',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
