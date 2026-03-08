@@ -1020,15 +1020,15 @@ export default function Sponsors() {
                     <TableRow key={sponsor.id}>
                       <TableCell>
                         {sponsor.banner_url ? (
-                          <div className="h-10 w-24 overflow-hidden rounded-md border bg-muted">
+                          <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted">
                             <img
                               src={sponsor.banner_url}
-                              alt={`Banner ${sponsor.name}`}
-                              className="h-full w-full object-cover"
+                              alt={`Logo ${sponsor.name}`}
+                              className="h-full w-full object-contain"
                             />
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sem banner</span>
+                          <span className="text-xs text-muted-foreground">Sem logo</span>
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{sponsor.name}</TableCell>
