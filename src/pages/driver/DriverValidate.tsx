@@ -206,9 +206,20 @@ export default function DriverValidate() {
   /* ---------- startCamera — core init routine ---------- */
 
   const startCamera = useCallback(async (video: HTMLVideoElement) => {
+    // Guard: prevent concurrent initializations (race condition fix)
+    if (initInProgressRef.current) {
+      console.log('[CAM] startCamera SKIPPED — init already in progress');
+      return;
+    }
+    initInProgressRef.current = true;
+    initCountRef.current += 1;
+    const thisInitId = initCountRef.current;
+    const initTimestamp = new Date().toISOString().slice(11, 23);
+    console.log(`[CAM] startCamera #${thisInitId} BEGIN at ${initTimestamp}`);
+
     stopCurrentStream();
     setCameraError(null);
-    updateDebug({ ...INITIAL_DEBUG });
+    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: thisInitId, lastInitAt: initTimestamp });
 
     // 1. Check permission
     try {
