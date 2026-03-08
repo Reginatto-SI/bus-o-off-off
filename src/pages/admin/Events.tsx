@@ -3250,7 +3250,7 @@ export default function Events() {
                                   {selectedTripIdForBoardings 
                                     ? isGroupedTransportPolicy
                                       ? 'Adicione locais para o transporte (ida e volta)'
-                                      : 'Adicione locais para esta viagem'
+                                      : 'Adicione locais para este transporte'
                                     : 'Adicione locais onde os passageiros embarcarão'
                                   }
                                 </p>
