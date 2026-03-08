@@ -300,11 +300,11 @@ export default function TicketLookup() {
         </div>
 
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <Ticket className="h-8 w-8 text-primary" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-3">
+            <Ticket className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Consultar Passagens</h1>
-          <p className="text-muted-foreground">Informe o evento e seu CPF para visualizar suas passagens</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Encontrar minha passagem</h1>
+          <p className="text-muted-foreground">Informe o evento e o CPF utilizado na compra para localizar suas passagens.</p>
         </div>
 
         <Card className="mb-6">
@@ -313,7 +313,7 @@ export default function TicketLookup() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label>Evento</Label>
+              <Label>Evento da viagem</Label>
               {eventsLoading ? (
                 <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -326,7 +326,7 @@ export default function TicketLookup() {
                 </div>
               ) : (
                 <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecionar evento" /></SelectTrigger>
                   <SelectContent>
                     {events?.map((e: any) => (
                       <SelectItem key={e.id} value={e.id} className="truncate">
@@ -346,6 +346,7 @@ export default function TicketLookup() {
                 onChange={(e) => setCpf(formatCpfInput(e.target.value))}
                 maxLength={14}
               />
+              <p className="text-xs text-muted-foreground mt-1">Use o CPF do passageiro ou o CPF utilizado na compra.</p>
             </div>
 
             <Button
@@ -354,8 +355,10 @@ export default function TicketLookup() {
               disabled={searching || !selectedEventId || cpf.replace(/\D/g, '').length !== 11}
             >
               {searching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-              Buscar Passagens
+              Ver minhas passagens
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center pt-2">Dica: utilize o CPF informado no momento da compra da passagem.</p>
           </CardContent>
         </Card>
 
