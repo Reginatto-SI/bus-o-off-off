@@ -16,9 +16,9 @@ import {
 } from '@/components/ui/select';
 import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock } from 'lucide-react';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
-import { format } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { parseDateOnlyAsLocal } from '@/lib/date';
+import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { getPersistedTripId, setPersistedTripId } from '@/lib/driverTripStorage';
 
 interface TripInfo {
