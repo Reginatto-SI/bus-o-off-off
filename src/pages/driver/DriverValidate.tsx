@@ -672,17 +672,20 @@ export default function DriverValidate() {
                   </div>
 
                   <div className="mt-4 flex w-full max-w-xs flex-col gap-2">
-                    <Button className="h-12 w-full text-base" onClick={resetOverlay}>
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      {overlay.result === 'success' ? 'Ler próximo' : 'Tentar novamente'}
-                    </Button>
+                    {driverPrefs.scanMode === 'auto' ? (
+                      <p className="text-xs text-white/60 text-center">Leitura automática em 2s…</p>
+                    ) : (
+                      <Button className="h-12 w-full text-base" onClick={resetOverlay}>
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        {overlay.result === 'success' ? 'Ler próximo' : 'Tentar novamente'}
+                      </Button>
+                    )}
                     {overlay.result === 'success' && (
                       <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
                         <Users className="mr-2 h-4 w-4" />
                         Lista de passageiros
                       </Button>
                     )}
-                    {/* Remove the old checkout button — now handled by phase selector */}
                   </div>
                 </div>
               )}
