@@ -330,11 +330,19 @@ export default function DriverValidate() {
       const backCameras = videoDevices.filter(d =>
         /back|rear|environment|traseira/i.test(d.label)
       );
+
+      // Sort: prefer lower camera index (camera 0 = primary on most Android)
+      backCameras.sort((a, b) => {
+        const numA = parseInt(a.label.match(/\d+/)?.[0] ?? '99', 10);
+        const numB = parseInt(b.label.match(/\d+/)?.[0] ?? '99', 10);
+        return numA - numB;
+      });
+
       const candidateLabels = backCameras.map(d => `${d.label} [${d.deviceId.slice(0, 8)}]`);
-      console.log('[CAM] back camera candidates:', candidateLabels);
+      console.log('[CAM] back camera candidates (sorted):', candidateLabels);
       updateDebug({ candidateBackCameras: candidateLabels });
 
-      // Phase 1: Try each back camera by deviceId
+      // Phase 1: Try each back camera by deviceId (with delay between attempts)
       for (let i = 0; i < backCameras.length; i++) {
         const cam = backCameras[i];
         console.log(`[CAM] trying back cam #${i}: ${cam.label} [${cam.deviceId.slice(0, 8)}]`);
@@ -354,16 +362,21 @@ export default function DriverValidate() {
           selectedDeviceId = cam.deviceId;
           break;
         }
+
+        // Wait 800ms for Android camera driver to release hardware before next attempt
+        console.log('[CAM] waiting 800ms for driver release…');
+        await new Promise(r => setTimeout(r, 800));
       }
 
       // Phase 2: Fallback — facingMode: environment
       if (!stream) {
-        console.log('[CAM] no back cam worked, trying facingMode environment');
+        console.log('[CAM] no back cam worked, waiting 1s before fallbacks…');
+        await new Promise(r => setTimeout(r, 1000));
+        console.log('[CAM] trying facingMode environment');
         try {
           const envStream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: 'environment' } }, audio: false,
           });
-          // Quick validate
           const t = envStream.getVideoTracks()[0];
           video.srcObject = envStream;
           await video.play().catch(() => {});

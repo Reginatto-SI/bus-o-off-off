@@ -1,49 +1,30 @@
 
 
-## Diagnóstico
+# Imagem padrão para eventos sem banner
 
-O log confirma um problema clássico do Android 10 + Chrome: após `tryDeviceCamera` falhar para `camera 2` e fazer `track.stop()`, o hardware fica "travado" temporariamente. Todas as chamadas seguintes (`camera 0`, `facingMode`, `video:true`) falham com **"NotFoundError / Requested device not found"** porque o driver da câmera ainda não liberou o recurso.
+## Mudança
 
-## Correção (arquivo único: `DriverValidate.tsx`)
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### 1. Delay entre tentativas de câmera
-
-Após parar as tracks de uma câmera que falhou, aguardar **800ms** antes de tentar a próxima. Isso dá tempo ao driver Android para liberar o hardware.
-
-Em `tryDeviceCamera`, após `stream.getTracks().forEach(t => t.stop())`, **não** fazer nada adicional — o delay será no loop chamador.
-
-No loop de `startCamera`, entre cada tentativa falhada:
-```typescript
-// após result falho
-await new Promise(r => setTimeout(r, 800));
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-### 2. Inverter a ordem das câmeras traseiras
+### Componentes afetados
 
-Priorizar `camera 0` (normalmente a câmera traseira principal no Android) antes de `camera 2`. Ordenar as candidatas: câmeras com índice menor no label primeiro, ou simplesmente reverter a lista.
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-```typescript
-backCameras.sort((a, b) => {
-  const numA = parseInt(a.label.match(/\d+/)?.[0] ?? '99');
-  const numB = parseInt(b.label.match(/\d+/)?.[0] ?? '99');
-  return numA - numB;
-});
-```
+### Lógica simplificada (ambos os cards)
 
-### 3. Fallback alternativo: abrir stream genérico antes de testar deviceIds
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-Se o loop por deviceId falhar totalmente, antes dos fallbacks atuais, tentar uma abordagem diferente: abrir `facingMode: environment` **sem** ter parado nenhum stream antes (fresh request). Para isso, mover os fallbacks para fora do bloco try/catch principal, com um delay de 1s.
+### Imagem padrão
 
-### 4. Adicionar ao debug: ordem testada e delays
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-Registrar a ordem final das câmeras candidatas e indicar os delays aplicados.
-
-### Resumo das mudanças
-
-- `tryDeviceCamera`: sem alteração
-- Loop em `startCamera`:
-  - Ordenar `backCameras` pelo número no label (menor primeiro)
-  - Adicionar `await sleep(800)` entre tentativas falhadas
-  - Adicionar `await sleep(1000)` antes dos fallbacks de fase 2/3
-- Debug: registrar ordem final
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
