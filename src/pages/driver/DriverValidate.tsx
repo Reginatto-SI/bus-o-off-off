@@ -651,6 +651,7 @@ export default function DriverValidate() {
             <p><strong>permission:</strong> {debugInfo.permission}</p>
             <p><strong>stream:</strong> {debugInfo.streamExists ? '✅' : '❌'}</p>
             <p><strong>tracks:</strong> {debugInfo.trackCount} — [{debugInfo.trackStates.join(', ')}]</p>
+            <p><strong>liveTrackStates:</strong> [{debugInfo.liveTrackStates.join(', ')}]</p>
             <p><strong>labels:</strong> {debugInfo.trackLabels.join(', ') || '—'}</p>
             <p><strong>constraint:</strong> {debugInfo.constraintUsed}</p>
             <p><strong>videoSize:</strong> {debugInfo.videoWidth}×{debugInfo.videoHeight}</p>
@@ -658,6 +659,9 @@ export default function DriverValidate() {
             <p><strong>cameraReady:</strong> {debugInfo.cameraReady ? '✅' : '❌'}</p>
             <p><strong>cameraError:</strong> {debugInfo.cameraError ?? '—'}</p>
             <p><strong>scanner:</strong> {debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}</p>
+            <p><strong>initInProgress:</strong> {debugInfo.initInProgress ? '⏳ sim' : 'não'}</p>
+            <p><strong>initCount:</strong> {debugInfo.initCount}</p>
+            <p><strong>lastInitAt:</strong> {debugInfo.lastInitAt ?? '—'}</p>
             <p><strong>lastError:</strong> {debugInfo.lastError ?? '—'}</p>
             <p><strong>devices:</strong></p>
             {debugInfo.devices.length > 0 ? (
