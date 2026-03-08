@@ -56,7 +56,7 @@ export default function PublicEventDetail() {
     const fetchData = async () => {
       if (!id) return;
 
-      const [eventRes, tripsRes, locationsRes] = await Promise.all([
+      const [eventRes, tripsRes, locationsRes, sponsorsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', id).eq('status', 'a_venda').single(),
         supabase.from('trips').select('*, vehicle:vehicles(*)').eq('event_id', id),
         supabase
@@ -64,6 +64,12 @@ export default function PublicEventDetail() {
           .select('*, boarding_location:boarding_locations(*)')
           .eq('event_id', id)
           .order('stop_order', { ascending: true }),
+        supabase
+          .from('event_sponsors')
+          .select('*, sponsor:sponsors(id, name, banner_url, link_type, site_url, whatsapp_phone, whatsapp_message)')
+          .eq('event_id', id)
+          .eq('show_on_event_page', true)
+          .order('display_order', { ascending: true }),
       ]);
 
       if (eventRes.data) {
