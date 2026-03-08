@@ -47,10 +47,13 @@ export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading } = useAuth();
   const canAccessDriverPortal = userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Stream and detector refs — persist across renders without triggering re-renders
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
   const scanIntervalRef = useRef<number | null>(null);
+  // Track whether we already started scanner to avoid double-init
+  const initStartedRef = useRef(false);
 
   const [processing, setProcessing] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
@@ -61,6 +64,18 @@ export default function DriverValidate() {
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+
+  /**
+   * videoEl keeps a direct reference to the <video> DOM node.
+   * We use a state (not useRef) so that the callback-ref triggers
+   * the camera-init effect when the element appears in the DOM.
+   * This is the FIX for the black-screen bug: the old useRef was
+   * already set via `ref={videoRef}`, but the useEffect that called
+   * startScanner ran on mount — before auth resolved and the <video>
+   * was rendered. Using state ensures the effect re-runs when the
+   * element actually exists.
+   */
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
   const reasonLabel = useMemo(() => {
     if (!overlay) return '';
@@ -130,68 +145,127 @@ export default function DriverValidate() {
       await (track as any).applyConstraints({ advanced: [{ torch: newState }] as any });
       setTorchOn(newState);
     } catch {
-      // torch not supported
+      // torch not supported on this device
     }
   }, [torchOn]);
 
+  /**
+   * Camera initialization effect.
+   *
+   * KEY FIX: This effect depends on `videoEl` (set via callback ref).
+   * It only runs when the <video> element is actually mounted in the DOM,
+   * which happens AFTER auth resolves and the full JSX is rendered.
+   *
+   * Previous bug: the old useEffect with `[]` deps ran on mount, but at
+   * that point `loading=true` meant <video> wasn't rendered yet, so
+   * videoRef.current was null and the stream was silently lost.
+   */
   useEffect(() => {
+    // Only start when the <video> element is present in the DOM
+    if (!videoEl) return;
+    // Prevent double-init if the effect re-fires
+    if (initStartedRef.current) return;
+    initStartedRef.current = true;
+
+    let cancelled = false;
+
     const startScanner = async () => {
+      // Check BarcodeDetector support (Chrome 83+, Android WebView)
       const hasBarcodeDetector = Boolean(window.BarcodeDetector);
       setScannerSupported(hasBarcodeDetector);
 
+      if (hasBarcodeDetector && window.BarcodeDetector) {
+        detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+      }
+
       try {
-        if (hasBarcodeDetector && window.BarcodeDetector) {
-          detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        // Request rear camera (ideal for mobile QR scanning).
+        // Fallback: if facingMode constraint fails on some devices,
+        // retry without it so the user gets *some* camera.
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false,
+          });
+        } catch {
+          console.warn('[DriverValidate] facingMode environment falhou, tentando câmera padrão');
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        });
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
 
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+
+        // Assign stream to the video element and start playback.
+        // `autoplay`, `muted` and `playsInline` on the element help
+        // mobile browsers auto-start without user gesture.
+        videoEl.srcObject = stream;
+        try {
+          await videoEl.play();
+        } catch (playErr) {
+          console.warn('[DriverValidate] video.play() falhou:', playErr);
+        }
+
+        if (!cancelled) {
           setCameraReady(true);
           setCameraError(null);
         }
 
-        // Check torch support
+        // Check torch/flash support on the active video track
         const track = stream.getVideoTracks()[0];
         if (track) {
           const caps = (track as any).getCapabilities?.();
           if (caps?.torch) setTorchSupported(true);
         }
       } catch (error) {
-        setCameraReady(false);
-        setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador para este site.');
-        console.error('[DriverValidate] Falha ao abrir câmera:', error);
+        if (!cancelled) {
+          setCameraReady(false);
+          setCameraError('Não foi possível abrir a câmera. Verifique a permissão do navegador para este site.');
+          console.error('[DriverValidate] Falha ao abrir câmera:', error);
+        }
       }
     };
 
     startScanner();
 
+    // Cleanup: stop all tracks when the component unmounts or videoEl changes
     return () => {
+      cancelled = true;
       if (scanIntervalRef.current) window.clearInterval(scanIntervalRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      initStartedRef.current = false;
     };
-  }, []);
+  }, [videoEl]);
 
+  /**
+   * QR scanning loop — runs every 300ms when camera is ready and
+   * BarcodeDetector is supported. Pauses when overlay is shown,
+   * processing is in progress, or scan is temporarily locked.
+   */
   useEffect(() => {
-    if (!scannerSupported || !cameraReady || overlay || processing) return;
+    if (!scannerSupported || !cameraReady || !videoEl || overlay || processing) return;
 
     scanIntervalRef.current = window.setInterval(async () => {
-      if (!videoRef.current || !detectorRef.current || scanLocked || processing || overlay) return;
+      if (!videoEl || !detectorRef.current || scanLocked || processing || overlay) return;
 
       try {
-        const detected = await detectorRef.current.detect(videoRef.current);
+        const detected = await detectorRef.current.detect(videoEl);
         const token = detected?.[0]?.rawValue?.trim();
         if (token) {
           await handleValidate(token, 'checkin');
         }
       } catch {
-        // silent
+        // silent — detection can fail between frames
       }
     }, 300);
 
@@ -201,12 +275,14 @@ export default function DriverValidate() {
         scanIntervalRef.current = null;
       }
     };
-  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported]);
+  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, videoEl]);
 
   const resetOverlay = () => {
     setOverlay(null);
     setProcessing(false);
   };
+
+  // --- Auth guards (render loaders / redirects BEFORE the main JSX) ---
 
   if (loading) {
     return (
@@ -238,7 +314,22 @@ export default function DriverValidate() {
           <CardContent className="space-y-4 p-4">
             {/* Camera viewport with scan frame overlay */}
             <div className="relative overflow-hidden rounded-xl border bg-black/90">
-              <video ref={videoRef} className="aspect-[3/4] w-full object-cover" muted playsInline />
+              {/*
+                Callback ref: when React mounts this <video>, setVideoEl is called,
+                which triggers the camera-init useEffect above.
+                autoPlay + muted + playsInline ensure mobile browsers can start
+                playback without an explicit user gesture on the video element.
+                webkit-playsinline is for older iOS Safari.
+              */}
+              <video
+                ref={setVideoEl}
+                className="aspect-[3/4] w-full object-cover"
+                autoPlay
+                muted
+                playsInline
+                // @ts-ignore — webkit-playsinline for older iOS
+                webkit-playsinline="true"
+              />
 
               {/* Scan frame overlay */}
               {cameraReady && !overlay && (
