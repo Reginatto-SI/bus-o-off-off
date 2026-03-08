@@ -1,39 +1,30 @@
 
 
-## Plano: Indicador de versão no header + atualização inline
+# Imagem padrão para eventos sem banner
 
-### Abordagem
+## Mudança
 
-Extrair a lógica de detecção de versão do `VersionUpdateBanner` para um hook reutilizável (`useVersionCheck`), e criar um componente compacto `VersionIndicator` para o header admin.
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### Alterações
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+```
 
-**1. Criar `src/hooks/use-version-check.ts`**
+### Componentes afetados
 
-Hook que encapsula a lógica já existente no `VersionUpdateBanner`:
-- Polling de `/version.json` a cada 60s
-- Compara com `APP_VERSION`
-- Retorna `{ currentVersion, availableVersion, hasUpdate, refresh() }`
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-**2. Criar `src/components/system/VersionIndicator.tsx`**
+### Lógica simplificada (ambos os cards)
 
-Componente compacto para o header:
-- Estado normal: texto discreto `v{version}` em `text-xs text-muted-foreground`
-- Com atualização: `v{version} • Nova versão` + botão "Atualizar" pequeno (variant link ou ghost, `text-xs`)
-- Usa o hook `useVersionCheck`
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-**3. Atualizar `src/components/system/VersionUpdateBanner.tsx`**
+### Imagem padrão
 
-Refatorar para usar o mesmo hook `useVersionCheck`, eliminando duplicação.
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-**4. Atualizar `src/components/layout/AdminHeader.tsx`**
-
-Adicionar `<VersionIndicator />` na área direita do header, antes do sino de notificações. Discreto, não compete com as ações principais.
-
-### Resultado
-
-- Versão visível no header sem poluir o layout
-- Atualização disponível indicada inline, sem popup
-- Lógica de versão centralizada em um único hook
-- Banner global continua funcionando para páginas públicas/não-admin
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 

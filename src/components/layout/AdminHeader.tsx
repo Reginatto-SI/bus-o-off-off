@@ -1,5 +1,6 @@
 import { Bell, Building2, ChevronDown, LogOut, User, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -124,6 +125,9 @@ export function AdminHeader() {
       </div>
 
       <div className="flex items-center gap-4">
+      {/* Version indicator */}
+      <VersionIndicator />
+
       {/* Notifications */}
       <Popover>
         <PopoverTrigger asChild>
