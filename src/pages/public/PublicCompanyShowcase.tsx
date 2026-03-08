@@ -3,7 +3,7 @@ import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { Bus, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
-import { Company, EventWithCompany } from '@/types/database';
+import { Company, CommercialPartner, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
