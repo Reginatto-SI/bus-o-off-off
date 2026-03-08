@@ -1,5 +1,6 @@
 import { Bell, Building2, ChevronDown, LogOut, User, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
