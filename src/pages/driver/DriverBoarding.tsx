@@ -142,6 +142,7 @@ export default function DriverBoarding() {
     if (!tickets || tickets.length === 0) {
       setPassengers([]);
       setLoadingData(false);
+      setRefreshing(false);
       return;
     }
 
