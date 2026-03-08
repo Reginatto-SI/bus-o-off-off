@@ -82,7 +82,7 @@ const SPONSOR_BANNER_BUCKET = 'event-images';
 
 const WIZARD_STEPS = [
   { label: 'Dados', icon: User },
-  { label: 'Banner', icon: Image },
+  { label: 'Logo', icon: Image },
   { label: 'Redirecionamento', icon: Link2 },
   { label: 'Contato', icon: Phone },
 ] as const;
