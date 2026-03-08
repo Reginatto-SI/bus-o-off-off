@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Sponsor } from '@/types/database';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -208,10 +209,10 @@ export default function Sponsors() {
       banner_url: form.banner_url,
       link_type: form.link_type,
       site_url: form.link_type === 'site' ? form.site_url.trim() || null : null,
-      whatsapp_phone: form.link_type === 'whatsapp' ? form.whatsapp_phone.trim() || null : null,
+      whatsapp_phone: form.link_type === 'whatsapp' ? normalizePhoneForStorage(form.whatsapp_phone) || null : null,
       whatsapp_message: form.link_type === 'whatsapp' ? form.whatsapp_message.trim() || null : null,
       contact_name: form.contact_name.trim() || null,
-      contact_phone: form.contact_phone.trim() || null,
+      contact_phone: normalizePhoneForStorage(form.contact_phone) || null,
       contact_email: form.contact_email.trim() || null,
     };
   };
@@ -378,10 +379,10 @@ export default function Sponsors() {
       banner_url: sponsor.banner_url,
       link_type: sponsor.link_type,
       site_url: sponsor.site_url ?? '',
-      whatsapp_phone: sponsor.whatsapp_phone ?? '',
+      whatsapp_phone: formatPhoneBR(sponsor.whatsapp_phone ?? ''),
       whatsapp_message: sponsor.whatsapp_message ?? '',
       contact_name: sponsor.contact_name ?? '',
-      contact_phone: sponsor.contact_phone ?? '',
+      contact_phone: formatPhoneBR(sponsor.contact_phone ?? ''),
       contact_email: sponsor.contact_email ?? '',
     });
     setDialogOpen(true);
@@ -714,8 +715,10 @@ export default function Sponsors() {
             <Input
               id="whatsapp_phone"
               value={form.whatsapp_phone}
-              onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })}
-              placeholder="+55 11 99999-9999"
+              onChange={(e) => setForm({ ...form, whatsapp_phone: formatPhoneBR(e.target.value) })}
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+              inputMode="tel"
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
@@ -748,7 +751,10 @@ export default function Sponsors() {
         <Input
           id="contact_phone"
           value={form.contact_phone}
-          onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
+          onChange={(e) => setForm({ ...form, contact_phone: formatPhoneBR(e.target.value) })}
+          placeholder="(00) 00000-0000"
+          maxLength={15}
+          inputMode="tel"
         />
       </div>
       <div className="space-y-2 sm:col-span-2">

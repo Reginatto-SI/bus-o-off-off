@@ -1,96 +1,30 @@
 
 
-## Plano: Padronização centralizada de telefone/WhatsApp
+# Imagem padrão para eventos sem banner
 
-### Diagnóstico
+## Mudança
 
-Existem **4+ implementações duplicadas** de formatação de telefone espalhadas pelo projeto:
-- `MyAccount.tsx` → `formatPhoneInput`
-- `CompanyRegistration.tsx` → `formatPhone`
-- `Checkout.tsx` → `formatPhoneMask`
-- `Company.tsx`, `Sellers.tsx`, `Sponsors.tsx`, `CommercialPartners.tsx` → sem máscara nenhuma
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-O utilitário `src/lib/whatsapp.ts` já normaliza corretamente para wa.me, mas não há função centralizada de máscara/limpeza.
-
----
-
-### Etapa 1 — Criar utilitário centralizado `src/lib/phone.ts`
-
-Funções exportadas:
-
-```typescript
-/**
- * Padrão oficial de telefone no sistema:
- * - Exibição (máscara): (65) 99999-8888 (celular) ou (65) 3333-4444 (fixo)
- * - Armazenamento (banco): somente dígitos, sem DDI → 65999218888
- * - Link WhatsApp: https://wa.me/5565999218888
- */
-
-/** Remove tudo que não é dígito. Trata +55 e 055 colados. */
-export function stripPhoneToDigits(value: string): string
-
-/** Aplica máscara BR durante digitação. Retorna string formatada. */
-export function formatPhoneBR(value: string): string
-
-/** Extrai apenas dígitos DDD+número (10-11 chars) para persistência. */
-export function normalizePhoneForStorage(value: string): string
-
-/** Valida se o número tem quantidade válida de dígitos BR (10 ou 11). */
-export function isValidBRPhone(value: string): boolean
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-Reutilizar `normalizeWhatsappForWaMe` e `buildWhatsappWaMeLink` do `whatsapp.ts` existente (sem duplicar).
+### Componentes afetados
 
----
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-### Etapa 2 — Criar componente `PhoneInput`
+### Lógica simplificada (ambos os cards)
 
-`src/components/ui/phone-input.tsx`
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-Componente wrapper do `Input` que:
-- Aplica `formatPhoneBR` no `onChange`
-- Aceita colagem com +55, espaços, etc. e limpa automaticamente
-- Exibe valor mascarado no input
-- Expõe `onValueChange(rawDigits)` para o formulário salvar apenas dígitos
+### Imagem padrão
 
-Alternativa mais simples: não criar componente, apenas usar `formatPhoneBR` inline no onChange de cada input (como já é feito em `MyAccount.tsx`). Ambas opções são viáveis; o componente dedicado é mais limpo.
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
----
-
-### Etapa 3 — Aplicar em cada tela
-
-#### `/admin/empresa` (Company.tsx)
-- Campos `phone` e `whatsapp`: adicionar máscara `formatPhoneBR` no onChange
-- No save: usar `normalizePhoneForStorage` antes de enviar ao banco
-- No fetch: aplicar `formatPhoneBR` ao carregar dados existentes
-
-#### `/admin/vendedores` (Sellers.tsx)
-- Campo `phone`: mesmo tratamento
-
-#### `/admin/patrocinadores` (Sponsors.tsx)
-- Campos `whatsapp_phone` e `contact_phone`: mesmo tratamento
-
-#### `/admin/parceiros` (CommercialPartners.tsx)
-- Campos `whatsapp_phone` e `contact_phone`: mesmo tratamento
-
-#### Limpeza de duplicatas
-- `MyAccount.tsx`: substituir `formatPhoneInput` local por import de `phone.ts`
-- `CompanyRegistration.tsx`: substituir `formatPhone` local por import
-- `Checkout.tsx`: substituir `formatPhoneMask` local por import
-
----
-
-### Etapa 4 — Garantir consistência do link WhatsApp
-
-O `whatsapp.ts` já trata corretamente a geração do link. Apenas garantir que os valores salvos no banco passem por `normalizePhoneForStorage` para que `normalizeWhatsappForWaMe` funcione sem surpresas.
-
----
-
-### Resumo
-
-- 1 arquivo novo: `src/lib/phone.ts`
-- 1 componente opcional: `src/components/ui/phone-input.tsx`
-- 7 arquivos modificados: `Company.tsx`, `Sellers.tsx`, `Sponsors.tsx`, `CommercialPartners.tsx`, `MyAccount.tsx`, `CompanyRegistration.tsx`, `Checkout.tsx`
-- 0 alterações de banco
-- 0 alterações de edge functions
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 

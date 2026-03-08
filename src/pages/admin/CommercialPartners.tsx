@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { CommercialPartner, CommercialPartnerStatus, CommercialPartnerTier } from '@/types/database';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -221,8 +222,8 @@ export default function CommercialPartners() {
       logo_url: form.logo_url,
       website_url: form.website_url.trim() || null,
       instagram_url: form.instagram_url.trim() || null,
-      whatsapp_phone: form.whatsapp_phone.trim() || null,
-      contact_phone: form.contact_phone.trim() || null,
+      whatsapp_phone: normalizePhoneForStorage(form.whatsapp_phone) || null,
+      contact_phone: normalizePhoneForStorage(form.contact_phone) || null,
       contact_email: form.contact_email.trim() || null,
       notes: form.notes.trim() || null,
       show_on_showcase: form.show_on_showcase,
@@ -335,8 +336,8 @@ export default function CommercialPartners() {
       logo_url: partner.logo_url,
       website_url: partner.website_url ?? '',
       instagram_url: partner.instagram_url ?? '',
-      whatsapp_phone: partner.whatsapp_phone ?? '',
-      contact_phone: partner.contact_phone ?? '',
+      whatsapp_phone: formatPhoneBR(partner.whatsapp_phone ?? ''),
+      contact_phone: formatPhoneBR(partner.contact_phone ?? ''),
       contact_email: partner.contact_email ?? '',
       notes: partner.notes ?? '',
       show_on_showcase: partner.show_on_showcase,
@@ -579,7 +580,7 @@ export default function CommercialPartners() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="cp-whatsapp">WhatsApp</Label>
-        <Input id="cp-whatsapp" value={form.whatsapp_phone} onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })} placeholder="+55 11 99999-9999" />
+        <Input id="cp-whatsapp" value={form.whatsapp_phone} onChange={(e) => setForm({ ...form, whatsapp_phone: formatPhoneBR(e.target.value) })} placeholder="(00) 00000-0000" maxLength={15} inputMode="tel" />
       </div>
     </div>
   );
@@ -588,7 +589,7 @@ export default function CommercialPartners() {
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
         <Label htmlFor="cp-phone">Telefone</Label>
-        <Input id="cp-phone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} />
+        <Input id="cp-phone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: formatPhoneBR(e.target.value) })} placeholder="(00) 00000-0000" maxLength={15} inputMode="tel" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="cp-email">E-mail</Label>

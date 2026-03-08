@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -237,8 +238,8 @@ export default function CompanyPage() {
       trade_name: data?.trade_name ?? data?.name ?? '',
       document_number: normalizedDocument,
       email: data?.email ?? '',
-      phone: data?.phone ?? '',
-      whatsapp: data?.whatsapp ?? '',
+      phone: formatPhoneBR(data?.phone ?? ''),
+      whatsapp: formatPhoneBR(data?.whatsapp ?? ''),
       website: data?.website ?? '',
       address: data?.address ?? '',
       city: data?.city ?? '',
@@ -634,8 +635,8 @@ export default function CompanyPage() {
       document: normalizedDocumentDigits || null,
       document_number: normalizedDocumentDigits || null,
       email: form.email.trim() || null,
-      phone: form.phone.trim() || null,
-      whatsapp: form.whatsapp.trim() || null,
+      phone: normalizePhoneForStorage(form.phone) || null,
+      whatsapp: normalizePhoneForStorage(form.whatsapp) || null,
       website: form.website.trim() || null,
       address: form.address.trim() || null,
       city: form.city.trim() || null,
@@ -1348,8 +1349,10 @@ export default function CompanyPage() {
                         <Input
                           id="phone"
                           value={form.phone}
-                          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                          placeholder="(11) 99999-9999"
+                          onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                          inputMode="tel"
                         />
                       </div>
                       <div className="space-y-2">
@@ -1357,8 +1360,10 @@ export default function CompanyPage() {
                         <Input
                           id="whatsapp"
                           value={form.whatsapp}
-                          onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                          placeholder="(11) 99999-9999"
+                          onChange={(e) => setForm({ ...form, whatsapp: formatPhoneBR(e.target.value) })}
+                          placeholder="(00) 00000-0000"
+                          maxLength={15}
+                          inputMode="tel"
                         />
                       </div>
                       <div className="space-y-2 md:col-span-2 lg:col-span-3">

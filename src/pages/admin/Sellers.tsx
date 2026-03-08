@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Seller } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -315,7 +316,7 @@ export default function Sellers() {
     const payload = {
       name: form.name,
       cpf: form.cpf || null,
-      phone: form.phone || null,
+      phone: normalizePhoneForStorage(form.phone) || null,
       email: form.email || null,
       commission_percent: commissionValue,
       pix_key: form.pix_key || null,
@@ -355,7 +356,7 @@ export default function Sellers() {
     setForm({
       name: seller.name,
       cpf: seller.cpf || '',
-      phone: seller.phone || '',
+      phone: formatPhoneBR(seller.phone || ''),
       email: seller.email || '',
       commission_percent: seller.commission_percent.toString(),
       pix_key: seller.pix_key || '',
@@ -514,8 +515,10 @@ export default function Sellers() {
                               <Input
                                 id="phone"
                                 value={form.phone}
-                                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                                onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
                                 placeholder="(00) 00000-0000"
+                                maxLength={15}
+                                inputMode="tel"
                               />
                             </div>
                             <div className="space-y-2">

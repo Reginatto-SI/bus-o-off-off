@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 
 function formatCNPJ(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -28,17 +29,7 @@ function formatCPF(value: string) {
     .replace(/\.(\d{3})(\d)/, '.$1-$2');
 }
 
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 10) {
-    return digits
-      .replace(/^(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{4})(\d)/, '$1-$2');
-  }
-  return digits
-    .replace(/^(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d)/, '$1-$2');
-}
+// Comentário: formatPhone substituído por formatPhoneBR de @/lib/phone.ts (fonte única de verdade).
 
 const getCpfDigits = (value: string) => value.replace(/\D/g, '').slice(0, 11);
 const getCnpjDigits = (value: string) => value.replace(/\D/g, '').slice(0, 14);
@@ -154,7 +145,7 @@ export default function CompanyRegistration() {
           document_number: normalizedDocument,
           responsible_name: responsibleName,
           email,
-          phone: phone.replace(/\D/g, ''),
+          phone: normalizePhoneForStorage(phone),
           password,
         },
       });
@@ -316,7 +307,7 @@ export default function CompanyRegistration() {
                       <Input
                         id="phone"
                         value={phone}
-                        onChange={(e) => setPhone(formatPhone(e.target.value))}
+                        onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
                         placeholder="(00) 00000-0000"
                         maxLength={15}
                         className="h-9"
