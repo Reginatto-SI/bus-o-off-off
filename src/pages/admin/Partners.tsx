@@ -126,7 +126,7 @@ export default function Partners() {
     setSaving(false);
   };
 
-  // Proteção de rota no front-end: página de parceiros é exclusiva para perfil developer.
+  // Proteção de rota no front-end: página de sócios é exclusiva para perfil developer.
   if (!isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
