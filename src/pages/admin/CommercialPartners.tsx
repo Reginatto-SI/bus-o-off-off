@@ -745,12 +745,16 @@ export default function CommercialPartners() {
           <TabsTrigger value="contato" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
             <Phone className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Contato</span>
           </TabsTrigger>
+          <TabsTrigger value="exibicao" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+            <Eye className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Exibição</span>
+          </TabsTrigger>
         </TabsList>
         <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
           <TabsContent value="logo" className="mt-0">{renderLogoFields()}</TabsContent>
           <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
           <TabsContent value="contato" className="mt-0">{renderContatoFields()}</TabsContent>
+          <TabsContent value="exibicao" className="mt-0">{renderExibicaoFields()}</TabsContent>
         </div>
       </Tabs>
       <div className="admin-modal__footer px-6 py-4">

@@ -114,6 +114,7 @@ export default function PublicCompanyShowcase() {
 
       setEvents((eventsRes.data ?? []) as EventWithCompany[]);
       setSponsors((sponsorsRes.data ?? []) as PublicSponsor[]);
+      setCommercialPartners((partnersRes.data ?? []) as CommercialPartner[]);
       setLoading(false);
     };
 
