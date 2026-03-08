@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { IdCard, MapPin, Shield } from 'lucide-react';
+import { formatPhoneBR } from '@/lib/phone';
 
 interface ProfileFormData {
   name: string;
