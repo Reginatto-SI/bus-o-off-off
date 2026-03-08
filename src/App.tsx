@@ -26,6 +26,7 @@ import Partners from "./pages/admin/Partners";
 import SalesReport from "./pages/admin/SalesReport";
 import SellersCommissionReport from "./pages/admin/SellersCommissionReport";
 import TemplatesLayout from "./pages/admin/TemplatesLayout";
+import CommercialPartners from "./pages/admin/CommercialPartners";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";

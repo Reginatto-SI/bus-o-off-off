@@ -19,6 +19,7 @@ import {
   User,
   Image,
   Handshake,
+  Briefcase,
   LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
