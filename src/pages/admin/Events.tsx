@@ -2971,7 +2971,7 @@ export default function Events() {
                     {!editingId ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Info className="h-8 w-8 mx-auto mb-2" />
-                        <p>Salve o evento primeiro para adicionar viagens.</p>
+                        <p>Salve o evento primeiro para adicionar transportes.</p>
                       </div>
                     ) : (
                       <>
