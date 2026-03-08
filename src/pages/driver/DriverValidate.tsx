@@ -106,6 +106,8 @@ export default function DriverValidate() {
 
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const initInProgressRef = useRef(false);
+  const initCountRef = useRef(0);
   const scanIntervalRef = useRef<number | null>(null);
 
   const [processing, setProcessing] = useState(false);
