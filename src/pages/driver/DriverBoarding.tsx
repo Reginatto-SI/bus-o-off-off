@@ -528,6 +528,30 @@ export default function DriverBoarding() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Undo dialog */}
+        <AlertDialog open={!!undoPassenger} onOpenChange={() => setUndoPassenger(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{phaseConfig.undoTitle}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {phaseConfig.undoConfirmText} <strong>{undoPassenger?.passengerName}</strong> (Assento{' '}
+                {undoPassenger?.seatLabel})?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={processing}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => undoPassenger && handleUndo(undoPassenger)}
+              >
+                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Desfazer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
