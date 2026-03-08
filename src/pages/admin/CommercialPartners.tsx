@@ -444,8 +444,8 @@ export default function CommercialPartners() {
   // ─── Shared form field renderers ───────────────────────────────────
 
   const renderDadosFields = () => (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2 sm:col-span-2">
+    <div className="space-y-4">
+      <div className="space-y-2">
         <Label htmlFor="cp-name">Nome da empresa parceira *</Label>
         <Input
           id="cp-name"
@@ -455,23 +455,36 @@ export default function CommercialPartners() {
           placeholder="Ex: Restaurante Sabor da Terra"
         />
       </div>
-      <div className="space-y-2">
-        <Label>Status</Label>
-        <Select value={form.status} onValueChange={(v: CommercialPartnerStatus) => setForm({ ...form, status: v })}>
-          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ativo">Ativo</SelectItem>
-            <SelectItem value="inativo">Inativo</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <Select value={form.status} onValueChange={(v: CommercialPartnerStatus) => setForm({ ...form, status: v })}>
+            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cp-order">Ordem de exibição</Label>
+          <Input
+            id="cp-order"
+            type="number"
+            min="0"
+            value={form.display_order}
+            onChange={(e) => setForm({ ...form, display_order: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">Quanto menor o número, mais destaque na listagem.</p>
+        </div>
       </div>
       <div className="space-y-2">
         <Label>Nível do parceiro</Label>
         <div className="grid grid-cols-3 gap-3">
           {([
-            { value: 'basico' as CommercialPartnerTier, title: 'Básico', desc: 'Exibição padrão na vitrine da empresa. O parceiro aparece na lista de parceiros oficiais.' },
-            { value: 'destaque' as CommercialPartnerTier, title: 'Destaque', desc: 'Maior visibilidade na vitrine. Pode aparecer antes dos parceiros básicos.' },
-            { value: 'premium' as CommercialPartnerTier, title: 'Premium', desc: 'Máximo destaque na vitrine. Aparece nas posições prioritárias e possui maior visibilidade no sistema.' },
+            { value: 'basico' as CommercialPartnerTier, title: 'Básico', emoji: '', desc: 'Exibição padrão na vitrine da empresa. O parceiro aparece na lista de parceiros oficiais.' },
+            { value: 'destaque' as CommercialPartnerTier, title: 'Destaque', emoji: ' ⭐', desc: 'Maior visibilidade na vitrine. Pode aparecer antes dos parceiros básicos.' },
+            { value: 'premium' as CommercialPartnerTier, title: 'Premium', emoji: ' 🔥', desc: 'Máximo destaque na vitrine. Aparece nas posições prioritárias e possui maior visibilidade no sistema.' },
           ]).map((tier) => (
             <button
               key={tier.value}
@@ -483,22 +496,11 @@ export default function CommercialPartners() {
                   : 'border-border'
               }`}
             >
-              <span className="block text-sm font-semibold">{tier.title}</span>
+              <span className="block text-sm font-semibold">{tier.title}{tier.emoji}</span>
               <span className="block text-xs text-muted-foreground mt-1">{tier.desc}</span>
             </button>
           ))}
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="cp-order">Ordem de exibição</Label>
-        <Input
-          id="cp-order"
-          type="number"
-          min="0"
-          value={form.display_order}
-          onChange={(e) => setForm({ ...form, display_order: e.target.value })}
-        />
-        <p className="text-xs text-muted-foreground">Quanto menor o número, mais destaque na listagem.</p>
       </div>
     </div>
   );
