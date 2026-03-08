@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { CommercialPartner, CommercialPartnerStatus, CommercialPartnerTier } from '@/types/database';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
