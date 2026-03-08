@@ -708,6 +708,9 @@ export default function DriverValidate() {
             type="button"
             className="mt-2 mb-1 w-full rounded border border-muted bg-background px-2 py-1 font-mono text-xs active:bg-muted"
             onClick={() => {
+              const attemptLines = debugInfo.attemptResults.map((a, i) =>
+                `  tentativa ${i + 1} → ${a.label} [${a.deviceId}] → ${a.result}${a.detail ? ` (${a.detail})` : ''}`
+              );
               const lines = [
                 `permission: ${debugInfo.permission}`,
                 `stream: ${debugInfo.streamExists ? '✅' : '❌'}`,
@@ -715,6 +718,7 @@ export default function DriverValidate() {
                 `liveTrackStates: [${debugInfo.liveTrackStates.join(', ')}]`,
                 `labels: ${debugInfo.trackLabels.join(', ') || '—'}`,
                 `constraint: ${debugInfo.constraintUsed}`,
+                `selectedDeviceId: ${debugInfo.selectedDeviceId ?? '—'}`,
                 `videoSize: ${debugInfo.videoWidth}×${debugInfo.videoHeight}`,
                 `readyState: ${debugInfo.readyState}`,
                 `cameraReady: ${debugInfo.cameraReady ? '✅' : '❌'}`,
@@ -724,7 +728,9 @@ export default function DriverValidate() {
                 `initCount: ${debugInfo.initCount}`,
                 `lastInitAt: ${debugInfo.lastInitAt ?? '—'}`,
                 `lastError: ${debugInfo.lastError ?? '—'}`,
+                `backCameras: ${debugInfo.candidateBackCameras.length > 0 ? debugInfo.candidateBackCameras.join(' | ') : 'nenhuma'}`,
                 `devices: ${debugInfo.devices.length > 0 ? debugInfo.devices.join(' | ') : 'nenhum'}`,
+                ...(attemptLines.length > 0 ? ['--- tentativas:', ...attemptLines] : ['--- tentativas: nenhuma']),
                 `--- userAgent: ${navigator.userAgent}`,
               ];
               navigator.clipboard.writeText(lines.join('\n')).then(() => {
@@ -740,6 +746,7 @@ export default function DriverValidate() {
             <p><strong>liveTrackStates:</strong> [{debugInfo.liveTrackStates.join(', ')}]</p>
             <p><strong>labels:</strong> {debugInfo.trackLabels.join(', ') || '—'}</p>
             <p><strong>constraint:</strong> {debugInfo.constraintUsed}</p>
+            <p><strong>selectedDeviceId:</strong> {debugInfo.selectedDeviceId ?? '—'}</p>
             <p><strong>videoSize:</strong> {debugInfo.videoWidth}×{debugInfo.videoHeight}</p>
             <p><strong>readyState:</strong> {debugInfo.readyState}</p>
             <p><strong>cameraReady:</strong> {debugInfo.cameraReady ? '✅' : '❌'}</p>
@@ -749,6 +756,22 @@ export default function DriverValidate() {
             <p><strong>initCount:</strong> {debugInfo.initCount}</p>
             <p><strong>lastInitAt:</strong> {debugInfo.lastInitAt ?? '—'}</p>
             <p><strong>lastError:</strong> {debugInfo.lastError ?? '—'}</p>
+            <p><strong>backCameras:</strong></p>
+            {debugInfo.candidateBackCameras.length > 0 ? (
+              <ul className="ml-3 list-disc">
+                {debugInfo.candidateBackCameras.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
+            ) : <p className="ml-3">nenhuma</p>}
+            <p><strong>tentativas:</strong></p>
+            {debugInfo.attemptResults.length > 0 ? (
+              <ul className="ml-3 list-disc">
+                {debugInfo.attemptResults.map((a, i) => (
+                  <li key={i} className={a.result === 'success' ? 'text-green-600' : 'text-red-500'}>
+                    #{i + 1} {a.label} [{a.deviceId}] → <strong>{a.result}</strong> {a.detail && `(${a.detail})`}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="ml-3">nenhuma</p>}
             <p><strong>devices:</strong></p>
             {debugInfo.devices.length > 0 ? (
               <ul className="ml-3 list-disc">
