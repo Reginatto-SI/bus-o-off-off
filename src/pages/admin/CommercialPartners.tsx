@@ -467,14 +467,27 @@ export default function CommercialPartners() {
       </div>
       <div className="space-y-2">
         <Label>Nível do parceiro</Label>
-        <Select value={form.partner_tier} onValueChange={(v: CommercialPartnerTier) => setForm({ ...form, partner_tier: v })}>
-          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="basico">Básico</SelectItem>
-            <SelectItem value="destaque">Destaque</SelectItem>
-            <SelectItem value="premium">Premium</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { value: 'basico' as CommercialPartnerTier, title: 'Básico', desc: 'Exibição padrão na vitrine da empresa. O parceiro aparece na lista de parceiros oficiais.' },
+            { value: 'destaque' as CommercialPartnerTier, title: 'Destaque', desc: 'Maior visibilidade na vitrine. Pode aparecer antes dos parceiros básicos.' },
+            { value: 'premium' as CommercialPartnerTier, title: 'Premium', desc: 'Máximo destaque na vitrine. Aparece nas posições prioritárias e possui maior visibilidade no sistema.' },
+          ]).map((tier) => (
+            <button
+              key={tier.value}
+              type="button"
+              onClick={() => setForm({ ...form, partner_tier: tier.value })}
+              className={`rounded-lg border p-3 text-left transition-all cursor-pointer hover:border-primary/60 ${
+                form.partner_tier === tier.value
+                  ? 'border-primary ring-2 ring-primary bg-primary/5'
+                  : 'border-border'
+              }`}
+            >
+              <span className="block text-sm font-semibold">{tier.title}</span>
+              <span className="block text-xs text-muted-foreground mt-1">{tier.desc}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="cp-order">Ordem de exibição</Label>
