@@ -905,7 +905,7 @@ export default function Sponsors() {
 
         <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
-          <TabsContent value="banner" className="mt-0">{renderBannerFields()}</TabsContent>
+          <TabsContent value="banner" className="mt-0">{renderLogoFields()}</TabsContent>
           <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
           <TabsContent value="contato" className="mt-0">{renderContatoFields()}</TabsContent>
         </div>
