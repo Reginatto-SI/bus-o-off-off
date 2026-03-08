@@ -451,122 +451,122 @@ export default function PublicCompanyShowcase() {
                 </section>
               )}
 
-              {/* Grid de todos os eventos */}
-              <section id="todos-eventos" className="space-y-4 scroll-mt-4">
-                <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
+               {/* Grid de todos os eventos */}
+               <section id="todos-eventos" className="space-y-4 scroll-mt-4">
+                 <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
 
-                {loading ? (
-                  <EventCardSkeletonGrid />
-                ) : events.length === 0 ? (
-                  <EmptyState
-                    icon={<Ticket className="h-8 w-8 text-muted-foreground" />}
-                    title="Nenhuma passagem disponível"
-                    description="No momento esta empresa não possui eventos em venda."
-                  />
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {events.map((event) => (
-                      <EventCard key={event.id} event={event} sellerRef={sellerRef} />
-                    ))}
-                  </div>
-                )}
-              </section>
+                 {loading ? (
+                   <EventCardSkeletonGrid />
+                 ) : events.length === 0 ? (
+                   <EmptyState
+                     icon={<Ticket className="h-8 w-8 text-muted-foreground" />}
+                     title="Nenhuma passagem disponível"
+                     description="No momento esta empresa não possui eventos em venda."
+                   />
+                 ) : (
+                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                     {events.map((event) => (
+                       <EventCard key={event.id} event={event} sellerRef={sellerRef} />
+                     ))}
+                   </div>
+                 )}
+               </section>
 
-              {/* Seção de confiança — mini-site */}
-              {!loading && company && (
-                <section className="space-y-4">
-                  <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center">
-                    Por que viajar com a gente?
-                  </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {[
-                      { icon: Bus, label: 'Ônibus confortável e revisado' },
-                      { icon: UserCheck, label: 'Motoristas experientes' },
-                      { icon: ClipboardCheck, label: 'Embarque organizado por lista' },
-                      { icon: ShieldCheck, label: 'Compra segura pelo sistema' },
-                      ...(events[0]?.company?.whatsapp
-                        ? [{ icon: HeadsetIcon, label: 'Suporte rápido via WhatsApp' }]
-                        : []),
-                      { icon: MapPin, label: 'Informações claras do embarque' },
-                    ].map(({ icon: Icon, label }) => (
-                      <div
-                        key={label}
-                        className="flex flex-col items-center gap-2 rounded-lg border bg-card p-4 text-center"
-                      >
-                        <Icon className="h-5 w-5 text-primary" />
-                        <span className="text-xs sm:text-sm text-muted-foreground leading-snug">
-                          {label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+               {/* Parceiros oficiais: seção visível se houver parceiros com show_on_showcase */}
+               {!loading && (commercialPartners.length > 0 || showEditUI) && (
+                 <section className="space-y-3">
+                   <div className="flex items-center justify-center gap-2">
+                     <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider text-center">
+                       Parceiros oficiais
+                     </h2>
+                     {showEditUI && (
+                       <Button variant="ghost" size="sm" asChild className="gap-1 h-6 text-xs">
+                         <Link to="/admin/parceiros">
+                           <Pencil className="h-3 w-3" />
+                           Gerenciar
+                         </Link>
+                       </Button>
+                     )}
+                   </div>
+                   {commercialPartners.length > 0 ? (
+                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                       {commercialPartners.map((partner) => {
+                         const link = partner.website_url;
+                         const content = (
+                           <div className="flex flex-col items-center gap-2 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 h-full">
+                             {partner.logo_url ? (
+                               <img
+                                 src={partner.logo_url}
+                                 alt={partner.name}
+                                 className="h-12 w-full object-contain"
+                               />
+                             ) : (
+                               <span className="text-xs font-medium text-muted-foreground text-center line-clamp-2">
+                                 {partner.name}
+                               </span>
+                             )}
+                             {link && (
+                               <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                 <ExternalLink className="h-3 w-3" />
+                                 Site
+                               </span>
+                             )}
+                           </div>
+                         );
 
-              {/* Parceiros oficiais: seção visível se houver parceiros com show_on_showcase */}
-              {!loading && (commercialPartners.length > 0 || showEditUI) && (
-                <section className="space-y-3">
-                  <div className="flex items-center justify-center gap-2">
-                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider text-center">
-                      Parceiros oficiais
-                    </h2>
-                    {showEditUI && (
-                      <Button variant="ghost" size="sm" asChild className="gap-1 h-6 text-xs">
-                        <Link to="/admin/parceiros">
-                          <Pencil className="h-3 w-3" />
-                          Gerenciar
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                  {commercialPartners.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {commercialPartners.map((partner) => {
-                        const link = partner.website_url;
-                        const content = (
-                          <div className="flex flex-col items-center gap-2 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 h-full">
-                            {partner.logo_url ? (
-                              <img
-                                src={partner.logo_url}
-                                alt={partner.name}
-                                className="h-12 w-full object-contain"
-                              />
-                            ) : (
-                              <span className="text-xs font-medium text-muted-foreground text-center line-clamp-2">
-                                {partner.name}
-                              </span>
-                            )}
-                            {link && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <ExternalLink className="h-3 w-3" />
-                                Site
-                              </span>
-                            )}
-                          </div>
-                        );
+                         return link ? (
+                           <a
+                             key={partner.id}
+                             href={link}
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="block"
+                           >
+                             {content}
+                           </a>
+                         ) : (
+                           <div key={partner.id}>{content}</div>
+                         );
+                       })}
+                     </div>
+                   ) : showEditUI ? (
+                     <p className="text-center text-muted-foreground/50 text-sm italic">
+                       Nenhum parceiro ativo com exibição na vitrine. Use "Gerenciar" para configurar.
+                     </p>
+                   ) : null}
+                 </section>
+               )}
 
-                        return link ? (
-                          <a
-                            key={partner.id}
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block"
-                          >
-                            {content}
-                          </a>
-                        ) : (
-                          <div key={partner.id}>{content}</div>
-                        );
-                      })}
-                    </div>
-                  ) : showEditUI ? (
-                    <p className="text-center text-muted-foreground/50 text-sm italic">
-                      Nenhum parceiro ativo com exibição na vitrine. Use "Gerenciar" para configurar.
-                    </p>
-                  ) : null}
-                </section>
-              )}
+               {/* Seção de confiança — mini-site */}
+               {!loading && company && (
+                 <section className="space-y-4">
+                   <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center">
+                     Por que viajar com a gente?
+                   </h2>
+                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                     {[
+                       { icon: Bus, label: 'Ônibus confortável e revisado' },
+                       { icon: UserCheck, label: 'Motoristas experientes' },
+                       { icon: ClipboardCheck, label: 'Embarque organizado por lista' },
+                       { icon: ShieldCheck, label: 'Compra segura pelo sistema' },
+                       ...(events[0]?.company?.whatsapp
+                         ? [{ icon: HeadsetIcon, label: 'Suporte rápido via WhatsApp' }]
+                         : []),
+                       { icon: MapPin, label: 'Informações claras do embarque' },
+                     ].map(({ icon: Icon, label }) => (
+                       <div
+                         key={label}
+                         className="flex flex-col items-center gap-2 rounded-lg border bg-card p-4 text-center"
+                       >
+                         <Icon className="h-5 w-5 text-primary" />
+                         <span className="text-xs sm:text-sm text-muted-foreground leading-snug">
+                           {label}
+                         </span>
+                       </div>
+                     ))}
+                   </div>
+                 </section>
+               )}
 
               {/* Patrocinadores: seção oculta se não houver ativos */}
               {!loading && (sponsors.length > 0 || showEditUI) && (
