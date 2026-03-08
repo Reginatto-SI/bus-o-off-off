@@ -4481,7 +4481,7 @@ export default function Events() {
                   required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma viagem *" />
+                    <SelectValue placeholder="Selecione um transporte *" />
                   </SelectTrigger>
                   <SelectContent>
                     {sortedEventTrips.map((trip) => (
