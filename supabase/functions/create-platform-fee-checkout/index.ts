@@ -81,12 +81,10 @@ serve(async (req) => {
     const eventName = sale.event?.name || "Evento";
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card", "pix"],
-      payment_method_options: {
-        pix: { expires_after_seconds: 900 },
-      },
+    // Tenta criar com card + pix; se Pix não estiver habilitado na conta da plataforma, faz fallback para card-only.
+    let session;
+    const baseParams = {
+      mode: "payment" as const,
       line_items: [
         {
           price_data: {
@@ -109,7 +107,27 @@ serve(async (req) => {
       },
       success_url: `${origin}/admin/vendas?fee_paid=${sale.id}`,
       cancel_url: `${origin}/admin/vendas?fee_cancelled=${sale.id}`,
-    });
+    };
+
+    try {
+      session = await stripe.checkout.sessions.create({
+        ...baseParams,
+        payment_method_types: ["card", "pix"],
+        payment_method_options: { pix: { expires_after_seconds: 900 } },
+      });
+      console.log("Platform fee checkout created with card + pix");
+    } catch (pixError: any) {
+      if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
+        console.warn("Pix not available on platform account, falling back to card-only");
+        session = await stripe.checkout.sessions.create({
+          ...baseParams,
+          payment_method_types: ["card"],
+        });
+        console.log("Platform fee checkout created with card only");
+      } else {
+        throw pixError;
+      }
+    }
 
     // 4. Salvar referência do checkout na venda
     await supabaseAdmin
