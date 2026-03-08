@@ -194,6 +194,25 @@ serve(async (req) => {
       await supabaseAdmin.from("companies").update({ stripe_onboarding_complete: false }).eq("id", company_id);
     }
 
+    // Verificar se Pix está habilitado na conta conectada
+    let pixEnabled = false;
+    if (capabilitiesReady) {
+      try {
+        const testIntent = await stripe.paymentIntents.create({
+          amount: 500,
+          currency: 'brl',
+          payment_method_types: ['pix'],
+          metadata: { test: 'pix_check' },
+        }, { stripeAccount: stripeAccountId });
+        // Se criou sem erro, Pix está habilitado. Cancelar imediatamente.
+        await stripe.paymentIntents.cancel(testIntent.id, {}, { stripeAccount: stripeAccountId });
+        pixEnabled = true;
+      } catch (pixCheckError: any) {
+        console.log("Pix check: not available on connected account", pixCheckError?.message);
+        pixEnabled = false;
+      }
+    }
+
     const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
 
     if (account.details_submitted || company.stripe_onboarding_complete) {
@@ -204,6 +223,7 @@ serve(async (req) => {
             already_complete: true,
             dashboard_url: loginLink.url,
             capabilities_ready: capabilitiesReady,
+            pix_enabled: pixEnabled,
             capabilities: {
               transfers: account.capabilities?.transfers || 'inactive',
               card_payments: account.capabilities?.card_payments || 'inactive',
