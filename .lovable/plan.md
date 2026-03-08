@@ -1,30 +1,38 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Exibir status do Pix na aba Pagamentos da Empresa
 
-## Mudança
+### Situação atual
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+Hoje o status do Pix **não é mostrado em nenhuma tela fixa**. O aviso só aparece como um toast temporário quando o admin tenta criar um checkout (venda manual ou taxa da plataforma) e o Pix falha. Na aba "Pagamentos" da empresa, o sistema mostra apenas se o Stripe está "Conectado e ativo" com base nas capabilities `transfers` e `card_payments`, mas não verifica se o Pix está habilitado.
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+### Solução
 
-### Componentes afetados
+Adicionar uma verificação de Pix na edge function `create-connect-account` (que já é chamada pelo botão "Verificar status") e exibir o resultado visualmente na aba Pagamentos.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+### Alterações
 
-### Lógica simplificada (ambos os cards)
+**1. Edge Function `create-connect-account/index.ts`**
+- Após verificar capabilities (`transfers`, `card_payments`), adicionar verificação do Pix
+- Usar `stripe.paymentMethods.list` ou tentar criar uma sessão de teste para detectar se Pix está ativo na conta conectada
+- Alternativa mais simples e confiável: consultar `account.capabilities` para verificar se existe capability de Pix (campo `pix_payments` ou similar) na conta conectada
+- Retornar no JSON de resposta um campo `pix_enabled: boolean`
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+**2. Frontend `src/pages/admin/Company.tsx`**
+- Adicionar estado `pixEnabled` (boolean | null)
+- Atualizar `refreshStripeStatus` e `handleConnectStripe` para capturar `pix_enabled` da resposta
+- Na seção "Conectado e ativo", abaixo do texto existente, adicionar um badge/indicador:
+  - Se `pixEnabled === true`: Badge verde "Pix habilitado"
+  - Se `pixEnabled === false`: Badge âmbar "Pix não habilitado" + texto orientativo: "Para habilitar Pix, acesse Settings → Payment Methods no Dashboard do Stripe da sua conta."
+  - Se `pixEnabled === null`: não exibir nada (ainda não verificou)
 
-### Imagem padrão
+### Comportamento esperado
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+- Admin clica em "Verificar status" → sistema consulta Stripe → exibe se Pix está habilitado ou não
+- Se não estiver habilitado, mostra orientação clara de como ativar
+- Nenhuma mudança no fluxo público ou de checkout
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+### Risco / limitação
+
+O Stripe pode não expor a capability de Pix diretamente via API para contas Express. Nesse caso, a alternativa é fazer uma tentativa de criar um PaymentIntent com `payment_method_types: ['pix']` e verificar se retorna erro — mesma lógica de fallback que já usamos no checkout, mas como verificação diagnóstica.
 
