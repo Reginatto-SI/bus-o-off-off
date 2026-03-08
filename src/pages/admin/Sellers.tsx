@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Seller } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
