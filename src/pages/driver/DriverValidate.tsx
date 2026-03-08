@@ -102,15 +102,69 @@ const INITIAL_DEBUG: DebugInfo = {
 };
 
 /**
- * CONSTRAINT CHAIN — simplified (no resolution hints).
- * Some Android devices accept width/height constraints but return
- * a stream that never produces frames. Removing resolution ideals
- * forces the device to pick its native resolution which always works.
+ * tryDeviceCamera — opens a stream for a specific deviceId,
+ * binds to video, validates that it produces real frames.
+ * Returns the stream if valid, or null + reason if not.
  */
-const CAMERA_CONSTRAINTS_CHAIN: MediaStreamConstraints[] = [
-  { video: { facingMode: { ideal: 'environment' } }, audio: false },
-  { video: true, audio: false },
-];
+async function tryDeviceCamera(
+  video: HTMLVideoElement,
+  deviceId: string,
+): Promise<{ stream: MediaStream | null; ok: boolean; reason: string }> {
+  let stream: MediaStream | null = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId } },
+      audio: false,
+    });
+  } catch (err: any) {
+    return { stream: null, ok: false, reason: `getUserMedia error: ${err?.name}` };
+  }
+
+  const track = stream.getVideoTracks()[0];
+  if (!track || track.readyState !== 'live') {
+    stream.getTracks().forEach(t => t.stop());
+    return { stream: null, ok: false, reason: `track ${track?.readyState ?? 'missing'}` };
+  }
+
+  // Bind and wait for metadata
+  video.srcObject = stream;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      if (video.readyState >= 1) { resolve(); return; }
+      const onMeta = () => { video.removeEventListener('loadedmetadata', onMeta); resolve(); };
+      video.addEventListener('loadedmetadata', onMeta);
+      setTimeout(() => { video.removeEventListener('loadedmetadata', onMeta); reject(new Error('metadata_timeout')); }, 4000);
+    });
+    await video.play();
+  } catch (err: any) {
+    stream.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+    return { stream: null, ok: false, reason: `play error: ${err?.message}` };
+  }
+
+  // Poll for real frames (up to 2s)
+  let frameOk = false;
+  for (let i = 0; i < 20; i++) {
+    if (track.readyState !== 'live') {
+      stream.getTracks().forEach(t => t.stop());
+      video.srcObject = null;
+      return { stream: null, ok: false, reason: 'track_ended during poll' };
+    }
+    if (video.videoWidth > 100 && video.videoHeight > 100) {
+      frameOk = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  if (!frameOk) {
+    stream.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+    return { stream: null, ok: false, reason: `no_frames ${video.videoWidth}x${video.videoHeight}` };
+  }
+
+  return { stream, ok: true, reason: 'success' };
+}
 
 export default function DriverValidate() {
   const navigate = useNavigate();
