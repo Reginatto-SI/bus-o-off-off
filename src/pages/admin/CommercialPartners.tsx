@@ -49,6 +49,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Briefcase,
   Check,
@@ -56,7 +57,6 @@ import {
   Image,
   Globe,
   Loader2,
-  
   Star,
   Pencil,
   Phone,
@@ -88,7 +88,14 @@ const WIZARD_STEPS = [
   { label: 'Logo', icon: Image },
   { label: 'Redirecionamento', icon: Globe },
   { label: 'Contato', icon: Phone },
+  { label: 'Exibição', icon: Eye },
 ] as const;
+
+const TIER_VISIBILITY_DEFAULTS: Record<CommercialPartnerTier, { show_on_showcase: boolean; show_on_event_page: boolean; show_on_ticket: boolean }> = {
+  basico: { show_on_showcase: true, show_on_event_page: false, show_on_ticket: false },
+  destaque: { show_on_showcase: true, show_on_event_page: true, show_on_ticket: false },
+  premium: { show_on_showcase: true, show_on_event_page: true, show_on_ticket: true },
+};
 
 const TIER_LABELS: Record<CommercialPartnerTier, string> = {
   basico: 'Básico',
@@ -124,6 +131,9 @@ export default function CommercialPartners() {
     contact_phone: '',
     contact_email: '',
     notes: '',
+    show_on_showcase: true,
+    show_on_event_page: false,
+    show_on_ticket: false,
   });
 
   const stats = useMemo(() => {
@@ -195,6 +205,9 @@ export default function CommercialPartners() {
       contact_phone: '',
       contact_email: '',
       notes: '',
+      show_on_showcase: true,
+      show_on_event_page: false,
+      show_on_ticket: false,
     });
   };
 
@@ -212,6 +225,9 @@ export default function CommercialPartners() {
       contact_phone: form.contact_phone.trim() || null,
       contact_email: form.contact_email.trim() || null,
       notes: form.notes.trim() || null,
+      show_on_showcase: form.show_on_showcase,
+      show_on_event_page: form.show_on_event_page,
+      show_on_ticket: form.show_on_ticket,
     };
   };
 
@@ -223,6 +239,7 @@ export default function CommercialPartners() {
     setSaving(true);
 
     const orderValue = Number.parseInt(form.display_order, 10);
+    const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
     const { data, error } = await supabase
       .from('commercial_partners')
       .insert([{
@@ -231,6 +248,9 @@ export default function CommercialPartners() {
         display_order: Number.isNaN(orderValue) ? 1 : orderValue,
         partner_tier: form.partner_tier,
         company_id: activeCompanyId!,
+        show_on_showcase: defaults.show_on_showcase,
+        show_on_event_page: defaults.show_on_event_page,
+        show_on_ticket: defaults.show_on_ticket,
       }])
       .select('id')
       .single();
@@ -240,6 +260,7 @@ export default function CommercialPartners() {
       toast.error(buildDebugToastMessage({ title: 'Erro ao criar parceiro', error, context: { action: 'insert', table: 'commercial_partners' } }));
     } else {
       setEditingId(data.id);
+      setForm((prev) => ({ ...prev, ...defaults }));
       toast.success('Parceiro criado. Continue o cadastro.');
       setWizardStep(2);
     }
@@ -318,6 +339,9 @@ export default function CommercialPartners() {
       contact_phone: partner.contact_phone ?? '',
       contact_email: partner.contact_email ?? '',
       notes: partner.notes ?? '',
+      show_on_showcase: partner.show_on_showcase,
+      show_on_event_page: partner.show_on_event_page,
+      show_on_ticket: partner.show_on_ticket,
     });
     setDialogOpen(true);
   };
@@ -556,7 +580,65 @@ export default function CommercialPartners() {
     </div>
   );
 
-  // ─── Wizard progress bar ───────────────────────────────────────────
+  const renderExibicaoFields = () => {
+    const applyTierDefaults = () => {
+      const defaults = TIER_VISIBILITY_DEFAULTS[form.partner_tier];
+      setForm((prev) => ({ ...prev, ...defaults }));
+    };
+
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Defina onde este parceiro será exibido no sistema. Você pode alterar essas opções a qualquer momento.
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={applyTierDefaults} className="mb-4">
+            Sugerir padrão para nível "{TIER_LABELS[form.partner_tier]}"
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-showcase"
+              checked={form.show_on_showcase}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_showcase: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-showcase" className="cursor-pointer">Mostrar na vitrine pública</Label>
+              <p className="text-xs text-muted-foreground">O parceiro aparecerá na seção "Parceiros oficiais" da página pública da empresa.</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-event-page"
+              checked={form.show_on_event_page}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_event_page: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-event-page" className="cursor-pointer">Mostrar na página de eventos</Label>
+              <p className="text-xs text-muted-foreground">O parceiro aparecerá na página de detalhe dos eventos, separado dos patrocinadores.</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="cp-ticket"
+              checked={form.show_on_ticket}
+              onCheckedChange={(checked) => setForm({ ...form, show_on_ticket: !!checked })}
+            />
+            <div>
+              <Label htmlFor="cp-ticket" className="cursor-pointer">Mostrar na passagem</Label>
+              <p className="text-xs text-muted-foreground">O parceiro pode aparecer de forma discreta no rodapé da passagem gerada.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
 
   const renderWizardProgress = () => (
     <div className="px-6 py-4 border-b border-border">
@@ -608,11 +690,11 @@ export default function CommercialPartners() {
       );
     }
 
-    if (wizardStep === 4) {
+    if (wizardStep === 5) {
       return (
         <div className="admin-modal__footer px-6 py-4">
           <div className="flex flex-wrap justify-between gap-3">
-            <Button type="button" variant="outline" onClick={() => setWizardStep(3)}>Voltar</Button>
+            <Button type="button" variant="outline" onClick={() => setWizardStep(4)}>Voltar</Button>
             <Button type="button" disabled={saving} onClick={() => handleWizardStepSave()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finalizar cadastro'}
             </Button>
@@ -641,6 +723,7 @@ export default function CommercialPartners() {
         {wizardStep === 2 && renderLogoFields()}
         {wizardStep === 3 && renderRedirecionamentoFields()}
         {wizardStep === 4 && renderContatoFields()}
+        {wizardStep === 5 && renderExibicaoFields()}
       </div>
       {renderWizardFooter()}
     </div>
@@ -662,12 +745,16 @@ export default function CommercialPartners() {
           <TabsTrigger value="contato" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
             <Phone className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Contato</span>
           </TabsTrigger>
+          <TabsTrigger value="exibicao" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+            <Eye className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Exibição</span>
+          </TabsTrigger>
         </TabsList>
         <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
           <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
           <TabsContent value="logo" className="mt-0">{renderLogoFields()}</TabsContent>
           <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
           <TabsContent value="contato" className="mt-0">{renderContatoFields()}</TabsContent>
+          <TabsContent value="exibicao" className="mt-0">{renderExibicaoFields()}</TabsContent>
         </div>
       </Tabs>
       <div className="admin-modal__footer px-6 py-4">

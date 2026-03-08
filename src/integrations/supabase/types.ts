@@ -113,6 +113,9 @@ export type Database = {
           name: string
           notes: string | null
           partner_tier: string
+          show_on_event_page: boolean
+          show_on_showcase: boolean
+          show_on_ticket: boolean
           status: string
           updated_at: string
           website_url: string | null
@@ -130,6 +133,9 @@ export type Database = {
           name: string
           notes?: string | null
           partner_tier?: string
+          show_on_event_page?: boolean
+          show_on_showcase?: boolean
+          show_on_ticket?: boolean
           status?: string
           updated_at?: string
           website_url?: string | null
@@ -147,6 +153,9 @@ export type Database = {
           name?: string
           notes?: string | null
           partner_tier?: string
+          show_on_event_page?: boolean
+          show_on_showcase?: boolean
+          show_on_ticket?: boolean
           status?: string
           updated_at?: string
           website_url?: string | null
