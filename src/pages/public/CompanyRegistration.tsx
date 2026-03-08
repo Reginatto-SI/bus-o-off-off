@@ -145,7 +145,7 @@ export default function CompanyRegistration() {
           document_number: normalizedDocument,
           responsible_name: responsibleName,
           email,
-          phone: phone.replace(/\D/g, ''),
+          phone: normalizePhoneForStorage(phone),
           password,
         },
       });
