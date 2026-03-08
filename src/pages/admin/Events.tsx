@@ -3176,7 +3176,7 @@ export default function Events() {
                             {selectedTripIdForBoardings 
                               ? isGroupedTransportPolicy
                                 ? 'Embarques do transporte selecionado (Ida + Volta)'
-                                : 'Embarques da viagem selecionada'
+                                : 'Embarques do transporte selecionado'
                               : 'Todos os embarques'
                             }
                           </h3>
