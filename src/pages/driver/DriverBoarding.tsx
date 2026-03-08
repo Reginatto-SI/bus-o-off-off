@@ -363,8 +363,8 @@ export default function DriverBoarding() {
             </Badge>
             <span className="text-sm font-medium">Passageiros</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => fetchData()} aria-label="Atualizar">
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={() => fetchData(true)} aria-label="Atualizar" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
 
