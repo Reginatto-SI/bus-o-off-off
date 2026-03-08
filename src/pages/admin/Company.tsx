@@ -992,6 +992,13 @@ export default function CompanyPage() {
                       <span className="min-w-0 truncate">Identidade Visual</span>
                     </TabsTrigger>
                     <TabsTrigger
+                      value="redes"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Share2 className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Redes Sociais</span>
+                    </TabsTrigger>
+                    <TabsTrigger
                       value="pagamentos"
                       className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
                     >
