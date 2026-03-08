@@ -103,7 +103,20 @@ export default function Confirmation() {
               .order('display_order')
               .limit(6);
             setCommercialPartners((partnersData || []).map((p: any) => ({ name: p.name, logo_url: p.logo_url })));
-          }
+
+            // Fetch event sponsors for ticket
+            const { data: esData } = await supabase
+              .from('event_sponsors')
+              .select('display_order, sponsor:sponsors(name, banner_url, status)')
+              .eq('event_id', saleRes.data.event_id)
+              .eq('show_on_ticket', true)
+              .order('display_order')
+              .limit(6);
+            setEventSponsors(
+              (esData || [])
+                .filter((es: any) => es.sponsor?.status === 'ativo')
+                .map((es: any) => ({ name: es.sponsor.name, logo_url: es.sponsor.banner_url }))
+            );
           }
         }
 
