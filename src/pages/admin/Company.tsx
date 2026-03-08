@@ -520,6 +520,13 @@ export default function CompanyPage() {
       cover_image_url: '',
       intro_text: '',
       background_style: 'solid',
+      social_instagram: '',
+      social_facebook: '',
+      social_tiktok: '',
+      social_youtube: '',
+      social_telegram: '',
+      social_twitter: '',
+      social_website: '',
     });
   };
 
