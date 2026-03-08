@@ -300,11 +300,11 @@ export default function TicketLookup() {
         </div>
 
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <Ticket className="h-8 w-8 text-primary" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-3">
+            <Ticket className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Consultar Passagens</h1>
-          <p className="text-muted-foreground">Informe o evento e seu CPF para visualizar suas passagens</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Encontrar minha passagem</h1>
+          <p className="text-muted-foreground">Informe o evento e o CPF utilizado na compra para localizar suas passagens.</p>
         </div>
 
         <Card className="mb-6">
