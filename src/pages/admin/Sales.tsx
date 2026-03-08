@@ -889,6 +889,16 @@ export default function Sales() {
     }
 
     if (isGerente) {
+      // Ação: Pagar taxa da plataforma (quando pendente)
+      const feeStatus = (sale as any).platform_fee_status;
+      if (feeStatus === 'pending' || feeStatus === 'failed') {
+        actions.push({
+          label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
+          icon: CreditCard,
+          onClick: () => handlePayPlatformFee(sale),
+        });
+      }
+
       if (sale.status === 'reservado') {
         actions.push({
           label: 'Marcar como Pago',
