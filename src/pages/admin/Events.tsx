@@ -2997,8 +2997,8 @@ export default function Events() {
                         ) : eventTrips.length === 0 ? (
                           <div className="text-center py-8 text-muted-foreground border rounded-lg">
                             <Bus className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>Nenhuma viagem cadastrada</p>
-                            <p className="text-sm">Adicione viagens para este evento</p>
+                            <p>Nenhum transporte cadastrado</p>
+                            <p className="text-sm">Adicione transportes para este evento</p>
                             {!isReadOnly && (
                               <Button
                                 type="button"
