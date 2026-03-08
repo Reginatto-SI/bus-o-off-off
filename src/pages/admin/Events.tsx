@@ -98,7 +98,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
-
+import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 // Types
 interface EventFilters {
   search: string;
