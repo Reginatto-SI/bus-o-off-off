@@ -2854,7 +2854,7 @@ export default function Events() {
                               disabled={isReadOnly}
                             />
                             <p className="text-xs text-muted-foreground">
-                              Local onde o evento acontece (destino final da viagem)
+                              Local onde o evento acontece (destino final do transporte)
                             </p>
                           </div>
                           <div className="space-y-2">
