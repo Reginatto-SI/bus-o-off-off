@@ -152,6 +152,7 @@ serve(async (req) => {
     };
 
     let session;
+    let pixAvailable = true;
     try {
       // Try with card + pix (Direct Charge — session on connected account)
       session = await stripe.checkout.sessions.create({
@@ -165,6 +166,7 @@ serve(async (req) => {
     } catch (pixError: any) {
       if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
         console.warn("Pix not available on connected account, falling back to card-only");
+        pixAvailable = false;
         session = await stripe.checkout.sessions.create({
           ...checkoutParams,
           payment_method_types: ['card'],
@@ -181,7 +183,7 @@ serve(async (req) => {
       .update({ stripe_checkout_session_id: session.id })
       .eq("id", sale.id);
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url, pix_available: pixAvailable }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

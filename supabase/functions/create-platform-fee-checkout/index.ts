@@ -83,6 +83,7 @@ serve(async (req) => {
 
     // Tenta criar com card + pix; se Pix não estiver habilitado na conta da plataforma, faz fallback para card-only.
     let session;
+    let pixAvailable = true;
     const baseParams = {
       mode: "payment" as const,
       line_items: [
@@ -119,6 +120,7 @@ serve(async (req) => {
     } catch (pixError: any) {
       if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
         console.warn("Pix not available on platform account, falling back to card-only");
+        pixAvailable = false;
         session = await stripe.checkout.sessions.create({
           ...baseParams,
           payment_method_types: ["card"],
@@ -143,7 +145,7 @@ serve(async (req) => {
       company_id: sale.company_id,
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url, pix_available: pixAvailable }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
