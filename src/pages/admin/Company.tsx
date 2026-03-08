@@ -435,6 +435,9 @@ export default function CompanyPage() {
       if (data?.capabilities) {
         setCapabilitiesDetail(data.capabilities);
       }
+      if (data?.pix_enabled !== undefined) {
+        setPixEnabled(data.pix_enabled);
+      }
 
       if (data?.already_complete && data?.dashboard_url) {
         window.open(data.dashboard_url, '_blank');
