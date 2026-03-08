@@ -1519,16 +1519,22 @@ export default function Events() {
   useEffect(() => {
     if (!tripDialogOpen || editingTripId) return;
 
-    // Regras guiadas por política: evita criação de configuração incoerente com o modelo comercial do evento.
+    /**
+     * Sincronização automática: a política do evento define o tipo de transporte.
+     * - ida_volta_obrigatorio → sempre ida_volta
+     * - ida_obrigatoria_volta_opcional (Somente ida) → sempre ida
+     * - trecho_independente (Flexível) → sem restrição, o usuário escolhe
+     */
     if (isRoundTripMandatoryPolicy && tripForm.trip_creation_type !== 'ida_volta') {
       setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida_volta' }));
       return;
     }
 
-    if (isGroupedTransportPolicy && tripForm.trip_creation_type === 'volta') {
+    if (isSomenteIdaPolicy && tripForm.trip_creation_type !== 'ida') {
       setTripForm((prev) => ({ ...prev, trip_creation_type: 'ida' }));
+      return;
     }
-  }, [tripDialogOpen, editingTripId, isGroupedTransportPolicy, isRoundTripMandatoryPolicy, tripForm.trip_creation_type]);
+  }, [tripDialogOpen, editingTripId, isRoundTripMandatoryPolicy, isSomenteIdaPolicy, tripForm.trip_creation_type]);
 
   const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
