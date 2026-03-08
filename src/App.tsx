@@ -26,6 +26,7 @@ import Partners from "./pages/admin/Partners";
 import SalesReport from "./pages/admin/SalesReport";
 import SellersCommissionReport from "./pages/admin/SellersCommissionReport";
 import TemplatesLayout from "./pages/admin/TemplatesLayout";
+import CommercialPartners from "./pages/admin/CommercialPartners";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
@@ -102,7 +103,7 @@ const App = () => (
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
             <Route path="/admin/socios" element={<Partners />} />
-            <Route path="/admin/parceiros" element={<Navigate to="/admin/socios" replace />} />
+            <Route path="/admin/parceiros" element={<CommercialPartners />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/templates-layout" element={<TemplatesLayout />} />

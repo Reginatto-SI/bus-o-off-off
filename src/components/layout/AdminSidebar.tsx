@@ -19,6 +19,7 @@ import {
   User,
   Image,
   Handshake,
+  Briefcase,
   LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
@@ -107,6 +108,11 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Patrocinadores',
     href: '/admin/patrocinadores',
     icon: Image,
+    roles: ['gerente']
+  }, {
+    name: 'Parceiros',
+    href: '/admin/parceiros',
+    icon: Briefcase,
     roles: ['gerente']
   }, {
     name: 'Sócios',

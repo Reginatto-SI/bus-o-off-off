@@ -12,6 +12,9 @@ export type SponsorStatus = 'ativo' | 'inativo';
 export type SponsorLinkType = 'site' | 'whatsapp';
 export type PartnerStatus = 'ativo' | 'inativo';
 
+export type CommercialPartnerStatus = 'ativo' | 'inativo';
+export type CommercialPartnerTier = 'basico' | 'destaque' | 'premium';
+
 export type CompanyLegalType = 'PF' | 'PJ';
 
 export interface Company {
@@ -385,6 +388,24 @@ export interface Partner {
   stripe_onboarding_complete: boolean;
   split_percent: number;
   status: PartnerStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommercialPartner {
+  id: string;
+  company_id: string;
+  name: string;
+  status: CommercialPartnerStatus;
+  display_order: number;
+  partner_tier: CommercialPartnerTier;
+  logo_url: string | null;
+  website_url: string | null;
+  instagram_url: string | null;
+  whatsapp_phone: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

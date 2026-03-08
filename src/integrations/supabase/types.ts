@@ -100,6 +100,68 @@ export type Database = {
         }
         Relationships: []
       }
+      commercial_partners: {
+        Row: {
+          company_id: string
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          display_order: number
+          id: string
+          instagram_url: string | null
+          logo_url: string | null
+          name: string
+          notes: string | null
+          partner_tier: string
+          status: string
+          updated_at: string
+          website_url: string | null
+          whatsapp_phone: string | null
+        }
+        Insert: {
+          company_id: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          instagram_url?: string | null
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          partner_tier?: string
+          status?: string
+          updated_at?: string
+          website_url?: string | null
+          whatsapp_phone?: string | null
+        }
+        Update: {
+          company_id?: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          instagram_url?: string | null
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          partner_tier?: string
+          status?: string
+          updated_at?: string
+          website_url?: string | null
+          whatsapp_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_partners_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           accent_color: string | null
