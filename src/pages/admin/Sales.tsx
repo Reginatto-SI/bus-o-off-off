@@ -834,7 +834,10 @@ export default function Sales() {
     setTicketGenTickets([]);
     setTicketGenFees(undefined);
     setTicketGenTotalPaid(undefined);
+    setTicketGenPartners([]);
+    setTicketGenSponsors([]);
 
+    const companyId = (sale.event as any)?.company_id || activeCompanyId;
     const [ticketsRes, boardingRes, feesRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase
