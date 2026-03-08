@@ -346,6 +346,7 @@ export default function TicketLookup() {
                 onChange={(e) => setCpf(formatCpfInput(e.target.value))}
                 maxLength={14}
               />
+              <p className="text-xs text-muted-foreground mt-1">Use o CPF do passageiro ou o CPF utilizado na compra.</p>
             </div>
 
             <Button
