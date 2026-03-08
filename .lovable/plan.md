@@ -1,55 +1,30 @@
 
 
-## Plano: Vincular Nível do Parceiro à Exibição Automática
+# Imagem padrão para eventos sem banner
 
-### Arquivo: `src/pages/admin/CommercialPartners.tsx`
+## Mudança
 
-### Mudanças
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-#### 1. Tier selection aplica defaults automaticamente (linhas 488-492)
-
-No `onClick` dos cards de nível, além de mudar `partner_tier`, aplicar automaticamente os defaults de visibilidade:
-
+### Constante
 ```ts
-onClick={() => {
-  const defaults = TIER_VISIBILITY_DEFAULTS[tier.value];
-  setForm({ ...form, partner_tier: tier.value, ...defaults });
-}
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-#### 2. Remover botão "Sugerir padrão" (linhas 610-612)
+### Componentes afetados
 
-Eliminar o `<Button>` "Sugerir padrão para nível..." e a função `applyTierDefaults` da `renderExibicaoFields`.
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-#### 3. Adicionar indicação de níveis em cada checkbox
+### Lógica simplificada (ambos os cards)
 
-Ao lado de cada label, adicionar badge discreta com os níveis que incluem aquela exibição:
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-- **Vitrine pública** → `Básico, Destaque e Premium`
-- **Página de eventos** → `Destaque e Premium`
-- **Passagem** → `Premium`
+### Imagem padrão
 
-Formato: `<span className="text-xs text-muted-foreground ml-1">(Básico, Destaque e Premium)</span>` após o label.
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-#### 4. Aviso de configuração personalizada
-
-Adicionar lógica que compara o estado atual dos checkboxes com `TIER_VISIBILITY_DEFAULTS[form.partner_tier]`. Se houver divergência, exibir um alerta discreto no topo da aba Exibição:
-
-```text
-┌─────────────────────────────────────────────┐
-│ ⚠ Configuração de exibição personalizada    │
-│ As opções abaixo diferem do padrão do       │
-│ nível "Destaque".                           │
-└─────────────────────────────────────────────┘
-```
-
-Usando um `<div>` com `bg-amber-50 border-amber-200 text-amber-800` (estilo alerta discreto). Aparece apenas quando há divergência.
-
-#### 5. Descrição introdutória atualizada
-
-Substituir o texto introdutório por algo como: "A configuração abaixo foi definida automaticamente com base no nível **{TIER_LABELS[tier]}**. Você pode ajustar manualmente se necessário."
-
-### Sem alteração de dados
-
-Lógica de persistência e estrutura do modal permanecem iguais. Apenas comportamento de auto-preenchimento e comunicação visual mudam.
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
