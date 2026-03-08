@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPersistedPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG, REASON_MESSAGES } from '@/lib/driverPhaseConfig';
+import { getDriverPreferences } from '@/lib/driverPreferences';
+import { playBeep, vibrateDevice } from '@/lib/driverScannerFeedback';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
