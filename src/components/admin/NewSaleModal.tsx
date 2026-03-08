@@ -669,7 +669,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       } as any);
 
       const successMessages: Record<SaleTab, string> = {
-        manual: 'Venda manual criada com sucesso!',
+        manual: hasPlatformFee
+          ? `Venda manual criada! Taxa da plataforma (${formatCurrencyBRL(platformFeeAmount!)}) pendente de pagamento.`
+          : 'Venda manual criada com sucesso!',
         reserva: 'Reserva criada. Você pode marcar como paga depois.',
         bloqueio: 'Poltrona(s) bloqueada(s) com sucesso!',
       };
