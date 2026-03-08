@@ -671,9 +671,12 @@ export default function Events() {
   // Computed: is read-only (encerrado)
   const isReadOnly = form.status === 'encerrado';
 
-  // Flags de política usados em validações/effects da tela. Mantidos aqui para evitar uso antes da inicialização.
+  // Flags de política de transporte — a política do evento (Etapa Geral) define a regra macro.
+  // O tipo de transporte por item só aparece na política Flexível (trecho_independente).
   const isGroupedTransportPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional' || form.transport_policy === 'ida_volta_obrigatorio';
   const isRoundTripMandatoryPolicy = form.transport_policy === 'ida_volta_obrigatorio';
+  const isSomenteIdaPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional';
+  const isFlexiblePolicy = form.transport_policy === 'trecho_independente';
 
   // Stats calculations
   const stats = useMemo(() => {
