@@ -715,8 +715,10 @@ export default function Sponsors() {
             <Input
               id="whatsapp_phone"
               value={form.whatsapp_phone}
-              onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })}
-              placeholder="+55 11 99999-9999"
+              onChange={(e) => setForm({ ...form, whatsapp_phone: formatPhoneBR(e.target.value) })}
+              placeholder="(00) 00000-0000"
+              maxLength={15}
+              inputMode="tel"
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
