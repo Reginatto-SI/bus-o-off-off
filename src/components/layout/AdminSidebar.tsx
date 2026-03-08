@@ -109,10 +109,10 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Image,
     roles: ['gerente']
   }, {
-    name: 'Parceiros',
-    href: '/admin/parceiros',
+    name: 'Sócios',
+    href: '/admin/socios',
     icon: Handshake,
-    // Tela restrita: somente usuários developer podem visualizar o menu de Parceiros.
+    // Tela restrita: somente usuários developer podem visualizar o menu de Sócios.
     roles: ['developer']
   }, {
     name: 'Templates de Layout',

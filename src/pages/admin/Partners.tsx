@@ -212,7 +212,7 @@ export default function Partners() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar Parceiro' : 'Novo Parceiro'}</DialogTitle>
+              <DialogTitle>{editingId ? 'Editar Sócio' : 'Novo Sócio'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -220,7 +220,7 @@ export default function Partners() {
                 <Input
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Nome do parceiro"
+                  placeholder="Nome do sócio"
                 />
               </div>
               <div className="space-y-2">
@@ -231,7 +231,7 @@ export default function Partners() {
                   placeholder="acct_..."
                 />
                 <p className="text-xs text-muted-foreground">
-                  ID da conta Stripe Connect do parceiro para recebimento automático
+                  ID da conta Stripe Connect do sócio para recebimento automático da participação na comissão da plataforma.
                 </p>
               </div>
               <div className="space-y-2">
@@ -245,7 +245,7 @@ export default function Partners() {
                   onChange={(e) => setForm({ ...form, split_percent: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Referência global. O valor efetivo é configurado por empresa.
+                  Percentual da comissão da plataforma que será repassado automaticamente ao sócio.
                 </p>
               </div>
               <div className="space-y-2">
