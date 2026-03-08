@@ -33,6 +33,7 @@ import SellerDashboard from "./pages/seller/SellerDashboard";
 import DriverHome from "./pages/driver/DriverHome";
 import DriverValidate from "./pages/driver/DriverValidate";
 import DriverBoarding from "./pages/driver/DriverBoarding";
+import DriverPreferences from "./pages/driver/DriverPreferences";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/motorista" element={<DriverHome />} />
             <Route path="/motorista/validar" element={<DriverValidate />} />
             <Route path="/motorista/embarque" element={<DriverBoarding />} />
+            <Route path="/motorista/preferencias" element={<DriverPreferences />} />
 
             {/* Admin Panel */}
             {/* Redireciona a rota base do admin para o dashboard mantendo o layout e guardas atuais. */}

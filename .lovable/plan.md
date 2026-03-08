@@ -1,81 +1,30 @@
 
 
-## Plano: Scanner contínuo + preferências do motorista
+# Imagem padrão para eventos sem banner
 
-### Resumo
+## Mudança
 
-Evoluir o scanner QR do motorista com modo automático (sem "Ler próximo"), feedback sonoro e vibração, e criar tela de preferências persistidas em localStorage.
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### 1. Novo arquivo: `src/lib/driverPreferences.ts`
-
-Utilitário para ler/salvar preferências do motorista em localStorage:
-
-```typescript
-type DriverPreferences = {
-  scanMode: 'manual' | 'auto';   // default: 'manual'
-  soundEnabled: boolean;          // default: true
-  vibrationEnabled: boolean;      // default: true
-};
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-Funções: `getDriverPreferences()`, `setDriverPreferences(prefs)`.
+### Componentes afetados
 
-### 2. Novo arquivo: `src/lib/driverScannerFeedback.ts`
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-Utilitário com funções de feedback:
+### Lógica simplificada (ambos os cards)
 
-- `playBeep(success: boolean)` — gera beep usando Web Audio API (AudioContext + oscillator). Sucesso: tom agudo curto. Erro: tom grave duplo.
-- `vibrateDevice(success: boolean)` — usa `navigator.vibrate()`. Sucesso: 100ms. Erro: [100, 50, 100]ms.
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-Sem dependências externas — tudo via APIs nativas do browser.
+### Imagem padrão
 
-### 3. Nova rota e página: `/motorista/preferencias`
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-Arquivo: `src/pages/driver/DriverPreferences.tsx`
-
-Tela mobile-first simples com:
-- Header com botão "Voltar"
-- **Modo de leitura** — RadioGroup: Manual / Automático
-- **Sons do scanner** — Switch toggle
-- **Vibração** — Switch toggle
-- Cada alteração salva imediatamente em localStorage
-
-### 4. Atualizar `DriverHome.tsx` — header com menu
-
-Substituir o botão "Sair" isolado por um DropdownMenu com ícone de engrenagem (Settings):
-- Item: "Preferências" → navega para `/motorista/preferencias`
-- Item: "Sair" → `signOut()`
-
-### 5. Atualizar `DriverValidate.tsx` — scanner contínuo + feedback
-
-Mudanças na lógica do scanner:
-
-**Após leitura (overlay aparece):**
-1. Chamar `playBeep(overlay.result === 'success')` se som habilitado
-2. Chamar `vibrateDevice(overlay.result === 'success')` se vibração habilitada
-3. Se modo automático:
-   - Esconder botão "Ler próximo"
-   - Após 2 segundos, chamar `resetOverlay()` automaticamente (via `setTimeout`)
-4. Se modo manual: manter comportamento atual (botão "Ler próximo")
-
-Leitura das preferências via `getDriverPreferences()` no início do componente.
-
-### 6. Atualizar `App.tsx` — nova rota
-
-Adicionar: `<Route path="/motorista/preferencias" element={<DriverPreferences />} />`
-
-### Arquivos
-
-| Arquivo | Ação |
-|---|---|
-| `src/lib/driverPreferences.ts` | Criar |
-| `src/lib/driverScannerFeedback.ts` | Criar |
-| `src/pages/driver/DriverPreferences.tsx` | Criar |
-| `src/pages/driver/DriverHome.tsx` | Editar header |
-| `src/pages/driver/DriverValidate.tsx` | Editar lógica pós-scan |
-| `src/App.tsx` | Adicionar rota |
-
-### Sem quebra
-
-Nenhuma funcionalidade existente é alterada. O modo padrão continua "manual". Sons e vibração ficam habilitados por padrão mas o motorista pode desligar a qualquer momento.
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 

@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPersistedPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG, REASON_MESSAGES } from '@/lib/driverPhaseConfig';
+import { getDriverPreferences } from '@/lib/driverPreferences';
+import { playBeep, vibrateDevice } from '@/lib/driverScannerFeedback';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -184,6 +186,8 @@ export default function DriverValidate() {
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>(INITIAL_DEBUG);
+  const [driverPrefs, setDriverPrefs] = useState(getDriverPreferences);
+  const autoResetTimerRef = useRef<number | null>(null);
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
@@ -536,10 +540,36 @@ export default function DriverValidate() {
     return () => window.clearInterval(id);
   }, [videoEl, cameraReady, cameraError]);
 
-  const resetOverlay = () => {
+  const resetOverlay = useCallback(() => {
+    if (autoResetTimerRef.current) {
+      window.clearTimeout(autoResetTimerRef.current);
+      autoResetTimerRef.current = null;
+    }
     setOverlay(null);
     setProcessing(false);
-  };
+    // Re-read prefs in case user changed them
+    setDriverPrefs(getDriverPreferences());
+  }, []);
+
+  // Trigger feedback + auto-reset when overlay appears
+  useEffect(() => {
+    if (!overlay) return;
+    const prefs = driverPrefs;
+    const isSuccess = overlay.result === 'success';
+    if (prefs.soundEnabled) playBeep(isSuccess);
+    if (prefs.vibrationEnabled) vibrateDevice(isSuccess);
+    if (prefs.scanMode === 'auto') {
+      autoResetTimerRef.current = window.setTimeout(() => {
+        resetOverlay();
+      }, 2000);
+    }
+    return () => {
+      if (autoResetTimerRef.current) {
+        window.clearTimeout(autoResetTimerRef.current);
+        autoResetTimerRef.current = null;
+      }
+    };
+  }, [overlay, driverPrefs, resetOverlay]);
 
   // --- Auth guards ---
   if (loading) {
@@ -642,17 +672,20 @@ export default function DriverValidate() {
                   </div>
 
                   <div className="mt-4 flex w-full max-w-xs flex-col gap-2">
-                    <Button className="h-12 w-full text-base" onClick={resetOverlay}>
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      {overlay.result === 'success' ? 'Ler próximo' : 'Tentar novamente'}
-                    </Button>
+                    {driverPrefs.scanMode === 'auto' ? (
+                      <p className="text-xs text-white/60 text-center">Leitura automática em 2s…</p>
+                    ) : (
+                      <Button className="h-12 w-full text-base" onClick={resetOverlay}>
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        {overlay.result === 'success' ? 'Ler próximo' : 'Tentar novamente'}
+                      </Button>
+                    )}
                     {overlay.result === 'success' && (
                       <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
                         <Users className="mr-2 h-4 w-4" />
                         Lista de passageiros
                       </Button>
                     )}
-                    {/* Remove the old checkout button — now handled by phase selector */}
                   </div>
                 </div>
               )}
