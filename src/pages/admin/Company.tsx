@@ -650,6 +650,14 @@ export default function CompanyPage() {
       cover_image_url: form.cover_image_url?.trim() || null,
       intro_text: form.intro_text?.trim() || null,
       background_style: form.background_style,
+      // Redes sociais
+      social_instagram: form.social_instagram?.trim() || null,
+      social_facebook: form.social_facebook?.trim() || null,
+      social_tiktok: form.social_tiktok?.trim() || null,
+      social_youtube: form.social_youtube?.trim() || null,
+      social_telegram: form.social_telegram?.trim() || null,
+      social_twitter: form.social_twitter?.trim() || null,
+      social_website: form.social_website?.trim() || null,
     };
 
     let error;
