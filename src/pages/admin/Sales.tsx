@@ -182,6 +182,8 @@ function buildTicketCardData(
   boardingDepartureDate: string | null,
   fees?: { name: string; amount: number }[],
   totalPaid?: number,
+  commercialPartners?: { name: string; logo_url: string | null }[],
+  eventSponsors?: { name: string; logo_url: string | null }[],
 ): TicketCardData {
   const companyDisplayName = company?.trade_name || company?.name || '';
   return {
@@ -215,6 +217,8 @@ function buildTicketCardData(
     driverName: (sale.trip as any)?.driver?.name || null,
     fees,
     totalPaid,
+    commercialPartners,
+    eventSponsors,
   };
 }
 

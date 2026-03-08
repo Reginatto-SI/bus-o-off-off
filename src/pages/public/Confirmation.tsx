@@ -287,6 +287,8 @@ export default function Confirmation() {
       seatCategory: seatInfo?.category || null,
       seatFloor: seatInfo?.floor || null,
       vehicleFloors: vehicleFloors,
+      commercialPartners: commercialPartners.length > 0 ? commercialPartners : undefined,
+      eventSponsors: eventSponsors.length > 0 ? eventSponsors : undefined,
     };
   });
 
