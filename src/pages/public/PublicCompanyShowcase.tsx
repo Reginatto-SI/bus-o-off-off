@@ -43,6 +43,7 @@ export default function PublicCompanyShowcase() {
   const [company, setCompany] = useState<PublicCompanyData | null>(null);
   const [events, setEvents] = useState<EventWithCompany[]>([]);
   const [sponsors, setSponsors] = useState<PublicSponsor[]>([]);
+  const [commercialPartners, setCommercialPartners] = useState<CommercialPartner[]>([]);
   const [loading, setLoading] = useState(true);
 
   // --- Fase 2: Modo edição inline (somente gerente da própria empresa) ---
