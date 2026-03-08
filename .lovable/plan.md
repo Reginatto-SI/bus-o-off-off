@@ -1,30 +1,25 @@
 
 
-# Imagem padrão para eventos sem banner
+## Plano: Corrigir bug do dialog de patrocinadores + dropdown com pesquisa
 
-## Mudança
+### Problema identificado
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+O modal do evento inteiro é envolvido por um `<form onSubmit={handleSubmit}>` (linha 2614 de Events.tsx). Quando o botão "Vincular" do dialog de patrocinadores é clicado, ele não possui `type="button"`, então o navegador interpreta como `type="submit"`, disparando o submit do form pai. Isso salva o evento e fecha tudo — é por isso que a tela "pisca" e mostra "evento salvo".
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+### Correções
 
-### Componentes afetados
+#### 1. `src/components/admin/EventSponsorsTab.tsx` — Corrigir botões e melhorar dropdown
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+**Bug do submit:** Adicionar `type="button"` em todos os botões do componente (Vincular, Adicionar, editar, excluir) para evitar que disparem o form pai.
 
-### Lógica simplificada (ambos os cards)
+Botões afetados:
+- Botão "Adicionar" (linha 213)
+- Botão "Vincular/Salvar" no DialogFooter (linha 346)
+- Botões de edição e exclusão nos cards (linhas 270-274)
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+**Dropdown com pesquisa:** Substituir o `<Select>` do patrocinador por um componente `Command` (cmdk) com campo de busca integrado, usando `Popover` + `Command` para implementar um combobox com filtro por nome. Padrão já existente no projeto (`cmdk` já está instalado).
 
-### Imagem padrão
-
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+### Resultado
+- O dialog de patrocinadores não vai mais disparar o submit do form do evento
+- O dropdown terá pesquisa por nome do patrocinador
 
