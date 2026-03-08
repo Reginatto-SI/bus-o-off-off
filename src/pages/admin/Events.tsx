@@ -4474,7 +4474,7 @@ export default function Events() {
             <form onSubmit={handleSaveBoarding} className="space-y-4">
               {/* Link to Trip - Required */}
               <div className="space-y-2">
-                <Label htmlFor="trip_link">Vincular a Viagem *</Label>
+                <Label htmlFor="trip_link">Vincular ao transporte *</Label>
                 <Select
                   value={boardingForm.trip_id || '__none__'}
                   onValueChange={(value) => setBoardingForm({ ...boardingForm, trip_id: value === '__none__' ? '' : value })}
