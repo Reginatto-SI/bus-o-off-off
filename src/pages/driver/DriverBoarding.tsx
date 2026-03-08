@@ -64,45 +64,65 @@ export default function DriverBoarding() {
     if (!user || !activeCompanyId) return;
     setLoadingData(true);
 
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('driver_id')
-      .eq('user_id', user.id)
-      .eq('company_id', activeCompanyId)
-      .single();
+    // Use persisted trip from DriverHome if available
+    const persistedTripId = getPersistedTripId(user.id, activeCompanyId);
+    
+    let tripId: string | null = null;
 
-    const driverId = roleData?.driver_id;
-
-    // Try with driver filter first, then fallback without
-    let trips: any[] | null = null;
-
-    if (driverId) {
+    if (persistedTripId) {
+      // Validate that the persisted trip still exists and is active
       const { data } = await supabase
         .from('trips')
-        .select('id, event_id, events!inner(status)')
-        .eq('company_id', activeCompanyId)
-        .eq('events.status', 'a_venda')
-        .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
-        .limit(1);
-      trips = data;
-    }
-
-    if (!trips || trips.length === 0) {
-      const { data } = await supabase
-        .from('trips')
-        .select('id, event_id, events!inner(status)')
+        .select('id, events!inner(status)')
+        .eq('id', persistedTripId)
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .limit(1);
-      trips = data;
+      if (data && data.length > 0) tripId = data[0].id;
     }
 
-    if (!trips || trips.length === 0) {
+    // Fallback: auto-detect
+    if (!tripId) {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('driver_id')
+        .eq('user_id', user.id)
+        .eq('company_id', activeCompanyId)
+        .single();
+
+      const driverId = roleData?.driver_id;
+      let trips: any[] | null = null;
+
+      if (driverId) {
+        const { data } = await supabase
+          .from('trips')
+          .select('id, events!inner(status)')
+          .eq('company_id', activeCompanyId)
+          .eq('events.status', 'a_venda')
+          .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
+          .limit(1);
+        trips = data;
+      }
+
+      if (!trips || trips.length === 0) {
+        const { data } = await supabase
+          .from('trips')
+          .select('id, events!inner(status)')
+          .eq('company_id', activeCompanyId)
+          .eq('events.status', 'a_venda')
+          .limit(1);
+        trips = data;
+      }
+
+      tripId = trips?.[0]?.id ?? null;
+    }
+
+    if (!tripId) {
       setLoadingData(false);
       return;
     }
 
-    const trip = trips[0];
+    const trip = { id: tripId };
     setTripId(trip.id);
 
     const { data: tickets } = await supabase
