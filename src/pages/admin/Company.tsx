@@ -1396,6 +1396,82 @@ export default function CompanyPage() {
                     />
                   </TabsContent>
 
+                  <TabsContent value="redes" className="mt-0">
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Adicione os links das redes sociais da sua empresa. Eles serão exibidos na vitrine pública.
+                      </p>
+                      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="social_instagram">Instagram</Label>
+                          <Input
+                            id="social_instagram"
+                            value={form.social_instagram}
+                            onChange={(e) => setForm({ ...form, social_instagram: e.target.value })}
+                            placeholder="https://instagram.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_facebook">Facebook</Label>
+                          <Input
+                            id="social_facebook"
+                            value={form.social_facebook}
+                            onChange={(e) => setForm({ ...form, social_facebook: e.target.value })}
+                            placeholder="https://facebook.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_tiktok">TikTok</Label>
+                          <Input
+                            id="social_tiktok"
+                            value={form.social_tiktok}
+                            onChange={(e) => setForm({ ...form, social_tiktok: e.target.value })}
+                            placeholder="https://tiktok.com/@suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_youtube">YouTube</Label>
+                          <Input
+                            id="social_youtube"
+                            value={form.social_youtube}
+                            onChange={(e) => setForm({ ...form, social_youtube: e.target.value })}
+                            placeholder="https://youtube.com/@suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_telegram">Telegram</Label>
+                          <Input
+                            id="social_telegram"
+                            value={form.social_telegram}
+                            onChange={(e) => setForm({ ...form, social_telegram: e.target.value })}
+                            placeholder="https://t.me/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="social_twitter">X / Twitter</Label>
+                          <Input
+                            id="social_twitter"
+                            value={form.social_twitter}
+                            onChange={(e) => setForm({ ...form, social_twitter: e.target.value })}
+                            placeholder="https://x.com/suaempresa"
+                          />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="social_website">Site oficial</Label>
+                          <Input
+                            id="social_website"
+                            value={form.social_website}
+                            onChange={(e) => setForm({ ...form, social_website: e.target.value })}
+                            placeholder="https://www.suaempresa.com.br"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Todos os campos são opcionais. Insira a URL completa (ex: https://instagram.com/suaempresa).
+                      </p>
+                    </div>
+                  </TabsContent>
+
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
                       {/* Comentário: card de comissionamento é uma área restrita e visível apenas para developer. */}
