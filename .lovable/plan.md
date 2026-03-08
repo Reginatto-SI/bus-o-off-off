@@ -1,37 +1,30 @@
 
 
-## Plano: Redesign do indicador de versão no header
+# Imagem padrão para eventos sem banner
 
-Inspirado na imagem de referência, o indicador terá um layout contido e profissional com ícone, build info e status.
+## Mudança
 
-### Alteração: `src/components/system/VersionIndicator.tsx`
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-Redesign completo do componente usando o padrão visual da referência:
-
-**Estado normal (sistema atualizado):**
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
-[⏱] Build 20260308 · 08/03/2026, 13:11
-    Sistema atualizado  ✓
-```
-- Ícone `Clock` à esquerda
-- Linha 1: número do build + data/hora formatada a partir de `APP_BUILD_TIME`
-- Linha 2: "Sistema atualizado" em verde com check icon
-- Container com `border rounded-lg px-3 py-1.5` para dar forma visual contida
 
-**Estado com atualização disponível:**
-```
-[⏱] Build 20260308 · 08/03/2026, 13:11
-    Nova versão disponível  [Atualizar]
-```
-- Linha 2 muda para "Nova versão disponível" em amarelo/primary
-- Botão "Atualizar" clicável ao lado
-- Ícone `RefreshCw` no botão
+### Componentes afetados
 
-### Imports adicionais
-- `Clock`, `CheckCircle2` do lucide-react
-- `APP_BUILD_TIME` do `build-info.ts`
-- `format` do `date-fns` para formatar a data
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-### Nenhuma outra alteração
-O header já importa e posiciona o `VersionIndicator` — só o componente muda.
+### Lógica simplificada (ambos os cards)
+
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+
+### Imagem padrão
+
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
