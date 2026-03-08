@@ -3131,7 +3131,7 @@ export default function Events() {
                                 <SelectValue placeholder="Selecione um transporte" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__none__">Todas as viagens</SelectItem>
+                                <SelectItem value="__none__">Todos os transportes</SelectItem>
                                 {boardingTripSelectorOptions.map((option) => (
                                   <SelectItem key={option.value} value={option.value}>
                                     {option.label}
