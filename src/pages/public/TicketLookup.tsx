@@ -268,6 +268,8 @@ export default function TicketLookup() {
           vehicleFloors: t.vehicleFloors || null,
           fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
           totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
+          commercialPartners: commercialPartners.length > 0 ? commercialPartners : undefined,
+          eventSponsors: eventSponsorsData.length > 0 ? eventSponsorsData : undefined,
         };
       });
 
