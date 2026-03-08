@@ -379,10 +379,10 @@ export default function Sponsors() {
       banner_url: sponsor.banner_url,
       link_type: sponsor.link_type,
       site_url: sponsor.site_url ?? '',
-      whatsapp_phone: sponsor.whatsapp_phone ?? '',
+      whatsapp_phone: formatPhoneBR(sponsor.whatsapp_phone ?? ''),
       whatsapp_message: sponsor.whatsapp_message ?? '',
       contact_name: sponsor.contact_name ?? '',
-      contact_phone: sponsor.contact_phone ?? '',
+      contact_phone: formatPhoneBR(sponsor.contact_phone ?? ''),
       contact_email: sponsor.contact_email ?? '',
     });
     setDialogOpen(true);
