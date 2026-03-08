@@ -1,52 +1,30 @@
 
 
-## Plano: Desfazer operação do passageiro no app do motorista
+# Imagem padrão para eventos sem banner
 
-### Abordagem
+## Mudança
 
-Adicionar uma nova action `undo` na RPC `validate_ticket_scan` que reverte o status do passageiro para o estado anterior da fase. No frontend, quando o passageiro já está "done" na fase ativa, o toque abre um dialog de "Desfazer" em vez do dialog de confirmação normal.
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-### 1. Migração SQL — nova action `undo`
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+```
 
-Adicionar bloco na RPC `validate_ticket_scan` para `p_action = 'undo_checkin' | 'undo_checkout' | 'undo_reboard'`:
+### Componentes afetados
 
-| Action | Status atual esperado | Novo status |
-|---|---|---|
-| `undo_checkin` | `checked_in` | `pendente` |
-| `undo_checkout` | `checked_out` | `checked_in` |
-| `undo_reboard` | `reboarded` | `checked_out` |
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-Se o status não bater, retorna `blocked` com reason code adequado (ex: `undo_not_applicable`). A validação continua registrando em `ticket_validations` para auditoria.
+### Lógica simplificada (ambos os cards)
 
-### 2. driverPhaseConfig.ts — adicionar config de undo por fase
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
 
-Adicionar ao `PhaseConfig`:
-- `undoAction`: `'undo_checkin' | 'undo_checkout' | 'undo_reboard'`
-- `undoTitle`: ex "Desfazer embarque"
-- `undoConfirmText`: ex "Deseja desfazer o embarque de"
-- `undoSuccessTitle`: ex "EMBARQUE DESFEITO"
+### Imagem padrão
 
-### 3. DriverBoarding.tsx — permitir desfazer ao tocar em passageiro "done"
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
 
-Hoje, passageiros "done" não são clicáveis. Mudanças:
-- Passageiros "done" passam a ser clicáveis (cursor-pointer)
-- Ao tocar em done → abre dialog de **desfazer** (novo state `undoPassenger`)
-- Dialog usa textos do `phaseConfig` (undoTitle, undoConfirmText)
-- Ao confirmar, chama RPC com a `undoAction` da fase
-- Atualiza estado local com o novo `boarding_status` retornado
-- KPIs e badges atualizam automaticamente (já reativo via useMemo)
-
-### 4. REASON_MESSAGES — nova mensagem
-
-Adicionar `undo_not_applicable` → "Operação não pode ser desfeita nesta fase".
-
-### Arquivos alterados
-
-- **Migração SQL** — adicionar undo_checkin/undo_checkout/undo_reboard na RPC
-- **src/lib/driverPhaseConfig.ts** — undo config por fase
-- **src/pages/driver/DriverBoarding.tsx** — click em done abre dialog de undo
-
-### Sem quebra de funcionalidade existente
-
-O fluxo normal (checkin/checkout/reboard) continua idêntico. Apenas passageiros já marcados ganham a opção de desfazer.
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 

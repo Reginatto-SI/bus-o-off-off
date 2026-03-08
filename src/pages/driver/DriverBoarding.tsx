@@ -59,6 +59,7 @@ export default function DriverBoarding() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
+  const [undoPassenger, setUndoPassenger] = useState<PassengerRow | null>(null);
   const [processing, setProcessing] = useState(false);
   const [_tripId, setTripId] = useState<string | null>(null);
 
@@ -263,7 +264,6 @@ export default function DriverBoarding() {
 
     const result = (Array.isArray(data) ? data[0] : data) as any;
     if (result?.result === 'success') {
-      // Update local state with the new boarding_status
       const newStatus = result.boarding_status;
       setPassengers(prev =>
         prev.map(p =>
@@ -285,6 +285,42 @@ export default function DriverBoarding() {
 
     setProcessing(false);
     setConfirmPassenger(null);
+  };
+
+  const handleUndo = async (passenger: PassengerRow) => {
+    setProcessing(true);
+    const { data, error } = await supabase.rpc('validate_ticket_scan', {
+      p_qr_code_token: passenger.qrCodeToken,
+      p_action: phaseConfig.undoAction,
+      p_device_info: navigator.userAgent,
+      p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+    });
+
+    if (error) {
+      toast({ title: 'Erro', description: 'Não foi possível desfazer a operação.', variant: 'destructive' });
+      setProcessing(false);
+      setUndoPassenger(null);
+      return;
+    }
+
+    const result = (Array.isArray(data) ? data[0] : data) as any;
+    if (result?.result === 'success') {
+      const newStatus = result.boarding_status;
+      setPassengers(prev =>
+        prev.map(p =>
+          p.ticketId === passenger.ticketId ? { ...p, boardingStatus: newStatus } : p
+        )
+      );
+      toast({ title: phaseConfig.undoSuccessTitle, description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
+    } else {
+      const reason = result?.reason_code === 'undo_not_applicable'
+        ? 'Operação não pode ser desfeita nesta fase'
+        : 'Não foi possível desfazer';
+      toast({ title: reason, variant: 'destructive' });
+    }
+
+    setProcessing(false);
+    setUndoPassenger(null);
   };
 
   // Helper: is this passenger actionable in current phase?
@@ -430,9 +466,10 @@ export default function DriverBoarding() {
                 return (
                   <Card
                     key={p.ticketId}
-                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5' : ''} ${actionable ? 'cursor-pointer' : ''}`}
+                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5 cursor-pointer' : ''} ${actionable ? 'cursor-pointer' : ''}`}
                     onClick={() => {
                       if (actionable) setConfirmPassenger(p);
+                      else if (done) setUndoPassenger(p);
                     }}
                   >
                     <CardContent className="flex items-center gap-3 p-3">
@@ -487,6 +524,30 @@ export default function DriverBoarding() {
               >
                 {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {phaseConfig.confirmAction}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Undo dialog */}
+        <AlertDialog open={!!undoPassenger} onOpenChange={() => setUndoPassenger(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{phaseConfig.undoTitle}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {phaseConfig.undoConfirmText} <strong>{undoPassenger?.passengerName}</strong> (Assento{' '}
+                {undoPassenger?.seatLabel})?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={processing}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={processing}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => undoPassenger && handleUndo(undoPassenger)}
+              >
+                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Desfazer
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

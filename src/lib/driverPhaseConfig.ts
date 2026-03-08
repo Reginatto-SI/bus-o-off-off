@@ -21,6 +21,11 @@ export type PhaseConfig = {
   /** Confirmation dialog */
   confirmTitle: string;
   confirmAction: string;
+  /** Undo operation */
+  undoAction: 'undo_checkin' | 'undo_checkout' | 'undo_reboard';
+  undoTitle: string;
+  undoConfirmText: string;
+  undoSuccessTitle: string;
 };
 
 export const PHASE_CONFIG: Record<OperationalPhase, PhaseConfig> = {
@@ -36,6 +41,10 @@ export const PHASE_CONFIG: Record<OperationalPhase, PhaseConfig> = {
     pendingBadge: 'Pendente',
     confirmTitle: 'Confirmar embarque',
     confirmAction: 'Confirmar embarque',
+    undoAction: 'undo_checkin',
+    undoTitle: 'Desfazer embarque',
+    undoConfirmText: 'Deseja desfazer o embarque de',
+    undoSuccessTitle: 'EMBARQUE DESFEITO',
   },
   desembarque: {
     label: 'Desembarque',
@@ -49,6 +58,10 @@ export const PHASE_CONFIG: Record<OperationalPhase, PhaseConfig> = {
     pendingBadge: 'No veículo',
     confirmTitle: 'Confirmar desembarque',
     confirmAction: 'Confirmar desembarque',
+    undoAction: 'undo_checkout',
+    undoTitle: 'Desfazer desembarque',
+    undoConfirmText: 'Deseja desfazer o desembarque de',
+    undoSuccessTitle: 'DESEMBARQUE DESFEITO',
   },
   reembarque: {
     label: 'Reembarque',
@@ -62,6 +75,10 @@ export const PHASE_CONFIG: Record<OperationalPhase, PhaseConfig> = {
     pendingBadge: 'Faltando',
     confirmTitle: 'Confirmar reembarque',
     confirmAction: 'Confirmar reembarque',
+    undoAction: 'undo_reboard',
+    undoTitle: 'Desfazer reembarque',
+    undoConfirmText: 'Deseja desfazer o reembarque de',
+    undoSuccessTitle: 'REEMBARQUE DESFEITO',
   },
 };
 
@@ -93,6 +110,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   invalid_action: 'Ação inválida',
   already_reboarded: 'Já reembarcado',
   reboard_without_checkout: 'Reembarque sem desembarque',
+  undo_not_applicable: 'Operação não pode ser desfeita nesta fase',
   rpc_error: 'Erro de comunicação',
   invalid_response: 'Resposta inválida',
 };
