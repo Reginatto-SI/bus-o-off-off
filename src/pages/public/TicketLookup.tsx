@@ -355,8 +355,10 @@ export default function TicketLookup() {
               disabled={searching || !selectedEventId || cpf.replace(/\D/g, '').length !== 11}
             >
               {searching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-              Buscar Passagens
+              Ver minhas passagens
             </Button>
+
+            <p className="text-xs text-muted-foreground text-center pt-2">Dica: utilize o CPF informado no momento da compra da passagem.</p>
           </CardContent>
         </Card>
 
