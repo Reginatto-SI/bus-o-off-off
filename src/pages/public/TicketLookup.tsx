@@ -250,6 +250,7 @@ export default function TicketLookup() {
           saleStatus: (t.saleStatus || 'reservado') as SaleStatus,
           saleId: t.saleId || undefined,
           stripeCheckoutSessionId: t.stripeCheckoutSessionId || null,
+          asaasPaymentId: t.asaasPaymentId || null,
           companyName: t.companyName,
           companyLogoUrl: t.companyLogoUrl,
           companyCity: t.companyCity,
