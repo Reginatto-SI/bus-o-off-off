@@ -205,6 +205,7 @@ serve(async (req) => {
         email: company.email,
         cpfCnpj: documentDigits,
         companyType: legalType === "PF" ? "MEI" : "LIMITED",
+        incomeValue: 5000,
       };
 
       const createRes = await fetch(`${ASAAS_BASE_URL}/accounts`, {
