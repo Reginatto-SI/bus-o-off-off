@@ -2465,7 +2465,7 @@ export default function Events() {
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
               <Button onClick={async () => {
-                const hasStripe = await checkStripeConnection();
+                const hasStripe = await checkAsaasConnection();
                 if (!hasStripe) {
                   setStripeGatePendingAction('create_event');
                   setStripeGateOpen(true);
