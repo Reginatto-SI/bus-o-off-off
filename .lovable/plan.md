@@ -1,37 +1,30 @@
 
 
-## Correção: Edge Function `create-asaas-account` falhando
+# Imagem padrão para eventos sem banner
 
-### Problema
+## Mudança
 
-A função usa `supabaseClient.auth.getClaims(token)` que **não existe** no SDK Supabase. Isso faz a função crashar imediatamente, gerando o erro "Failed to send a request to the Edge Function".
+Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
 
-Conforme padrão arquitetural do projeto (documentado em memória), Edge Functions devem decodificar o JWT manualmente via `atob` para extrair o `sub` (user_id).
-
-### Correção
-
-**Arquivo:** `supabase/functions/create-asaas-account/index.ts`
-
-Substituir o bloco de autenticação (linhas 25-48) que usa `getClaims` por decodificação manual do JWT:
-
-```typescript
-// ANTES (quebrado):
-const supabaseClient = createClient(...);
-const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
-const userId = claimsData.claims.sub;
-
-// DEPOIS (funcional):
-const token = authHeader.replace("Bearer ", "");
-const payloadBase64 = token.split(".")[1];
-const payload = JSON.parse(atob(payloadBase64));
-const userId = payload.sub;
+### Constante
+```ts
+const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 ```
 
-- Remove a criação do `supabaseClient` com anon key (desnecessário, só era usado para `getClaims`)
-- Mantém o `supabaseAdmin` com service_role para as operações de banco
-- Mantém toda a lógica de negócio intacta (criar subconta + vincular conta existente)
+### Componentes afetados
 
-### Escopo
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
+| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
 
-Apenas 1 arquivo alterado. Nenhuma mudança no frontend — o `Company.tsx` já chama corretamente via `supabase.functions.invoke('create-asaas-account', { body })`.
+### Lógica simplificada (ambos os cards)
+
+Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+
+### Imagem padrão
+
+A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+
+Nenhuma alteração de lógica, rota ou fluxo de compra.
 
