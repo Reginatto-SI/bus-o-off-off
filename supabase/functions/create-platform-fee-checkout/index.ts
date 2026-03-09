@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -8,20 +7,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ASAAS_BASE_URL = "https://api.asaas.com/v3";
+
 /**
- * Edge function para cobrar a taxa da plataforma em vendas manuais/conversão de reserva.
- *
- * Diferença fundamental do create-checkout-session:
- * - Lá: Direct Charge na conta conectada (empresa recebe, plataforma retém application_fee).
- * - Aqui: Cobrança direta na conta da plataforma. A empresa já recebeu por fora (Pix, dinheiro, etc.).
- *   A plataforma cobra apenas sua comissão.
- *
- * Fluxo:
- * 1. Frontend envia sale_id
- * 2. Valida que a venda é admin e tem taxa pendente
- * 3. Cria Checkout Session na conta da plataforma (sem stripeAccount header)
- * 4. Salva platform_fee_payment_id na venda
- * 5. Retorna URL do checkout
+ * Cobra a taxa da plataforma em vendas manuais/conversão de reserva via Asaas.
+ * Cobrança na conta da plataforma (sem split — 100% para a plataforma).
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -42,7 +32,6 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // 1. Buscar venda com evento
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select("*, event:events(name)")
@@ -56,7 +45,6 @@ serve(async (req) => {
       });
     }
 
-    // 2. Validar que é venda admin com taxa pendente
     if (sale.platform_fee_status !== "pending") {
       return new Response(
         JSON.stringify({ error: `Taxa não está pendente (status atual: ${sale.platform_fee_status})` }),
@@ -72,83 +60,108 @@ serve(async (req) => {
       );
     }
 
-    // 3. Criar Checkout Session na conta da plataforma (SEM stripeAccount)
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
-
-    const feeAmountCents = Math.round(feeAmount * 100);
-    const eventName = sale.event?.name || "Evento";
-    const origin = req.headers.get("origin") || "https://busaooofoof.lovable.app";
-
-    // Tenta criar com card + pix; se Pix não estiver habilitado na conta da plataforma, faz fallback para card-only.
-    let session;
-    let pixAvailable = true;
-    const baseParams = {
-      mode: "payment" as const,
-      line_items: [
-        {
-          price_data: {
-            currency: "brl",
-            product_data: {
-              name: `Taxa da Plataforma — Venda Manual`,
-              description: `Comissão referente à venda do evento "${eventName}" (${sale.quantity} passagem(ns))`,
-            },
-            unit_amount: feeAmountCents,
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-        payment_type: "platform_fee_manual",
-        sale_origin: sale.sale_origin,
-        fee_amount: String(feeAmount),
-      },
-      success_url: `${origin}/admin/vendas?fee_paid=${sale.id}`,
-      cancel_url: `${origin}/admin/vendas?fee_cancelled=${sale.id}`,
-    };
-
-    try {
-      session = await stripe.checkout.sessions.create({
-        ...baseParams,
-        payment_method_types: ["card", "pix"],
-        payment_method_options: { pix: { expires_after_seconds: 900 } },
+    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    if (!PLATFORM_API_KEY) {
+      return new Response(JSON.stringify({ error: "Asaas API key not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-      console.log("Platform fee checkout created with card + pix");
-    } catch (pixError: any) {
-      if (pixError?.type === "StripeInvalidRequestError" && pixError?.param === "payment_method_types") {
-        console.warn("Pix not available on platform account, falling back to card-only");
-        pixAvailable = false;
-        session = await stripe.checkout.sessions.create({
-          ...baseParams,
-          payment_method_types: ["card"],
-        });
-        console.log("Platform fee checkout created with card only");
-      } else {
-        throw pixError;
+    }
+
+    // Get or create customer for the company admin
+    const { data: companyData } = await supabaseAdmin
+      .from("companies")
+      .select("name, document_number, cnpj, email")
+      .eq("id", sale.company_id)
+      .single();
+
+    const companyDoc = (companyData?.document_number || companyData?.cnpj || "").replace(/\D/g, "");
+    const companyName = companyData?.name || "Empresa";
+
+    let customerId: string | null = null;
+
+    if (companyDoc) {
+      const searchRes = await fetch(
+        `${ASAAS_BASE_URL}/customers?cpfCnpj=${companyDoc}`,
+        { headers: { "access_token": PLATFORM_API_KEY } }
+      );
+      const searchData = await searchRes.json();
+      if (searchData?.data?.length > 0) {
+        customerId = searchData.data[0].id;
       }
     }
 
-    // 4. Salvar referência do checkout na venda
+    if (!customerId) {
+      const createRes = await fetch(`${ASAAS_BASE_URL}/customers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "access_token": PLATFORM_API_KEY,
+        },
+        body: JSON.stringify({
+          name: companyName,
+          cpfCnpj: companyDoc || undefined,
+          email: companyData?.email || undefined,
+          externalReference: `company_${sale.company_id}`,
+        }),
+      });
+      const customerData = await createRes.json();
+      if (!createRes.ok) {
+        return new Response(
+          JSON.stringify({ error: customerData?.errors?.[0]?.description || "Erro ao criar cliente no Asaas" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      customerId = customerData.id;
+    }
+
+    // Create payment for the platform fee (no split — 100% platform)
+    const eventName = sale.event?.name || "Evento";
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 1);
+
+    const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "access_token": PLATFORM_API_KEY,
+      },
+      body: JSON.stringify({
+        customer: customerId,
+        billingType: "UNDEFINED",
+        value: feeAmount,
+        dueDate: dueDate.toISOString().split("T")[0],
+        description: `Taxa da Plataforma — Venda Manual "${eventName}" (${sale.quantity} passagem(ns))`,
+        externalReference: `platform_fee_${sale.id}`,
+      }),
+    });
+
+    const paymentData = await paymentRes.json();
+
+    if (!paymentRes.ok) {
+      return new Response(
+        JSON.stringify({ error: paymentData?.errors?.[0]?.description || "Erro ao criar cobrança no Asaas" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Save reference
     await supabaseAdmin
       .from("sales")
-      .update({ platform_fee_payment_id: session.id })
+      .update({ platform_fee_payment_id: paymentData.id })
       .eq("id", sale.id);
 
-    // 5. Log de auditoria
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: sale.id,
       action: "platform_fee_checkout_created",
-      description: `Checkout da taxa da plataforma criado (R$ ${feeAmount.toFixed(2)}). Session: ${session.id}`,
+      description: `Cobrança da taxa da plataforma criada no Asaas (R$ ${feeAmount.toFixed(2)}). Payment: ${paymentData.id}`,
       company_id: sale.company_id,
     });
 
-    return new Response(JSON.stringify({ url: session.url, pix_available: pixAvailable }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ url: paymentData.invoiceUrl }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error) {
     console.error("Error in create-platform-fee-checkout:", error);
     return new Response(

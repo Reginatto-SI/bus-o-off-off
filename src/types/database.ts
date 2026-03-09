@@ -40,9 +40,14 @@ export interface Company {
   website: string | null;
   address: string | null;
   notes: string | null;
-  // Stripe Connect
+  // Stripe Connect (legacy)
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
+  // Asaas
+  asaas_account_id: string | null;
+  asaas_wallet_id: string | null;
+  asaas_api_key: string | null;
+  asaas_onboarding_complete: boolean;
   // Comissionamento variável
   platform_fee_percent: number;
   partner_split_percent: number;
@@ -360,9 +365,13 @@ export interface Sale {
   cancel_reason: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
-  // Stripe
+  // Stripe (legacy)
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
+  // Asaas
+  asaas_payment_id: string | null;
+  asaas_payment_status: string | null;
+  asaas_transfer_id: string | null;
   // Dados financeiros de comissão (preenchidos após pagamento)
   gross_amount: number | null;
   platform_fee_total: number | null;

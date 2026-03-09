@@ -392,7 +392,7 @@ export default function Events() {
     setCompanyPlatformFeePercent(Number(data.platform_fee_percent));
   };
 
-  const checkStripeConnection = async () => {
+  const checkAsaasConnection = async () => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
       return false;
@@ -400,19 +400,19 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('stripe_account_id, stripe_onboarding_complete')
+      .select('asaas_wallet_id, asaas_onboarding_complete')
       .eq('id', activeCompanyId)
       .single();
 
     if (error) {
-      toast.error('Não foi possível validar a conexão Stripe da empresa');
+      toast.error('Não foi possível validar a conexão de pagamentos da empresa');
       return false;
     }
 
-    return Boolean(data?.stripe_account_id && data?.stripe_onboarding_complete);
+    return Boolean(data?.asaas_wallet_id && data?.asaas_onboarding_complete);
   };
 
-  const handleConnectStripeFromGate = async () => {
+  const handleConnectAsaasFromGate = async () => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
       return;
@@ -420,7 +420,7 @@ export default function Events() {
 
     setStripeConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: activeCompanyId },
       });
 
@@ -429,23 +429,17 @@ export default function Events() {
         throw new Error(errData.error || error.message);
       }
 
-      if (data?.already_complete) {
-        toast.success('Sua empresa já está conectada ao Stripe.');
+      if (data?.already_complete || data?.success) {
+        toast.success('Conta de pagamentos conectada com sucesso.');
       }
 
-      if (data?.onboarding_url) {
-        // Fluxo em mesma aba para retorno automático ao sistema após finalizar onboarding.
-        window.location.href = data.onboarding_url;
-        return;
-      }
-
-      const connected = await checkStripeConnection();
+      const connected = await checkAsaasConnection();
       if (connected) {
         setStripeGateOpen(false);
       }
     } catch (err: any) {
-      console.error('Erro ao iniciar Stripe Connect:', err);
-      toast.error(err?.message || 'Erro ao conectar com Stripe. Tente novamente.');
+      console.error('Erro ao configurar Asaas:', err);
+      toast.error(err?.message || 'Erro ao conectar conta de pagamentos. Tente novamente.');
     } finally {
       setStripeConnecting(false);
     }
@@ -455,7 +449,7 @@ export default function Events() {
     if (!stripeGateOpen) return;
 
     const revalidateStripeStatus = async () => {
-      const connected = await checkStripeConnection();
+      const connected = await checkAsaasConnection();
       if (!connected) return;
 
       setStripeGateOpen(false);
@@ -489,7 +483,7 @@ export default function Events() {
     if (params.get('novo') !== '1') return;
 
     const openCreateFromDashboard = async () => {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction('create_event');
         setStripeGateOpen(true);
@@ -1082,7 +1076,7 @@ export default function Events() {
     }
 
     if (targetStatus === 'a_venda') {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction('publish_from_form');
         setStripeGateOpen(true);
@@ -2038,7 +2032,7 @@ export default function Events() {
   // Quick status change from card
   const handleQuickStatusChange = async (event: EventWithTrips, newStatus: Event['status']) => {
     if (newStatus === 'a_venda') {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction(null);
         setStripeGateOpen(true);
@@ -2243,7 +2237,7 @@ export default function Events() {
           description="Gerencie os eventos e viagens"
           actions={
             <Button onClick={async () => {
-              const hasStripe = await checkStripeConnection();
+              const hasStripe = await checkAsaasConnection();
               if (!hasStripe) {
                 setStripeGatePendingAction('create_event');
                 setStripeGateOpen(true);
@@ -2471,7 +2465,7 @@ export default function Events() {
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
               <Button onClick={async () => {
-                const hasStripe = await checkStripeConnection();
+                const hasStripe = await checkAsaasConnection();
                 if (!hasStripe) {
                   setStripeGatePendingAction('create_event');
                   setStripeGateOpen(true);
@@ -4743,16 +4737,16 @@ export default function Events() {
               </Button>
               <Button
                 type="button"
-                className="h-11 bg-gradient-to-r from-[#635BFF] to-[#7C3AED] hover:from-[#5A54E6] hover:to-[#6D2ED8] text-white shadow-md shadow-[#635BFF]/25"
-                onClick={handleConnectStripeFromGate}
+                className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                onClick={handleConnectAsaasFromGate}
                 disabled={stripeConnecting}
               >
                 {stripeConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
-                Conectar com Stripe
+                Conectar Pagamentos
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground text-center">
-              Protegido por Stripe · Criptografia de ponta a ponta
+              Pagamentos seguros via Asaas
             </p>
           </div>
         </DialogContent>

@@ -175,6 +175,10 @@ export type Database = {
         Row: {
           accent_color: string | null
           address: string | null
+          asaas_account_id: string | null
+          asaas_api_key: string | null
+          asaas_onboarding_complete: boolean
+          asaas_wallet_id: string | null
           background_style: string
           city: string | null
           cnpj: string | null
@@ -217,6 +221,10 @@ export type Database = {
         Insert: {
           accent_color?: string | null
           address?: string | null
+          asaas_account_id?: string | null
+          asaas_api_key?: string | null
+          asaas_onboarding_complete?: boolean
+          asaas_wallet_id?: string | null
           background_style?: string
           city?: string | null
           cnpj?: string | null
@@ -259,6 +267,10 @@ export type Database = {
         Update: {
           accent_color?: string | null
           address?: string | null
+          asaas_account_id?: string | null
+          asaas_api_key?: string | null
+          asaas_onboarding_complete?: boolean
+          asaas_wallet_id?: string | null
           background_style?: string
           city?: string | null
           cnpj?: string | null
@@ -660,6 +672,7 @@ export type Database = {
       }
       partners: {
         Row: {
+          asaas_wallet_id: string | null
           created_at: string
           id: string
           name: string
@@ -671,6 +684,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asaas_wallet_id?: string | null
           created_at?: string
           id?: string
           name: string
@@ -682,6 +696,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asaas_wallet_id?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -808,6 +823,9 @@ export type Database = {
       }
       sales: {
         Row: {
+          asaas_payment_id: string | null
+          asaas_payment_status: string | null
+          asaas_transfer_id: string | null
           boarding_location_id: string
           cancel_reason: string | null
           cancelled_at: string | null
@@ -839,6 +857,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asaas_payment_id?: string | null
+          asaas_payment_status?: string | null
+          asaas_transfer_id?: string | null
           boarding_location_id: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -870,6 +891,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asaas_payment_id?: string | null
+          asaas_payment_status?: string | null
+          asaas_transfer_id?: string | null
           boarding_location_id?: string
           cancel_reason?: string | null
           cancelled_at?: string | null
