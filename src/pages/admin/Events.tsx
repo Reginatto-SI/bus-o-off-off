@@ -449,7 +449,7 @@ export default function Events() {
     if (!stripeGateOpen) return;
 
     const revalidateStripeStatus = async () => {
-      const connected = await checkStripeConnection();
+      const connected = await checkAsaasConnection();
       if (!connected) return;
 
       setStripeGateOpen(false);
