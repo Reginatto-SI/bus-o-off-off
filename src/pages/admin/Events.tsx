@@ -100,6 +100,7 @@ import { CardHeader, CardTitle } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
+import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 // Types
 interface EventFilters {
   search: string;
@@ -308,7 +309,8 @@ export default function Events() {
 
   // Gate de pagamentos (Asaas): bloqueia criação/publicação sem onboarding financeiro concluído.
   const [paymentsGateOpen, setPaymentsGateOpen] = useState(false);
-  const [asaasConnecting, setAsaasConnecting] = useState(false);
+  const [asaasWizardOpen, setAsaasWizardOpen] = useState(false);
+  const [asaasWizardCompanyData, setAsaasWizardCompanyData] = useState<AsaasOnboardingCompanyData | null>(null);
   // Comentário de manutenção: mantemos a ação pendente para continuar o fluxo após conectar pagamentos.
   const [paymentsGatePendingAction, setPaymentsGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
   // Fonte de verdade da taxa: companies.platform_fee_percent da empresa ativa.
@@ -413,38 +415,71 @@ export default function Events() {
     return Boolean(data?.asaas_wallet_id && data?.asaas_onboarding_complete);
   };
 
-  const handleConnectAsaasFromGate = async () => {
+  const fetchAsaasWizardCompanyData = async (): Promise<AsaasOnboardingCompanyData | null> => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
-      return;
+      return null;
     }
 
-    setAsaasConnecting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: activeCompanyId },
+    const { data, error } = await supabase
+      .from('companies')
+      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address')
+      .eq('id', activeCompanyId)
+      .single();
+
+    if (error || !data) {
+      logSupabaseError({
+        label: 'Erro ao carregar dados da empresa para onboarding Asaas (companies.select)',
+        error,
+        context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id },
       });
-
-      if (error) {
-        const errData = data || {};
-        throw new Error(errData.error || error.message);
-      }
-
-      if (data?.already_complete || data?.success) {
-        toast.success('Conta de pagamentos conectada com sucesso.');
-      }
-
-      const connected = await checkAsaasConnection();
-      if (connected) {
-        setPaymentsGateOpen(false);
-      }
-    } catch (err: any) {
-      console.error('Erro ao configurar Asaas:', err);
-      toast.error(err?.message || 'Erro ao conectar conta de pagamentos. Tente novamente.');
-    } finally {
-      setAsaasConnecting(false);
+      toast.error('Não foi possível carregar os dados da empresa para conectar pagamentos. Atualize a página e tente novamente.');
+      return null;
     }
+
+    const legalType = data.legal_type === 'PF' ? 'PF' : 'PJ';
+    const documentNumber = (data.document_number || data.cnpj || '').replace(/\D/g, '');
+    const companyName = (data.trade_name || data.legal_name || data.name || '').trim();
+    const email = (data.email || '').trim();
+
+    const missingRequired: string[] = [];
+    if (!companyName) missingRequired.push('nome da empresa');
+    if (!email) missingRequired.push('e-mail');
+    if (legalType === 'PF' && documentNumber.length !== 11) missingRequired.push('CPF válido');
+    if (legalType === 'PJ' && documentNumber.length !== 14) missingRequired.push('CNPJ válido');
+
+    if (missingRequired.length > 0) {
+      toast.error(`Complete os dados da empresa em /admin/empresa antes de conectar pagamentos: ${missingRequired.join(', ')}.`);
+      return null;
+    }
+
+    const missingRecommended: string[] = [];
+    if (!data.city?.trim()) missingRecommended.push('cidade');
+    if (!data.state?.trim()) missingRecommended.push('estado');
+    if (!data.address?.trim()) missingRecommended.push('endereço');
+
+    if (missingRecommended.length > 0) {
+      // Comentário de manutenção: não bloqueia a conexão, apenas orienta para reduzir pendências no Asaas Sandbox.
+      toast.warning(`Recomendado para o Asaas Sandbox: complete ${missingRecommended.join(', ')} em /admin/empresa.`);
+    }
+
+    return {
+      companyId: data.id,
+      companyName,
+      legalType,
+      documentNumber,
+      email,
+    };
   };
+
+  const handleOpenAsaasWizardFromGate = async () => {
+    // Comentário de manutenção: o gate só abre o wizard; a criação real ocorre no passo final de confirmação.
+    const wizardData = await fetchAsaasWizardCompanyData();
+    if (!wizardData) return;
+    setAsaasWizardCompanyData(wizardData);
+    setAsaasWizardOpen(true);
+  };
+
 
   useEffect(() => {
     if (!paymentsGateOpen) return;
@@ -4740,10 +4775,9 @@ export default function Events() {
               <Button
                 type="button"
                 className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                onClick={handleConnectAsaasFromGate}
-                disabled={asaasConnecting}
+                onClick={() => { void handleOpenAsaasWizardFromGate(); }}
               >
-                {asaasConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+                <DollarSign className="h-4 w-4 mr-2" />
                 Conectar Pagamentos
               </Button>
             </div>
@@ -4753,6 +4787,25 @@ export default function Events() {
           </div>
         </DialogContent>
       </Dialog>
+
+
+      <AsaasOnboardingWizard
+        open={asaasWizardOpen}
+        onOpenChange={setAsaasWizardOpen}
+        companyData={asaasWizardCompanyData}
+        onSuccess={async () => {
+          const connected = await checkAsaasConnection();
+          if (!connected) return;
+
+          setPaymentsGateOpen(false);
+          if (paymentsGatePendingAction === 'create_event') {
+            resetForm();
+            setIsCreateWizardMode(true);
+            setDialogOpen(true);
+          }
+          setPaymentsGatePendingAction(null);
+        }}
+      />
 
         {/* Delete Trip Dialog with Validation */}
         <AlertDialog open={deleteTripDialogOpen} onOpenChange={setDeleteTripDialogOpen}>
