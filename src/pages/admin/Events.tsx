@@ -4737,16 +4737,16 @@ export default function Events() {
               </Button>
               <Button
                 type="button"
-                className="h-11 bg-gradient-to-r from-[#635BFF] to-[#7C3AED] hover:from-[#5A54E6] hover:to-[#6D2ED8] text-white shadow-md shadow-[#635BFF]/25"
-                onClick={handleConnectStripeFromGate}
+                className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                onClick={handleConnectAsaasFromGate}
                 disabled={stripeConnecting}
               >
                 {stripeConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
-                Conectar com Stripe
+                Conectar Pagamentos
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground text-center">
-              Protegido por Stripe · Criptografia de ponta a ponta
+              Pagamentos seguros via Asaas
             </p>
           </div>
         </DialogContent>
