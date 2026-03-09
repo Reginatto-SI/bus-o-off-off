@@ -268,6 +268,7 @@ export default function Confirmation() {
       saleStatus: (sale?.status || 'reservado') as SaleStatus,
       saleId: sale?.id,
       stripeCheckoutSessionId: sale?.stripe_checkout_session_id || null,
+      asaasPaymentId: (sale as any)?.asaas_payment_id || null,
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,
