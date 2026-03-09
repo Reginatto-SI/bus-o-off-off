@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Company } from '@/types/database';
