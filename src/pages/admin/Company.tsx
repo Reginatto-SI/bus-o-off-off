@@ -1322,7 +1322,7 @@ export default function CompanyPage() {
 
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
-                      {/* Comentário: card de comissionamento é uma área restrita e visível apenas para developer. */}
+                      {/* Comissionamento da Plataforma — Developer Only */}
                       {isDeveloper && (
                         <div className="rounded-lg border p-4 space-y-4">
                           <div className="flex items-center justify-between gap-2">
@@ -1372,167 +1372,140 @@ export default function CompanyPage() {
                                 }}
                               />
                               <p className="text-xs text-muted-foreground">
-                                Percentual da comissão da plataforma que será repassado automaticamente ao parceiro via Stripe Transfer.
+                                Percentual da comissão da plataforma que será repassado automaticamente ao parceiro via split Asaas.
                               </p>
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Integração Stripe */}
+                      {/* Integração Asaas */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="font-medium">Integração Stripe</h3>
+                          <h3 className="font-medium">Integração de Pagamentos</h3>
                           <p className="text-sm text-muted-foreground">
-                            Conecte sua conta para receber pagamentos online. Para Pessoa Física usamos CPF; para Pessoa Jurídica usamos CNPJ.
+                            Conecte sua conta Asaas para receber pagamentos online via Pix e Cartão.
                           </p>
                         </div>
-                        {isPolling ? (
-                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            Verificando...
-                          </Badge>
-                        ) : company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
+                        {company?.asaas_onboarding_complete ? (
                           <Badge className="bg-green-100 text-green-700 border-green-200">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Conectado e ativo
-                          </Badge>
-                        ) : company?.stripe_account_id ? (
-                          <Badge variant="secondary" className="bg-amber-100 text-amber-700 border-amber-200">
-                            <AlertCircle className="h-3 w-3 mr-1" />
-                            Pendente
+                            Conectado
                           </Badge>
                         ) : (
                           <Badge variant="secondary">Não conectado</Badge>
                         )}
                       </div>
 
-                      {/* Polling indicator */}
-                      {isPolling && (
-                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                          <p className="text-blue-700">
-                            Verificando vínculo com o Stripe... Aguarde até 30 segundos.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Capabilities warning */}
-                      {!isPolling && capabilitiesReady === false && company?.stripe_account_id && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
-                          <p className="text-amber-800 font-medium">
-                            ⚠️ Capabilities ainda não ativas
-                          </p>
-                          <p className="text-amber-700 text-xs">
-                            A conta Stripe foi conectada, mas as capabilities de pagamento ({capabilitiesDetail?.transfers || 'transfers'}: {capabilitiesDetail?.transfers || '?'}, {capabilitiesDetail?.card_payments || 'card_payments'}: {capabilitiesDetail?.card_payments || '?'}) ainda não foram ativadas pelo Stripe.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCheckStripeStatus}
-                            disabled={stripeConnecting || isPolling}
-                          >
-                            {stripeConnecting ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            ) : null}
-                            Atualizar status
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Pending status — fallback button */}
-                      {!isPolling && company?.stripe_account_id && !company?.stripe_onboarding_complete && capabilitiesReady !== false && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
-                          <p className="text-amber-700">
-                            Estamos aguardando confirmação do Stripe. Se você já concluiu o cadastro, clique abaixo para verificar.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCheckStripeStatus}
-                            disabled={stripeConnecting || isPolling}
-                          >
-                            {stripeConnecting ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            ) : null}
-                            Atualizar status
-                          </Button>
-                        </div>
-                      )}
-
-                      {company?.stripe_onboarding_complete && capabilitiesReady !== false ? (
+                      {company?.asaas_onboarding_complete ? (
                         <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">
-                            Sua conta Stripe está conectada e pronta para receber pagamentos.
-                            A plataforma retém automaticamente <strong>{company?.platform_fee_percent ?? 7.5}%</strong> de comissão sobre cada venda.
-                          </p>
-
-                          {/* Indicador de status do Pix */}
-                          {pixEnabled === true && (
-                            <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              <span className="text-sm font-medium text-green-700">Pix habilitado</span>
+                          <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="h-5 w-5 text-green-600" />
+                              <p className="font-medium text-green-800">Pagamentos ativos</p>
                             </div>
-                          )}
-                          {pixEnabled === false && (
-                            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <AlertCircle className="h-4 w-4 text-amber-600" />
-                                <span className="text-sm font-medium text-amber-700">Pix não habilitado</span>
-                              </div>
-                              <p className="text-xs text-amber-600">
-                                Para habilitar Pix, acesse <strong>Settings → Payment Methods</strong> no Dashboard do Stripe da sua conta e ative o método Pix.
+                            <p className="text-sm text-green-700">
+                              Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
+                              A plataforma retém automaticamente <strong>{company?.platform_fee_percent ?? 7.5}%</strong> de comissão sobre cada venda online.
+                            </p>
+                            {company.asaas_wallet_id && (
+                              <p className="text-xs text-green-600 font-mono">
+                                Wallet: {company.asaas_wallet_id}
                               </p>
-                            </div>
-                          )}
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleConnectStripe}
-                              disabled={stripeConnecting}
-                            >
-                              {stripeConnecting ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              ) : (
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                              )}
-                              Acessar Painel Stripe
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleCheckStripeStatus}
-                              disabled={stripeConnecting}
-                            >
-                              Verificar status
-                            </Button>
+                            )}
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Repasse via Pix: D+1 após confirmação do pagamento.
+                          </p>
                         </div>
                       ) : (
-                        <div className="space-y-3">
-                          <p className="text-sm text-muted-foreground">
-                            {company?.stripe_account_id
-                              ? 'Seu cadastro no Stripe está incompleto. Clique abaixo para retomar.'
-                              : form.legal_type === 'PF'
-                                ? 'Conecte ao Stripe usando seus dados de Pessoa Física (CPF) para receber pagamentos.'
-                                : 'Conecte ao Stripe usando os dados da Pessoa Jurídica (CNPJ) para receber pagamentos.'}
-                          </p>
-                          <Button
-                            type="button"
-                            onClick={handleConnectStripe}
-                            disabled={stripeConnecting || isPolling}
-                          >
-                            {stripeConnecting ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <CreditCard className="h-4 w-4 mr-2" />
-                            )}
-                            {company?.stripe_account_id ? 'Retomar Cadastro Stripe' : 'Conectar Stripe'}
-                          </Button>
+                        <div className="space-y-4">
+                          {!asaasOnboardingMode ? (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => setAsaasOnboardingMode('create')}>
+                                <CardContent className="p-4 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <CreditCard className="h-5 w-5 text-primary" />
+                                    <h4 className="font-medium">Criar conta Asaas</h4>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Não tenho conta no Asaas. Criar uma subconta automaticamente vinculada à plataforma.
+                                  </p>
+                                </CardContent>
+                              </Card>
+                              <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => setAsaasOnboardingMode('link')}>
+                                <CardContent className="p-4 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <Link2 className="h-5 w-5 text-primary" />
+                                    <h4 className="font-medium">Já tenho conta Asaas</h4>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Já possuo uma conta Asaas e quero vinculá-la à plataforma usando minha API Key.
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          ) : asaasOnboardingMode === 'create' ? (
+                            <div className="rounded-lg border p-4 space-y-4">
+                              <h4 className="font-medium">Criar subconta Asaas</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Vamos criar uma conta Asaas automaticamente usando os dados cadastrados da sua empresa
+                                ({form.legal_type === 'PF' ? 'CPF' : 'CNPJ'}, e-mail e nome).
+                              </p>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  onClick={() => handleConnectAsaas('create')}
+                                  disabled={asaasConnecting}
+                                >
+                                  {asaasConnecting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : (
+                                    <CreditCard className="h-4 w-4 mr-2" />
+                                  )}
+                                  Criar minha conta
+                                </Button>
+                                <Button type="button" variant="ghost" onClick={() => setAsaasOnboardingMode(null)}>
+                                  Voltar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border p-4 space-y-4">
+                              <h4 className="font-medium">Vincular conta Asaas existente</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Informe sua API Key do Asaas para vincular sua conta. Encontre sua API Key em: 
+                                Asaas → Integrações → API.
+                              </p>
+                              <div className="space-y-2">
+                                <Label htmlFor="asaas_api_key">API Key do Asaas</Label>
+                                <Input
+                                  id="asaas_api_key"
+                                  type="password"
+                                  value={asaasApiKeyInput}
+                                  onChange={(e) => setAsaasApiKeyInput(e.target.value)}
+                                  placeholder="$aact_..."
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  onClick={() => handleConnectAsaas('link')}
+                                  disabled={asaasConnecting || !asaasApiKeyInput.trim()}
+                                >
+                                  {asaasConnecting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : (
+                                    <Link2 className="h-4 w-4 mr-2" />
+                                  )}
+                                  Vincular conta
+                                </Button>
+                                <Button type="button" variant="ghost" onClick={() => { setAsaasOnboardingMode(null); setAsaasApiKeyInput(''); }}>
+                                  Voltar
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
