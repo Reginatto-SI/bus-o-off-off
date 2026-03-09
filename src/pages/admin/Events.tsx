@@ -1076,7 +1076,7 @@ export default function Events() {
     }
 
     if (targetStatus === 'a_venda') {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction('publish_from_form');
         setStripeGateOpen(true);
