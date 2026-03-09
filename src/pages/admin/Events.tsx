@@ -483,7 +483,7 @@ export default function Events() {
     if (params.get('novo') !== '1') return;
 
     const openCreateFromDashboard = async () => {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction('create_event');
         setStripeGateOpen(true);
