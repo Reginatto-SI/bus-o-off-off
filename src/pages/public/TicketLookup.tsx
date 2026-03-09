@@ -159,7 +159,7 @@ export default function TicketLookup() {
     // Coleta saleIds únicos que estão pendentes e têm checkout session
     const pendingSaleIds = [...new Set(
       cards
-        .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && t.stripeCheckoutSessionId && t.saleId)
+        .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && (t.stripeCheckoutSessionId || t.asaasPaymentId) && t.saleId)
         .map((t) => t.saleId!)
     )].slice(0, 3); // Máximo 3 verificações por busca
 
@@ -250,6 +250,7 @@ export default function TicketLookup() {
           saleStatus: (t.saleStatus || 'reservado') as SaleStatus,
           saleId: t.saleId || undefined,
           stripeCheckoutSessionId: t.stripeCheckoutSessionId || null,
+          asaasPaymentId: t.asaasPaymentId || null,
           companyName: t.companyName,
           companyLogoUrl: t.companyLogoUrl,
           companyCity: t.companyCity,

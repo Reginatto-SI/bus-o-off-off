@@ -29,7 +29,8 @@ export interface TicketCardData {
   boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
   saleId?: string;
-  stripeCheckoutSessionId?: string | null;
+  stripeCheckoutSessionId?: string | null; // legacy
+  asaasPaymentId?: string | null;
   companyName: string;
   companyLogoUrl: string | null;
   companyCity: string | null;
@@ -87,13 +88,14 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
 
-  // Status visual: "processando" quando reservado mas com checkout Stripe em andamento
-  const displayStatus = (ticket.saleStatus === 'reservado' && ticket.stripeCheckoutSessionId)
+  // Status visual: "processando" quando reservado mas com pagamento em andamento
+  const hasPaymentPending = ticket.stripeCheckoutSessionId || ticket.asaasPaymentId;
+  const displayStatus = (ticket.saleStatus === 'reservado' && hasPaymentPending)
     ? 'processando'
     : ticket.saleStatus;
 
-  // Mostrar botão de atualizar status quando não está pago e existe checkout session
-  const showRefreshButton = !isPaid && !isCancelled && ticket.stripeCheckoutSessionId && onRefreshStatus && ticket.saleId;
+  // Mostrar botão de atualizar status quando não está pago e existe pagamento pendente
+  const showRefreshButton = !isPaid && !isCancelled && hasPaymentPending && onRefreshStatus && ticket.saleId;
 
   const handleCopySaleId = async () => {
     if (!ticket.saleId) return;
