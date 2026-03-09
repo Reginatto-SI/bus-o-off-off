@@ -2032,7 +2032,7 @@ export default function Events() {
   // Quick status change from card
   const handleQuickStatusChange = async (event: EventWithTrips, newStatus: Event['status']) => {
     if (newStatus === 'a_venda') {
-      const hasStripe = await checkStripeConnection();
+      const hasStripe = await checkAsaasConnection();
       if (!hasStripe) {
         setStripeGatePendingAction(null);
         setStripeGateOpen(true);
