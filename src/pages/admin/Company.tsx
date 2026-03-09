@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
