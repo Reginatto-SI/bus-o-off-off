@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.create-platform-fee-checkout]
 verify_jwt = false
+
+[functions.create-asaas-account]
+verify_jwt = false
+
+[functions.create-asaas-payment]
+verify_jwt = false
+
+[functions.asaas-webhook]
+verify_jwt = false
+
+[functions.ticket-lookup]
+verify_jwt = false
