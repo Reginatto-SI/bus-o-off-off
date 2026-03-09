@@ -301,81 +301,40 @@ export default function CompanyPage() {
   const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
-  const handleConnectStripe = async () => {
+  const handleConnectAsaas = async (mode: 'create' | 'link') => {
     if (!editingId) {
-      toast.error('Salve a empresa antes de conectar o Stripe');
+      toast.error('Salve a empresa antes de conectar o Asaas');
       return;
     }
 
-    setStripeConnecting(true);
+    setAsaasConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-connect-account', {
-        body: { company_id: editingId },
-      });
-
-      if (error) {
-        // Edge function returns structured error in data even on non-2xx
-        const errData = data || {};
-        if (errData.action_url) {
-          toast.error(errData.error || 'Erro na configuração do Stripe', {
-            duration: 10000,
-            action: {
-              label: 'Abrir Stripe',
-              onClick: () => window.open(errData.action_url, '_blank'),
-            },
-          });
+      const body: any = { company_id: editingId, mode };
+      if (mode === 'link') {
+        if (!asaasApiKeyInput.trim()) {
+          toast.error('Informe sua API Key do Asaas');
+          setAsaasConnecting(false);
           return;
         }
-        throw new Error(errData.error || error.message);
+        body.api_key = asaasApiKeyInput.trim();
       }
 
-      // Update capabilities status from response
-      if (data?.capabilities_ready !== undefined) {
-        setCapabilitiesReady(data.capabilities_ready);
-      }
-      if (data?.capabilities) {
-        setCapabilitiesDetail(data.capabilities);
-      }
-      if (data?.pix_enabled !== undefined) {
-        setPixEnabled(data.pix_enabled);
-      }
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', { body });
+      if (error) throw new Error((data as any)?.error || error.message);
 
-      if (data?.already_complete && data?.dashboard_url) {
-        window.open(data.dashboard_url, '_blank');
-        if (data.capabilities_ready) {
-          toast.success('Stripe conectado e ativo. Abrindo painel...');
-        } else {
-          toast.warning('Stripe conectado, mas as capabilities ainda não foram ativadas. Aguarde a aprovação do Stripe.');
-        }
-        fetchCompany();
-      } else if (data?.onboarding_url) {
-        window.open(data.onboarding_url, '_blank');
-        toast.info('Complete o cadastro na aba do Stripe que foi aberta.');
+      if (data?.already_complete) {
+        toast.success('Conta Asaas já conectada!');
+      } else {
+        toast.success(mode === 'create' ? 'Subconta Asaas criada com sucesso!' : 'Conta Asaas vinculada com sucesso!');
       }
+      setAsaasOnboardingMode(null);
+      setAsaasApiKeyInput('');
+      fetchCompany();
     } catch (err: unknown) {
-      console.error('Stripe connect error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar Stripe. Tente novamente.';
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar Asaas. Tente novamente.';
       toast.error(errorMessage);
     } finally {
-      setStripeConnecting(false);
-    }
-  };
-
-  const handleCheckStripeStatus = async () => {
-    if (!editingId) return;
-    setStripeConnecting(true);
-    try {
-      const ready = await refreshStripeStatus(editingId);
-      if (ready) {
-        toast.success('Capabilities ativas! Pagamentos online prontos.');
-      } else {
-        toast.info('Capabilities ainda pendentes. Aguarde a aprovação do Stripe.');
-      }
-    } catch (err) {
-      console.error('Stripe status check error:', err);
-      toast.error('Erro ao verificar status. Tente novamente.');
-    } finally {
-      setStripeConnecting(false);
+      setAsaasConnecting(false);
     }
   };
 
