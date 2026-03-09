@@ -29,7 +29,8 @@ export interface TicketCardData {
   boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
   saleId?: string;
-  stripeCheckoutSessionId?: string | null;
+  stripeCheckoutSessionId?: string | null; // legacy
+  asaasPaymentId?: string | null;
   companyName: string;
   companyLogoUrl: string | null;
   companyCity: string | null;
