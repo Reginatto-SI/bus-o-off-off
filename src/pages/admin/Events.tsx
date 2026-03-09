@@ -2237,7 +2237,7 @@ export default function Events() {
           description="Gerencie os eventos e viagens"
           actions={
             <Button onClick={async () => {
-              const hasStripe = await checkStripeConnection();
+              const hasStripe = await checkAsaasConnection();
               if (!hasStripe) {
                 setStripeGatePendingAction('create_event');
                 setStripeGateOpen(true);
