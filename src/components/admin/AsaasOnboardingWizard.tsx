@@ -62,7 +62,9 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
 
     const missing: string[] = [];
     if (!companyData.companyName.trim()) missing.push('nome da empresa');
-    if (!onlyDigits(companyData.documentNumber)) missing.push(companyData.legalType === 'PF' ? 'CPF' : 'CNPJ');
+    const documentDigits = onlyDigits(companyData.documentNumber);
+    if (companyData.legalType === 'PF' && documentDigits.length !== 11) missing.push('CPF válido (11 dígitos)');
+    if (companyData.legalType === 'PJ' && documentDigits.length !== 14) missing.push('CNPJ válido (14 dígitos)');
     if (!companyData.email.trim()) missing.push('e-mail');
     else if (!emailRegex.test(companyData.email.trim())) missing.push('e-mail válido');
     return missing;
@@ -169,6 +171,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
               <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{companyData?.email}</strong> será a referência principal da conta criada.</p>
               <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
               <p>Se for necessário definir senha, completar cadastro ou validar dados, essa etapa acontece diretamente no Asaas.</p>
+              <p className="text-muted-foreground">Enquanto a operação estiver em testes, a conexão será criada no ambiente Sandbox do Asaas.</p>
               <p className="font-medium">Você poderá gerenciar sua conta de pagamentos diretamente no Asaas após a criação.</p>
             </div>
           </div>
@@ -184,7 +187,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
               A conexão foi concluída para a empresa <strong>{companyData?.companyName}</strong> com o e-mail <strong>{companyData?.email}</strong>.
             </p>
             <p className="text-sm text-emerald-900">
-              Próximo passo: acompanhe e conclua configurações complementares diretamente no Asaas, quando necessário.
+              Próximo passo: acompanhe e conclua configurações complementares diretamente no Asaas (ambiente Sandbox, quando aplicável).
             </p>
           </div>
         )}

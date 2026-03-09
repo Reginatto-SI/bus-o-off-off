@@ -423,23 +423,52 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, full_name')
+      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address')
       .eq('id', activeCompanyId)
       .single();
 
     if (error || !data) {
-      toast.error('Não foi possível carregar os dados da empresa para conectar pagamentos.');
+      logSupabaseError({
+        label: 'Erro ao carregar dados da empresa para onboarding Asaas (companies.select)',
+        error,
+        context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id },
+      });
+      toast.error('Não foi possível carregar os dados da empresa para conectar pagamentos. Atualize a página e tente novamente.');
       return null;
     }
 
     const legalType = data.legal_type === 'PF' ? 'PF' : 'PJ';
     const documentNumber = (data.document_number || data.cnpj || '').replace(/\D/g, '');
+    const companyName = (data.trade_name || data.legal_name || data.name || '').trim();
+    const email = (data.email || '').trim();
+
+    const missingRequired: string[] = [];
+    if (!companyName) missingRequired.push('nome da empresa');
+    if (!email) missingRequired.push('e-mail');
+    if (legalType === 'PF' && documentNumber.length !== 11) missingRequired.push('CPF válido');
+    if (legalType === 'PJ' && documentNumber.length !== 14) missingRequired.push('CNPJ válido');
+
+    if (missingRequired.length > 0) {
+      toast.error(`Complete os dados da empresa em /admin/empresa antes de conectar pagamentos: ${missingRequired.join(', ')}.`);
+      return null;
+    }
+
+    const missingRecommended: string[] = [];
+    if (!data.city?.trim()) missingRecommended.push('cidade');
+    if (!data.state?.trim()) missingRecommended.push('estado');
+    if (!data.address?.trim()) missingRecommended.push('endereço');
+
+    if (missingRecommended.length > 0) {
+      // Comentário de manutenção: não bloqueia a conexão, apenas orienta para reduzir pendências no Asaas Sandbox.
+      toast.warning(`Recomendado para o Asaas Sandbox: complete ${missingRecommended.join(', ')} em /admin/empresa.`);
+    }
+
     return {
       companyId: data.id,
-      companyName: (data.trade_name || data.legal_name || data.full_name || data.name || '').trim(),
+      companyName,
       legalType,
       documentNumber,
-      email: (data.email || '').trim(),
+      email,
     };
   };
 

@@ -368,7 +368,7 @@ export default function CompanyPage() {
       }
 
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: editingId, mode: 'link', api_key: asaasApiKeyInput.trim() },
+        body: { company_id: editingId, mode: 'link_existing', api_key: asaasApiKeyInput.trim() },
       });
       if (error) throw new Error((data as any)?.error || error.message);
 
