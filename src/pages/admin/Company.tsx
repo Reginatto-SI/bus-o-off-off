@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store, Share2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
+import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate } from 'react-router-dom';
@@ -337,7 +338,22 @@ export default function CompanyPage() {
   const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
-  const handleConnectAsaas = async (mode: 'create' | 'link') => {
+  const [asaasWizardOpen, setAsaasWizardOpen] = useState(false);
+
+  const getAsaasWizardCompanyData = (): AsaasOnboardingCompanyData | null => {
+    if (!editingId) return null;
+
+    const documentDigits = form.document_number.replace(/\D/g, '');
+    return {
+      companyId: editingId,
+      companyName: form.trade_name.trim() || form.legal_name.trim() || form.full_name.trim(),
+      legalType: form.legal_type,
+      documentNumber: documentDigits,
+      email: form.email.trim(),
+    };
+  };
+
+  const handleConnectAsaasLink = async () => {
     if (!editingId) {
       toast.error('Salve a empresa antes de conectar o Asaas');
       return;
@@ -345,24 +361,23 @@ export default function CompanyPage() {
 
     setAsaasConnecting(true);
     try {
-      const body: any = { company_id: editingId, mode };
-      if (mode === 'link') {
-        if (!asaasApiKeyInput.trim()) {
-          toast.error('Informe sua API Key do Asaas');
-          setAsaasConnecting(false);
-          return;
-        }
-        body.api_key = asaasApiKeyInput.trim();
+      if (!asaasApiKeyInput.trim()) {
+        toast.error('Informe sua API Key do Asaas');
+        setAsaasConnecting(false);
+        return;
       }
 
-      const { data, error } = await supabase.functions.invoke('create-asaas-account', { body });
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
+        body: { company_id: editingId, mode: 'link', api_key: asaasApiKeyInput.trim() },
+      });
       if (error) throw new Error((data as any)?.error || error.message);
 
       if (data?.already_complete) {
         toast.success('Conta Asaas já conectada!');
       } else {
-        toast.success(mode === 'create' ? 'Subconta Asaas criada com sucesso!' : 'Conta Asaas vinculada com sucesso!');
+        toast.success('Conta Asaas vinculada com sucesso!');
       }
+
       setAsaasOnboardingMode(null);
       setAsaasApiKeyInput('');
       fetchCompany();
@@ -373,6 +388,7 @@ export default function CompanyPage() {
       setAsaasConnecting(false);
     }
   };
+
 
   const resetForm = () => {
     // Comentário: volta ao estado atual da empresa quando disponível.
@@ -1491,15 +1507,10 @@ export default function CompanyPage() {
                               <div className="flex gap-2">
                                 <Button
                                   type="button"
-                                  onClick={() => handleConnectAsaas('create')}
-                                  disabled={asaasConnecting}
+                                  onClick={() => setAsaasWizardOpen(true)}
                                 >
-                                  {asaasConnecting ? (
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  ) : (
-                                    <CreditCard className="h-4 w-4 mr-2" />
-                                  )}
-                                  Criar minha conta
+                                  <CreditCard className="h-4 w-4 mr-2" />
+                                  Iniciar conexão guiada
                                 </Button>
                                 <Button type="button" variant="ghost" onClick={() => setAsaasOnboardingMode(null)}>
                                   Voltar
@@ -1526,7 +1537,7 @@ export default function CompanyPage() {
                               <div className="flex gap-2">
                                 <Button
                                   type="button"
-                                  onClick={() => handleConnectAsaas('link')}
+                                  onClick={handleConnectAsaasLink}
                                   disabled={asaasConnecting || !asaasApiKeyInput.trim()}
                                 >
                                   {asaasConnecting ? (
@@ -1546,6 +1557,18 @@ export default function CompanyPage() {
                       )}
                     </div>
                   </TabsContent>
+
+
+                    {/* Comentário de manutenção: wizard reutilizável para evitar criação automática sem confirmação explícita. */}
+                    <AsaasOnboardingWizard
+                      open={asaasWizardOpen}
+                      onOpenChange={setAsaasWizardOpen}
+                      companyData={getAsaasWizardCompanyData()}
+                      onSuccess={async () => {
+                        setAsaasOnboardingMode(null);
+                        await fetchCompany();
+                      }}
+                    />
 
                   {/* Vitrine Pública (Fase 1): seção visível somente para gerente/developer.
                       Campos controlam a personalização da vitrine /empresa/:slug. */}
