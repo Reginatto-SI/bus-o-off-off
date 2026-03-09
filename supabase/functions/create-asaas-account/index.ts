@@ -220,8 +220,15 @@ serve(async (req) => {
       const createData = await createRes.json();
 
       if (!createRes.ok) {
-        const errorMsg = createData?.errors?.[0]?.description || createData?.message || "Erro ao criar subconta no Asaas";
+        const rawMsg = createData?.errors?.[0]?.description || createData?.message || "Erro ao criar subconta no Asaas";
         console.error("Asaas create account error:", JSON.stringify(createData));
+        
+        // If email already in use, suggest linking existing account
+        const isEmailInUse = rawMsg.toLowerCase().includes("já está em uso") || rawMsg.toLowerCase().includes("already");
+        const errorMsg = isEmailInUse
+          ? "Este e-mail já possui uma conta no Asaas. Use a opção 'Vincular conta existente' informando sua API Key do Asaas."
+          : rawMsg;
+
         return new Response(
           JSON.stringify({ error: errorMsg }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
