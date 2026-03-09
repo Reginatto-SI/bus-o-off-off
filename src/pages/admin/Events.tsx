@@ -392,7 +392,7 @@ export default function Events() {
     setCompanyPlatformFeePercent(Number(data.platform_fee_percent));
   };
 
-  const checkStripeConnection = async () => {
+  const checkAsaasConnection = async () => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
       return false;
@@ -400,19 +400,19 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('stripe_account_id, stripe_onboarding_complete')
+      .select('asaas_wallet_id, asaas_onboarding_complete')
       .eq('id', activeCompanyId)
       .single();
 
     if (error) {
-      toast.error('Não foi possível validar a conexão Stripe da empresa');
+      toast.error('Não foi possível validar a conexão de pagamentos da empresa');
       return false;
     }
 
-    return Boolean(data?.stripe_account_id && data?.stripe_onboarding_complete);
+    return Boolean(data?.asaas_wallet_id && data?.asaas_onboarding_complete);
   };
 
-  const handleConnectStripeFromGate = async () => {
+  const handleConnectAsaasFromGate = async () => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
       return;
@@ -420,7 +420,7 @@ export default function Events() {
 
     setStripeConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: activeCompanyId },
       });
 
@@ -429,23 +429,17 @@ export default function Events() {
         throw new Error(errData.error || error.message);
       }
 
-      if (data?.already_complete) {
-        toast.success('Sua empresa já está conectada ao Stripe.');
+      if (data?.already_complete || data?.success) {
+        toast.success('Conta de pagamentos conectada com sucesso.');
       }
 
-      if (data?.onboarding_url) {
-        // Fluxo em mesma aba para retorno automático ao sistema após finalizar onboarding.
-        window.location.href = data.onboarding_url;
-        return;
-      }
-
-      const connected = await checkStripeConnection();
+      const connected = await checkAsaasConnection();
       if (connected) {
         setStripeGateOpen(false);
       }
     } catch (err: any) {
-      console.error('Erro ao iniciar Stripe Connect:', err);
-      toast.error(err?.message || 'Erro ao conectar com Stripe. Tente novamente.');
+      console.error('Erro ao configurar Asaas:', err);
+      toast.error(err?.message || 'Erro ao conectar conta de pagamentos. Tente novamente.');
     } finally {
       setStripeConnecting(false);
     }

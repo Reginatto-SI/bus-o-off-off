@@ -668,15 +668,15 @@ export default function Checkout() {
       }
     }
 
-    // Try to create Stripe checkout session
+    // Try to create Asaas payment
     try {
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
-        'create-checkout-session',
+        'create-asaas-payment',
         { body: { sale_id: sale.id } }
       );
 
       if (!checkoutError && checkoutData?.url) {
-        // Redirect to Stripe Checkout
+        // Redirect to Asaas payment page
         window.location.href = checkoutData.url;
         return;
       }
@@ -685,20 +685,10 @@ export default function Checkout() {
       const errorCode = checkoutData?.error_code;
       const errorMessage = checkoutData?.error;
 
-      if (errorCode === 'no_stripe_account') {
-        // Company has no Stripe — fallback to reservation
-        console.log('Stripe not configured, falling back to confirmation');
+      if (errorCode === 'no_asaas_account') {
+        // Company has no Asaas — fallback to reservation
+        console.log('Asaas not configured, falling back to confirmation');
         navigate(`/confirmacao/${sale.id}`);
-        return;
-      }
-
-      if (errorCode === 'capabilities_not_ready') {
-        // Capabilities not active — show error, don't create false reservation
-        toast.error('O pagamento online não está disponível no momento. A conta de pagamentos da empresa ainda está sendo ativada. Tente novamente mais tarde.');
-        // Delete the sale and tickets since payment can't proceed
-        await supabase.from('tickets').delete().eq('sale_id', sale.id);
-        await supabase.from('sales').delete().eq('id', sale.id);
-        setSubmitting(false);
         return;
       }
 
@@ -710,7 +700,7 @@ export default function Checkout() {
       return;
     } catch (err) {
       // Network error or edge function unavailable — fallback to confirmation
-      console.log('Stripe checkout not available, falling back to confirmation:', err);
+      console.log('Asaas checkout not available, falling back to confirmation:', err);
       navigate(`/confirmacao/${sale.id}`);
     }
   };
