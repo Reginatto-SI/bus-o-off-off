@@ -295,8 +295,44 @@ export default function CompanyPage() {
     }
     setLoading(false);
   };
+  useEffect(() => {
+    fetchCompany();
+  }, [activeCompanyId]);
 
-  // Asaas onboarding states
+  // Slug availability check with debounce
+  useEffect(() => {
+    const hasSlug = normalizedPublicSlug.length > 0;
+    if (!hasSlug) {
+      setSlugAvailable(null);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    if (isReservedSlug) {
+      setSlugAvailable(false);
+      setSlugCheckLoading(false);
+      return;
+    }
+
+    setSlugCheckLoading(true);
+    const timeoutId = window.setTimeout(async () => {
+      const { data, error } = await supabase.rpc('is_company_public_slug_available', {
+        input_slug: normalizedPublicSlug,
+        current_company_id: editingId,
+      });
+
+      if (error) {
+        setSlugAvailable(null);
+      } else {
+        setSlugAvailable(Boolean(data));
+      }
+      setSlugCheckLoading(false);
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [normalizedPublicSlug, editingId, isReservedSlug]);
+
+
   const [asaasConnecting, setAsaasConnecting] = useState(false);
   const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
