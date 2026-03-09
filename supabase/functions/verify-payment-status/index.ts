@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -8,10 +7,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ASAAS_BASE_URL = "https://api.asaas.com/v3";
+
 /**
- * Edge function pública para verificar o status real de pagamento no Stripe.
- * Resolve o problema de vendas que ficam "reservado" quando o webhook falha ou demora.
- * Reutiliza a mesma lógica financeira do webhook (comissão + transfer) para consistência.
+ * Verifica o status real de pagamento no Asaas.
+ * Resolve vendas que ficam "reservado" quando o webhook falha ou demora.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -33,10 +33,9 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // 1. Buscar a venda com checkout session id
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, stripe_checkout_session_id, company_id, unit_price, quantity, gross_amount")
+      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount")
       .eq("id", sale_id)
       .single();
 
@@ -47,7 +46,6 @@ serve(async (req) => {
       );
     }
 
-    // Se já está pago, retorna direto sem consultar Stripe
     if (sale.status === "pago") {
       return new Response(
         JSON.stringify({ paymentStatus: "pago" }),
@@ -55,7 +53,6 @@ serve(async (req) => {
       );
     }
 
-    // Se cancelado, retorna direto
     if (sale.status === "cancelado") {
       return new Response(
         JSON.stringify({ paymentStatus: "cancelado" }),
@@ -63,62 +60,61 @@ serve(async (req) => {
       );
     }
 
-    // Sem checkout session, não há como verificar no Stripe
-    if (!sale.stripe_checkout_session_id) {
+    if (!sale.asaas_payment_id) {
       return new Response(
         JSON.stringify({ paymentStatus: "reservado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 2. Buscar empresa para obter stripe_account_id (Direct Charge)
-    const { data: company } = await supabaseAdmin
-      .from("companies")
-      .select("stripe_account_id, platform_fee_percent, partner_split_percent")
-      .eq("id", sale.company_id)
-      .single();
-
-    if (!company?.stripe_account_id) {
+    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    if (!PLATFORM_API_KEY) {
       return new Response(
-        JSON.stringify({ paymentStatus: "reservado", detail: "Company has no Stripe account" }),
+        JSON.stringify({ paymentStatus: "reservado", detail: "Asaas API key not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 3. Consultar Checkout Session no Stripe (conta conectada)
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
-
-    let session: Stripe.Checkout.Session;
+    // Query Asaas for payment status
+    let paymentData: any;
     try {
-      session = await stripe.checkout.sessions.retrieve(
-        sale.stripe_checkout_session_id,
-        { stripeAccount: company.stripe_account_id }
-      );
-    } catch (stripeErr: any) {
-      console.error("Stripe session retrieve error:", stripeErr);
+      const res = await fetch(`${ASAAS_BASE_URL}/payments/${sale.asaas_payment_id}`, {
+        headers: { "access_token": PLATFORM_API_KEY },
+      });
+
+      if (!res.ok) {
+        console.error("Asaas payment retrieve error:", await res.text());
+        return new Response(
+          JSON.stringify({ paymentStatus: "reservado", detail: "Could not verify with Asaas" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      paymentData = await res.json();
+    } catch (err) {
+      console.error("Asaas API error:", err);
       return new Response(
-        JSON.stringify({ paymentStatus: "reservado", detail: "Could not verify with Stripe" }),
+        JSON.stringify({ paymentStatus: "reservado", detail: "Could not verify with Asaas" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4. Mapear status do Stripe para status interno
-    if (session.payment_status === "paid" || session.payment_status === "no_payment_required") {
-      // Pagamento confirmado — aplicar mesma lógica do webhook
+    // Map Asaas status to internal status
+    const asaasStatus = paymentData.status;
+
+    if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
+      // Payment confirmed — apply same logic as webhook
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
           status: "pago",
-          stripe_payment_intent_id: (session.payment_intent as string) || null,
+          asaas_payment_status: asaasStatus,
         })
         .eq("id", sale_id)
-        .eq("status", "reservado"); // Guard de idempotência
+        .eq("status", "reservado");
 
       if (updateError) {
         console.error("Error updating sale:", updateError);
-        // Se falhou o update, pode ser que já foi atualizado por outra instância
         const { data: freshSale } = await supabaseAdmin
           .from("sales").select("status").eq("id", sale_id).single();
         return new Response(
@@ -127,81 +123,56 @@ serve(async (req) => {
         );
       }
 
-      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand check`);
+      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand Asaas check`);
 
-      if (company.platform_fee_percent == null) {
-        return new Response(
-          JSON.stringify({ paymentStatus: "reservado", detail: "Company platform fee not configured" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // Calculate financial data
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("platform_fee_percent, partner_split_percent")
+        .eq("id", sale.company_id)
+        .single();
 
-      const platformFeePercent = Number(company.platform_fee_percent);
-      if (!Number.isFinite(platformFeePercent)) {
-        return new Response(
-          JSON.stringify({ paymentStatus: "reservado", detail: "Company platform fee invalid" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      if (company?.platform_fee_percent != null) {
+        const platformFeePercent = Number(company.platform_fee_percent);
+        const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
+        const grossAmountCents = Math.round(grossAmount * 100);
+        const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
+        const platformFeeTotal = platformFeeCents / 100;
 
-      const partnerSplitPercent = company.partner_split_percent ?? 50;
-      const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
-      const grossAmountCents = Math.round(grossAmount * 100);
-      const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
-      const platformFeeTotal = platformFeeCents / 100;
+        const partnerSplitPercent = company?.partner_split_percent ?? 50;
+        const { data: partner } = await supabaseAdmin
+          .from("partners")
+          .select("id, asaas_wallet_id, status")
+          .eq("status", "ativo")
+          .limit(1)
+          .maybeSingle();
 
-      const { data: partner } = await supabaseAdmin
-        .from("partners")
-        .select("id, stripe_account_id, status")
-        .eq("status", "ativo")
-        .limit(1)
-        .maybeSingle();
+        let partnerFeeAmount = 0;
+        let platformNetAmount = platformFeeTotal;
 
-      let partnerFeeAmount = 0;
-      let platformNetAmount = platformFeeTotal;
-      let stripeTransferId: string | null = null;
-
-      if (partner?.stripe_account_id && partner.status === "ativo") {
-        const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
-        partnerFeeAmount = partnerFeeCents / 100;
-        platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
-
-        if (partnerFeeCents > 0) {
-          try {
-            const transfer = await stripe.transfers.create({
-              amount: partnerFeeCents,
-              currency: "brl",
-              destination: partner.stripe_account_id,
-              description: `Comissão parceiro — Venda ${sale_id} (verify-payment-status)`,
-              metadata: { sale_id },
-            });
-            stripeTransferId = transfer.id;
-            console.log(`[verify-payment-status] Transfer ${transfer.id} created (R$ ${partnerFeeAmount.toFixed(2)})`);
-          } catch (transferError) {
-            console.error("[verify-payment-status] Error creating partner transfer:", transferError);
-            partnerFeeAmount = 0;
-            platformNetAmount = platformFeeTotal;
-          }
+        if (partner?.asaas_wallet_id && partner.status === "ativo") {
+          const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
+          partnerFeeAmount = partnerFeeCents / 100;
+          platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
         }
+
+        await supabaseAdmin
+          .from("sales")
+          .update({
+            gross_amount: grossAmount,
+            platform_fee_total: platformFeeTotal,
+            partner_fee_amount: partnerFeeAmount,
+            platform_net_amount: platformNetAmount,
+          })
+          .eq("id", sale_id);
+
+        await supabaseAdmin.from("sale_logs").insert({
+          sale_id,
+          action: "payment_confirmed",
+          description: `Pagamento confirmado via verify-payment-status (Asaas on-demand). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%).`,
+          company_id: sale.company_id,
+        });
       }
-
-      await supabaseAdmin
-        .from("sales")
-        .update({
-          gross_amount: grossAmount,
-          platform_fee_total: platformFeeTotal,
-          partner_fee_amount: partnerFeeAmount,
-          platform_net_amount: platformNetAmount,
-          stripe_transfer_id: stripeTransferId,
-        })
-        .eq("id", sale_id);
-
-      await supabaseAdmin.from("sale_logs").insert({
-        sale_id,
-        action: "payment_confirmed",
-        description: `Pagamento confirmado via verify-payment-status (on-demand). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
-        company_id: sale.company_id,
-      });
 
       return new Response(
         JSON.stringify({ paymentStatus: "pago" }),
@@ -209,17 +180,23 @@ serve(async (req) => {
       );
     }
 
-    // Session ainda não paga — verificar se expirou
-    if (session.status === "expired") {
+    if (asaasStatus === "OVERDUE") {
       return new Response(
         JSON.stringify({ paymentStatus: "expirado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Pagamento em processamento (ex: cartão aguardando confirmação)
+    if (asaasStatus === "PENDING" || asaasStatus === "AWAITING_RISK_ANALYSIS") {
+      return new Response(
+        JSON.stringify({ paymentStatus: "processando" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Default
     return new Response(
-      JSON.stringify({ paymentStatus: "processando" }),
+      JSON.stringify({ paymentStatus: "reservado", asaas_status: asaasStatus }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
