@@ -306,10 +306,11 @@ export default function Events() {
 
   const [savingFee, setSavingFee] = useState(false);
 
-  // Gate Stripe para monetização: bloqueia criação/publicação sem conta conectada.
-  const [stripeGateOpen, setStripeGateOpen] = useState(false);
-  const [stripeConnecting, setStripeConnecting] = useState(false);
-  const [stripeGatePendingAction, setStripeGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
+  // Gate de pagamentos (Asaas): bloqueia criação/publicação sem onboarding financeiro concluído.
+  const [paymentsGateOpen, setPaymentsGateOpen] = useState(false);
+  const [asaasConnecting, setAsaasConnecting] = useState(false);
+  // Comentário de manutenção: mantemos a ação pendente para continuar o fluxo após conectar pagamentos.
+  const [paymentsGatePendingAction, setPaymentsGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
   // Fonte de verdade da taxa: companies.platform_fee_percent da empresa ativa.
   const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState<number | null>(null);
 
@@ -418,7 +419,7 @@ export default function Events() {
       return;
     }
 
-    setStripeConnecting(true);
+    setAsaasConnecting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: activeCompanyId },
@@ -435,38 +436,39 @@ export default function Events() {
 
       const connected = await checkAsaasConnection();
       if (connected) {
-        setStripeGateOpen(false);
+        setPaymentsGateOpen(false);
       }
     } catch (err: any) {
       console.error('Erro ao configurar Asaas:', err);
       toast.error(err?.message || 'Erro ao conectar conta de pagamentos. Tente novamente.');
     } finally {
-      setStripeConnecting(false);
+      setAsaasConnecting(false);
     }
   };
 
   useEffect(() => {
-    if (!stripeGateOpen) return;
+    if (!paymentsGateOpen) return;
 
-    const revalidateStripeStatus = async () => {
+    // Revalida conexão Asaas ao voltar foco para liberar automaticamente a jornada de criação/publicação.
+    const revalidateAsaasStatus = async () => {
       const connected = await checkAsaasConnection();
       if (!connected) return;
 
-      setStripeGateOpen(false);
+      setPaymentsGateOpen(false);
 
       // Continuidade automática: se estava tentando criar evento, abre modal de cadastro.
-      if (stripeGatePendingAction === 'create_event') {
+      if (paymentsGatePendingAction === 'create_event') {
         resetForm();
         setIsCreateWizardMode(true);
         setDialogOpen(true);
       }
 
-      setStripeGatePendingAction(null);
-      toast.success('Stripe conectado com sucesso. Você já pode continuar.');
+      setPaymentsGatePendingAction(null);
+      toast.success('Pagamentos conectados com sucesso. Você já pode continuar.');
     };
 
     const onFocus = () => {
-      revalidateStripeStatus();
+      revalidateAsaasStatus();
     };
 
     window.addEventListener('focus', onFocus);
@@ -476,17 +478,17 @@ export default function Events() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [stripeGateOpen, stripeGatePendingAction, activeCompanyId]);
+  }, [paymentsGateOpen, paymentsGatePendingAction, activeCompanyId]);
   useEffect(() => {
     // Comentário: permite deep-link de ação rápida do Dashboard sem alterar o fluxo padrão da tela.
     const params = new URLSearchParams(location.search);
     if (params.get('novo') !== '1') return;
 
     const openCreateFromDashboard = async () => {
-      const hasStripe = await checkAsaasConnection();
-      if (!hasStripe) {
-        setStripeGatePendingAction('create_event');
-        setStripeGateOpen(true);
+      const hasAsaasConnection = await checkAsaasConnection();
+      if (!hasAsaasConnection) {
+        setPaymentsGatePendingAction('create_event');
+        setPaymentsGateOpen(true);
         return;
       }
 
@@ -1068,7 +1070,7 @@ export default function Events() {
       return { error: true, eventId: editingId, isNew: false };
     }
 
-    // Publicação gera receita: exige taxa válida da empresa e Stripe conectado antes de seguir.
+    // Publicação gera receita: exige taxa válida da empresa e conexão Asaas concluída antes de seguir.
     if (targetStatus === 'a_venda' && !hasValidCompanyPlatformFee) {
       toast.error('Defina a Taxa da Plataforma da empresa em /admin/empresa antes de publicar.');
       setActiveTab('passagens');
@@ -1076,10 +1078,10 @@ export default function Events() {
     }
 
     if (targetStatus === 'a_venda') {
-      const hasStripe = await checkAsaasConnection();
-      if (!hasStripe) {
-        setStripeGatePendingAction('publish_from_form');
-        setStripeGateOpen(true);
+      const hasAsaasConnection = await checkAsaasConnection();
+      if (!hasAsaasConnection) {
+        setPaymentsGatePendingAction('publish_from_form');
+        setPaymentsGateOpen(true);
         return { error: true, eventId: editingId, isNew: false };
       }
     }
@@ -2032,10 +2034,10 @@ export default function Events() {
   // Quick status change from card
   const handleQuickStatusChange = async (event: EventWithTrips, newStatus: Event['status']) => {
     if (newStatus === 'a_venda') {
-      const hasStripe = await checkAsaasConnection();
-      if (!hasStripe) {
-        setStripeGatePendingAction(null);
-        setStripeGateOpen(true);
+      const hasAsaasConnection = await checkAsaasConnection();
+      if (!hasAsaasConnection) {
+        setPaymentsGatePendingAction(null);
+        setPaymentsGateOpen(true);
         return;
       }
 
@@ -2237,10 +2239,10 @@ export default function Events() {
           description="Gerencie os eventos e viagens"
           actions={
             <Button onClick={async () => {
-              const hasStripe = await checkAsaasConnection();
-              if (!hasStripe) {
-                setStripeGatePendingAction('create_event');
-                setStripeGateOpen(true);
+              const hasAsaasConnection = await checkAsaasConnection();
+              if (!hasAsaasConnection) {
+                setPaymentsGatePendingAction('create_event');
+                setPaymentsGateOpen(true);
                 return;
               }
 
@@ -2465,10 +2467,10 @@ export default function Events() {
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
               <Button onClick={async () => {
-                const hasStripe = await checkAsaasConnection();
-                if (!hasStripe) {
-                  setStripeGatePendingAction('create_event');
-                  setStripeGateOpen(true);
+                const hasAsaasConnection = await checkAsaasConnection();
+                if (!hasAsaasConnection) {
+                  setPaymentsGatePendingAction('create_event');
+                  setPaymentsGateOpen(true);
                   return;
                 }
 
@@ -3572,7 +3574,7 @@ export default function Events() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                          A plataforma cobra a taxa configurada na empresa sobre cada passagem vendida online via Stripe.
+                          A plataforma cobra a taxa configurada na empresa sobre cada passagem vendida online.
                         </p>
 
                         <div className="flex items-center justify-between">
@@ -3782,7 +3784,7 @@ export default function Events() {
 
                         {/* ─── Simulação financeira (Etapa Passagens) ───
                            Mostra o impacto completo: base + taxas + comissão + líquido.
-                           Mesma fórmula usada na Publicação e no Stripe. */}
+                           Mesma fórmula usada na Publicação e no checkout online. */}
                         {form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (
                           <Card className="p-3 bg-muted/50">
                             <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
@@ -3910,7 +3912,7 @@ export default function Events() {
                       {/* ─── Resumo Financeiro do Evento (Etapa Publicação) ───
                          Cálculo centralizado: comissão da plataforma incide sobre o valor BRUTO
                          cobrado do cliente (preço base + taxas adicionais), garantindo consistência
-                         com o valor enviado ao Stripe (gross_amount). */}
+                         com o valor bruto cobrado no checkout (gross_amount). */}
                       {editingId && form.unit_price && parseCurrencyInputBRL(form.unit_price) > 0 && (
                         <Card className="p-4">
                           <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
@@ -4671,14 +4673,14 @@ export default function Events() {
           </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal bloqueante para monetização: força Stripe antes de criar/publicar evento. */}
-      <Dialog open={stripeGateOpen} onOpenChange={(open) => {
+      {/* Modal bloqueante para monetização: força conexão de pagamentos antes de criar/publicar evento. */}
+      <Dialog open={paymentsGateOpen} onOpenChange={(open) => {
         if (!open) {
-          setStripeGateOpen(false);
-          setStripeGatePendingAction(null);
+          setPaymentsGateOpen(false);
+          setPaymentsGatePendingAction(null);
           return;
         }
-        setStripeGateOpen(open);
+        setPaymentsGateOpen(open);
       }}>
         <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
           <div className="p-6 pb-0">
@@ -4690,9 +4692,9 @@ export default function Events() {
                 <Lock className="h-3 w-3" />
                 Conexão Segura SSL
               </div>
-              <DialogTitle className="text-center text-xl">Conecte sua conta Stripe para começar a vender</DialogTitle>
+              <DialogTitle className="text-center text-xl">Configure seus pagamentos para começar a vender</DialogTitle>
               <p className="text-sm text-center font-medium text-muted-foreground">
-                Receba pagamentos de forma segura e automática diretamente na sua conta bancária.
+                Conecte sua empresa ao Asaas e receba via Pix e cartão com repasse automático.
               </p>
             </DialogHeader>
           </div>
@@ -4701,7 +4703,7 @@ export default function Events() {
             <div className="space-y-2.5">
               {[
                 'Receba pagamentos via Pix e Cartão',
-                'Valores transferidos direto para sua conta',
+                'Repasse automático para a conta da sua empresa',
                 'Processo 100% seguro e criptografado',
               ].map((text) => (
                 <div key={text} className="flex items-center gap-2.5">
@@ -4715,7 +4717,7 @@ export default function Events() {
 
             <div className="rounded-lg bg-muted/50 border p-3">
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Após conectar, você poderá criar eventos, definir preços e começar a vender passagens imediatamente.
+                Após a conexão, você poderá publicar eventos e iniciar as vendas sem configurações adicionais.
               </p>
             </div>
           </div>
@@ -4729,8 +4731,8 @@ export default function Events() {
                 variant="outline"
                 className="h-11"
                 onClick={() => {
-                  setStripeGateOpen(false);
-                  setStripeGatePendingAction(null);
+                  setPaymentsGateOpen(false);
+                  setPaymentsGatePendingAction(null);
                 }}
               >
                 Cancelar
@@ -4739,9 +4741,9 @@ export default function Events() {
                 type="button"
                 className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
                 onClick={handleConnectAsaasFromGate}
-                disabled={stripeConnecting}
+                disabled={asaasConnecting}
               >
-                {stripeConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
+                {asaasConnecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <DollarSign className="h-4 w-4 mr-2" />}
                 Conectar Pagamentos
               </Button>
             </div>
