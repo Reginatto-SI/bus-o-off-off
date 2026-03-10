@@ -13,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import {
   Table,
   TableBody,
@@ -44,6 +46,10 @@ import {
   Clock,
   AlertTriangle,
   Ticket,
+  ChevronDown,
+  Webhook,
+  Code,
+  FileJson,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -73,6 +79,7 @@ const initialFilters: DiagnosticFilters = {
 };
 
 interface DiagnosticSale extends Sale {
+  company_id: string;
   company_name?: string;
   event_name?: string;
   event_date?: string;
@@ -247,6 +254,12 @@ export default function SalesDiagnostic() {
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailCompany, setDetailCompany] = useState<{
+    name: string;
+    asaas_account_email: string | null;
+    asaas_wallet_id: string | null;
+    asaas_account_id: string | null;
+  } | null>(null);
 
   const hasActiveFilters = useMemo(() => (
     filters.search !== '' ||
@@ -375,14 +388,23 @@ export default function SalesDiagnostic() {
     setDetailSale(sale);
     setDetailLoading(true);
     setDetailLogs([]);
+    setDetailCompany(null);
 
-    const { data: logs } = await supabase
-      .from('sale_logs')
-      .select('*')
-      .eq('sale_id', sale.id)
-      .order('created_at', { ascending: true });
+    const [logsRes, companyRes] = await Promise.all([
+      supabase
+        .from('sale_logs')
+        .select('*')
+        .eq('sale_id', sale.id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('companies')
+        .select('name, asaas_account_email, asaas_wallet_id, asaas_account_id')
+        .eq('id', sale.company_id)
+        .single(),
+    ]);
 
-    setDetailLogs((logs ?? []) as SaleLog[]);
+    setDetailLogs((logsRes.data ?? []) as SaleLog[]);
+    setDetailCompany(companyRes.data as any ?? null);
     setDetailLoading(false);
   };
 
@@ -602,7 +624,7 @@ export default function SalesDiagnostic() {
 
         {/* Detail Modal */}
         <Dialog open={!!detailSale} onOpenChange={(open) => !open && setDetailSale(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-primary" />
@@ -611,156 +633,303 @@ export default function SalesDiagnostic() {
             </DialogHeader>
 
             {detailSale && (
-              <ScrollArea className="flex-1 pr-4">
-                <div className="space-y-6 pb-4">
-                  {/* Block 1 — Sale Data */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Dados da Venda
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">ID da venda</span>
-                        <p className="font-mono text-xs break-all">{detailSale.id}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Empresa</span>
-                        <p>{detailSale.company_name}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Evento</span>
-                        <p>{detailSale.event_name}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Comprador</span>
-                        <p>{detailSale.customer_name}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">CPF</span>
-                        <p>{detailSale.customer_cpf}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Quantidade</span>
-                        <p>{detailSale.quantity} passagem(ns)</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Valor total</span>
-                        <p className="font-semibold">
-                          {formatCurrencyBRL(detailSale.gross_amount ?? detailSale.quantity * detailSale.unit_price)}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Data da compra</span>
-                        <p>{format(parseISO(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+              <Tabs defaultValue="resumo" className="flex-1 overflow-hidden flex flex-col">
+                <TabsList className="w-full justify-start flex-shrink-0">
+                  <TabsTrigger value="resumo">Resumo</TabsTrigger>
+                  <TabsTrigger value="fluxo">Fluxo da Venda</TabsTrigger>
+                  <TabsTrigger value="gateway">Gateway</TabsTrigger>
+                  <TabsTrigger value="webhook">Webhook</TabsTrigger>
+                  <TabsTrigger value="payloads">Payloads</TabsTrigger>
+                </TabsList>
+
+                {/* Tab 1 — Resumo */}
+                <TabsContent value="resumo" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-4 pb-4">
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">ID da venda</span>
+                          <p className="font-mono text-xs break-all">{detailSale.id}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Empresa</span>
+                          <p>{detailSale.company_name}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Evento</span>
+                          <p>{detailSale.event_name}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Comprador</span>
+                          <p>{detailSale.customer_name}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">CPF</span>
+                          <p>{detailSale.customer_cpf}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Quantidade</span>
+                          <p>{detailSale.quantity} passagem(ns)</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Valor total</span>
+                          <p className="font-semibold">
+                            {formatCurrencyBRL(detailSale.gross_amount ?? detailSale.quantity * detailSale.unit_price)}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Data da compra</span>
+                          <p>{format(parseISO(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Gateway</span>
+                          <p>{computeGateway(detailSale)}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Status da venda</span>
+                          <div className="mt-1"><StatusBadge status={detailSale.status} /></div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Status do pagamento</span>
+                          <Badge variant={computePaymentStatus(detailSale).variant} className="text-xs mt-1">
+                            {computePaymentStatus(detailSale).label}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Origem da venda</span>
+                          <p>{(detailSale as any).sale_origin ?? '-'}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </ScrollArea>
+                </TabsContent>
 
-                  {/* Block 2 — Payment */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <CreditCard className="h-4 w-4" />
-                      Pagamento
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Gateway</span>
-                        <p>{computeGateway(detailSale)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Status do pagamento</span>
-                        <Badge variant={computePaymentStatus(detailSale).variant} className="text-xs mt-1">
-                          {computePaymentStatus(detailSale).label}
-                        </Badge>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">ID da cobrança</span>
-                        <p className="font-mono text-xs break-all">
-                          {detailSale.asaas_payment_id || detailSale.stripe_payment_intent_id || detailSale.stripe_checkout_session_id || '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Origem</span>
-                        <p>{(detailSale as any).sale_origin ?? '-'}</p>
-                      </div>
-                      {detailSale.platform_fee_total != null && (
-                        <div>
-                          <span className="text-muted-foreground">Taxa plataforma</span>
-                          <p>{formatCurrencyBRL(detailSale.platform_fee_total)}</p>
+                {/* Tab 2 — Fluxo da Venda */}
+                <TabsContent value="fluxo" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-3 pb-4">
+                      <h3 className="text-sm font-semibold text-foreground">Linha do tempo da transação</h3>
+                      {detailLoading ? (
+                        <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando histórico...
                         </div>
-                      )}
-                      {detailSale.partner_fee_amount != null && (
-                        <div>
-                          <span className="text-muted-foreground">Comissão sócio</span>
-                          <p>{formatCurrencyBRL(detailSale.partner_fee_amount)}</p>
-                        </div>
-                      )}
+                      ) : (() => {
+                        const timeline = buildTimeline(detailSale, detailLogs);
+                        return (
+                          <div className="space-y-0">
+                            {timeline.map((entry, i) => {
+                              const EntryIcon = entry.icon;
+                              return (
+                                <div key={i} className="flex items-start gap-3 py-2">
+                                  <div className="flex flex-col items-center">
+                                    <EntryIcon className={`h-4 w-4 ${entry.color}`} />
+                                    {i < timeline.length - 1 && (
+                                      <div className="w-px h-full min-h-[16px] bg-border mt-1" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm">{entry.label}</p>
+                                    <p className="text-xs text-muted-foreground">{entry.time}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
-                  </div>
+                  </ScrollArea>
+                </TabsContent>
 
-                  {/* Block 3 — Integration */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <Activity className="h-4 w-4" />
-                      Integração
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Retorno resumido</span>
-                        <p>{computeReturnMessage(detailSale)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Etapa atual</span>
-                        <span className={`flex items-center gap-1.5 mt-1 ${computeFlowStage(detailSale).color}`}>
-                          {(() => { const F = computeFlowStage(detailSale).icon; return <F className="h-4 w-4" />; })()}
-                          {computeFlowStage(detailSale).label}
-                        </span>
-                      </div>
-                      {detailSale.asaas_payment_status && (
+                {/* Tab 3 — Gateway / Integração */}
+                <TabsContent value="gateway" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-4 pb-4">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Dados da Integração
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <span className="text-muted-foreground">Status Asaas bruto</span>
-                          <p className="font-mono text-xs">{detailSale.asaas_payment_status}</p>
+                          <span className="text-muted-foreground">Gateway utilizado</span>
+                          <p>{computeGateway(detailSale)}</p>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Timeline */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Linha do tempo
-                    </h3>
-
-                    {detailLoading ? (
-                      <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Carregando histórico...
+                        <div>
+                          <span className="text-muted-foreground">Empresa vinculada</span>
+                          <p>{detailCompany?.name ?? detailSale.company_name ?? '-'}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Conta Asaas (email)</span>
+                          <p className="font-mono text-xs">{detailCompany?.asaas_account_email ?? 'N/A'}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Wallet Asaas</span>
+                          <p className="font-mono text-xs">{detailCompany?.asaas_wallet_id ?? 'N/A'}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ID Conta Asaas</span>
+                          <p className="font-mono text-xs">{detailCompany?.asaas_account_id ?? 'N/A'}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ID da cobrança no gateway</span>
+                          <p className="font-mono text-xs break-all">
+                            {detailSale.asaas_payment_id || detailSale.stripe_payment_intent_id || detailSale.stripe_checkout_session_id || '-'}
+                          </p>
+                        </div>
+                        {detailSale.asaas_payment_status && (
+                          <div>
+                            <span className="text-muted-foreground">Status Asaas bruto</span>
+                            <p className="font-mono text-xs">{detailSale.asaas_payment_status}</p>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-muted-foreground">Status taxa plataforma</span>
+                          <p className="font-mono text-xs">{(detailSale as any).platform_fee_status ?? '-'}</p>
+                        </div>
+                        {detailSale.platform_fee_total != null && (
+                          <div>
+                            <span className="text-muted-foreground">Taxa plataforma</span>
+                            <p>{formatCurrencyBRL(detailSale.platform_fee_total)}</p>
+                          </div>
+                        )}
+                        {detailSale.partner_fee_amount != null && (
+                          <div>
+                            <span className="text-muted-foreground">Comissão sócio</span>
+                            <p>{formatCurrencyBRL(detailSale.partner_fee_amount)}</p>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-0">
-                        {buildTimeline(detailSale, detailLogs).map((entry, i) => {
-                          const EntryIcon = entry.icon;
-                          return (
-                            <div key={i} className="flex items-start gap-3 py-2">
-                              <div className="flex flex-col items-center">
-                                <EntryIcon className={`h-4 w-4 ${entry.color}`} />
-                                {i < buildTimeline(detailSale, detailLogs).length - 1 && (
-                                  <div className="w-px h-full min-h-[16px] bg-border mt-1" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm">{entry.label}</p>
-                                <p className="text-xs text-muted-foreground">{entry.time}</p>
-                              </div>
+                      <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                        <p>Endpoint utilizado e tempo de requisição não estão disponíveis nos dados atuais. Para rastreamento completo, considere implementar uma tabela <code className="font-mono">sale_integration_logs</code>.</p>
+                      </div>
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Tab 4 — Webhook */}
+                <TabsContent value="webhook" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    {(() => {
+                      const webhookLog = detailLogs.find(
+                        (l) => l.action === 'payment_confirmed' || l.action === 'payment_received' || l.description.toLowerCase().includes('webhook')
+                      );
+                      const webhookReceived = !!webhookLog;
+                      const processingOk = webhookReceived && detailSale.status === 'pago';
+
+                      return (
+                        <div className="space-y-4 pb-4">
+                          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <Webhook className="h-4 w-4" />
+                            Webhook do Pagamento
+                          </h3>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Webhook recebido</span>
+                              <p className={webhookReceived ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
+                                {webhookReceived ? 'Sim' : 'Não detectado'}
+                              </p>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </ScrollArea>
+                            {webhookLog && (
+                              <>
+                                <div>
+                                  <span className="text-muted-foreground">Data do webhook</span>
+                                  <p>{format(parseISO(webhookLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Tipo do evento</span>
+                                  <p className="font-mono text-xs">{webhookLog.action.toUpperCase()}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Descrição</span>
+                                  <p className="text-xs">{webhookLog.description}</p>
+                                </div>
+                              </>
+                            )}
+                            <div>
+                              <span className="text-muted-foreground">Status do processamento</span>
+                              <p className={processingOk ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
+                                {!webhookReceived ? 'Aguardando' : processingOk ? 'Sucesso' : 'Possível falha'}
+                              </p>
+                            </div>
+                          </div>
+                          {!webhookReceived && (
+                            <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                              <p>Nenhum log de webhook encontrado para esta venda. Isso pode indicar que o pagamento ainda não foi processado ou que o webhook não foi registrado nos logs.</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Tab 5 — Payloads Técnicos */}
+                <TabsContent value="payloads" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-4 pb-4">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <FileJson className="h-4 w-4" />
+                        Payloads Técnicos
+                      </h3>
+
+                      {/* Raw sale data */}
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
+                          <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+                          Ver dados brutos da venda
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <pre className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
+                            {JSON.stringify(
+                              (() => {
+                                const { ...safe } = detailSale as any;
+                                // Remove sensitive/internal fields
+                                delete safe.event;
+                                delete safe.company;
+                                return safe;
+                              })(),
+                              null,
+                              2
+                            )}
+                          </pre>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* Sale logs */}
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
+                          <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+                          Ver logs da venda ({detailLogs.length})
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          {detailLogs.length === 0 ? (
+                            <p className="mt-2 text-xs text-muted-foreground">Nenhum log registrado para esta venda.</p>
+                          ) : (
+                            <pre className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
+                              {JSON.stringify(detailLogs, null, 2)}
+                            </pre>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* Placeholder for API payloads */}
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
+                          <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+                          Ver payload enviado ao gateway
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                            <p>Payloads de requisição e resposta da API do gateway não são armazenados no banco de dados atual.</p>
+                            <p className="mt-1">Para rastreamento completo, considere implementar uma tabela <code className="font-mono">sale_integration_logs</code> com os campos: request_payload, response_payload, status_code, duration_ms.</p>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
             )}
           </DialogContent>
         </Dialog>
