@@ -162,6 +162,16 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Building2
   }]
 }, {
+  id: 'sistema',
+  label: 'Sistema',
+  icon: Wrench,
+  items: [{
+    name: 'Diagnóstico de Vendas',
+    href: '/admin/diagnostico-vendas',
+    icon: Activity,
+    roles: ['developer'] as UserRole[],
+  }]
+}, {
   id: 'conta',
   label: 'Conta',
   icon: User,

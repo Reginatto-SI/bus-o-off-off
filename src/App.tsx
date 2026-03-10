@@ -110,6 +110,7 @@ const App = () => (
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/templates-layout" element={<TemplatesLayout />} />
+            <Route path="/admin/diagnostico-vendas" element={<SalesDiagnostic />} />
             
             <Route path="/:nick" element={<PublicCompanyShortLink />} />
 
