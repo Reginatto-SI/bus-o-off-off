@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store, Share2, AlertTriangle } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store, Share2, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
@@ -38,6 +38,9 @@ const COMPANY_COVER_BUCKET = 'company-covers';
 const MAX_COVER_SIZE_MB = 5;
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
 const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+// Comentário de suporte: este link é apenas um atalho para o painel oficial do Asaas
+// e não participa da autenticação nem da integração via API do sistema.
+const DEFAULT_ASAAS_DASHBOARD_URL = 'https://www.asaas.com';
 
 
 function isBucketMissingErrorMessage(message?: string | null) {
@@ -1490,9 +1493,21 @@ export default function CompanyPage() {
                       {company?.asaas_onboarding_complete ? (
                         <div className="space-y-3">
                           <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                              <p className="font-medium text-green-800">Pagamentos ativos</p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                <p className="font-medium text-green-800">Pagamentos ativos</p>
+                              </div>
+                              <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto">
+                                <a
+                                  href={DEFAULT_ASAAS_DASHBOARD_URL}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Abrir painel Asaas
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </Button>
                             </div>
                             <p className="text-sm text-green-700">
                               Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
