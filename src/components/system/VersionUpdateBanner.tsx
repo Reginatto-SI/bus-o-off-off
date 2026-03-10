@@ -35,7 +35,7 @@ export function VersionUpdateBanner() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={refresh}>
+          <Button size="sm" onClick={() => refresh()}>
             Atualizar agora
           </Button>
           <Button size="sm" variant="secondary" onClick={handleDismiss}>

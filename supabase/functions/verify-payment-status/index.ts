@@ -11,10 +11,6 @@ const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
   ? "https://api.asaas.com/v3"
   : "https://sandbox.asaas.com/api/v3";
 
-/**
- * Verifica o status real de pagamento no Asaas.
- * Resolve vendas que ficam "reservado" quando o webhook falha ou demora.
- */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -69,19 +65,36 @@ serve(async (req) => {
       );
     }
 
+    // Buscar empresa com asaas_api_key e dados de comissão em uma única query.
+    // A cobrança é criada na conta Asaas da empresa, então a consulta de status
+    // deve usar a API key da empresa para ler o pagamento corretamente.
+    const { data: company } = await supabaseAdmin
+      .from("companies")
+      .select("asaas_api_key, platform_fee_percent, partner_split_percent")
+      .eq("id", sale.company_id)
+      .single();
+
     const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
-    if (!PLATFORM_API_KEY) {
+
+    // Priorizar chave da empresa; fallback para chave global apenas para vendas legadas
+    const apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY;
+
+    if (!apiKeyToUse) {
       return new Response(
         JSON.stringify({ paymentStatus: "reservado", detail: "Asaas API key not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    if (!company?.asaas_api_key && PLATFORM_API_KEY) {
+      console.warn(`[verify-payment-status] Empresa ${sale.company_id} sem asaas_api_key — usando chave global como fallback (venda legada?)`);
+    }
+
     // Query Asaas for payment status
     let paymentData: any;
     try {
       const res = await fetch(`${ASAAS_BASE_URL}/payments/${sale.asaas_payment_id}`, {
-        headers: { "access_token": PLATFORM_API_KEY },
+        headers: { "access_token": apiKeyToUse },
       });
 
       if (!res.ok) {
@@ -127,13 +140,7 @@ serve(async (req) => {
 
       console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand Asaas check`);
 
-      // Calculate financial data
-      const { data: company } = await supabaseAdmin
-        .from("companies")
-        .select("platform_fee_percent, partner_split_percent")
-        .eq("id", sale.company_id)
-        .single();
-
+      // Calculate financial data using company data already fetched above
       if (company?.platform_fee_percent != null) {
         const platformFeePercent = Number(company.platform_fee_percent);
         const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
