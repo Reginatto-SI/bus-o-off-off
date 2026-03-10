@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Activity,
   Eye,
@@ -481,22 +482,25 @@ export default function SalesDiagnostic() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="page-container">
         <PageHeader
           title="Diagnóstico de Vendas"
           description="Ferramenta para análise de vendas, pagamentos e retorno das integrações do sistema."
         />
 
-        <FilterCard
-          searchValue={filters.search}
-          onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
-          searchPlaceholder="Nome, CPF, ID da venda ou evento..."
-          searchIcon={Search}
-          selects={filterSelects}
-          mainFilters={mainFilters}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-        />
+        <div className="mb-6">
+          {/* Mantém o mesmo espaçamento e hierarquia visual das demais telas administrativas. */}
+          <FilterCard
+            searchValue={filters.search}
+            onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+            searchPlaceholder="Nome, CPF, ID da venda ou evento..."
+            searchIcon={Search}
+            selects={filterSelects}
+            mainFilters={mainFilters}
+            onClearFilters={() => setFilters(initialFilters)}
+            hasActiveFilters={hasActiveFilters}
+          />
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -509,10 +513,11 @@ export default function SalesDiagnostic() {
             description="Ajuste os filtros para buscar vendas."
           />
         ) : (
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
                   <TableHead>Data</TableHead>
                   {isDeveloper && <TableHead>Empresa</TableHead>}
                   <TableHead>Evento</TableHead>
@@ -524,9 +529,9 @@ export default function SalesDiagnostic() {
                   <TableHead>Etapa do Fluxo</TableHead>
                   <TableHead>Mensagem</TableHead>
                   <TableHead className="w-10"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {sales.map((sale) => {
                   const gateway = computeGateway(sale);
                   const paymentStatus = computePaymentStatus(sale);
@@ -544,54 +549,55 @@ export default function SalesDiagnostic() {
 
                   return (
                     <TableRow key={sale.id}>
-                      <TableCell className="whitespace-nowrap text-sm">
+                      <TableCell className="whitespace-nowrap py-5 text-sm">
                         {format(parseISO(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                       </TableCell>
                       {isDeveloper && (
-                        <TableCell className="text-sm max-w-[120px] truncate">
+                        <TableCell className="max-w-[120px] truncate py-5 text-sm">
                           {sale.company_name}
                         </TableCell>
                       )}
-                      <TableCell className="text-sm max-w-[140px] truncate">
+                      <TableCell className="max-w-[140px] truncate py-5 text-sm">
                         {sale.event_name}
                       </TableCell>
-                      <TableCell className="text-sm max-w-[140px] truncate">
+                      <TableCell className="max-w-[140px] truncate py-5 text-sm">
                         {sale.customer_name}
                       </TableCell>
-                      <TableCell className="text-sm whitespace-nowrap">
+                      <TableCell className="whitespace-nowrap py-5 text-sm">
                         {formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-5">
                         <Badge variant="outline" className="text-xs">
                           {gateway}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-5">
                         <StatusBadge status={sale.status} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-5">
                         <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
                           {paymentStatus.label}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <span className={`flex items-center gap-1.5 text-xs whitespace-nowrap ${flowStage.color}`}>
+                      <TableCell className="py-5">
+                        <span className={`flex items-center gap-1.5 whitespace-nowrap text-sm ${flowStage.color}`}>
                           <FlowIcon className="h-3.5 w-3.5" />
                           {flowStage.label}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">
+                      <TableCell className="max-w-[180px] truncate py-5 text-sm text-muted-foreground">
                         {returnMsg}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-5">
                         <ActionsDropdown actions={actions} />
                       </TableCell>
                     </TableRow>
                   );
                 })}
-              </TableBody>
-            </Table>
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         )}
 
         {/* Detail Modal */}
