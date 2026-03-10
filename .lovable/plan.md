@@ -1,30 +1,82 @@
 
 
-# Imagem padrão para eventos sem banner
+# Plan: Sales Diagnostic Page (`/admin/diagnostico-vendas`)
 
-## Mudança
+## Overview
+Create a developer-only diagnostic page for investigating sales flow, payment status, and gateway integration issues. Follows the Fleet page pattern (AdminLayout, PageHeader, FilterCard, Table, ActionsDropdown, detail modal).
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+## Files to Create/Modify
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
+### 1. New file: `src/pages/admin/SalesDiagnostic.tsx`
+The main page component with:
+
+**Header**: PageHeader with title "Diagnostico de Vendas" and description about analysis tool.
+
+**Filters (FilterCard)**: Date range (from/to), company selector (developer cross-company), event selector, sale status (`reservado`/`pago`/`cancelado`), payment status (Asaas statuses), gateway (`asaas`/`stripe`/`manual`), and text search (name, CPF, sale ID, event name). Clear filters button.
+
+**Table columns**:
+- Data da venda
+- Empresa (company name from join)
+- Evento (event name)
+- Comprador (customer_name)
+- Valor (gross_amount or quantity * unit_price)
+- Gateway (derived from sale_origin + asaas_payment_id / stripe_checkout_session_id)
+- Status da venda (StatusBadge)
+- Status do pagamento (asaas_payment_status or derived from stripe)
+- Etapa atual do fluxo (computed from sale state: sale created -> charge sent -> payment pending -> webhook received -> paid -> ticket generated)
+- Mensagem de retorno (summary from available data)
+- Actions dropdown with "Ver detalhes da venda"
+
+**Detail modal** with three blocks:
+- Block 1 — Sale data: ID, company, event, buyer, CPF, quantity, total, date
+- Block 2 — Payment: gateway, payment status, gateway charge ID (asaas_payment_id or stripe_payment_intent_id), payment link
+- Block 3 — Integration: summary of API return, communication status, error message (no sensitive data like API keys)
+- Timeline: reconstructed from sale_logs + sale fields (created_at, asaas_payment_id presence, asaas_payment_status, status changes, etc.)
+
+**Data source**: Query `sales` table with joins to `events`, `companies`, `sale_logs`. For developer users, no company_id filter (cross-company). For gerente, filter by activeCompanyId.
+
+**Flow stage computation** (pure frontend logic based on sale fields):
+- `sale_origin === 'admin_manual'` and no gateway IDs → "Venda manual"
+- `asaas_payment_id` exists → gateway = "Asaas"
+- `stripe_checkout_session_id` exists → gateway = "Stripe"
+- Stage derived from: has payment ID? → "Cobranca enviada". Status = pago? → "Pagamento confirmado". Has tickets? → "Passagem gerada". Cancelled? → "Cancelado".
+
+### 2. Modify: `src/components/layout/AdminSidebar.tsx`
+Add a new navigation group `sistema` (after `administracao`, before `conta`) with:
+```
+{
+  id: 'sistema',
+  label: 'Sistema',
+  icon: Wrench, // or Activity
+  items: [{
+    name: 'Diagnostico de Vendas',
+    href: '/admin/diagnostico-vendas',
+    icon: Activity,
+    roles: ['developer']
+  }]
+}
 ```
 
-### Componentes afetados
+### 3. Modify: `src/App.tsx`
+Add route: `<Route path="/admin/diagnostico-vendas" element={<SalesDiagnostic />} />`
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+## Access Control
+- Sidebar item restricted to `roles: ['developer']`
+- Page component uses AdminLayout (existing auth guard)
+- Developer can query cross-company (no company_id filter); gerente filtered by activeCompanyId
 
-### Lógica simplificada (ambos os cards)
+## No Database Changes Required
+All data already exists in `sales`, `sale_logs`, `events`, `companies` tables. The diagnostic view is read-only, using existing fields (`asaas_payment_id`, `asaas_payment_status`, `stripe_checkout_session_id`, `sale_origin`, `platform_fee_status`, etc.).
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+## Timeline Reconstruction Logic
+The modal timeline is built from:
+1. `sale.created_at` → "Venda criada"
+2. Presence of `asaas_payment_id` or `stripe_checkout_session_id` → "Cobranca enviada ao gateway"
+3. `asaas_payment_status` values → "Pagamento aguardando" / "Pagamento confirmado" / "Pagamento falhou"
+4. `sale.status = 'pago'` → "Venda atualizada para pago"
+5. `sale_logs` entries → additional timeline events (status changes, cancellations, edits)
+6. Ticket count > 0 → "Passagem gerada"
 
-### Imagem padrão
-
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
-
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+## Estimated Size
+~600-800 lines for the page component, following Sales.tsx patterns but simpler (read-only, no edit/cancel actions).
 
