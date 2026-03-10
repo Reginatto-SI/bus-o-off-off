@@ -253,6 +253,12 @@ export default function SalesDiagnostic() {
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailCompany, setDetailCompany] = useState<{
+    name: string;
+    asaas_account_email: string | null;
+    asaas_wallet_id: string | null;
+    asaas_account_id: string | null;
+  } | null>(null);
 
   const hasActiveFilters = useMemo(() => (
     filters.search !== '' ||
