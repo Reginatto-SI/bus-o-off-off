@@ -345,6 +345,7 @@ export default function CompanyPage() {
 
 
   const [asaasConnecting, setAsaasConnecting] = useState(false);
+  const [asaasRevalidating, setAsaasRevalidating] = useState(false);
   const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
@@ -396,6 +397,31 @@ export default function CompanyPage() {
       toast.error(errorMessage);
     } finally {
       setAsaasConnecting(false);
+    }
+  };
+
+  const handleRevalidateAsaasIntegration = async () => {
+    if (!editingId) {
+      toast.error('Empresa não identificada para validar integração');
+      return;
+    }
+
+    setAsaasRevalidating(true);
+    try {
+      // Comentário de suporte: reutiliza a mesma edge function para validar novamente
+      // os dados da conta conectada sem alterar o layout atual do card.
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
+        body: { company_id: editingId, mode: 'revalidate' },
+      });
+
+      if (error) throw new Error((data as any)?.error || error.message);
+
+      await fetchCompany();
+      toast.success('Integração verificada com sucesso');
+    } catch {
+      toast.error('Não foi possível validar a integração com o Asaas. Verifique se a API Key cadastrada ainda é válida.');
+    } finally {
+      setAsaasRevalidating(false);
     }
   };
 
@@ -1544,16 +1570,35 @@ export default function CompanyPage() {
                                 <CheckCircle2 className="h-5 w-5 text-green-600" />
                                 <p className="font-medium text-green-800">Pagamentos ativos</p>
                               </div>
-                              <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto">
-                                <a
-                                  href={DEFAULT_ASAAS_DASHBOARD_URL}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => void handleRevalidateAsaasIntegration()}
+                                  disabled={asaasRevalidating}
+                                  className="w-full sm:w-auto"
                                 >
-                                  Abrir painel Asaas
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </Button>
+                                  {asaasRevalidating ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Verificando...
+                                    </>
+                                  ) : (
+                                    'Verificar integração'
+                                  )}
+                                </Button>
+                                <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto">
+                                  <a
+                                    href={DEFAULT_ASAAS_DASHBOARD_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Abrir painel Asaas
+                                    <ExternalLink className="h-4 w-4" />
+                                  </a>
+                                </Button>
+                              </div>
                             </div>
                             <p className="text-sm text-green-700">
                               Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.

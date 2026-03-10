@@ -81,7 +81,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, asaas_wallet_id, asaas_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
       .eq("id", company_id)
       .single();
 
@@ -98,6 +98,69 @@ serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ====== MODE: Revalidate existing integration ======
+    if (mode === "revalidate") {
+      if (!company.asaas_api_key) {
+        return new Response(
+          JSON.stringify({ error: "Não foi possível validar a integração sem API Key cadastrada." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
+          headers: { "access_token": company.asaas_api_key },
+        });
+
+        if (!myAccountRes.ok) {
+          const errBody = await myAccountRes.text();
+          console.error("Asaas myAccount revalidation failed:", errBody);
+          return new Response(
+            JSON.stringify({ error: "API Key inválida ou conta não encontrada. Verifique a chave e tente novamente." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const accountData = await myAccountRes.json();
+        const walletId = accountData.walletId;
+
+        if (!walletId) {
+          return new Response(
+            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Comentário de manutenção: nesta ação atualizamos apenas os campos exibidos no card
+        // e reafirmamos o status de integração para manter o UI sincronizado com o Asaas.
+        await supabaseAdmin
+          .from("companies")
+          .update({
+            asaas_wallet_id: walletId,
+            asaas_account_id: accountData.id || null,
+            asaas_account_email: accountData.email || null,
+            asaas_onboarding_complete: true,
+          })
+          .eq("id", company_id);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            wallet_id: walletId,
+            account_name: accountData.name || accountData.tradingName || null,
+            account_email: accountData.email || null,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (err) {
+        console.error("Error revalidating Asaas account:", err);
+        return new Response(
+          JSON.stringify({ error: "Erro ao validar integração com o Asaas. Tente novamente." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ====== MODE: Link existing account ======
