@@ -90,15 +90,21 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: companyData.companyId, mode: 'create' },
       });
-      if (error) throw new Error((data as { error?: string } | null)?.error || error.message);
+
+      // supabase.functions.invoke: em status >= 400, error vem preenchido e data pode conter o body JSON
+      if (error) {
+        // Tentar extrair mensagem do body retornado pela edge function
+        const errorMessage = (data as any)?.error || error.message || 'Não foi possível conectar sua conta Asaas.';
+        throw new Error(errorMessage);
+      }
 
       toast.success(data?.already_complete ? 'Conta Asaas já estava conectada.' : 'Conta Asaas conectada com sucesso.');
       await onSuccess?.();
       setStep(4);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Não foi possível conectar sua conta Asaas.';
-      // Se e-mail já está em uso, sugerir vincular conta existente
-      if (message.toLowerCase().includes('vincular conta existente') || message.toLowerCase().includes('já possui uma conta')) {
+      // Se e-mail já está em uso, redirecionar automaticamente para vincular conta existente
+      if (message.includes('Vincular conta existente') || message.includes('já possui uma conta')) {
         toast.error(message);
         setMode('link');
         setStep(2);
