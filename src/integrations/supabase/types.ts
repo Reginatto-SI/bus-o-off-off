@@ -175,8 +175,8 @@ export type Database = {
         Row: {
           accent_color: string | null
           address: string | null
-          asaas_account_id: string | null
           asaas_account_email: string | null
+          asaas_account_id: string | null
           asaas_api_key: string | null
           asaas_onboarding_complete: boolean
           asaas_wallet_id: string | null
@@ -222,8 +222,8 @@ export type Database = {
         Insert: {
           accent_color?: string | null
           address?: string | null
-          asaas_account_id?: string | null
           asaas_account_email?: string | null
+          asaas_account_id?: string | null
           asaas_api_key?: string | null
           asaas_onboarding_complete?: boolean
           asaas_wallet_id?: string | null
@@ -269,8 +269,8 @@ export type Database = {
         Update: {
           accent_color?: string | null
           address?: string | null
-          asaas_account_id?: string | null
           asaas_account_email?: string | null
+          asaas_account_id?: string | null
           asaas_api_key?: string | null
           asaas_onboarding_complete?: boolean
           asaas_wallet_id?: string | null
