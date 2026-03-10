@@ -132,6 +132,8 @@ serve(async (req) => {
             asaas_wallet_id: walletId,
             asaas_api_key: api_key,
             asaas_account_id: accountData.id || null,
+            // Mantém o e-mail efetivo da conta vinculada para exibição em /admin/empresa.
+            asaas_account_email: accountData.email || null,
             asaas_onboarding_complete: true,
           })
           .eq("id", company_id);
@@ -245,6 +247,8 @@ serve(async (req) => {
         .update({
           asaas_wallet_id: walletId,
           asaas_account_id: accountId,
+          // No fluxo de criação de subconta, o e-mail da conta Asaas é o e-mail cadastrado da empresa.
+          asaas_account_email: company.email,
           asaas_api_key: createData.apiKey || null,
           asaas_onboarding_complete: true,
         })

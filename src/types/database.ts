@@ -45,6 +45,7 @@ export interface Company {
   stripe_onboarding_complete: boolean;
   // Asaas
   asaas_account_id: string | null;
+  asaas_account_email: string | null;
   asaas_wallet_id: string | null;
   asaas_api_key: string | null;
   asaas_onboarding_complete: boolean;
