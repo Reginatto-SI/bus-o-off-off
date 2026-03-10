@@ -79,6 +79,7 @@ const initialFilters: DiagnosticFilters = {
 };
 
 interface DiagnosticSale extends Sale {
+  company_id: string;
   company_name?: string;
   event_name?: string;
   event_date?: string;
