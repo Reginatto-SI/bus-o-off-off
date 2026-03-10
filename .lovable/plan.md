@@ -1,30 +1,29 @@
 
 
-# Imagem padrão para eventos sem banner
+# Plan: Fix Developer User Blank Screen / Infinite Loading
 
-## Mudança
+## Root Cause
 
-Adicionar uma constante de fallback e usá-la nos 2 componentes de card quando `event.image_url` estiver vazio.
+Two bugs in `AuthContext.tsx` create a race condition that leaves the developer user stuck on a loading spinner:
 
-### Constante
-```ts
-const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
-```
+### Bug 1 — `loading` set to `false` before data is ready
+Line 222: `setLoading(false)` fires inside `onAuthStateChange` **immediately**, but `fetchUserData` is deferred with `setTimeout(..., 0)`. This means `loading=false` while `userRole` is still `null`. AdminLayout sees `!userRole` → shows spinner forever (lines 89-94).
 
-### Componentes afetados
+### Bug 2 — Developer role never set when no matching company role entry
+Line 165: `rolesData.find(r => r.company_id === validCompanyId)` — the developer fetches ALL active companies (cross-company), but may not have a `user_roles` row for the company saved in localStorage. When `roleForCompany` is undefined, `setUserRole` is never called → `userRole` stays `null` permanently.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/public/EventCard.tsx` | Calcular `const imageUrl = event.image_url \|\| DEFAULT_EVENT_IMAGE` e usar sempre o branch com imagem (remover o else com ícone Calendar) |
-| `src/components/public/EventCardFeatured.tsx` | Mesma lógica: sempre renderizar imagem, usando fallback |
+This is why clearing browser storage "fixes" it temporarily — it removes the stale localStorage entry, forcing a different company selection path.
 
-### Lógica simplificada (ambos os cards)
+## Fix (single file: `src/contexts/AuthContext.tsx`)
 
-Em vez de `event.image_url ? <img> : <Calendar icon>`, sempre renderizar `<img src={imageUrl}>` com o blur background. O branch sem imagem desaparece.
+1. **Move `setLoading(false)` inside `fetchUserData`** — loading only clears after all data (profile, role, company) is fully resolved.
 
-### Imagem padrão
+2. **Developer fallback for role**: After resolving `validCompanyId`, if no `roleForCompany` is found but user is a developer, always set `userRole = 'developer'`. This covers the case where developer has no `user_roles` entry for a particular company.
 
-A imagem `public/assets/eventos/evento_padrao.png` já existe no projeto (`public/assets/vitrine/Img_padrao_vitrine.png` como referência). Será necessário colocar a imagem padrão de evento nesse caminho — ou reutilizar a existente apontando para ela.
+3. **Stale localStorage cleanup**: If the saved company from localStorage is not found in the fetched active companies list, remove the stale entry immediately to prevent repeat failures.
 
-Nenhuma alteração de lógica, rota ou fluxo de compra.
+4. **Ensure `setLoading(false)` is called in ALL code paths** within `fetchUserData` (success, error, empty roles) so the user is never stuck.
+
+## Files Changed
+- `src/contexts/AuthContext.tsx` — single file fix
 
