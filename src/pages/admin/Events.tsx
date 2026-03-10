@@ -3645,7 +3645,7 @@ export default function Events() {
                           <div className="space-y-0.5">
                             <Label htmlFor="platform_fee_pass">Repassar taxa para o cliente</Label>
                             <p className="text-xs text-muted-foreground">
-                              Se ativado, o cliente pagará o preço base + taxa da plataforma da empresa
+                              Se ativado, o cliente pagará o preço base + taxa total (plataforma + sócio) da empresa
                             </p>
                           </div>
                           <Switch
@@ -4036,7 +4036,7 @@ export default function Events() {
                                   </div>
                                   <Separator className="my-1" />
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Comissão da plataforma ({feePercent}%)</span>
+                                    <span className="text-muted-foreground">Comissão plataforma + sócio ({feePercent}%)</span>
                                     <span>{formatCurrencyBRL(platformFee)}</span>
                                   </div>
                                   <div className="flex justify-between">
