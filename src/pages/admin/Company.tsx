@@ -1561,6 +1561,11 @@ export default function CompanyPage() {
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
                               A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 7.5) + (company?.partner_split_percent ?? 0)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
+                            <p className="text-xs text-green-700">
+                              {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
+                                  ainda não foi retornado/salvo na vinculação da conta Asaas. */}
+                              Conta Asaas conectada: {company.asaas_account_email || 'Não identificado'}
+                            </p>
                             {company.asaas_wallet_id && (
                               <p className="text-xs text-green-600 font-mono">
                                 Wallet: {company.asaas_wallet_id}
