@@ -27,6 +27,7 @@ import SalesReport from "./pages/admin/SalesReport";
 import SellersCommissionReport from "./pages/admin/SellersCommissionReport";
 import TemplatesLayout from "./pages/admin/TemplatesLayout";
 import CommercialPartners from "./pages/admin/CommercialPartners";
+import SalesDiagnostic from "./pages/admin/SalesDiagnostic";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
@@ -109,6 +110,7 @@ const App = () => (
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/templates-layout" element={<TemplatesLayout />} />
+            <Route path="/admin/diagnostico-vendas" element={<SalesDiagnostic />} />
             
             <Route path="/:nick" element={<PublicCompanyShortLink />} />
 

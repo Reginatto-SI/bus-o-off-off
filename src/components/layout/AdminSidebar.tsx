@@ -26,6 +26,8 @@ import {
   ChevronDown,
   LayoutDashboard,
   Building2,
+  Wrench,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -158,6 +160,16 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Building2
+  }]
+}, {
+  id: 'sistema',
+  label: 'Sistema',
+  icon: Wrench,
+  items: [{
+    name: 'Diagnóstico de Vendas',
+    href: '/admin/diagnostico-vendas',
+    icon: Activity,
+    roles: ['developer'] as UserRole[],
   }]
 }, {
   id: 'conta',
