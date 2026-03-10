@@ -313,7 +313,7 @@ export default function Events() {
   const [asaasWizardCompanyData, setAsaasWizardCompanyData] = useState<AsaasOnboardingCompanyData | null>(null);
   // Comentário de manutenção: mantemos a ação pendente para continuar o fluxo após conectar pagamentos.
   const [paymentsGatePendingAction, setPaymentsGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
-  // Fonte de verdade das taxas: na venda online a comissão real é plataforma + sócio.
+  // Fonte de verdade das taxas: na venda online a comissão exibida considera o total configurado da empresa.
   const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState<number | null>(null);
   const [companyPartnerSplitPercent, setCompanyPartnerSplitPercent] = useState<number>(0);
 
@@ -3633,12 +3633,12 @@ export default function Events() {
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
                           <DollarSign className="h-4 w-4" />
-                          Taxa da Plataforma + Sócio ({hasValidCompanyPlatformFee ? `${companyTotalPlatformFeePercent}%` : 'indisponível'})
+                          Taxa da Plataforma ({hasValidCompanyPlatformFee ? `${companyTotalPlatformFeePercent}%` : 'indisponível'})
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                          A taxa aplicada na venda online considera a soma da taxa da plataforma com a taxa do sócio configuradas na empresa.
+                          A taxa aplicada na venda online considera a taxa total configurada na empresa.
                         </p>
 
                         <div className="flex items-center justify-between">
@@ -3683,7 +3683,7 @@ export default function Events() {
                                   <span>{formatCurrencyBRL(basePrice)}</span>
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
-                                  <span>Taxa da plataforma + sócio ({companyTotalPlatformFeePercent}%)</span>
+                                  <span>Taxa da plataforma ({companyTotalPlatformFeePercent}%)</span>
                                   <span>{formatCurrencyBRL(platformFee)}</span>
                                 </div>
                                 <Separator className="my-1" />
@@ -3885,7 +3885,7 @@ export default function Events() {
                                           : grossPerTicket
                                       )}</span>
                                     </div>
-                                    {/* Comissão total (plataforma + sócio) — deve espelhar o split financeiro real. */}
+                                    {/* Comissão total da plataforma — deve espelhar o split financeiro real configurado na empresa. */}
                                     {hasValidCompanyPlatformFee && (() => {
                                       const feePercent = companyTotalPlatformFeePercent;
                                       const platformFee = Math.round(grossPerTicket * (feePercent / 100) * 100) / 100;
@@ -3896,7 +3896,7 @@ export default function Events() {
                                         <>
                                           <Separator className="my-1" />
                                           <div className="flex justify-between text-muted-foreground">
-                                            <span>Comissão plataforma + sócio ({feePercent}%)</span>
+                                            <span>Comissão da plataforma ({feePercent}%)</span>
                                             <span>{formatCurrencyBRL(platformFee)}</span>
                                           </div>
                                           <div className="flex justify-between text-muted-foreground">
