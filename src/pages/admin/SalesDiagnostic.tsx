@@ -387,14 +387,23 @@ export default function SalesDiagnostic() {
     setDetailSale(sale);
     setDetailLoading(true);
     setDetailLogs([]);
+    setDetailCompany(null);
 
-    const { data: logs } = await supabase
-      .from('sale_logs')
-      .select('*')
-      .eq('sale_id', sale.id)
-      .order('created_at', { ascending: true });
+    const [logsRes, companyRes] = await Promise.all([
+      supabase
+        .from('sale_logs')
+        .select('*')
+        .eq('sale_id', sale.id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('companies')
+        .select('name, asaas_account_email, asaas_wallet_id, asaas_account_id')
+        .eq('id', sale.company_id)
+        .single(),
+    ]);
 
-    setDetailLogs((logs ?? []) as SaleLog[]);
+    setDetailLogs((logsRes.data ?? []) as SaleLog[]);
+    setDetailCompany(companyRes.data as any ?? null);
     setDetailLoading(false);
   };
 
