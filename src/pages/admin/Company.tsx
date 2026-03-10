@@ -1557,7 +1557,9 @@ export default function CompanyPage() {
                             </div>
                             <p className="text-sm text-green-700">
                               Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
-                              A plataforma retém automaticamente <strong>{company?.platform_fee_percent ?? 7.5}%</strong> de comissão sobre cada venda online.
+                              {/* Comentário de regra de negócio: o desconto total exibido ao usuário
+                                  soma taxa da plataforma + taxa do sócio (split Asaas). */}
+                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 7.5) + (company?.partner_split_percent ?? 0)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
                             {company.asaas_wallet_id && (
                               <p className="text-xs text-green-600 font-mono">
