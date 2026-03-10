@@ -504,7 +504,7 @@ export default function SalesDiagnostic() {
           </div>
         ) : sales.length === 0 ? (
           <EmptyState
-            icon={Activity}
+            icon={<Activity className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
             description="Ajuste os filtros para buscar vendas."
           />
