@@ -64,7 +64,7 @@ serve(async (req) => {
     // 2. Buscar empresa com configuração de comissão
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("asaas_wallet_id, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
+      .select("asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -88,6 +88,22 @@ serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Importante: a cobrança precisa ser criada no contexto da conta da empresa.
+    // Se cair no token da plataforma, o checkout exibe o emissor incorreto.
+    const companyApiKey = company.asaas_api_key;
+    if (!companyApiKey) {
+      return new Response(
+        JSON.stringify({
+          error: "Empresa sem API Key do Asaas vinculada. Reconecte a conta Asaas da empresa para emitir cobranças no nome correto.",
+          error_code: "missing_company_asaas_api_key",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const platformFeePercent = Number(company.platform_fee_percent ?? 0);
@@ -139,6 +155,36 @@ serve(async (req) => {
       },
     ];
 
+    // A plataforma deve continuar recebendo comissão via split,
+    // mesmo com a cobrança sendo criada na conta da empresa.
+    const platformWalletFromEnv = Deno.env.get("ASAAS_WALLET_ID");
+    let platformWalletId = platformWalletFromEnv ?? null;
+
+    if (!platformWalletId && platformFeePercent > 0) {
+      const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
+        headers: { "access_token": PLATFORM_API_KEY },
+      });
+
+      if (myAccountRes.ok) {
+        const myAccountData = await myAccountRes.json();
+        platformWalletId = myAccountData?.walletId ?? null;
+      }
+    }
+
+    if (platformFeePercent > 0) {
+      if (!platformWalletId) {
+        return new Response(
+          JSON.stringify({ error: "Não foi possível obter wallet da plataforma para aplicar o split." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      splitArray.push({
+        walletId: platformWalletId,
+        percentualValue: platformFeePercent,
+      });
+    }
+
     // Incluir sócio no split somente se aplicável
     if (activePartner && effectivePartnerFee > 0) {
       splitArray.push({
@@ -153,7 +199,7 @@ serve(async (req) => {
 
     const searchRes = await fetch(
       `${ASAAS_BASE_URL}/customers?cpfCnpj=${customerCpf}`,
-      { headers: { "access_token": PLATFORM_API_KEY } }
+      { headers: { "access_token": companyApiKey } }
     );
     const searchData = await searchRes.json();
 
@@ -164,7 +210,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "access_token": PLATFORM_API_KEY,
+          "access_token": companyApiKey,
         },
         body: JSON.stringify({
           name: sale.customer_name,
@@ -205,7 +251,7 @@ serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "access_token": PLATFORM_API_KEY,
+        "access_token": companyApiKey,
       },
       body: JSON.stringify(paymentPayload),
     });
