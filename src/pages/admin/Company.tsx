@@ -161,6 +161,8 @@ export default function CompanyPage() {
     social_telegram: '',
     social_twitter: '',
     social_website: '',
+    platform_fee_percent: '7.5',
+    partner_split_percent: '0',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -261,6 +263,10 @@ export default function CompanyPage() {
       social_telegram: data?.social_telegram ?? '',
       social_twitter: data?.social_twitter ?? '',
       social_website: data?.social_website ?? '',
+      // Comentário: taxas ficam no estado local do formulário para evitar autosave no onChange
+      // e impedir perda de foco durante a digitação de decimais.
+      platform_fee_percent: String(data?.platform_fee_percent ?? 7.5),
+      partner_split_percent: String(data?.partner_split_percent ?? 0),
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -424,7 +430,19 @@ export default function CompanyPage() {
       social_telegram: '',
       social_twitter: '',
       social_website: '',
+      platform_fee_percent: '7.5',
+      partner_split_percent: '0',
     });
+  };
+
+  const normalizePercentInput = (value: string) => value.replace(',', '.').trim();
+
+  const parsePercentInput = (value: string) => {
+    const normalized = normalizePercentInput(value);
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) return NaN;
+    return parsed;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -505,6 +523,21 @@ export default function CompanyPage() {
       return;
     }
 
+    const platformFeePercent = parsePercentInput(form.platform_fee_percent);
+    const partnerSplitPercent = parsePercentInput(form.partner_split_percent);
+
+    if (platformFeePercent === null || Number.isNaN(platformFeePercent) || platformFeePercent < 0 || platformFeePercent > 100) {
+      toast.error('Taxa da Plataforma deve estar entre 0 e 100');
+      setSaving(false);
+      return;
+    }
+
+    if (partnerSplitPercent === null || Number.isNaN(partnerSplitPercent) || partnerSplitPercent < 0 || partnerSplitPercent > 100) {
+      toast.error('Taxa do Sócio deve estar entre 0 e 100');
+      setSaving(false);
+      return;
+    }
+
     // Comentário de manutenção:
     // - Persistimos documento sempre com apenas dígitos para evitar divergência entre máscara/UI e banco.
     // - Mantemos `document` e `cnpj` por compatibilidade legada, mas no mesmo padrão normalizado.
@@ -555,6 +588,10 @@ export default function CompanyPage() {
       social_telegram: form.social_telegram?.trim() || null,
       social_twitter: form.social_twitter?.trim() || null,
       social_website: form.social_website?.trim() || null,
+      // Comentário: persistência das taxas acontece somente no submit (Salvar Empresa)
+      // para evitar re-render prematuro e perda de foco nos campos de comissão.
+      platform_fee_percent: platformFeePercent,
+      partner_split_percent: partnerSplitPercent,
     };
 
     let error;
@@ -1377,9 +1414,12 @@ export default function CompanyPage() {
                     <div className="space-y-6">
                       {/* Comissionamento da Plataforma — Developer Only */}
                       {isDeveloper && (() => {
-                        // Cálculo dinâmico: taxa_total = plataforma + sócio; empresa = 100 - taxa_total
-                        const platformFee = company?.platform_fee_percent ?? 7.5;
-                        const partnerFee = company?.partner_split_percent ?? 0;
+                        // Comentário de manutenção:
+                        // Estes campos usam estado local controlado para permitir digitação fluida
+                        // (incluindo decimais com ponto/vírgula) sem disparar salvamento automático.
+                        // A persistência ocorre somente no botão "Salvar Empresa" (handleSubmit).
+                        const platformFee = parsePercentInput(form.platform_fee_percent) ?? 0;
+                        const partnerFee = parsePercentInput(form.partner_split_percent) ?? 0;
                         const totalFee = platformFee + partnerFee;
                         const companyShare = 100 - totalFee;
                         const sumExceeds100 = totalFee > 100;
@@ -1401,16 +1441,19 @@ export default function CompanyPage() {
                               <Label htmlFor="platform_fee_percent">Taxa da Plataforma (%)</Label>
                               <Input
                                 id="platform_fee_percent"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 min="0"
                                 max="100"
-                                step="0.5"
-                                value={platformFee}
-                                onChange={async (e) => {
-                                  const val = parseFloat(e.target.value);
-                                  if (editingId && !isNaN(val) && val >= 0 && val <= 100) {
-                                    await supabase.from('companies').update({ platform_fee_percent: val }).eq('id', editingId);
-                                    fetchCompany();
+                                step="any"
+                                value={form.platform_fee_percent}
+                                onChange={(e) => {
+                                  const rawValue = e.target.value;
+                                  const normalizedValue = rawValue.replace(',', '.');
+
+                                  // Aceita vazio durante edição e números com decimal (ex: 3,5 -> 3.5).
+                                  if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
+                                    setForm((prev) => ({ ...prev, platform_fee_percent: normalizedValue }));
                                   }
                                 }}
                               />
@@ -1422,16 +1465,19 @@ export default function CompanyPage() {
                               <Label htmlFor="partner_split_percent">Taxa do Sócio (%)</Label>
                               <Input
                                 id="partner_split_percent"
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 min="0"
                                 max="100"
-                                step="0.5"
-                                value={partnerFee}
-                                onChange={async (e) => {
-                                  const val = parseFloat(e.target.value);
-                                  if (editingId && !isNaN(val) && val >= 0 && val <= 100) {
-                                    await supabase.from('companies').update({ partner_split_percent: val }).eq('id', editingId);
-                                    fetchCompany();
+                                step="any"
+                                value={form.partner_split_percent}
+                                onChange={(e) => {
+                                  const rawValue = e.target.value;
+                                  const normalizedValue = rawValue.replace(',', '.');
+
+                                  // Mantém edição local para evitar perda de foco causada por autosave.
+                                  if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
+                                    setForm((prev) => ({ ...prev, partner_split_percent: normalizedValue }));
                                   }
                                 }}
                               />
