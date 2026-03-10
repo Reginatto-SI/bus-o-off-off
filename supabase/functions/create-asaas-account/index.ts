@@ -206,6 +206,7 @@ serve(async (req) => {
         cpfCnpj: documentDigits,
         companyType: legalType === "PF" ? "MEI" : "LIMITED",
         incomeValue: 5000,
+        birthDate: "1990-01-01",
       };
 
       const createRes = await fetch(`${ASAAS_BASE_URL}/accounts`, {
