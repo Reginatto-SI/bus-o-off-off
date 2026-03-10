@@ -1375,7 +1375,15 @@ export default function CompanyPage() {
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
                       {/* Comissionamento da Plataforma — Developer Only */}
-                      {isDeveloper && (
+                      {isDeveloper && (() => {
+                        // Cálculo dinâmico: taxa_total = plataforma + sócio; empresa = 100 - taxa_total
+                        const platformFee = company?.platform_fee_percent ?? 7.5;
+                        const partnerFee = company?.partner_split_percent ?? 0;
+                        const totalFee = platformFee + partnerFee;
+                        const companyShare = 100 - totalFee;
+                        const sumExceeds100 = totalFee > 100;
+
+                        return (
                         <div className="rounded-lg border p-4 space-y-4">
                           <div className="flex items-center justify-between gap-2">
                             <h3 className="font-medium">Comissionamento da Plataforma</h3>
@@ -1385,7 +1393,7 @@ export default function CompanyPage() {
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Configure a taxa cobrada pela plataforma e o percentual repassado ao parceiro.
+                            Configure a taxa da plataforma e a taxa do sócio para esta empresa. A empresa recebe o restante via split direto no Asaas.
                           </p>
                           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                             <div className="space-y-2">
@@ -1396,40 +1404,69 @@ export default function CompanyPage() {
                                 min="0"
                                 max="100"
                                 step="0.5"
-                                value={company?.platform_fee_percent ?? 7.5}
+                                value={platformFee}
                                 onChange={async (e) => {
                                   const val = parseFloat(e.target.value);
-                                  if (editingId && !isNaN(val)) {
+                                  if (editingId && !isNaN(val) && val >= 0 && val <= 100) {
                                     await supabase.from('companies').update({ platform_fee_percent: val }).eq('id', editingId);
                                     fetchCompany();
                                   }
                                 }}
                               />
+                              <p className="text-xs text-muted-foreground">
+                                Comissão retida pela plataforma sobre cada venda online.
+                              </p>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="partner_split_percent">Repasse ao Parceiro (%)</Label>
+                              <Label htmlFor="partner_split_percent">Taxa do Sócio (%)</Label>
                               <Input
                                 id="partner_split_percent"
                                 type="number"
                                 min="0"
                                 max="100"
                                 step="0.5"
-                                value={company?.partner_split_percent ?? 50}
+                                value={partnerFee}
                                 onChange={async (e) => {
                                   const val = parseFloat(e.target.value);
-                                  if (editingId && !isNaN(val)) {
+                                  if (editingId && !isNaN(val) && val >= 0 && val <= 100) {
                                     await supabase.from('companies').update({ partner_split_percent: val }).eq('id', editingId);
                                     fetchCompany();
                                   }
                                 }}
                               />
                               <p className="text-xs text-muted-foreground">
-                                Percentual da comissão da plataforma que será repassado automaticamente ao parceiro via split Asaas.
+                                Percentual enviado diretamente ao sócio ativo via split Asaas. Se zero ou sem sócio ativo, será ignorado.
                               </p>
                             </div>
                           </div>
+
+                          {/* Resumo calculado automaticamente */}
+                          <div className="rounded-md bg-muted/50 p-3 space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Taxa total da plataforma:</span>
+                              <span className={`font-medium ${sumExceeds100 ? 'text-destructive' : ''}`}>
+                                {totalFee.toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Empresa receberá:</span>
+                              <span className={`font-medium ${sumExceeds100 ? 'text-destructive' : 'text-green-700'}`}>
+                                {companyShare.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {sumExceeds100 && (
+                            <Alert variant="destructive">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertDescription>
+                                A soma das taxas excede 100%. Corrija os valores antes de continuar.
+                              </AlertDescription>
+                            </Alert>
+                          )}
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Integração Asaas */}
                       <div className="flex items-center justify-between">

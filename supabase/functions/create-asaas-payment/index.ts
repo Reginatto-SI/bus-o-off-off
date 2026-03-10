@@ -12,9 +12,14 @@ const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
   : "https://sandbox.asaas.com/api/v3";
 
 /**
- * Cria cobrança no Asaas para uma venda.
- * Modelo: a PLATAFORMA cria a cobrança e faz split com a empresa.
- * A empresa recebe (100% - platform_fee_percent) via walletId.
+ * Cria cobrança no Asaas com split dinâmico.
+ *
+ * Regra de split:
+ *   empresa  = 100 - (taxa_plataforma + taxa_socio)
+ *   plataforma = taxa_plataforma  (fica na conta principal da plataforma)
+ *   sócio    = taxa_socio         (enviado via walletId do sócio ativo)
+ *
+ * Se taxa_socio = 0 ou não há sócio ativo com wallet válido, o sócio é omitido do split.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -35,7 +40,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Get sale with event
+    // 1. Buscar venda com evento
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select("*, event:events(*)")
@@ -56,10 +61,10 @@ serve(async (req) => {
       });
     }
 
-    // Get company with Asaas config
+    // 2. Buscar empresa com configuração de comissão
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("asaas_wallet_id, asaas_onboarding_complete, platform_fee_percent")
+      .select("asaas_wallet_id, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -85,22 +90,67 @@ serve(async (req) => {
       });
     }
 
-    if (company.platform_fee_percent == null) {
-      return new Response(JSON.stringify({ error: "Company platform fee is not configured", error_code: "platform_fee_missing" }), {
+    const platformFeePercent = Number(company.platform_fee_percent ?? 0);
+    const partnerSplitPercent = Number(company.partner_split_percent ?? 0);
+
+    if (platformFeePercent < 0) {
+      return new Response(JSON.stringify({ error: "Taxa da plataforma inválida", error_code: "platform_fee_missing" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const platformFeePercent = Number(company.platform_fee_percent);
-    const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
-    const companySharePercent = 100 - platformFeePercent;
+    // 3. Buscar sócio ativo (máximo 1) para incluir no split
+    let activePartner: { asaas_wallet_id: string } | null = null;
+    if (partnerSplitPercent > 0) {
+      const { data: partnerData } = await supabaseAdmin
+        .from("partners")
+        .select("asaas_wallet_id")
+        .eq("status", "ativo")
+        .limit(1)
+        .single();
 
-    // 1. Create or find customer in Asaas
+      if (partnerData?.asaas_wallet_id) {
+        activePartner = partnerData;
+      }
+    }
+
+    // 4. Montar split dinâmico
+    // Se sócio ativo com wallet válido e taxa > 0: split triplo (empresa + plataforma + sócio)
+    // Caso contrário: split duplo (empresa + plataforma)
+    const effectivePartnerFee = activePartner ? partnerSplitPercent : 0;
+    const totalFee = platformFeePercent + effectivePartnerFee;
+
+    if (totalFee > 100) {
+      return new Response(
+        JSON.stringify({ error: "Soma das taxas (plataforma + sócio) excede 100%", error_code: "fee_exceeds_limit" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const companySharePercent = 100 - totalFee;
+    const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
+
+    // Array de split: empresa sempre presente
+    const splitArray: Array<{ walletId: string; percentualValue: number }> = [
+      {
+        walletId: company.asaas_wallet_id,
+        percentualValue: companySharePercent,
+      },
+    ];
+
+    // Incluir sócio no split somente se aplicável
+    if (activePartner && effectivePartnerFee > 0) {
+      splitArray.push({
+        walletId: activePartner.asaas_wallet_id,
+        percentualValue: effectivePartnerFee,
+      });
+    }
+
+    // 5. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
     let customerId: string | null = null;
 
-    // Try to find existing customer by CPF
     const searchRes = await fetch(
       `${ASAAS_BASE_URL}/customers?cpfCnpj=${customerCpf}`,
       { headers: { "access_token": PLATFORM_API_KEY } }
@@ -110,7 +160,6 @@ serve(async (req) => {
     if (searchData?.data?.length > 0) {
       customerId = searchData.data[0].id;
     } else {
-      // Create customer
       const createCustomerRes = await fetch(`${ASAAS_BASE_URL}/customers`, {
         method: "POST",
         headers: {
@@ -136,25 +185,20 @@ serve(async (req) => {
       customerId = customerData.id;
     }
 
-    // 2. Create payment with split
+    // 6. Criar cobrança com split
     const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 1); // Tomorrow
+    dueDate.setDate(dueDate.getDate() + 1);
     const dueDateStr = dueDate.toISOString().split("T")[0];
 
     const eventName = sale.event?.name || "Evento";
-    const paymentPayload: Record<string, any> = {
+    const paymentPayload: Record<string, unknown> = {
       customer: customerId,
-      billingType: "UNDEFINED", // Allows customer to choose between PIX, credit card, boleto
+      billingType: "UNDEFINED",
       value: grossAmount,
       dueDate: dueDateStr,
       description: `${eventName} — ${sale.quantity} passagem(ns)`,
       externalReference: sale.id,
-      split: [
-        {
-          walletId: company.asaas_wallet_id,
-          percentualValue: companySharePercent,
-        },
-      ],
+      split: splitArray,
     };
 
     const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
@@ -176,7 +220,7 @@ serve(async (req) => {
       );
     }
 
-    // 3. Save Asaas payment ID on the sale
+    // 7. Salvar ID do pagamento na venda
     await supabaseAdmin
       .from("sales")
       .update({
@@ -185,7 +229,7 @@ serve(async (req) => {
       })
       .eq("id", sale.id);
 
-    // 4. Return invoice URL for redirect
+    // 8. Retornar URL para redirect
     return new Response(
       JSON.stringify({
         url: paymentData.invoiceUrl,
