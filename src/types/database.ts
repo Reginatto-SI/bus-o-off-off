@@ -401,6 +401,9 @@ export interface SaleLog {
 export interface Partner {
   id: string;
   name: string;
+  /** Identificador da carteira Asaas para split direto no pagamento. */
+  asaas_wallet_id: string | null;
+  // Campos legados do Stripe — mantidos para histórico, não usados no fluxo atual.
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
   split_percent: number;

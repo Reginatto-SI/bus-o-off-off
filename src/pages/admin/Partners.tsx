@@ -32,11 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Handshake, Plus, Loader2, Pencil, Code2 } from 'lucide-react';
+import { Handshake, Plus, Loader2, Pencil, Code2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Partners() {
   const { isDeveloper } = useAuth();
@@ -47,9 +48,8 @@ export default function Partners() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
-    stripe_account_id: '',
+    asaas_wallet_id: '',
     status: 'ativo' as PartnerStatus,
-    split_percent: '50',
     notes: '',
   });
 
@@ -73,7 +73,7 @@ export default function Partners() {
 
   const openNew = () => {
     setEditingId(null);
-    setForm({ name: '', stripe_account_id: '', status: 'ativo', split_percent: '50', notes: '' });
+    setForm({ name: '', asaas_wallet_id: '', status: 'ativo', notes: '' });
     setModalOpen(true);
   };
 
@@ -81,9 +81,8 @@ export default function Partners() {
     setEditingId(p.id);
     setForm({
       name: p.name,
-      stripe_account_id: p.stripe_account_id ?? '',
+      asaas_wallet_id: p.asaas_wallet_id ?? '',
       status: p.status as PartnerStatus,
-      split_percent: String(p.split_percent),
       notes: p.notes ?? '',
     });
     setModalOpen(true);
@@ -91,21 +90,28 @@ export default function Partners() {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
-      toast.error('Informe o nome do parceiro');
+      toast.error('Informe o nome do sócio');
       return;
     }
-    const splitNum = parseFloat(form.split_percent);
-    if (isNaN(splitNum) || splitNum < 0 || splitNum > 100) {
-      toast.error('Percentual de split inválido (0-100)');
-      return;
+
+    // Regra: no máximo 1 sócio ativo. Se tentando salvar como ativo, verificar conflito.
+    if (form.status === 'ativo') {
+      const existingActive = partners.find(
+        (p) => p.status === 'ativo' && p.id !== editingId
+      );
+      if (existingActive) {
+        toast.error(
+          `Já existe um sócio ativo: "${existingActive.name}". Inative-o antes de ativar outro.`
+        );
+        return;
+      }
     }
 
     setSaving(true);
     const payload = {
       name: form.name.trim(),
-      stripe_account_id: form.stripe_account_id.trim() || null,
+      asaas_wallet_id: form.asaas_wallet_id.trim() || null,
       status: form.status,
-      split_percent: splitNum,
       notes: form.notes.trim() || null,
     };
 
@@ -126,7 +132,7 @@ export default function Partners() {
     setSaving(false);
   };
 
-  // Proteção de rota no front-end: página de sócios é exclusiva para perfil developer.
+  // Proteção de rota: página exclusiva para perfil developer.
   if (!isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
@@ -138,15 +144,16 @@ export default function Partners() {
           title="Sócios da Plataforma"
           metadata={
             <div className="space-y-2">
-              {/* Identificação visual discreta para reforçar que esta é uma área técnica do sistema. */}
               <Badge variant="secondary" className="inline-flex items-center gap-1.5 border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-100">
                 <Code2 className="h-3.5 w-3.5" />
                 Área do Desenvolvedor
               </Badge>
-              <p className="text-xs text-muted-foreground">Área técnica restrita ao desenvolvedor do sistema.</p>
+              <p className="text-xs text-muted-foreground">
+                Cadastro técnico dos sócios da plataforma. O percentual de repasse é configurado individualmente por empresa na aba Pagamentos.
+              </p>
             </div>
           }
-          description="Configure os sócios da plataforma e defina o percentual da comissão da plataforma que será repassado automaticamente via Stripe."
+          description="Gerencie os sócios que recebem parte da comissão da plataforma via split direto no Asaas."
           actions={
             <Button onClick={openNew}>
               <Plus className="h-4 w-4 mr-2" />
@@ -163,7 +170,7 @@ export default function Partners() {
           <EmptyState
             icon={<Handshake className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum sócio cadastrado"
-            description="Cadastre um sócio para dividir a comissão da plataforma automaticamente via Stripe Connect."
+            description="Cadastre um sócio para dividir a comissão da plataforma automaticamente via split Asaas."
             action={
               <Button onClick={openNew}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -178,8 +185,7 @@ export default function Partners() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Stripe Account</TableHead>
-                    <TableHead>Split (%)</TableHead>
+                    <TableHead>Asaas Wallet ID</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ação</TableHead>
                   </TableRow>
@@ -188,10 +194,9 @@ export default function Partners() {
                   {partners.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {p.stripe_account_id || '—'}
+                      <TableCell className="text-sm text-muted-foreground font-mono">
+                        {p.asaas_wallet_id || '—'}
                       </TableCell>
-                      <TableCell>{p.split_percent}%</TableCell>
                       <TableCell>
                         <StatusBadge status={p.status} />
                       </TableCell>
@@ -208,7 +213,7 @@ export default function Partners() {
           </Card>
         )}
 
-        {/* Modal */}
+        {/* Modal de cadastro/edição */}
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -224,28 +229,15 @@ export default function Partners() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Stripe Account ID</Label>
+                <Label>Asaas Wallet ID</Label>
                 <Input
-                  value={form.stripe_account_id}
-                  onChange={(e) => setForm({ ...form, stripe_account_id: e.target.value })}
-                  placeholder="acct_..."
+                  value={form.asaas_wallet_id}
+                  onChange={(e) => setForm({ ...form, asaas_wallet_id: e.target.value })}
+                  placeholder="Ex: 5f7e3b2a-..."
+                  className="font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  ID da conta Stripe Connect do sócio para recebimento automático da participação na comissão da plataforma.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Split (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={form.split_percent}
-                  onChange={(e) => setForm({ ...form, split_percent: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Percentual da comissão da plataforma que será repassado automaticamente ao sócio.
+                  Identificador da carteira do sócio no Asaas. Usado para receber o split direto no pagamento.
                 </p>
               </div>
               <div className="space-y-2">
@@ -258,6 +250,17 @@ export default function Partners() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Alerta: validação de 1 sócio ativo */}
+              {form.status === 'ativo' && partners.some((p) => p.status === 'ativo' && p.id !== editingId) && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Já existe um sócio ativo. Apenas 1 sócio pode estar ativo por vez. Inative o atual antes.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="space-y-2">
                 <Label>Notas</Label>
                 <Textarea
