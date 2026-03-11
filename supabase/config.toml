@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.ticket-lookup]
 verify_jwt = false
+
+[functions.cleanup-expired-locks]
+verify_jwt = false
