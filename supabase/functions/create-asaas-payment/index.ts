@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { sale_id } = await req.json();
+    const { sale_id, payment_method } = await req.json();
     if (!sale_id) {
       return new Response(JSON.stringify({ error: "sale_id is required" }), {
         status: 400,
@@ -240,9 +240,16 @@ serve(async (req) => {
     const dueDateStr = dueDate.toISOString().split("T")[0];
 
     const eventName = sale.event?.name || "Evento";
+    // Comentário de suporte: mantém compatibilidade com vendas legadas sem payment_method salvo.
+    const normalizedPaymentMethod = payment_method === "credit_card" || sale.payment_method === "credit_card"
+      ? "credit_card"
+      : "pix";
+    // Comentário de suporte: evita billingType indefinido no gateway ao mapear a escolha explícita do checkout.
+    const billingType = normalizedPaymentMethod === "credit_card" ? "CREDIT_CARD" : "PIX";
+
     const paymentPayload: Record<string, unknown> = {
       customer: customerId,
-      billingType: "UNDEFINED",
+      billingType,
       value: grossAmount,
       dueDate: dueDateStr,
       description: `${eventName} — ${sale.quantity} passagem(ns)`,
@@ -275,6 +282,7 @@ serve(async (req) => {
       .update({
         asaas_payment_id: paymentData.id,
         asaas_payment_status: paymentData.status,
+        payment_method: normalizedPaymentMethod,
       })
       .eq("id", sale.id);
 

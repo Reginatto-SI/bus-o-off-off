@@ -913,6 +913,7 @@ export type Database = {
           gross_amount: number | null
           id: string
           partner_fee_amount: number | null
+          payment_method: string | null
           platform_fee_amount: number | null
           platform_fee_paid_at: string | null
           platform_fee_payment_id: string | null
@@ -947,6 +948,7 @@ export type Database = {
           gross_amount?: number | null
           id?: string
           partner_fee_amount?: number | null
+          payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
           platform_fee_payment_id?: string | null
@@ -981,6 +983,7 @@ export type Database = {
           gross_amount?: number | null
           id?: string
           partner_fee_amount?: number | null
+          payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
           platform_fee_payment_id?: string | null

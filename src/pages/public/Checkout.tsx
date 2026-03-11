@@ -72,6 +72,8 @@ interface PassengerData {
   phone: string;
 }
 
+type PaymentMethod = 'pix' | 'credit_card';
+
 function isPassengerComplete(p: PassengerData): boolean {
   const rawCpf = p.cpf.replace(/\D/g, '');
   return p.name.trim().length >= 3 && rawCpf.length === 11 && isValidCpf(rawCpf);
@@ -103,7 +105,7 @@ export default function Checkout() {
   const [categoryPrices, setCategoryPrices] = useState<{ category: string; price: number }[]>([]);
 
 
-  // Step management: 1 = seat selection, 2 = passenger data
+  // Step management: 1 = seat selection, 2 = passenger data, 3 = payment method
   const [step, setStep] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
@@ -114,6 +116,8 @@ export default function Checkout() {
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
 
   // Helper: get price for a seat based on category pricing
@@ -642,6 +646,7 @@ export default function Checkout() {
         unit_price: event.unit_price ?? 0,
         gross_amount: grossAmount,
         status: 'pendente_pagamento' as const,
+        payment_method: paymentMethod,
         company_id: event.company_id,
       })
       .select()
@@ -713,7 +718,7 @@ export default function Checkout() {
     try {
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         'create-asaas-payment',
-        { body: { sale_id: sale.id } }
+        { body: { sale_id: sale.id, payment_method: paymentMethod } }
       );
 
       if (!checkoutError && checkoutData?.url) {
@@ -793,8 +798,8 @@ export default function Checkout() {
             size="icon"
             className="shrink-0"
             onClick={() => {
-              if (step === 2) {
-                setStep(1);
+              if (step > 1) {
+                setStep((currentStep) => currentStep - 1);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               } else {
                 navigate(-1);
@@ -805,10 +810,14 @@ export default function Checkout() {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-bold">
-              {step === 1 ? 'Escolha seus assentos' : 'Dados dos passageiros'}
+              {step === 1
+                ? 'Escolha seus assentos'
+                : step === 2
+                  ? 'Dados dos passageiros'
+                  : 'Escolha a forma de pagamento'}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Etapa {step} de 2
+              Etapa {step} de 3
             </p>
           </div>
         </div>
@@ -1059,6 +1068,37 @@ export default function Checkout() {
             <div className="h-1" />
           </>
         )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">Escolha a forma de pagamento</h2>
+              <p className="text-sm text-muted-foreground">Selecione como deseja concluir a compra.</p>
+            </div>
+
+            <RadioGroup
+              value={paymentMethod}
+              onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}
+              className="grid gap-3 md:grid-cols-2"
+            >
+              <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
+                <RadioGroupItem value="pix" className="mt-1" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Pix</p>
+                  <p className="text-sm text-muted-foreground">Pagamento instantâneo via Pix.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
+                <RadioGroupItem value="credit_card" className="mt-1" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Cartão de crédito</p>
+                  <p className="text-sm text-muted-foreground">Pagamento seguro com cartão de crédito.</p>
+                </div>
+              </label>
+            </RadioGroup>
+          </div>
+        )}
       </div>
 
       {/* Barra fixa mobile: total sempre visível + CTA principal + atalho discreto para o detalhamento. */}
@@ -1080,9 +1120,28 @@ export default function Checkout() {
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
               </Button>
+            ) : step === 2 ? (
+              <Button
+                className="h-10 px-4"
+                disabled={submitting}
+                onClick={() => {
+                  if (!validatePassengers()) {
+                    const firstErrorKey = Object.keys(errors)[0];
+                    if (firstErrorKey) {
+                      const idx = parseInt(firstErrorKey.split('_')[0]);
+                      setOpenPassengerIdx(idx);
+                    }
+                    return;
+                  }
+                  setStep(3);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
+              </Button>
             ) : (
               <Button className="h-10 px-4" disabled={submitting} onClick={handleSubmit}>
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir para pagamento'}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar para pagamento'}
               </Button>
             )}
           </div>
