@@ -144,16 +144,11 @@ serve(async (req) => {
       );
     }
 
-    const companySharePercent = 100 - totalFee;
+    // Empresa recebe automaticamente: 100% - totalFee (como dona da cobrança)
     const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
 
-    // Array de split: empresa sempre presente
-    const splitArray: Array<{ walletId: string; percentualValue: number }> = [
-      {
-        walletId: company.asaas_wallet_id,
-        percentualValue: companySharePercent,
-      },
-    ];
+    // Array de split: apenas plataforma + sócio (empresa recebe o restante automaticamente como dona da cobrança)
+    const splitArray: Array<{ walletId: string; percentualValue: number }> = [];
 
     // A plataforma deve continuar recebendo comissão via split,
     // mesmo com a cobrança sendo criada na conta da empresa.

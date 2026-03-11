@@ -676,14 +676,20 @@ export default function Checkout() {
       );
 
       if (!checkoutError && checkoutData?.url) {
-        // Redirect to Asaas payment page
         window.location.href = checkoutData.url;
         return;
       }
 
-      // Parse error response
-      const errorCode = checkoutData?.error_code;
-      const errorMessage = checkoutData?.error;
+      // Parse error response — supabase.functions.invoke returns data=null on non-2xx
+      let errorBody = checkoutData;
+      if (checkoutError && !errorBody) {
+        try {
+          errorBody = await (checkoutError as any).context?.json?.();
+        } catch { /* ignore parse failure */ }
+      }
+
+      const errorCode = errorBody?.error_code;
+      const errorMessage = errorBody?.error;
 
       if (errorCode === 'no_asaas_account') {
         // Company has no Asaas — fallback to reservation
