@@ -14,6 +14,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   rascunho: { label: 'Rascunho', className: 'status-badge-draft' },
   a_venda: { label: 'À Venda', className: 'status-badge-available' },
   encerrado: { label: 'Encerrado', className: 'status-badge-closed' },
+  pendente_pagamento: { label: 'Aguardando Pagamento', className: 'status-badge-reserved' },
   reservado: { label: 'Reservado', className: 'status-badge-reserved' },
   processando: { label: 'Processando', className: 'status-badge-reserved' },
   pago: { label: 'Pago', className: 'status-badge-paid' },
