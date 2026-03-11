@@ -320,6 +320,7 @@ export default function Confirmation() {
   }
 
   const isPaid = sale.status === 'pago';
+  const isPendingPayment = sale.status === 'pendente_pagamento';
 
   return (
     <PublicLayout>
@@ -334,22 +335,26 @@ export default function Confirmation() {
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado!</h1>
               <p className="text-muted-foreground">Seu pagamento foi confirmado e suas passagens estão garantidas.</p>
             </>
-          ) : paymentSuccess && !pollingTimedOut ? (
+          ) : (isPendingPayment || (sale.status === 'reservado' && paymentSuccess)) && !pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Verificando Pagamento...</h1>
-              <p className="text-muted-foreground">Estamos confirmando seu pagamento. Isso pode levar alguns segundos.</p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Aguardando Confirmação do Pagamento</h1>
+              <p className="text-muted-foreground">
+                Assim que o pagamento for confirmado, sua passagem será gerada automaticamente.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Você pode fechar esta página — sua passagem será gerada mesmo assim.
+              </p>
             </>
-          ) : paymentSuccess && pollingTimedOut ? (
+          ) : (isPendingPayment || paymentSuccess) && pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento em Processamento</h1>
-              <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco.</p>
-              {/* Botão fallback para forçar verificação com Stripe */}
+              <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco. Sua passagem será gerada automaticamente quando confirmado.</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -364,6 +369,16 @@ export default function Confirmation() {
                 )}
                 Atualizar status do pagamento
               </Button>
+            </>
+          ) : sale.status === 'cancelado' ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Compra Cancelada</h1>
+              <p className="text-muted-foreground">
+                {sale.cancel_reason || 'Esta compra foi cancelada.'}
+              </p>
             </>
           ) : (
             <>
