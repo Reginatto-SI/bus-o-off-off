@@ -86,6 +86,23 @@ interface DiagnosticSale extends Sale {
   ticket_count?: number;
 }
 
+interface SaleIntegrationLog {
+  id: string;
+  sale_id: string | null;
+  company_id: string | null;
+  provider: string;
+  direction: string;
+  event_type: string | null;
+  payment_id: string | null;
+  external_reference: string | null;
+  http_status: number | null;
+  processing_status: 'received' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized';
+  message: string;
+  payload_json: Record<string, unknown> | null;
+  response_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
 // ── Flow stage computation ──
 function computeGateway(sale: DiagnosticSale): string {
   if (sale.asaas_payment_id) return 'Asaas';
@@ -243,6 +260,7 @@ export default function SalesDiagnostic() {
   // Detail modal
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
+  const [detailIntegrationLogs, setDetailIntegrationLogs] = useState<SaleIntegrationLog[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<{
     name: string;
@@ -378,14 +396,22 @@ export default function SalesDiagnostic() {
     setDetailSale(sale);
     setDetailLoading(true);
     setDetailLogs([]);
+    setDetailIntegrationLogs([]);
     setDetailCompany(null);
 
-    const [logsRes, companyRes] = await Promise.all([
+    const [logsRes, integrationLogsRes, companyRes] = await Promise.all([
       supabase
         .from('sale_logs')
         .select('*')
         .eq('sale_id', sale.id)
         .order('created_at', { ascending: true }),
+      // Usa trilha técnica persistida para diagnóstico confiável do webhook/payload.
+      supabase
+        .from('sale_integration_logs')
+        .select('*')
+        .eq('sale_id', sale.id)
+        .order('created_at', { ascending: false })
+        .limit(30),
       supabase
         .from('companies')
         .select('name, asaas_account_email, asaas_wallet_id, asaas_account_id')
@@ -394,6 +420,7 @@ export default function SalesDiagnostic() {
     ]);
 
     setDetailLogs((logsRes.data ?? []) as SaleLog[]);
+    setDetailIntegrationLogs((integrationLogsRes.data ?? []) as SaleIntegrationLog[]);
     setDetailCompany(companyRes.data as any ?? null);
     setDetailLoading(false);
   };
@@ -780,7 +807,7 @@ export default function SalesDiagnostic() {
                         )}
                       </div>
                       <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                        <p>Endpoint utilizado e tempo de requisição não estão disponíveis nos dados atuais. Para rastreamento completo, considere implementar uma tabela <code className="font-mono">sale_integration_logs</code>.</p>
+                        <p>Logs técnicos de integração são persistidos em <code className="font-mono">sale_integration_logs</code> para rastreamento do webhook e payloads.</p>
                       </div>
                     </div>
                   </ScrollArea>
@@ -790,11 +817,16 @@ export default function SalesDiagnostic() {
                 <TabsContent value="webhook" className="flex-1 overflow-auto">
                   <ScrollArea className="h-full pr-4">
                     {(() => {
-                      const webhookLog = detailLogs.find(
-                        (l) => l.action === 'payment_confirmed' || l.action === 'payment_received' || l.description.toLowerCase().includes('webhook')
-                      );
+                      const webhookLog = detailIntegrationLogs.find((log) => log.direction === 'incoming_webhook' && log.provider === 'asaas');
                       const webhookReceived = !!webhookLog;
-                      const processingOk = webhookReceived && detailSale.status === 'pago';
+                      const statusLabelMap: Record<SaleIntegrationLog['processing_status'], string> = {
+                        received: 'Recebido',
+                        ignored: 'Ignorado',
+                        success: 'Sucesso',
+                        partial_failure: 'Parcial',
+                        failed: 'Falha',
+                        unauthorized: 'Não autorizado',
+                      };
 
                       return (
                         <div className="space-y-4 pb-4">
@@ -817,24 +849,30 @@ export default function SalesDiagnostic() {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Tipo do evento</span>
-                                  <p className="font-mono text-xs">{webhookLog.action.toUpperCase()}</p>
+                                  <p className="font-mono text-xs">{webhookLog.event_type ?? '-'}</p>
                                 </div>
                                 <div>
-                                  <span className="text-muted-foreground">Descrição</span>
-                                  <p className="text-xs">{webhookLog.description}</p>
+                                  <span className="text-muted-foreground">Status bruto do Asaas</span>
+                                  <p className="font-mono text-xs">{String((webhookLog.payload_json as any)?.payment?.status ?? '-')}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Status do processamento</span>
+                                  <p className="font-medium">{statusLabelMap[webhookLog.processing_status] ?? webhookLog.processing_status}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Mensagem técnica</span>
+                                  <p className="text-xs">{webhookLog.message}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">HTTP retornado</span>
+                                  <p className="font-mono text-xs">{webhookLog.http_status ?? '-'}</p>
                                 </div>
                               </>
                             )}
-                            <div>
-                              <span className="text-muted-foreground">Status do processamento</span>
-                              <p className={processingOk ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
-                                {!webhookReceived ? 'Aguardando' : processingOk ? 'Sucesso' : 'Possível falha'}
-                              </p>
-                            </div>
                           </div>
                           {!webhookReceived && (
                             <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                              <p>Nenhum log de webhook encontrado para esta venda. Isso pode indicar que o pagamento ainda não foi processado ou que o webhook não foi registrado nos logs.</p>
+                              <p>Nenhum log técnico de webhook encontrado para esta venda.</p>
                             </div>
                           )}
                         </div>
@@ -892,17 +930,19 @@ export default function SalesDiagnostic() {
                         </CollapsibleContent>
                       </Collapsible>
 
-                      {/* Placeholder for API payloads */}
                       <Collapsible>
                         <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
                           <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
-                          Ver payload enviado ao gateway
+                          Ver logs técnicos de integração ({detailIntegrationLogs.length})
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                            <p>Payloads de requisição e resposta da API do gateway não são armazenados no banco de dados atual.</p>
-                            <p className="mt-1">Para rastreamento completo, considere implementar uma tabela <code className="font-mono">sale_integration_logs</code> com os campos: request_payload, response_payload, status_code, duration_ms.</p>
-                          </div>
+                          {detailIntegrationLogs.length === 0 ? (
+                            <p className="mt-2 text-xs text-muted-foreground">Nenhum log técnico encontrado para esta venda.</p>
+                          ) : (
+                            <pre className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
+                              {JSON.stringify(detailIntegrationLogs, null, 2)}
+                            </pre>
+                          )}
                         </CollapsibleContent>
                       </Collapsible>
                     </div>
