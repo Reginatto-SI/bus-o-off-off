@@ -60,14 +60,12 @@ serve(async (req) => {
 
     if (!sale.asaas_payment_id) {
       return new Response(
-        JSON.stringify({ paymentStatus: "reservado" }),
+        JSON.stringify({ paymentStatus: sale.status }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Buscar empresa com asaas_api_key e dados de comissão em uma única query.
-    // A cobrança é criada na conta Asaas da empresa, então a consulta de status
-    // deve usar a API key da empresa para ler o pagamento corretamente.
+    // Buscar empresa com asaas_api_key e dados de comissão
     const { data: company } = await supabaseAdmin
       .from("companies")
       .select("asaas_api_key, platform_fee_percent, partner_split_percent")
@@ -75,19 +73,17 @@ serve(async (req) => {
       .single();
 
     const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
-
-    // Priorizar chave da empresa; fallback para chave global apenas para vendas legadas
     const apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY;
 
     if (!apiKeyToUse) {
       return new Response(
-        JSON.stringify({ paymentStatus: "reservado", detail: "Asaas API key not configured" }),
+        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas API key not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!company?.asaas_api_key && PLATFORM_API_KEY) {
-      console.warn(`[verify-payment-status] Empresa ${sale.company_id} sem asaas_api_key — usando chave global como fallback (venda legada?)`);
+      console.warn(`[verify-payment-status] Empresa ${sale.company_id} sem asaas_api_key — usando chave global como fallback`);
     }
 
     // Query Asaas for payment status
@@ -100,7 +96,7 @@ serve(async (req) => {
       if (!res.ok) {
         console.error("Asaas payment retrieve error:", await res.text());
         return new Response(
-          JSON.stringify({ paymentStatus: "reservado", detail: "Could not verify with Asaas" }),
+          JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -109,16 +105,15 @@ serve(async (req) => {
     } catch (err) {
       console.error("Asaas API error:", err);
       return new Response(
-        JSON.stringify({ paymentStatus: "reservado", detail: "Could not verify with Asaas" }),
+        JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Map Asaas status to internal status
     const asaasStatus = paymentData.status;
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
-      // Payment confirmed — apply same logic as webhook
+      // Payment confirmed — accept both pendente_pagamento and reservado
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
@@ -126,21 +121,27 @@ serve(async (req) => {
           asaas_payment_status: asaasStatus,
         })
         .eq("id", sale_id)
-        .eq("status", "reservado");
+        .in("status", ["pendente_pagamento", "reservado"]);
 
       if (updateError) {
         console.error("Error updating sale:", updateError);
         const { data: freshSale } = await supabaseAdmin
           .from("sales").select("status").eq("id", sale_id).single();
         return new Response(
-          JSON.stringify({ paymentStatus: freshSale?.status || "reservado" }),
+          JSON.stringify({ paymentStatus: freshSale?.status || sale.status }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago' via on-demand Asaas check`);
+      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago'`);
 
-      // Calculate financial data using company data already fetched above
+      // Create tickets from sale_passengers (same logic as webhook)
+      await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
+
+      // Release seat locks
+      await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
+
+      // Calculate financial data
       if (company?.platform_fee_percent != null) {
         const platformFeePercent = Number(company.platform_fee_percent);
         const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
@@ -203,9 +204,8 @@ serve(async (req) => {
       );
     }
 
-    // Default
     return new Response(
-      JSON.stringify({ paymentStatus: "reservado", asaas_status: asaasStatus }),
+      JSON.stringify({ paymentStatus: sale.status, asaas_status: asaasStatus }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -216,3 +216,65 @@ serve(async (req) => {
     );
   }
 });
+
+/**
+ * Creates tickets from sale_passengers staging table.
+ * Same logic as asaas-webhook to ensure consistency.
+ */
+async function createTicketsFromPassengers(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  saleId: string,
+  companyId: string
+) {
+  // Idempotency: skip if tickets already exist
+  const { count: existingTickets } = await supabaseAdmin
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("sale_id", saleId);
+
+  if (existingTickets && existingTickets > 0) {
+    console.log(`Tickets already exist for sale ${saleId}, skipping`);
+    return;
+  }
+
+  const { data: passengers, error: passError } = await supabaseAdmin
+    .from("sale_passengers")
+    .select("*")
+    .eq("sale_id", saleId)
+    .order("sort_order");
+
+  if (passError) {
+    console.error("Error fetching sale_passengers:", passError);
+    return;
+  }
+
+  if (!passengers || passengers.length === 0) {
+    console.log(`No sale_passengers for sale ${saleId} (legacy/admin flow)`);
+    return;
+  }
+
+  const ticketInserts = passengers.map((p: any) => ({
+    sale_id: saleId,
+    trip_id: p.trip_id,
+    seat_id: p.seat_id,
+    seat_label: p.seat_label,
+    passenger_name: p.passenger_name,
+    passenger_cpf: p.passenger_cpf,
+    passenger_phone: p.passenger_phone,
+    company_id: companyId,
+  }));
+
+  const { error: ticketError } = await supabaseAdmin
+    .from("tickets")
+    .insert(ticketInserts);
+
+  if (ticketError) {
+    console.error("Error creating tickets:", ticketError);
+    return;
+  }
+
+  console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} via verify-payment-status`);
+
+  // Clean up staging data
+  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
+}
