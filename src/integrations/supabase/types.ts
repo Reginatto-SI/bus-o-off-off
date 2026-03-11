@@ -780,6 +780,72 @@ export type Database = {
           },
         ]
       }
+      sale_integration_logs: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          direction: string
+          event_type: string | null
+          external_reference: string | null
+          http_status: number | null
+          id: string
+          message: string
+          payload_json: Json | null
+          payment_id: string | null
+          processing_status: string
+          provider: string
+          response_json: Json | null
+          sale_id: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          direction: string
+          event_type?: string | null
+          external_reference?: string | null
+          http_status?: number | null
+          id?: string
+          message: string
+          payload_json?: Json | null
+          payment_id?: string | null
+          processing_status: string
+          provider: string
+          response_json?: Json | null
+          sale_id?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          direction?: string
+          event_type?: string | null
+          external_reference?: string | null
+          http_status?: number | null
+          id?: string
+          message?: string
+          payload_json?: Json | null
+          payment_id?: string | null
+          processing_status?: string
+          provider?: string
+          response_json?: Json | null
+          sale_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_integration_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_integration_logs_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sale_logs: {
         Row: {
           action: string
