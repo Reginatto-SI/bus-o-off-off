@@ -141,30 +141,20 @@ function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof C
   return { label: 'Venda criada', icon: Clock, color: 'text-muted-foreground' };
 }
 
-function computeReturnMessage(sale: DiagnosticSale): string {
-  if (sale.status === 'cancelado') {
-    return sale.cancel_reason ? `Cancelado: ${sale.cancel_reason}` : 'Venda cancelada';
-  }
+function computeCompactFlowLabel(fullLabel: string): string {
+  // Mantém a leitura rápida da tabela sem perder o contexto técnico do fluxo.
+  const compactLabels: Record<string, string> = {
+    'Cobrança enviada ao gateway': 'Cobrança enviada',
+    'Pagamento confirmado': 'Pagamento confirmado',
+    'Passagem gerada': 'Passagem gerada',
+    'Venda manual paga': 'Venda manual paga',
+    'Venda manual criada': 'Venda manual criada',
+    'Cobrança expirada': 'Cobrança expirada',
+    'Venda criada': 'Venda criada',
+    'Cancelado': 'Cancelado',
+  };
 
-  const gateway = computeGateway(sale);
-  if (gateway === 'Manual') return 'Venda manual — sem gateway';
-
-  if (sale.asaas_payment_id) {
-    const statusMap: Record<string, string> = {
-      PENDING: 'Cobrança criada com sucesso',
-      RECEIVED: 'Pagamento recebido',
-      CONFIRMED: 'Pagamento confirmado',
-      OVERDUE: 'Cobrança vencida',
-      REFUNDED: 'Pagamento estornado',
-      REFUND_REQUESTED: 'Estorno solicitado',
-    };
-    return statusMap[sale.asaas_payment_status ?? ''] ?? sale.asaas_payment_status ?? 'Sem retorno';
-  }
-
-  if (sale.stripe_payment_intent_id) return 'Stripe — pagamento processado';
-  if (sale.stripe_checkout_session_id) return 'Stripe — checkout criado';
-
-  return '-';
+  return compactLabels[fullLabel] ?? fullLabel;
 }
 
 // ── Timeline builder ──
@@ -537,20 +527,17 @@ export default function SalesDiagnostic() {
         ) : (
           <Card>
             <CardContent className="p-0">
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                  <TableHead>Data</TableHead>
-                  {isDeveloper && <TableHead>Empresa</TableHead>}
-                  <TableHead>Evento</TableHead>
-                  <TableHead>Comprador</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Gateway</TableHead>
-                  <TableHead>Status Venda</TableHead>
-                  <TableHead>Status Pgto</TableHead>
-                  <TableHead>Etapa do Fluxo</TableHead>
-                  <TableHead>Mensagem</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-[120px]">Data</TableHead>
+                  <TableHead className="w-[150px]">Evento</TableHead>
+                  <TableHead className="w-[140px]">Comprador</TableHead>
+                  <TableHead className="w-[105px]">Valor</TableHead>
+                  <TableHead className="w-[95px]">Gateway</TableHead>
+                  <TableHead className="w-[190px]">Status</TableHead>
+                  <TableHead className="w-[170px]">Fluxo</TableHead>
+                  <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -559,7 +546,7 @@ export default function SalesDiagnostic() {
                   const paymentStatus = computePaymentStatus(sale);
                   const flowStage = computeFlowStage(sale);
                   const FlowIcon = flowStage.icon;
-                  const returnMsg = computeReturnMessage(sale);
+                  const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
 
                   const actions: ActionItem[] = [
                     {
@@ -574,12 +561,7 @@ export default function SalesDiagnostic() {
                       <TableCell className="whitespace-nowrap py-5 text-sm">
                         {format(parseISO(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                       </TableCell>
-                      {isDeveloper && (
-                        <TableCell className="max-w-[120px] truncate py-5 text-sm">
-                          {sale.company_name}
-                        </TableCell>
-                      )}
-                      <TableCell className="max-w-[140px] truncate py-5 text-sm">
+                      <TableCell className="max-w-[150px] truncate py-5 text-sm">
                         {sale.event_name}
                       </TableCell>
                       <TableCell className="max-w-[140px] truncate py-5 text-sm">
@@ -594,21 +576,18 @@ export default function SalesDiagnostic() {
                         </Badge>
                       </TableCell>
                       <TableCell className="py-5">
-                        <StatusBadge status={sale.status} />
-                      </TableCell>
-                      <TableCell className="py-5">
-                        <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
-                          {paymentStatus.label}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge status={sale.status} />
+                          <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
+                            {paymentStatus.label}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="py-5">
                         <span className={`flex items-center gap-1.5 whitespace-nowrap text-sm ${flowStage.color}`}>
                           <FlowIcon className="h-3.5 w-3.5" />
-                          {flowStage.label}
+                          {compactFlowLabel}
                         </span>
-                      </TableCell>
-                      <TableCell className="max-w-[180px] truncate py-5 text-sm text-muted-foreground">
-                        {returnMsg}
                       </TableCell>
                       <TableCell className="py-5">
                         <ActionsDropdown actions={actions} />
