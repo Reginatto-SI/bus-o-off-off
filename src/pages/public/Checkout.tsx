@@ -367,21 +367,28 @@ export default function Checkout() {
     await fetchOccupiedSeats(tripId, () => true);
   };
 
-  // Revalidate seats against the database, returns true if all OK
+  // Revalidate seats against the database (tickets + seat_locks), returns true if all OK
   const revalidateSeats = async (): Promise<boolean> => {
     if (!tripId) return false;
 
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select('seat_id, sale_id')
-      .eq('trip_id', tripId);
+    const [ticketsRes, locksRes] = await Promise.all([
+      supabase
+        .from('tickets')
+        .select('seat_id, sale_id')
+        .eq('trip_id', tripId),
+      supabase
+        .from('seat_locks')
+        .select('seat_id')
+        .eq('trip_id', tripId)
+        .gt('expires_at', new Date().toISOString()),
+    ]);
 
-    if (error) {
+    if (ticketsRes.error) {
       toast.error('Erro ao verificar disponibilidade. Tente novamente.');
       return false;
     }
 
-    const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+    const ticketRows = (ticketsRes.data ?? []) as { seat_id: string | null; sale_id: string | null }[];
     const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
 
     let blockedSales = new Set<string>();
@@ -398,9 +405,15 @@ export default function Checkout() {
     const currentBlocked = ticketRows
       .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
       .map((t) => t.seat_id as string);
-    const currentOccupied = ticketRows
+    
+    const occupiedFromTickets = ticketRows
       .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
       .map((t) => t.seat_id as string);
+    
+    const occupiedFromLocks = (locksRes.data ?? [])
+      .map((l: any) => l.seat_id as string);
+
+    const currentOccupied = [...new Set([...occupiedFromTickets, ...occupiedFromLocks])];
 
     setBlockedSeatIds(currentBlocked);
     setOccupiedSeatIds(currentOccupied);
