@@ -1,32 +1,24 @@
 
-# Complete Payment Flow Overhaul — IMPLEMENTED
 
-## Changes Made
+# Root Cause: `verify-payment-status` not updated for new flow
 
-### Database
-- Added `pendente_pagamento` to `sale_status` enum
-- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
-- Created `sale_passengers` staging table for passenger data before payment confirmation
-- Enabled realtime on `sales` table
-- Enabled `pg_cron` and `pg_net` extensions
-- Scheduled `cleanup-expired-locks` cron job every 5 minutes
+Two bugs in `supabase/functions/verify-payment-status/index.ts`:
 
-### Edge Functions
-- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
-- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
-- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
+## Bug 1 — Status filter only matches `reservado`
+Line 129: `.eq("status", "reservado")` — the new checkout flow creates sales with `pendente_pagamento`, so the UPDATE silently matches zero rows. The sale stays stuck even though Asaas confirms the payment.
 
-### Frontend
-- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
-- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
-- `StatusBadge.tsx`: Added `pendente_pagamento` badge
-- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
+## Bug 2 — No ticket creation
+Unlike the webhook, `verify-payment-status` never creates tickets from `sale_passengers`. Even if Bug 1 were fixed, the user would see "pago" but no tickets.
 
-## Architecture
-```
-NEW FLOW:
-  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
-  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
-  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
-  → Frontend detects pago → Show tickets
-```
+## Why the webhook didn't catch it
+The screenshot shows webhooks with event `PAYMENT_CHECKOUT_VIEWED` — this is a "customer viewed the checkout" event, not a payment confirmation. The actual `PAYMENT_CONFIRMED`/`PAYMENT_RECEIVED` webhook may not have fired yet at screenshot time, or Asaas webhook config may not include those events. Either way, the polling fallback (`verify-payment-status`) should handle it — and that's where both bugs live.
+
+## Fix
+
+### `supabase/functions/verify-payment-status/index.ts`
+1. Change line 129 from `.eq("status", "reservado")` to `.in("status", ["pendente_pagamento", "reservado"])`
+2. After updating to `pago`, call the same ticket creation logic: read `sale_passengers`, insert into `tickets`, delete staging data, release `seat_locks`
+3. Update the early return for missing `asaas_payment_id` to return `pendente_pagamento` instead of `reservado`
+
+No other files need changes — the webhook is already correct. This is purely a `verify-payment-status` oversight from the migration.
+
