@@ -156,13 +156,21 @@ serve(async (req) => {
     let platformWalletId = platformWalletFromEnv ?? null;
 
     if (!platformWalletId && platformFeePercent > 0) {
-      const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
-        headers: { "access_token": PLATFORM_API_KEY },
-      });
+      console.log("ASAAS_WALLET_ID not set, falling back to /myAccount API...");
+      try {
+        const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
+          headers: { "access_token": PLATFORM_API_KEY },
+        });
 
-      if (myAccountRes.ok) {
-        const myAccountData = await myAccountRes.json();
-        platformWalletId = myAccountData?.walletId ?? null;
+        if (myAccountRes.ok) {
+          const myAccountData = await myAccountRes.json();
+          platformWalletId = myAccountData?.walletId ?? null;
+          console.log("Fallback wallet resolved:", platformWalletId ? "OK" : "NULL");
+        } else {
+          console.error("Fallback /myAccount failed:", myAccountRes.status, await myAccountRes.text());
+        }
+      } catch (fetchErr) {
+        console.error("Fallback /myAccount fetch error:", fetchErr);
       }
     }
 
