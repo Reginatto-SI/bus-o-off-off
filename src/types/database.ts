@@ -373,6 +373,7 @@ export interface Sale {
   asaas_payment_id: string | null;
   asaas_payment_status: string | null;
   asaas_transfer_id: string | null;
+  payment_method: "pix" | "credit_card" | null;
   // Dados financeiros de comissão (preenchidos após pagamento)
   gross_amount: number | null;
   platform_fee_total: number | null;
