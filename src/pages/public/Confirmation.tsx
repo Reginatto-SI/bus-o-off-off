@@ -204,21 +204,24 @@ export default function Confirmation() {
     }
   }, [id, toast]);
 
-  // Polling para confirmação de pagamento
+  // Polling para confirmação de pagamento (works for both pendente_pagamento and reservado)
   useEffect(() => {
-    if (!paymentSuccess || !id || !sale || sale.status === 'pago') return;
+    if (!id || !sale) return;
+    // Only poll if sale is in a pending state
+    const isPending = sale.status === 'pendente_pagamento' || (sale.status === 'reservado' && paymentSuccess);
+    if (!isPending) return;
 
     let attempts = 0;
-    const maxAttempts = 60;
+    const maxAttempts = 120; // 6 minutes at 3s intervals
 
     const interval = setInterval(async () => {
       attempts++;
 
-      // Após 15s (5 tentativas), forçar sync com Stripe uma vez
+      // After 15s, force sync with payment gateway once
       if (attempts === 5 && !verifyCalledRef.current) {
         verifyCalledRef.current = true;
         supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
-          .catch(() => {}); // fire-and-forget, o polling local vai pegar o resultado
+          .catch(() => {});
       }
 
       const { data } = await supabase.from('sales').select('status').eq('id', id).maybeSingle();
@@ -229,6 +232,9 @@ export default function Confirmation() {
         if (freshTickets) setTickets(freshTickets as TicketRecord[]);
         setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
         clearInterval(interval);
+      } else if (data?.status === 'cancelado') {
+        setSale((prev) => (prev ? { ...prev, status: 'cancelado' } : prev));
+        clearInterval(interval);
       } else if (attempts >= maxAttempts) {
         setPollingTimedOut(true);
         clearInterval(interval);
@@ -236,7 +242,7 @@ export default function Confirmation() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [paymentSuccess, id, sale?.status]);
+  }, [id, sale?.status, paymentSuccess]);
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
