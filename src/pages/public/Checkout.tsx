@@ -177,22 +177,27 @@ export default function Checkout() {
     setSeatStatusError(null);
 
     try {
-      const { data: tickets, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('seat_id, sale_id')
-        .eq('trip_id', tripUuid);
+      // Fetch tickets AND active seat_locks for this trip
+      const [ticketsRes, locksRes] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select('seat_id, sale_id')
+          .eq('trip_id', tripUuid),
+        supabase
+          .from('seat_locks')
+          .select('seat_id')
+          .eq('trip_id', tripUuid)
+          .gt('expires_at', new Date().toISOString()),
+      ]);
 
-      if (ticketsError) {
-        throw ticketsError;
-      }
+      if (ticketsRes.error) throw ticketsRes.error;
 
       if (!isActive()) return;
 
-      const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+      const ticketRows = (ticketsRes.data ?? []) as { seat_id: string | null; sale_id: string | null }[];
       const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
 
-      // Comentário de suporte: bloqueios operacionais são registrados em venda/ticket,
-      // então identificamos e separamos para não exibir como "ocupado" para cliente.
+      // Identify admin blocks (BLOQUEIO sales)
       let blockedSales = new Set<string>();
       if (saleIds.length > 0) {
         const { data: blockedSalesData } = await supabase
@@ -207,12 +212,19 @@ export default function Checkout() {
       const blockedSeats = ticketRows
         .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
         .map((t) => t.seat_id as string);
-      const occupiedSeats = ticketRows
+      
+      // Occupied = tickets (non-blocked) + active seat_locks
+      const occupiedFromTickets = ticketRows
         .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
         .map((t) => t.seat_id as string);
+      
+      const occupiedFromLocks = (locksRes.data ?? [])
+        .map((l: any) => l.seat_id as string);
+
+      const allOccupied = [...new Set([...occupiedFromTickets, ...occupiedFromLocks])];
 
       setBlockedSeatIds(blockedSeats);
-      setOccupiedSeatIds(occupiedSeats);
+      setOccupiedSeatIds(allOccupied);
     } catch (error) {
       console.error('Erro ao carregar status dos assentos:', error);
       if (!isActive()) return;
@@ -355,21 +367,28 @@ export default function Checkout() {
     await fetchOccupiedSeats(tripId, () => true);
   };
 
-  // Revalidate seats against the database, returns true if all OK
+  // Revalidate seats against the database (tickets + seat_locks), returns true if all OK
   const revalidateSeats = async (): Promise<boolean> => {
     if (!tripId) return false;
 
-    const { data: tickets, error } = await supabase
-      .from('tickets')
-      .select('seat_id, sale_id')
-      .eq('trip_id', tripId);
+    const [ticketsRes, locksRes] = await Promise.all([
+      supabase
+        .from('tickets')
+        .select('seat_id, sale_id')
+        .eq('trip_id', tripId),
+      supabase
+        .from('seat_locks')
+        .select('seat_id')
+        .eq('trip_id', tripId)
+        .gt('expires_at', new Date().toISOString()),
+    ]);
 
-    if (error) {
+    if (ticketsRes.error) {
       toast.error('Erro ao verificar disponibilidade. Tente novamente.');
       return false;
     }
 
-    const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+    const ticketRows = (ticketsRes.data ?? []) as { seat_id: string | null; sale_id: string | null }[];
     const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
 
     let blockedSales = new Set<string>();
@@ -386,9 +405,15 @@ export default function Checkout() {
     const currentBlocked = ticketRows
       .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
       .map((t) => t.seat_id as string);
-    const currentOccupied = ticketRows
+    
+    const occupiedFromTickets = ticketRows
       .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
       .map((t) => t.seat_id as string);
+    
+    const occupiedFromLocks = (locksRes.data ?? [])
+      .map((l: any) => l.seat_id as string);
+
+    const currentOccupied = [...new Set([...occupiedFromTickets, ...occupiedFromLocks])];
 
     setBlockedSeatIds(currentBlocked);
     setOccupiedSeatIds(currentOccupied);
@@ -487,10 +512,9 @@ export default function Checkout() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Submit purchase
+  // Submit purchase — new flow: seat_locks + sale_passengers + pendente_pagamento + new tab
   const handleSubmit = async () => {
     if (!validatePassengers()) {
-      // Open the first passenger with error
       const firstErrorKey = Object.keys(errors)[0];
       if (firstErrorKey) {
         const idx = parseInt(firstErrorKey.split('_')[0]);
@@ -505,7 +529,6 @@ export default function Checkout() {
     // Revalidate seats before creating sale
     const seatsValid = await revalidateSeats();
     if (!seatsValid) {
-      // Go back to step 1 so user can pick new seats
       setStep(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setSubmitting(false);
@@ -523,7 +546,6 @@ export default function Checkout() {
       return;
     }
 
-    // Estoque por política: ida sempre obrigatória; volta depende da política do evento.
     const shouldCreateReturn = mandatoryRoundTrip || Boolean(returnTripId);
 
     if (mandatoryRoundTrip && !returnTripId) {
@@ -546,9 +568,7 @@ export default function Checkout() {
 
     const payer = passengers[payerIndex];
 
-    // Vendedor é rastreio comercial (link/ref). Comissão de vendedor é manual e fora do Stripe.
-    // Stripe apenas confirma pagamento da venda (sale_status), independente de vendedor.
-    // Validar ref: só grava seller_id se vendedor existir, estiver ativo e pertencer à mesma empresa.
+    // Validate seller ref
     let validatedSellerId: string | null = null;
     if (sellerRef) {
       const { data: sellerData } = await supabase
@@ -559,8 +579,6 @@ export default function Checkout() {
 
       if (sellerData && sellerData.status === 'ativo' && sellerData.company_id === event.company_id) {
         validatedSellerId = sellerData.id;
-      } else {
-        console.warn('Ref inválido ou vendedor inativo/outra empresa. Ignorando seller_id.', sellerRef);
       }
     }
 
@@ -571,7 +589,6 @@ export default function Checkout() {
       return;
     }
 
-    // Calculate fees — per-seat pricing when category pricing is active
     const seatsTotal = usesCategoryPricing
       ? selectedSeats.reduce((sum, seatId) => sum + getSeatPrice(seatId), 0)
       : (event.unit_price ?? 0) * quantity;
@@ -587,7 +604,30 @@ export default function Checkout() {
       ? seatsTotal + (feeBreakdown.totalFees * quantity)
       : feeBreakdown.unitPriceWithFees * quantity;
 
-    // Create sale
+    // === Step 1: Create temporary seat locks (15 min expiry) ===
+    const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const seatLockInserts = selectedSeats.map((seatId) => ({
+      trip_id: tripId!,
+      seat_id: seatId,
+      company_id: event.company_id,
+      expires_at: lockExpiresAt,
+    }));
+
+    const { error: lockError } = await supabase.from('seat_locks').insert(seatLockInserts);
+
+    if (lockError) {
+      console.error('Seat lock error:', lockError);
+      if (lockError.code === '23505') {
+        toast.error('Um ou mais assentos já estão sendo reservados por outro comprador. Escolha outros.');
+        await fetchOccupiedSeats(tripId!, () => true);
+      } else {
+        toast.error('Erro ao reservar assentos temporariamente. Tente novamente.');
+      }
+      setSubmitting(false);
+      return;
+    }
+
+    // === Step 2: Create sale with pendente_pagamento status ===
     const { data: sale, error: saleError } = await supabase
       .from('sales')
       .insert({
@@ -601,7 +641,7 @@ export default function Checkout() {
         quantity,
         unit_price: event.unit_price ?? 0,
         gross_amount: grossAmount,
-        status: 'reservado' as const,
+        status: 'pendente_pagamento' as const,
         company_id: event.company_id,
       })
       .select()
@@ -609,6 +649,8 @@ export default function Checkout() {
 
     if (saleError || !sale) {
       console.error('Sale error:', saleError);
+      // Rollback seat locks
+      await supabase.from('seat_locks').delete().in('seat_id', selectedSeats).eq('trip_id', tripId!);
       const isRlsError = saleError?.code === '42501' || saleError?.message?.includes('row-level security');
       const msg = isRlsError
         ? 'Este evento não está disponível para compra online no momento.'
@@ -618,57 +660,56 @@ export default function Checkout() {
       return;
     }
 
-    // Create tickets
-    const ticketInserts = selectedSeats.map((seatId, i) => ({
+    // Update seat locks with sale_id
+    await supabase
+      .from('seat_locks')
+      .update({ sale_id: sale.id })
+      .in('seat_id', selectedSeats)
+      .eq('trip_id', tripId!);
+
+    // === Step 3: Create sale_passengers (staging for webhook ticket generation) ===
+    const passengerInserts = selectedSeats.map((seatId, i) => ({
       sale_id: sale.id,
-      trip_id: tripId!,
       seat_id: seatId,
       seat_label: seatLabelMap[seatId] || String(i + 1),
       passenger_name: passengers[i].name.trim(),
       passenger_cpf: passengers[i].cpf.replace(/\D/g, ''),
       passenger_phone: passengers[i].phone.replace(/\D/g, '') || null,
+      trip_id: tripId!,
+      sort_order: i,
       company_id: event.company_id,
     }));
 
-    const { error: ticketError } = await supabase.from('tickets').insert(ticketInserts);
+    // Add return trip passengers if applicable
+    if (shouldCreateReturn && returnTripId) {
+      passengers.forEach((passenger, i) => {
+        passengerInserts.push({
+          sale_id: sale.id,
+          seat_id: null as any,
+          seat_label: `VOLTA-${i + 1}`,
+          passenger_name: passenger.name.trim(),
+          passenger_cpf: passenger.cpf.replace(/\D/g, ''),
+          passenger_phone: passenger.phone.replace(/\D/g, '') || null,
+          trip_id: returnTripId,
+          sort_order: selectedSeats.length + i,
+          company_id: event.company_id,
+        });
+      });
+    }
 
-    if (ticketError) {
-      console.error('Ticket error:', ticketError);
-      if (ticketError.code === '23505') {
-        toast.error('Um ou mais assentos já foram reservados. Escolha outros assentos.');
-      } else {
-        toast.error('Erro ao reservar assentos. Tente novamente.');
-      }
+    const { error: passengersError } = await supabase.from('sale_passengers').insert(passengerInserts);
+
+    if (passengersError) {
+      console.error('Passengers error:', passengersError);
+      // Rollback
+      await supabase.from('seat_locks').delete().eq('sale_id', sale.id);
       await supabase.from('sales').delete().eq('id', sale.id);
+      toast.error('Erro ao registrar dados dos passageiros. Tente novamente.');
       setSubmitting(false);
       return;
     }
 
-    if ((mandatoryRoundTrip || Boolean(returnTripId)) && returnTripId) {
-      // Mantemos uma única venda financeira (Stripe) e adicionamos bilhetes extras para a volta.
-      // Assim o estoque segue por trip_id sem quebrar o histórico/composição atual da venda.
-      const returnTicketInserts = passengers.map((passenger, i) => ({
-        sale_id: sale.id,
-        trip_id: returnTripId,
-        seat_id: null,
-        seat_label: `VOLTA-${i + 1}`,
-        passenger_name: passenger.name.trim(),
-        passenger_cpf: passenger.cpf.replace(/\D/g, ''),
-        passenger_phone: passenger.phone.replace(/\D/g, '') || null,
-        company_id: event.company_id,
-      }));
-
-      const { error: returnTicketsError } = await supabase.from('tickets').insert(returnTicketInserts);
-      if (returnTicketsError) {
-        await supabase.from('tickets').delete().eq('sale_id', sale.id);
-        await supabase.from('sales').delete().eq('id', sale.id);
-        toast.error('Erro ao confirmar os bilhetes da volta.');
-        setSubmitting(false);
-        return;
-      }
-    }
-
-    // Try to create Asaas payment
+    // === Step 4: Create Asaas payment and open in new tab ===
     try {
       const { data: checkoutData, error: checkoutError } = await supabase.functions.invoke(
         'create-asaas-payment',
@@ -676,11 +717,14 @@ export default function Checkout() {
       );
 
       if (!checkoutError && checkoutData?.url) {
-        window.location.href = checkoutData.url;
+        // Open payment in new tab
+        window.open(checkoutData.url, '_blank');
+        // Navigate to waiting/confirmation screen in current tab
+        navigate(`/confirmacao/${sale.id}`);
         return;
       }
 
-      // Parse error response — supabase.functions.invoke returns data=null on non-2xx
+      // Parse error response
       let errorBody = checkoutData;
       if (checkoutError && !errorBody) {
         try {
@@ -692,15 +736,16 @@ export default function Checkout() {
       const errorMessage = errorBody?.error;
 
       if (errorCode === 'no_asaas_account') {
-        // Company has no Asaas — fallback to reservation
+        // Company has no Asaas — fallback to reservation (keep as pendente)
         console.log('Asaas not configured, falling back to confirmation');
         navigate(`/confirmacao/${sale.id}`);
         return;
       }
 
-      // Generic error
+      // Generic error — rollback everything
       toast.error(errorMessage || 'Erro ao iniciar pagamento. Tente novamente.');
-      await supabase.from('tickets').delete().eq('sale_id', sale.id);
+      await supabase.from('sale_passengers').delete().eq('sale_id', sale.id);
+      await supabase.from('seat_locks').delete().eq('sale_id', sale.id);
       await supabase.from('sales').delete().eq('id', sale.id);
       setSubmitting(false);
       return;

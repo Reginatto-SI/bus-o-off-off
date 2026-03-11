@@ -54,8 +54,8 @@ serve(async (req) => {
       });
     }
 
-    if (sale.status !== "reservado") {
-      return new Response(JSON.stringify({ error: "Sale is not in 'reservado' status" }), {
+    if (sale.status !== "reservado" && sale.status !== "pendente_pagamento") {
+      return new Response(JSON.stringify({ error: "Sale is not in 'reservado' or 'pendente_pagamento' status" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

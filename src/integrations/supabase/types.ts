@@ -824,6 +824,77 @@ export type Database = {
           },
         ]
       }
+      sale_passengers: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          passenger_cpf: string
+          passenger_name: string
+          passenger_phone: string | null
+          sale_id: string
+          seat_id: string | null
+          seat_label: string
+          sort_order: number
+          trip_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          passenger_cpf: string
+          passenger_name: string
+          passenger_phone?: string | null
+          sale_id: string
+          seat_id?: string | null
+          seat_label: string
+          sort_order?: number
+          trip_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          passenger_cpf?: string
+          passenger_name?: string
+          passenger_phone?: string | null
+          sale_id?: string
+          seat_id?: string | null
+          seat_label?: string
+          sort_order?: number
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_passengers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_passengers_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_passengers_seat_id_fkey"
+            columns: ["seat_id"]
+            isOneToOne: false
+            referencedRelation: "seats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_passengers_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales: {
         Row: {
           asaas_payment_id: string | null
@@ -958,6 +1029,65 @@ export type Database = {
           },
           {
             foreignKeyName: "sales_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seat_locks: {
+        Row: {
+          company_id: string
+          expires_at: string
+          id: string
+          locked_at: string
+          sale_id: string | null
+          seat_id: string
+          trip_id: string
+        }
+        Insert: {
+          company_id: string
+          expires_at: string
+          id?: string
+          locked_at?: string
+          sale_id?: string | null
+          seat_id: string
+          trip_id: string
+        }
+        Update: {
+          company_id?: string
+          expires_at?: string
+          id?: string
+          locked_at?: string
+          sale_id?: string | null
+          seat_id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seat_locks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_locks_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_locks_seat_id_fkey"
+            columns: ["seat_id"]
+            isOneToOne: false
+            referencedRelation: "seats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_locks_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
@@ -1816,7 +1946,7 @@ export type Database = {
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"
-      sale_status: "reservado" | "pago" | "cancelado"
+      sale_status: "pendente_pagamento" | "reservado" | "pago" | "cancelado"
       seller_status: "ativo" | "inativo"
       user_role: "gerente" | "operador" | "vendedor" | "motorista" | "developer"
       vehicle_type: "onibus" | "van" | "micro_onibus"
@@ -1948,7 +2078,7 @@ export const Constants = {
   public: {
     Enums: {
       event_status: ["rascunho", "a_venda", "encerrado"],
-      sale_status: ["reservado", "pago", "cancelado"],
+      sale_status: ["pendente_pagamento", "reservado", "pago", "cancelado"],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista", "developer"],
       vehicle_type: ["onibus", "van", "micro_onibus"],

@@ -204,21 +204,24 @@ export default function Confirmation() {
     }
   }, [id, toast]);
 
-  // Polling para confirmação de pagamento
+  // Polling para confirmação de pagamento (works for both pendente_pagamento and reservado)
   useEffect(() => {
-    if (!paymentSuccess || !id || !sale || sale.status === 'pago') return;
+    if (!id || !sale) return;
+    // Only poll if sale is in a pending state
+    const isPending = sale.status === 'pendente_pagamento' || (sale.status === 'reservado' && paymentSuccess);
+    if (!isPending) return;
 
     let attempts = 0;
-    const maxAttempts = 60;
+    const maxAttempts = 120; // 6 minutes at 3s intervals
 
     const interval = setInterval(async () => {
       attempts++;
 
-      // Após 15s (5 tentativas), forçar sync com Stripe uma vez
+      // After 15s, force sync with payment gateway once
       if (attempts === 5 && !verifyCalledRef.current) {
         verifyCalledRef.current = true;
         supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
-          .catch(() => {}); // fire-and-forget, o polling local vai pegar o resultado
+          .catch(() => {});
       }
 
       const { data } = await supabase.from('sales').select('status').eq('id', id).maybeSingle();
@@ -229,6 +232,9 @@ export default function Confirmation() {
         if (freshTickets) setTickets(freshTickets as TicketRecord[]);
         setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
         clearInterval(interval);
+      } else if (data?.status === 'cancelado') {
+        setSale((prev) => (prev ? { ...prev, status: 'cancelado' } : prev));
+        clearInterval(interval);
       } else if (attempts >= maxAttempts) {
         setPollingTimedOut(true);
         clearInterval(interval);
@@ -236,7 +242,7 @@ export default function Confirmation() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [paymentSuccess, id, sale?.status]);
+  }, [id, sale?.status, paymentSuccess]);
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
@@ -314,6 +320,7 @@ export default function Confirmation() {
   }
 
   const isPaid = sale.status === 'pago';
+  const isPendingPayment = sale.status === 'pendente_pagamento';
 
   return (
     <PublicLayout>
@@ -328,22 +335,26 @@ export default function Confirmation() {
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado!</h1>
               <p className="text-muted-foreground">Seu pagamento foi confirmado e suas passagens estão garantidas.</p>
             </>
-          ) : paymentSuccess && !pollingTimedOut ? (
+          ) : (isPendingPayment || (sale.status === 'reservado' && paymentSuccess)) && !pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Verificando Pagamento...</h1>
-              <p className="text-muted-foreground">Estamos confirmando seu pagamento. Isso pode levar alguns segundos.</p>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Aguardando Confirmação do Pagamento</h1>
+              <p className="text-muted-foreground">
+                Assim que o pagamento for confirmado, sua passagem será gerada automaticamente.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Você pode fechar esta página — sua passagem será gerada mesmo assim.
+              </p>
             </>
-          ) : paymentSuccess && pollingTimedOut ? (
+          ) : (isPendingPayment || paymentSuccess) && pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento em Processamento</h1>
-              <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco.</p>
-              {/* Botão fallback para forçar verificação com Stripe */}
+              <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco. Sua passagem será gerada automaticamente quando confirmado.</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -358,6 +369,16 @@ export default function Confirmation() {
                 )}
                 Atualizar status do pagamento
               </Button>
+            </>
+          ) : sale.status === 'cancelado' ? (
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Compra Cancelada</h1>
+              <p className="text-muted-foreground">
+                {sale.cancel_reason || 'Esta compra foi cancelada.'}
+              </p>
             </>
           ) : (
             <>

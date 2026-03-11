@@ -10,8 +10,8 @@ const corsHeaders = {
 /**
  * Webhook do Asaas para processar notificações de pagamento.
  * Eventos processados:
- * - PAYMENT_CONFIRMED / PAYMENT_RECEIVED → marca venda como pago
- * - PAYMENT_OVERDUE / PAYMENT_DELETED / PAYMENT_REFUNDED → cancela venda
+ * - PAYMENT_CONFIRMED / PAYMENT_RECEIVED → marca venda como pago + gera tickets
+ * - PAYMENT_OVERDUE / PAYMENT_DELETED / PAYMENT_REFUNDED → cancela venda + libera locks
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -53,7 +53,6 @@ serve(async (req) => {
     const saleId = payment.externalReference;
     if (!saleId) {
       console.log("No externalReference in payment, checking metadata...");
-      // Try payment_type for platform fee
       if (payment.description?.includes("Taxa da Plataforma")) {
         console.log("Platform fee payment event, skipping (handled by platform fee flow)");
       }
@@ -97,45 +96,45 @@ async function processPaymentConfirmed(
   saleId: string,
   payment: any
 ) {
-  // Update sale to 'pago' with idempotency guard
-  const { error: updateError } = await supabaseAdmin
+  // Accept both pendente_pagamento and reservado (admin flow backward compat)
+  const { data: updatedSale, error: updateError } = await supabaseAdmin
     .from("sales")
     .update({
       status: "pago",
       asaas_payment_status: payment.status,
     })
     .eq("id", saleId)
-    .eq("status", "reservado");
+    .in("status", ["pendente_pagamento", "reservado"])
+    .select("id, company_id, unit_price, quantity, gross_amount, event_id, trip_id, boarding_location_id")
+    .single();
 
-  if (updateError) {
-    console.error("Error updating sale:", updateError);
+  if (updateError || !updatedSale) {
+    console.error("Error updating sale (may already be pago):", updateError);
     return;
   }
 
   console.log(`Sale ${saleId} marked as 'pago' via Asaas webhook`);
 
+  // Generate tickets from sale_passengers if they exist (new flow)
+  await createTicketsFromPassengers(supabaseAdmin, saleId, updatedSale.company_id);
+
+  // Release seat locks for this sale
+  await supabaseAdmin.from("seat_locks").delete().eq("sale_id", saleId);
+
   // Calculate financial data
-  const { data: sale } = await supabaseAdmin
-    .from("sales")
-    .select("company_id, unit_price, quantity, gross_amount")
-    .eq("id", saleId)
-    .single();
-
-  if (!sale) return;
-
   const { data: company } = await supabaseAdmin
     .from("companies")
     .select("platform_fee_percent, partner_split_percent")
-    .eq("id", sale.company_id)
+    .eq("id", updatedSale.company_id)
     .single();
 
   if (company?.platform_fee_percent == null) {
-    console.error(`Company ${sale.company_id} missing platform_fee_percent`);
+    console.error(`Company ${updatedSale.company_id} missing platform_fee_percent`);
     return;
   }
 
   const platformFeePercent = Number(company.platform_fee_percent);
-  const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
+  const grossAmount = updatedSale.gross_amount ?? (updatedSale.unit_price * updatedSale.quantity);
   const grossAmountCents = Math.round(grossAmount * 100);
   const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
   const platformFeeTotal = platformFeeCents / 100;
@@ -156,8 +155,6 @@ async function processPaymentConfirmed(
     const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
     partnerFeeAmount = partnerFeeCents / 100;
     platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
-    // Note: Asaas split already handles the distribution at payment creation.
-    // Partner transfer via Asaas split is automatic. No manual transfer needed.
   }
 
   await supabaseAdmin
@@ -174,8 +171,72 @@ async function processPaymentConfirmed(
     sale_id: saleId,
     action: "payment_confirmed",
     description: `Pagamento confirmado via Asaas (Payment: ${payment.id}, billingType: ${payment.billingType || 'unknown'}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
-    company_id: sale.company_id,
+    company_id: updatedSale.company_id,
   });
+}
+
+/**
+ * Creates tickets from sale_passengers staging table (new public checkout flow).
+ * If no sale_passengers exist (admin/legacy flow), does nothing.
+ */
+async function createTicketsFromPassengers(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  saleId: string,
+  companyId: string
+) {
+  // Check if tickets already exist for this sale (idempotency)
+  const { count: existingTickets } = await supabaseAdmin
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("sale_id", saleId);
+
+  if (existingTickets && existingTickets > 0) {
+    console.log(`Tickets already exist for sale ${saleId}, skipping creation`);
+    return;
+  }
+
+  // Fetch passenger data from staging table
+  const { data: passengers, error: passError } = await supabaseAdmin
+    .from("sale_passengers")
+    .select("*")
+    .eq("sale_id", saleId)
+    .order("sort_order");
+
+  if (passError) {
+    console.error("Error fetching sale_passengers:", passError);
+    return;
+  }
+
+  if (!passengers || passengers.length === 0) {
+    console.log(`No sale_passengers for sale ${saleId} (legacy/admin flow)`);
+    return;
+  }
+
+  // Create tickets from passenger data
+  const ticketInserts = passengers.map((p: any) => ({
+    sale_id: saleId,
+    trip_id: p.trip_id,
+    seat_id: p.seat_id,
+    seat_label: p.seat_label,
+    passenger_name: p.passenger_name,
+    passenger_cpf: p.passenger_cpf,
+    passenger_phone: p.passenger_phone,
+    company_id: companyId,
+  }));
+
+  const { error: ticketError } = await supabaseAdmin
+    .from("tickets")
+    .insert(ticketInserts);
+
+  if (ticketError) {
+    console.error("Error creating tickets from passengers:", ticketError);
+    return;
+  }
+
+  console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} from sale_passengers`);
+
+  // Clean up staging data
+  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
 }
 
 async function processPaymentFailed(
@@ -184,6 +245,7 @@ async function processPaymentFailed(
   payment: any,
   eventType: string
 ) {
+  // Accept both pendente_pagamento and reservado for cancellation
   const { error: updateError } = await supabaseAdmin
     .from("sales")
     .update({
@@ -193,7 +255,7 @@ async function processPaymentFailed(
       asaas_payment_status: payment.status,
     })
     .eq("id", saleId)
-    .eq("status", "reservado");
+    .in("status", ["pendente_pagamento", "reservado"]);
 
   if (updateError) {
     console.error("Error cancelling sale:", updateError);
@@ -202,8 +264,14 @@ async function processPaymentFailed(
 
   console.log(`Sale ${saleId} cancelled due to ${eventType}`);
 
-  // Delete tickets to release seats
+  // Delete tickets to release seats (if any exist from legacy flow)
   await supabaseAdmin.from("tickets").delete().eq("sale_id", saleId);
+
+  // Delete seat locks
+  await supabaseAdmin.from("seat_locks").delete().eq("sale_id", saleId);
+
+  // Clean up staging data
+  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
 
   const { data: sale } = await supabaseAdmin
     .from("sales")
