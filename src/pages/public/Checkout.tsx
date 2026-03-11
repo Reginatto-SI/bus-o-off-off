@@ -177,22 +177,27 @@ export default function Checkout() {
     setSeatStatusError(null);
 
     try {
-      const { data: tickets, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('seat_id, sale_id')
-        .eq('trip_id', tripUuid);
+      // Fetch tickets AND active seat_locks for this trip
+      const [ticketsRes, locksRes] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select('seat_id, sale_id')
+          .eq('trip_id', tripUuid),
+        supabase
+          .from('seat_locks')
+          .select('seat_id')
+          .eq('trip_id', tripUuid)
+          .gt('expires_at', new Date().toISOString()),
+      ]);
 
-      if (ticketsError) {
-        throw ticketsError;
-      }
+      if (ticketsRes.error) throw ticketsRes.error;
 
       if (!isActive()) return;
 
-      const ticketRows = (tickets ?? []) as { seat_id: string | null; sale_id: string | null }[];
+      const ticketRows = (ticketsRes.data ?? []) as { seat_id: string | null; sale_id: string | null }[];
       const saleIds = ticketRows.map((t) => t.sale_id).filter(Boolean) as string[];
 
-      // Comentário de suporte: bloqueios operacionais são registrados em venda/ticket,
-      // então identificamos e separamos para não exibir como "ocupado" para cliente.
+      // Identify admin blocks (BLOQUEIO sales)
       let blockedSales = new Set<string>();
       if (saleIds.length > 0) {
         const { data: blockedSalesData } = await supabase
@@ -207,12 +212,19 @@ export default function Checkout() {
       const blockedSeats = ticketRows
         .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
         .map((t) => t.seat_id as string);
-      const occupiedSeats = ticketRows
+      
+      // Occupied = tickets (non-blocked) + active seat_locks
+      const occupiedFromTickets = ticketRows
         .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
         .map((t) => t.seat_id as string);
+      
+      const occupiedFromLocks = (locksRes.data ?? [])
+        .map((l: any) => l.seat_id as string);
+
+      const allOccupied = [...new Set([...occupiedFromTickets, ...occupiedFromLocks])];
 
       setBlockedSeatIds(blockedSeats);
-      setOccupiedSeatIds(occupiedSeats);
+      setOccupiedSeatIds(allOccupied);
     } catch (error) {
       console.error('Erro ao carregar status dos assentos:', error);
       if (!isActive()) return;
