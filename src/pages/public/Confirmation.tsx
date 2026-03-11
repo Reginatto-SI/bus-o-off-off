@@ -56,6 +56,7 @@ export default function Confirmation() {
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [lastVerificationAt, setLastVerificationAt] = useState<Date | null>(null);
   const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
   // Ref para evitar chamada dupla ao verify-payment-status durante polling
@@ -179,6 +180,8 @@ export default function Confirmation() {
   const verifyPaymentStatus = useCallback(async () => {
     if (!id) return;
     setIsVerifyingPayment(true);
+    // Guardamos a última tentativa para dar feedback claro ao usuário em estados pendentes.
+    setLastVerificationAt(new Date());
     try {
       const { data, error } = await supabase.functions.invoke('verify-payment-status', {
         body: { sale_id: id },
@@ -347,6 +350,25 @@ export default function Confirmation() {
               <p className="text-xs text-muted-foreground mt-2">
                 Você pode fechar esta página — sua passagem será gerada mesmo assim.
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={verifyPaymentStatus}
+                disabled={isVerifyingPayment}
+              >
+                {isVerifyingPayment ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Atualizar status do pagamento
+              </Button>
+              {lastVerificationAt && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Última tentativa: {new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(lastVerificationAt)}
+                </p>
+              )}
             </>
           ) : (isPendingPayment || paymentSuccess) && pollingTimedOut ? (
             <>
@@ -369,6 +391,11 @@ export default function Confirmation() {
                 )}
                 Atualizar status do pagamento
               </Button>
+              {lastVerificationAt && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Última tentativa: {new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(lastVerificationAt)}
+                </p>
+              )}
             </>
           ) : sale.status === 'cancelado' ? (
             <>
