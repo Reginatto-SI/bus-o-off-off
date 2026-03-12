@@ -521,6 +521,7 @@ export default function EventReport() {
           </Card>
         ) : filteredSales.length === 0 ? (
           <EmptyState
+            icon={<BarChart3 className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum registro encontrado"
             description="Ajuste os filtros para visualizar os dados do relatório por evento."
           />
