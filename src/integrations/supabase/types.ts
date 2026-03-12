@@ -175,6 +175,7 @@ export type Database = {
         Row: {
           accent_color: string | null
           address: string | null
+          address_number: string | null
           asaas_account_email: string | null
           asaas_account_id: string | null
           asaas_api_key: string | null
@@ -198,8 +199,10 @@ export type Database = {
           notes: string | null
           partner_split_percent: number
           phone: string | null
+          postal_code: string | null
           platform_fee_percent: number
           primary_color: string | null
+          province: string | null
           public_slug: string | null
           slogan: string | null
           social_facebook: string | null
@@ -222,6 +225,7 @@ export type Database = {
         Insert: {
           accent_color?: string | null
           address?: string | null
+          address_number?: string | null
           asaas_account_email?: string | null
           asaas_account_id?: string | null
           asaas_api_key?: string | null
@@ -245,8 +249,10 @@ export type Database = {
           notes?: string | null
           partner_split_percent?: number
           phone?: string | null
+          postal_code?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
+          province?: string | null
           public_slug?: string | null
           slogan?: string | null
           social_facebook?: string | null
@@ -269,6 +275,7 @@ export type Database = {
         Update: {
           accent_color?: string | null
           address?: string | null
+          address_number?: string | null
           asaas_account_email?: string | null
           asaas_account_id?: string | null
           asaas_api_key?: string | null
@@ -292,8 +299,10 @@ export type Database = {
           notes?: string | null
           partner_split_percent?: number
           phone?: string | null
+          postal_code?: string | null
           platform_fee_percent?: number
           primary_color?: string | null
+          province?: string | null
           public_slug?: string | null
           slogan?: string | null
           social_facebook?: string | null

@@ -39,6 +39,9 @@ export interface Company {
   whatsapp: string | null;
   website: string | null;
   address: string | null;
+  address_number: string | null;
+  province: string | null;
+  postal_code: string | null;
   notes: string | null;
   // Stripe Connect (legacy)
   stripe_account_id: string | null;

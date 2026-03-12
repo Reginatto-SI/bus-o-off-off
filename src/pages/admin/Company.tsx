@@ -148,6 +148,9 @@ export default function CompanyPage() {
     whatsapp: '',
     website: '',
     address: '',
+    address_number: '',
+    province: '',
+    postal_code: '',
     city: '',
     state: '',
     notes: '',
@@ -251,6 +254,9 @@ export default function CompanyPage() {
       whatsapp: formatPhoneBR(data?.whatsapp ?? ''),
       website: data?.website ?? '',
       address: data?.address ?? '',
+      address_number: data?.address_number ?? '',
+      province: data?.province ?? '',
+      postal_code: data?.postal_code ?? '',
       city: data?.city ?? '',
       state: (data?.state ?? '').toUpperCase(),
       notes: data?.notes ?? '',
@@ -456,6 +462,9 @@ export default function CompanyPage() {
       whatsapp: '',
       website: '',
       address: '',
+      address_number: '',
+      province: '',
+      postal_code: '',
       city: '',
       state: '',
       notes: '',
@@ -609,6 +618,10 @@ export default function CompanyPage() {
       whatsapp: normalizePhoneForStorage(form.whatsapp) || null,
       website: form.website.trim() || null,
       address: form.address.trim() || null,
+      // Comentário: campos de endereço adicionais exigidos pela API do Asaas.
+      address_number: form.address_number.trim() || null,
+      province: form.province.trim() || null,
+      postal_code: form.postal_code.trim() || null,
       city: form.city.trim() || null,
       state: form.state.trim().toUpperCase() || null,
       notes: form.notes.trim() || null,
@@ -1280,7 +1293,34 @@ export default function CompanyPage() {
                           id="address"
                           value={form.address}
                           onChange={(e) => setForm({ ...form, address: e.target.value })}
-                          placeholder="Rua Exemplo, 123"
+                          placeholder="Rua Exemplo"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="address_number">Número</Label>
+                        <Input
+                          id="address_number"
+                          value={form.address_number}
+                          onChange={(e) => setForm({ ...form, address_number: e.target.value })}
+                          placeholder="123"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="province">Bairro</Label>
+                        <Input
+                          id="province"
+                          value={form.province}
+                          onChange={(e) => setForm({ ...form, province: e.target.value })}
+                          placeholder="Centro"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="postal_code">CEP</Label>
+                        <Input
+                          id="postal_code"
+                          value={form.postal_code}
+                          onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
+                          placeholder="00000-000"
                         />
                       </div>
                       <div className="space-y-2">
