@@ -197,7 +197,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setUnitPrice('');
       setSelectedSellerId('');
       setConfirmationData(null);
-      setActiveTicketIndex(0);
+      // activeTicketIndex reset removido
       fetchEvents();
       fetchSellers();
     }
