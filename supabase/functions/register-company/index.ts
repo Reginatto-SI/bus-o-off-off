@@ -150,6 +150,9 @@ serve(async (req) => {
         document_number: normalizedDocument,
         phone,
         email,
+        // Padrão de comissão aplicado já na criação para evitar configuração manual.
+        platform_fee_percent: 3.5,
+        partner_split_percent: 3.5,
       })
       .select("id")
       .single();
