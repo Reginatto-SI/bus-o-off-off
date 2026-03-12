@@ -8,6 +8,7 @@ import { FilterCard } from '@/components/admin/FilterCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +18,8 @@ interface EventOption {
   id: string;
   name: string;
   date: string;
+  status: 'rascunho' | 'a_venda' | 'encerrado';
+  is_archived: boolean;
 }
 
 interface TripOption {
@@ -40,6 +43,7 @@ export default function BoardingManifestReport() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showOldEvents, setShowOldEvents] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState('all');
   const [selectedTripId, setSelectedTripId] = useState('all');
 
@@ -85,17 +89,31 @@ export default function BoardingManifestReport() {
   );
 
   // Carrega eventos da empresa logada respeitando isolamento multi-tenant.
+  // Comentário de suporte: por padrão mantemos foco operacional (à venda + janela recente),
+  // e só exibimos histórico completo quando o operador habilita explicitamente.
   const fetchEvents = useCallback(async () => {
     if (!activeCompanyId) {
       setEvents([]);
       return;
     }
 
-    const { data, error } = await supabase
+    const recentCutoff = new Date();
+    recentCutoff.setDate(recentCutoff.getDate() - 30);
+    const recentCutoffIso = recentCutoff.toISOString().slice(0, 10);
+
+    let query = supabase
       .from('events')
-      .select('id, name, date')
+      .select('id, name, date, status, is_archived')
       .eq('company_id', activeCompanyId)
       .order('date', { ascending: false });
+
+    if (!showOldEvents) {
+      query = query
+        .eq('is_archived', false)
+        .or(`status.eq.a_venda,date.gte.${recentCutoffIso}`);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       toast.error('Erro ao carregar eventos.');
@@ -104,7 +122,7 @@ export default function BoardingManifestReport() {
     }
 
     setEvents((data ?? []) as EventOption[]);
-  }, [activeCompanyId]);
+  }, [activeCompanyId, showOldEvents]);
 
   // Carrega viagens somente quando evento é selecionado para manter UX e performance.
   const fetchTrips = useCallback(async (eventId: string) => {
@@ -144,6 +162,14 @@ export default function BoardingManifestReport() {
     fetchTrips(selectedEventId);
   }, [selectedEventId, fetchTrips]);
 
+
+  useEffect(() => {
+    // Comentário de suporte: evita estado inválido quando o operador alterna entre eventos ativos/históricos.
+    if (selectedEventId !== 'all' && !events.some((event) => event.id === selectedEventId)) {
+      setSelectedEventId('all');
+    }
+  }, [events, selectedEventId]);
+
   const handleGeneratePdf = async () => {
     if (!activeCompanyId || !selectedEvent || !activeCompany) {
       toast.error('Selecione um evento válido para gerar o PDF.');
@@ -169,7 +195,7 @@ export default function BoardingManifestReport() {
     }
   };
 
-  const hasActiveFilters = selectedEventId !== 'all' || selectedTripId !== 'all' || Boolean(searchTerm.trim());
+  const hasActiveFilters = selectedEventId !== 'all' || selectedTripId !== 'all' || Boolean(searchTerm.trim()) || showOldEvents;
 
   return (
     <AdminLayout>
@@ -198,10 +224,19 @@ export default function BoardingManifestReport() {
             onSearchChange={setSearchTerm}
             onClearFilters={() => {
               setSearchTerm('');
+              setShowOldEvents(false);
               setSelectedEventId('all');
               setSelectedTripId('all');
             }}
             hasActiveFilters={hasActiveFilters}
+            mainFilters={
+              <div className="space-y-1.5 flex items-end">
+                <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground cursor-pointer select-none">
+                  <Switch checked={showOldEvents} onCheckedChange={setShowOldEvents} />
+                  Mostrar eventos antigos
+                </label>
+              </div>
+            }
             selects={[
               {
                 id: 'event',
