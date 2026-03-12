@@ -7,7 +7,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ASAAS_BASE_URL = "https://api.asaas.com/v3";
+function getAsaasBaseUrl() {
+  const asaasEnv = Deno.env.get("ASAAS_ENV") ?? "production";
+
+  // Comentário de suporte: centralizamos a decisão do ambiente para evitar cobrança real em deploys de teste.
+  if (asaasEnv === "sandbox") {
+    return "https://sandbox.asaas.com/api/v3";
+  }
+
+  return "https://api.asaas.com/v3";
+}
 
 /**
  * Cobra a taxa da plataforma em vendas manuais/conversão de reserva via Asaas.
@@ -19,6 +28,8 @@ serve(async (req) => {
   }
 
   try {
+    const asaasBaseUrl = getAsaasBaseUrl();
+
     const { sale_id } = await req.json();
     if (!sale_id) {
       return new Response(JSON.stringify({ error: "sale_id is required" }), {
@@ -82,7 +93,7 @@ serve(async (req) => {
 
     if (companyDoc) {
       const searchRes = await fetch(
-        `${ASAAS_BASE_URL}/customers?cpfCnpj=${companyDoc}`,
+        `${asaasBaseUrl}/customers?cpfCnpj=${companyDoc}`,
         { headers: { "access_token": PLATFORM_API_KEY } }
       );
       const searchData = await searchRes.json();
@@ -92,7 +103,7 @@ serve(async (req) => {
     }
 
     if (!customerId) {
-      const createRes = await fetch(`${ASAAS_BASE_URL}/customers`, {
+      const createRes = await fetch(`${asaasBaseUrl}/customers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,7 +131,7 @@ serve(async (req) => {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
 
-    const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
+    const paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
