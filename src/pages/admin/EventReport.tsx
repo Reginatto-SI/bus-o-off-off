@@ -82,9 +82,8 @@ interface SaleReportRow {
   gross_amount: number | null;
   platform_fee_total: number | null;
   customer_name: string;
-  seat_number: string | null;
   event?: { id: string; name: string; date: string; status: string; is_archived: boolean } | null;
-  trip?: { id: string; capacity: number; vehicle?: { id: string; name: string; prefix: string | null; plate: string } | null } | null;
+  trip?: { id: string; capacity: number; vehicle?: { id: string; model: string | null; brand: string | null; plate: string } | null } | null;
   seller?: { name: string | null } | null;
 }
 
