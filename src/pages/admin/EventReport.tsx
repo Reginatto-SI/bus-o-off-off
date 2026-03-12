@@ -68,8 +68,8 @@ interface EventOption {
 
 interface VehicleOption {
   id: string;
-  name: string;
-  prefix: string | null;
+  model: string | null;
+  brand: string | null;
   plate: string;
 }
 
