@@ -357,7 +357,6 @@ export default function EventReport() {
         evento: sale.event?.name ?? '-',
         id_venda: sale.id,
         passageiro: sale.customer_name,
-        poltrona: sale.seat_number ?? '-',
         vendedor: sale.seller?.name ?? 'Sem vendedor',
         valor: formatCurrencyBRL(getSaleAmount(sale)),
         status: sale.status,
