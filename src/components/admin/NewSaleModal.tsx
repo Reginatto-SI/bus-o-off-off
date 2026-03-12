@@ -473,6 +473,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     return passengers.length > 0;
   }, [passengers, activeTab, unitPrice, saving]);
 
+  const manualSaleFinancialSummary = useMemo(() => {
+    if (activeTab !== 'manual') return null;
+
+    const pricePerTicket = parseCurrencyInputBRL(unitPrice);
+    if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
+
+    const quantity = passengers.length;
+    const feeBreakdown = calculateFees(pricePerTicket, eventFees);
+    const subtotal = pricePerTicket * quantity;
+    const totalServiceFee = feeBreakdown.totalFees * quantity;
+
+    return {
+      pricePerTicket,
+      quantity,
+      subtotal,
+      totalServiceFee,
+      totalSale: subtotal + totalServiceFee,
+    };
+  }, [activeTab, unitPrice, passengers.length, eventFees]);
+
   // ── Build TicketCardData for confirmation ──
   const buildTicketCardData = (ticket: TicketRecord): TicketCardData => {
     const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
