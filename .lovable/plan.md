@@ -1,23 +1,32 @@
 
+# Complete Payment Flow Overhaul — IMPLEMENTED
 
-# Fix: Automatic Payment Verification Polling
+## Changes Made
 
-## Root Cause
+### Database
+- Added `pendente_pagamento` to `sale_status` enum
+- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
+- Created `sale_passengers` staging table for passenger data before payment confirmation
+- Enabled realtime on `sales` table
+- Enabled `pg_cron` and `pg_net` extensions
+- Scheduled `cleanup-expired-locks` cron job every 5 minutes
 
-In `Confirmation.tsx` lines 220-228, the polling loop calls `verify-payment-status` exactly **once** at attempt 5 (15 seconds), guarded by `verifyCalledRef`. After that, it only reads `sales.status` from the database every 3 seconds — but nothing updates that status because the webhook may not fire in Sandbox and the single verify call happened too early.
+### Edge Functions
+- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
+- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
+- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
 
-The manual button works because it calls `verify-payment-status` on demand, which queries Asaas directly and updates the sale.
+### Frontend
+- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
+- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
+- `StatusBadge.tsx`: Added `pendente_pagamento` badge
+- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
 
-## Fix
-
-Replace the single-shot verify at attempt 5 with **periodic calls** to `verify-payment-status` every ~30 seconds (every 10th polling cycle). Remove the `verifyCalledRef` guard. Keep the DB status check every 3s between verify calls.
-
-## Changes
-
-### `src/pages/public/Confirmation.tsx`
-- Remove `verifyCalledRef`
-- In the polling interval: call `verify-payment-status` every 10 attempts (~30s) instead of once at attempt 5
-- Add comments explaining the change
-
-No backend changes needed — `verify-payment-status` already works correctly (proven by the manual button).
-
+## Architecture
+```
+NEW FLOW:
+  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
+  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
+  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
+  → Frontend detects pago → Show tickets
+```
