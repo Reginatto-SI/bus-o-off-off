@@ -459,9 +459,8 @@ export default function Confirmation() {
             <h2 className="font-semibold text-lg">
               {isPaid ? 'Suas Passagens' : 'Passagens (Canceladas)'}
             </h2>
-            {ticketCards.map((tc) => (
-              <TicketCard key={tc.ticketId} ticket={tc} />
-            ))}
+            {/* Agrupamento por passageiro com ida/volta sob demanda */}
+            <PassengerTicketList tickets={ticketCards} />
           </div>
         )}
 
