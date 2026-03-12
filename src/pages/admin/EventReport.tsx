@@ -118,9 +118,9 @@ const REPORT_TABS = {
 type ReportTab = (typeof REPORT_TABS)[keyof typeof REPORT_TABS];
 
 const getVehicleLabel = (trip?: SaleReportRow['trip']) => {
-  const name = trip?.vehicle?.name ?? 'Sem veículo';
-  const prefix = trip?.vehicle?.prefix ? ` • ${trip.vehicle.prefix}` : '';
-  return `${name}${prefix}`;
+  if (!trip?.vehicle) return 'Sem veículo';
+  const label = [trip.vehicle.brand, trip.vehicle.model].filter(Boolean).join(' ') || trip.vehicle.plate;
+  return `${label} • ${trip.vehicle.plate}`;
 };
 
 const getSaleAmount = (sale: Pick<SaleReportRow, 'gross_amount' | 'quantity' | 'unit_price'>) => {
