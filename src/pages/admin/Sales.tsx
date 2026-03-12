@@ -94,7 +94,8 @@ import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { TicketCard, type TicketCardData } from '@/components/public/TicketCard';
+import { type TicketCardData } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
 
 function formatCpfMask(value: string): string {
@@ -825,11 +826,11 @@ export default function Sales() {
   };
 
   // ── Ticket Generation ──
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // selectedTicketId removido — agora PassengerTicketList gerencia internamente
 
   const openTicketGen = async (sale: Sale) => {
     setTicketGenSale(sale);
-    setSelectedTicketId(null);
+    setTicketGenLoading(true);
     setTicketGenLoading(true);
     setTicketGenTickets([]);
     setTicketGenFees(undefined);
@@ -897,9 +898,7 @@ export default function Sales() {
 
     setTicketGenLoading(false);
 
-    if (fetchedTickets.length === 1) {
-      setSelectedTicketId(fetchedTickets[0].id);
-    }
+    // Agrupamento agora é feito automaticamente pelo PassengerTicketList
   };
 
   // ── Actions dropdown ──
@@ -961,20 +960,22 @@ export default function Sales() {
 
     return actions;
   };
-  const selectedTicket = ticketGenTickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
-  const selectedTicketData = selectedTicket && ticketGenSale && activeCompany
-    ? buildTicketCardData(
-        selectedTicket,
-        ticketGenSale,
-        activeCompany,
-        ticketGenBoardingTime,
-        ticketGenBoardingDate,
-        ticketGenFees,
-        ticketGenTotalPaid,
-        ticketGenPartners.length > 0 ? ticketGenPartners : undefined,
-        ticketGenSponsors.length > 0 ? ticketGenSponsors : undefined,
+  // Constrói TicketCardData para TODOS os tickets da venda (agrupamento por passageiro no componente)
+  const allTicketGenCards: TicketCardData[] = ticketGenSale && activeCompany
+    ? ticketGenTickets.map((ticket) =>
+        buildTicketCardData(
+          ticket,
+          ticketGenSale,
+          activeCompany,
+          ticketGenBoardingTime,
+          ticketGenBoardingDate,
+          ticketGenFees,
+          ticketGenTotalPaid,
+          ticketGenPartners.length > 0 ? ticketGenPartners : undefined,
+          ticketGenSponsors.length > 0 ? ticketGenSponsors : undefined,
+        )
       )
-    : null;
+    : [];
 
 
 
@@ -1374,7 +1375,6 @@ export default function Sales() {
             if (!open) {
               setTicketGenSale(null);
               setTicketGenTickets([]);
-              setSelectedTicketId(null);
             }
           }}
         >
@@ -1390,36 +1390,21 @@ export default function Sales() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
-              ) : ticketGenTickets.length === 0 ? (
+              ) : allTicketGenCards.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">Nenhum passageiro encontrado.</p>
-              ) : !selectedTicketId && ticketGenTickets.length > 1 ? (
-                <div className="mx-auto w-full max-w-[600px] space-y-3">
-                  <p className="text-sm font-medium">Qual passageiro?</p>
-                  {ticketGenTickets.map((ticket) => (
-                    <Button
-                      key={ticket.id}
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => setSelectedTicketId(ticket.id)}
-                    >
-                      {ticket.passenger_name} · Poltrona {ticket.seat_label}
-                    </Button>
-                  ))}
+              ) : (
+                <div className="mx-auto w-full max-w-[600px]">
+                  {/* Agrupamento por passageiro com ida/volta sob demanda */}
+                  <PassengerTicketList
+                    tickets={allTicketGenCards}
+                    allowReservedDownloads
+                    context="admin"
+                  />
                 </div>
-              ) : selectedTicketData ? (
-                <div className="mx-auto w-full max-w-[600px] space-y-3">
-                  {ticketGenTickets.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedTicketId(null)}>
-                      ← Trocar passageiro
-                    </Button>
-                  )}
-                  {/* Reuso intencional do mesmo componente público para manter padrão visual e ações de download. */}
-                  <TicketCard ticket={selectedTicketData} allowReservedDownloads />
-                </div>
-              ) : null}
+              )}
             </div>
             <DialogFooter className="admin-modal__footer shrink-0 px-6 py-4">
-              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); setSelectedTicketId(null); }}>
+              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
                 Fechar
               </Button>
             </DialogFooter>

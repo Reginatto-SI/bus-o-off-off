@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SeatMap } from '@/components/public/SeatMap';
-import { TicketCard } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import {
   Loader2,
   ChevronLeft,
@@ -165,7 +165,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Step 4: Confirmation
   const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
-  const [activeTicketIndex, setActiveTicketIndex] = useState(0);
+  // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [categoryPricesMap, setCategoryPricesMap] = useState<Map<string, number>>(new Map());
 
@@ -197,7 +197,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setUnitPrice('');
       setSelectedSellerId('');
       setConfirmationData(null);
-      setActiveTicketIndex(0);
+      // activeTicketIndex reset removido
       fetchEvents();
       fetchSellers();
     }
@@ -696,7 +696,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           ticketCardData: buildTicketCardData(t),
         }));
         setConfirmationData(confirmData);
-        setActiveTicketIndex(0);
+        // activeTicketIndex reset removido
         setStep(4);
       } else {
         onSuccess();
@@ -746,56 +746,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           // ── Step 4: Confirmation using the same virtual ticket component used across the app ──
           <>
             <ScrollArea className="flex-1 px-6 py-4">
-              <div className="flex flex-col items-center gap-4">
-                {confirmationData.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={activeTicketIndex === 0}
-                      onClick={() => setActiveTicketIndex((i) => i - 1)}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Passageiro {activeTicketIndex + 1} de {confirmationData.length}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={activeTicketIndex === confirmationData.length - 1}
-                      onClick={() => setActiveTicketIndex((i) => i + 1)}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-
-                {(() => {
-                  const item = confirmationData[activeTicketIndex];
-                  if (!item) return null;
-
-                  // Mantém o mesmo card/popup do ticket oficial para visualização + exportações (PDF/QR).
-                  return (
-                    <div className="w-full max-w-2xl space-y-3">
-                      <div className="rounded-lg border bg-muted/20 p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Resumo da passagem</span>
-                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Pago</Badge>
-                        </div>
-                        <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                          <div><span className="font-medium text-foreground">Passageiro:</span> {item.ticket.passenger_name}</div>
-                          <div><span className="font-medium text-foreground">Evento:</span> {selectedEvent?.name ?? '-'}</div>
-                          <div><span className="font-medium text-foreground">Embarque:</span> {boardingOptions.find((b) => b.id === selectedBoardingId)?.name ?? '-'}</div>
-                          <div><span className="font-medium text-foreground">Assento:</span> {item.ticket.seat_label}</div>
-                        </div>
-                      </div>
-                      <TicketCard ticket={item.ticketCardData} allowReservedDownloads />
-                    </div>
-                  );
-                })()}
+              <div className="mx-auto w-full max-w-2xl">
+                {/* Agrupamento por passageiro com ida/volta sob demanda */}
+                <PassengerTicketList
+                  tickets={confirmationData.map((item) => item.ticketCardData)}
+                  allowReservedDownloads
+                  context="admin"
+                />
               </div>
             </ScrollArea>
             <DialogFooter className="px-6 py-4 border-t">

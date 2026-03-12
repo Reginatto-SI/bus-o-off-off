@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
-import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
+import { TicketCardData } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -373,25 +374,12 @@ export default function TicketLookup() {
             ) : (
               <div className="space-y-4">
                 <h2 className="font-semibold text-lg">{tickets.length} passagem(ns) encontrada(s)</h2>
-                {tickets.map((t, index) => {
-                  const previousCompanyName = index > 0 ? tickets[index - 1].companyName : null;
-                  const shouldShowCompanySeparator = hasMultipleCompanies && t.companyName !== previousCompanyName;
-
-                  return (
-                    <div key={t.ticketId} className="space-y-2">
-                      {shouldShowCompanySeparator && (
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Empresa: {t.companyName}
-                        </p>
-                      )}
-                      <TicketCard
-                        ticket={t}
-                        onRefreshStatus={handleRefreshStatus}
-                        isRefreshing={!!(t.saleId && refreshingSaleIds.has(t.saleId))}
-                      />
-                    </div>
-                  );
-                })}
+                {/* Agrupamento por passageiro com ida/volta sob demanda */}
+                <PassengerTicketList
+                  tickets={tickets}
+                  onRefreshStatus={handleRefreshStatus}
+                  isRefreshingSaleIds={refreshingSaleIds}
+                />
               </div>
             )}
           </>

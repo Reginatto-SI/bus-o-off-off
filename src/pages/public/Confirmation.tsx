@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
+import { TicketCardData } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import {
   CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
   User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle, RefreshCw,
@@ -458,9 +459,8 @@ export default function Confirmation() {
             <h2 className="font-semibold text-lg">
               {isPaid ? 'Suas Passagens' : 'Passagens (Canceladas)'}
             </h2>
-            {ticketCards.map((tc) => (
-              <TicketCard key={tc.ticketId} ticket={tc} />
-            ))}
+            {/* Agrupamento por passageiro com ida/volta sob demanda */}
+            <PassengerTicketList tickets={ticketCards} />
           </div>
         )}
 
