@@ -170,9 +170,9 @@ export default function EventReport() {
         .order('date', { ascending: false }),
       supabase
         .from('vehicles')
-        .select('id, name, prefix, plate')
+        .select('id, model, brand, plate')
         .eq('company_id', activeCompanyId)
-        .order('name'),
+        .order('plate'),
       supabase
         .from('sales')
         .select(`
