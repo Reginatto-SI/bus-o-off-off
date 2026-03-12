@@ -81,7 +81,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, address, city, state, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
       .eq("id", company_id)
       .single();
 
@@ -266,10 +266,17 @@ serve(async (req) => {
     // Asaas exige endereço no onboarding de subconta em produção.
     // Normalizamos e validamos antes de chamar /accounts para evitar rejeição por string vazia (ex.: "   ").
     const normalizedAddress = (company.address || "").trim();
+    const normalizedAddressNumber = (company.address_number || "").trim();
+    const normalizedProvince = (company.province || "").trim();
+    const normalizedPostalCode = (company.postal_code || "").trim();
     const normalizedCity = (company.city || "").trim();
     const normalizedState = (company.state || "").trim().toUpperCase();
 
-    if (!normalizedCity || !normalizedState || !normalizedAddress) {
+    if (!company.postal_code || !company.address || !company.city || !company.state) {
+      throw new Error("Endereço da empresa incompleto. Complete o cadastro da empresa antes de conectar pagamentos.");
+    }
+
+    if (!normalizedAddressNumber || !normalizedProvince) {
       return new Response(
         JSON.stringify({ error: "Dados de endereço da empresa incompletos. Complete o cadastro da empresa antes de conectar pagamentos." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -288,15 +295,21 @@ serve(async (req) => {
         // Endereço obrigatório para evitar rejeição do Asaas em ambiente de produção.
         // Enviamos valores normalizados para não mandar espaços em branco ao Asaas.
         address: normalizedAddress,
+        addressNumber: normalizedAddressNumber,
+        province: normalizedProvince,
+        postalCode: normalizedPostalCode,
         city: normalizedCity,
         state: normalizedState,
       };
 
       // Log de suporte: ajuda a validar rapidamente se endereço/cidade/UF chegaram preenchidos.
       // Não registramos o endereço completo para evitar exposição de dados sensíveis.
-      console.log("Asaas create account payload address fields", {
+      console.log("[DIAG][ASAAS] create account payload address fields", {
         company_id,
         hasAddress: Boolean(normalizedAddress),
+        hasAddressNumber: Boolean(normalizedAddressNumber),
+        hasProvince: Boolean(normalizedProvince),
+        hasPostalCode: Boolean(normalizedPostalCode),
         hasCity: Boolean(normalizedCity),
         hasState: Boolean(normalizedState),
         city: normalizedCity,
@@ -317,11 +330,14 @@ serve(async (req) => {
       if (!createRes.ok) {
         const rawMsg = createData?.errors?.[0]?.description || createData?.message || "Erro ao criar subconta no Asaas";
         console.error("Asaas create account error:", JSON.stringify(createData));
-        console.error("Asaas create account address diagnostic:", {
+        console.error("[DIAG][ASAAS] create account address diagnostic:", {
           company_id,
           city: normalizedCity,
           state: normalizedState,
           hasAddress: Boolean(normalizedAddress),
+          hasAddressNumber: Boolean(normalizedAddressNumber),
+          hasProvince: Boolean(normalizedProvince),
+          hasPostalCode: Boolean(normalizedPostalCode),
         });
         
         // If email already in use, suggest linking existing account
@@ -369,9 +385,12 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error("Error in create-asaas-account:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    const isAddressValidationError = errorMessage.includes("Endereço da empresa incompleto");
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: errorMessage }),
+      { status: isAddressValidationError ? 400 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
