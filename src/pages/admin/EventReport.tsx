@@ -585,7 +585,6 @@ export default function EventReport() {
                         <TableHead>Evento</TableHead>
                         <TableHead>ID da venda</TableHead>
                         <TableHead>Passageiro</TableHead>
-                        <TableHead>Poltrona</TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
                         <TableHead>Status</TableHead>
