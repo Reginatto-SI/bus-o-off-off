@@ -18,6 +18,7 @@ interface SeatMapProps {
   seatsRightSide: number;
   loadingStatus?: boolean;
   interactionDisabled?: boolean;
+  showSelectionQuantityLabel?: boolean;
 }
 
 export function SeatMap({
@@ -32,6 +33,7 @@ export function SeatMap({
   seatsRightSide,
   loadingStatus = false,
   interactionDisabled = false,
+  showSelectionQuantityLabel = false,
 }: SeatMapProps) {
   const [activeFloor, setActiveFloor] = useState(1);
   const [showSynced, setShowSynced] = useState(false);
@@ -157,6 +159,13 @@ export function SeatMap({
       <div className="text-center text-sm font-medium text-foreground">
         Selecionados: <span className="text-primary font-bold">{selectedSeats.length}</span> de {maxSelection}
       </div>
+
+      {/* Rótulo opcional para reforçar quantidade no fluxo administrativo sem alterar checkout público. */}
+      {showSelectionQuantityLabel && (
+        <div className="text-center text-xs text-muted-foreground">
+          {selectedSeats.length} passagem{selectedSeats.length === 1 ? '' : 'ens'} selecionada{selectedSeats.length === 1 ? '' : 's'}
+        </div>
+      )}
 
       {/* Synced indicator */}
       {showSynced && (

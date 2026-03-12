@@ -473,6 +473,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     return passengers.length > 0;
   }, [passengers, activeTab, unitPrice, saving]);
 
+  const manualSaleFinancialSummary = useMemo(() => {
+    if (activeTab !== 'manual') return null;
+
+    const pricePerTicket = parseCurrencyInputBRL(unitPrice);
+    if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
+
+    const quantity = passengers.length;
+    const feeBreakdown = calculateFees(pricePerTicket, eventFees);
+    const subtotal = pricePerTicket * quantity;
+    const totalServiceFee = feeBreakdown.totalFees * quantity;
+
+    return {
+      pricePerTicket,
+      quantity,
+      subtotal,
+      totalServiceFee,
+      totalSale: subtotal + totalServiceFee,
+    };
+  }, [activeTab, unitPrice, passengers.length, eventFees]);
+
   // ── Build TicketCardData for confirmation ──
   const buildTicketCardData = (ticket: TicketRecord): TicketCardData => {
     const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
@@ -926,6 +946,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         floors={selectedVehicle?.floors ?? 1}
                         seatsLeftSide={selectedVehicle?.seats_left_side ?? 2}
                         seatsRightSide={selectedVehicle?.seats_right_side ?? 2}
+                        showSelectionQuantityLabel
                       />
                     )}
                   </div>
@@ -951,13 +972,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label>Valor unitário *</Label>
+                            <Label>Preço por passagem *</Label>
                             <Input
                               type="text"
                               inputMode="numeric"
                               value={unitPrice}
                               onChange={(e) => setUnitPrice(formatCurrencyInputFromDigits(e.target.value))}
                             />
+                            {manualSaleFinancialSummary && manualSaleFinancialSummary.quantity > 0 && (
+                              <p className="text-xs font-medium text-muted-foreground">
+                                {formatCurrencyBRL(manualSaleFinancialSummary.pricePerTicket)} × {manualSaleFinancialSummary.quantity} passagem{manualSaleFinancialSummary.quantity === 1 ? '' : 'ens'} = {formatCurrencyBRL(manualSaleFinancialSummary.subtotal)}
+                              </p>
+                            )}
                             {selectedEvent && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
@@ -987,6 +1013,34 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             rows={2}
                           />
                         </div>
+
+                        {manualSaleFinancialSummary && (
+                          <div className="space-y-3 rounded-lg border bg-background p-3">
+                            <p className="text-sm font-semibold">Resumo da compra</p>
+                            <div className="space-y-1 text-sm">
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Preço por passagem</span>
+                                <span className="font-medium">{formatCurrencyBRL(manualSaleFinancialSummary.pricePerTicket)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Quantidade</span>
+                                <span className="font-medium">{manualSaleFinancialSummary.quantity}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 pt-1">
+                                <span className="text-muted-foreground">Subtotal</span>
+                                <span className="font-medium">{formatCurrencyBRL(manualSaleFinancialSummary.subtotal)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Taxa de serviço</span>
+                                <span className="font-medium">+ {formatCurrencyBRL(manualSaleFinancialSummary.totalServiceFee)}</span>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-base font-semibold">
+                                <span>Total da venda</span>
+                                <span>{formatCurrencyBRL(manualSaleFinancialSummary.totalSale)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
