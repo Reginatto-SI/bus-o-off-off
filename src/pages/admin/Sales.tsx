@@ -826,7 +826,7 @@ export default function Sales() {
   };
 
   // ── Ticket Generation ──
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  // selectedTicketId removido — agora PassengerTicketList gerencia internamente
 
   const openTicketGen = async (sale: Sale) => {
     setTicketGenSale(sale);
