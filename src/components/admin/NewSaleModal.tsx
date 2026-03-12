@@ -979,11 +979,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               value={unitPrice}
                               onChange={(e) => setUnitPrice(formatCurrencyInputFromDigits(e.target.value))}
                             />
-                            {manualSaleFinancialSummary && manualSaleFinancialSummary.quantity > 0 && (
-                              <p className="text-xs font-medium text-muted-foreground">
-                                {formatCurrencyBRL(manualSaleFinancialSummary.pricePerTicket)} × {manualSaleFinancialSummary.quantity} passagem{manualSaleFinancialSummary.quantity === 1 ? '' : 'ens'} = {formatCurrencyBRL(manualSaleFinancialSummary.subtotal)}
-                              </p>
-                            )}
+                            {passengers.length > 0 && unitPrice && (() => {
+                              const pricePerTicket = parseCurrencyInputBRL(unitPrice);
+                              if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
+                              const subtotal = pricePerTicket * passengers.length;
+                              return (
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  {formatCurrencyBRL(pricePerTicket)} × {passengers.length} passagem{passengers.length === 1 ? '' : 'ens'} = {formatCurrencyBRL(subtotal)}
+                                </p>
+                              );
+                            })()}
                             {selectedEvent && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
@@ -1014,33 +1019,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           />
                         </div>
 
-                        {manualSaleFinancialSummary && (
-                          <div className="space-y-3 rounded-lg border bg-background p-3">
-                            <p className="text-sm font-semibold">Resumo da compra</p>
-                            <div className="space-y-1 text-sm">
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Preço por passagem</span>
-                                <span className="font-medium">{formatCurrencyBRL(manualSaleFinancialSummary.pricePerTicket)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Quantidade</span>
-                                <span className="font-medium">{manualSaleFinancialSummary.quantity}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4 pt-1">
-                                <span className="text-muted-foreground">Subtotal</span>
-                                <span className="font-medium">{formatCurrencyBRL(manualSaleFinancialSummary.subtotal)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="text-muted-foreground">Taxa de serviço</span>
-                                <span className="font-medium">+ {formatCurrencyBRL(manualSaleFinancialSummary.totalServiceFee)}</span>
-                              </div>
-                              <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-base font-semibold">
-                                <span>Total da venda</span>
-                                <span>{formatCurrencyBRL(manualSaleFinancialSummary.totalSale)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -1173,6 +1151,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <CalculationSimulationCard
                           basePrice={price}
                           fees={eventFees}
+                          quantity={passengers.length}
+                          showSaleTotals
                           platformFeePercent={company?.platform_fee_percent}
                           passPlatformFeeToCustomer={false}
                         />
