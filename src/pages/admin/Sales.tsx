@@ -1407,7 +1407,7 @@ export default function Sales() {
               )}
             </div>
             <DialogFooter className="admin-modal__footer shrink-0 px-6 py-4">
-              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); setSelectedTicketId(null); }}>
+              <Button variant="outline" onClick={() => { setTicketGenSale(null); setTicketGenTickets([]); }}>
                 Fechar
               </Button>
             </DialogFooter>
