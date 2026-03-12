@@ -13,6 +13,45 @@ const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
 
 type IntegrationLogStatus = "requested" | "success" | "failed";
 
+const ASAAS_DESCRIPTION_MAX_LENGTH = 180;
+
+function toSingleLineText(value: unknown, fallback: string) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  return normalized || fallback;
+}
+
+function getShortSaleId(saleId: string) {
+  // Comentário de suporte: quando a venda é UUID exibimos apenas o prefixo para facilitar leitura humana.
+  return /^[0-9a-fA-F-]{36}$/.test(saleId) ? saleId.split("-")[0] : saleId;
+}
+
+function truncateForAsaas(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function buildAsaasPaymentDescription(params: {
+  companyName: string;
+  eventName: string;
+  saleId: string;
+  quantity: number;
+  customerName: string;
+}) {
+  const shortSaleId = getShortSaleId(params.saleId);
+  const quantityLabel = `${params.quantity} passagem(ns)`;
+
+  const description = [
+    "SmartBus",
+    toSingleLineText(params.companyName, "Empresa"),
+    toSingleLineText(params.eventName, "Evento"),
+    `Venda ${shortSaleId}`,
+    quantityLabel,
+    `Resp.: ${toSingleLineText(params.customerName, "Comprador")}`,
+  ].join(" | ");
+
+  return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
+}
+
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -82,7 +121,7 @@ serve(async (req) => {
     // 2. Buscar empresa com configuração de comissão
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
+      .select("name, asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -319,14 +358,22 @@ serve(async (req) => {
     const dueDateStr = dueDate.toISOString().split("T")[0];
 
     const eventName = sale.event?.name || "Evento";
+    const saleExternalReference = sale.id;
+    const paymentDescription = buildAsaasPaymentDescription({
+      companyName: company.name,
+      eventName,
+      saleId: sale.id,
+      quantity: Number(sale.quantity ?? 0),
+      customerName: sale.customer_name,
+    });
 
     const paymentPayload: Record<string, unknown> = {
       customer: customerId,
       billingType,
       value: grossAmount,
       dueDate: dueDateStr,
-      description: `${eventName} — ${sale.quantity} passagem(ns)`,
-      externalReference: sale.id,
+      description: paymentDescription,
+      externalReference: saleExternalReference,
       split: splitArray,
     };
 
