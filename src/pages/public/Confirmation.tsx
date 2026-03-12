@@ -59,8 +59,7 @@ export default function Confirmation() {
   const [lastVerificationAt, setLastVerificationAt] = useState<Date | null>(null);
   const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
-  // Ref para evitar chamada dupla ao verify-payment-status durante polling
-  const verifyCalledRef = useRef(false);
+  // Removed verifyCalledRef — polling now calls verify-payment-status periodically (see below)
 
   useEffect(() => {
     const fetchSale = async () => {
