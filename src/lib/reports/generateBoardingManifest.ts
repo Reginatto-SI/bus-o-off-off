@@ -43,7 +43,7 @@ interface GroupedManifest {
   passengers: ManifestRow[];
 }
 
-const FOOTER_TEXT = 'Gerado por Reginatto SI — www.reginattosistemas.com.br — Contato: (65) 99210-2030';
+const FOOTER_TEXT = 'SmartBus BR - Documento operacional de embarque - Contato: (65) 99210-2030';
 
 const formatDateBR = (dateIso: string) => {
   if (!dateIso) return '-';
@@ -162,7 +162,7 @@ export async function generateBoardingManifest({
     doc.setTextColor(40, 40, 40);
     doc.text(getCompanyDisplayName(company), leftX, cursorY + 6);
 
-    doc.setFontSize(16);
+    doc.setFontSize(17);
     doc.setTextColor(primaryColor.r, primaryColor.g, primaryColor.b);
     doc.text('LISTA DE EMBARQUE', pageWidth - margin, cursorY + 7, { align: 'right' });
 
@@ -170,28 +170,28 @@ export async function generateBoardingManifest({
     doc.setTextColor(90, 90, 90);
     doc.text('Manifesto de Passageiros', pageWidth - margin, cursorY + 13, { align: 'right' });
 
-    cursorY += 23;
+    cursorY += 24;
     doc.setFontSize(10);
     doc.setTextColor(20, 20, 20);
     doc.text(`Evento: ${firstRow.event_name}`, margin, cursorY);
     doc.text(`Data: ${formatDateBR(firstRow.event_date)}`, margin, cursorY + 5);
 
     const vehicleLabel = firstRow.vehicle_plate
-      ? `${firstRow.vehicle_type ?? 'Veículo'} • ${firstRow.vehicle_plate}`
+      ? `${firstRow.vehicle_type ?? 'Veiculo'} - ${firstRow.vehicle_plate}`
       : firstRow.vehicle_type ?? 'Não informado';
     doc.text(`Veículo: ${vehicleLabel}`, margin, cursorY + 10);
     doc.text('Motorista: ______________________', margin, cursorY + 15);
 
     doc.setDrawColor(220, 220, 220);
     doc.line(margin, cursorY + 18, pageWidth - margin, cursorY + 18);
-    return cursorY + 22;
+    return cursorY + 24;
   };
 
   let currentY = drawDocumentHeader();
 
   groups.forEach((group, index) => {
     const tableRows = group.passengers.map((passenger) => [
-      '☐',
+      '[ ]',
       passenger.seat_label,
       passenger.passenger_name,
       passenger.passenger_phone || '-',
@@ -201,13 +201,17 @@ export async function generateBoardingManifest({
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
       doc.setTextColor(20, 20, 20);
-      doc.text(`📍 Ponto de Embarque – ${group.groupTitle}`, margin, y);
+
+      // Bloco de destaque para facilitar leitura rápida em operação de prancheta.
+      doc.setFillColor(247, 247, 247);
+      doc.roundedRect(margin, y - 4.5, pageWidth - margin * 2, 11.5, 1.6, 1.6, 'F');
+      doc.text(`Ponto de Embarque: ${group.groupTitle}`, margin + 2, y);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9.5);
       doc.text(
-        `Horário: ${group.departureTime}   •   Passageiros: ${group.passengers.length}`,
-        margin,
+        `Horario: ${group.departureTime}   |   Passageiros: ${group.passengers.length}`,
+        margin + 2,
         y + 5,
       );
     };
@@ -225,22 +229,28 @@ export async function generateBoardingManifest({
       head: [['Check', 'Poltrona', 'Passageiro', 'Telefone']],
       body: tableRows,
       margin: { left: margin, right: margin, top: margin },
+      showHead: 'everyPage',
       styles: {
         fontSize: 9,
-        cellPadding: 1.8,
+        cellPadding: 2,
         overflow: 'linebreak',
         textColor: [20, 20, 20],
+        lineColor: [228, 228, 228],
+        lineWidth: 0.1,
       },
       headStyles: {
-        fillColor: [245, 245, 245],
+        fillColor: [236, 236, 236],
         textColor: [40, 40, 40],
         fontStyle: 'bold',
       },
+      alternateRowStyles: {
+        fillColor: [252, 252, 252],
+      },
       columnStyles: {
-        0: { cellWidth: 16, halign: 'center' },
+        0: { cellWidth: 18, halign: 'center' },
         1: { cellWidth: 24, halign: 'center' },
-        2: { cellWidth: 88 },
-        3: { cellWidth: 48 },
+        2: { cellWidth: 86 },
+        3: { cellWidth: 48, halign: 'left' },
       },
       didDrawPage: (hookData) => {
         // Sempre redesenha o cabeçalho do grupo quando a tabela quebra de página.
@@ -252,12 +262,13 @@ export async function generateBoardingManifest({
       willDrawCell: (hookData) => {
         // Mantém a tabela compacta para caber ~30-35 passageiros por página A4.
         if (hookData.section === 'body') {
-          hookData.cell.styles.minCellHeight = 6.2;
+          hookData.cell.styles.minCellHeight = 6.4;
         }
       },
     });
 
-    currentY = (doc as any).lastAutoTable.finalY + 8;
+    const tableState = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
+    currentY = (tableState?.finalY ?? currentY) + 8;
   });
 
   if (currentY > pageHeight - 55) {
@@ -269,15 +280,19 @@ export async function generateBoardingManifest({
   doc.setFontSize(11);
   doc.text('Resumo do Embarque', margin, currentY);
 
+  // Caixa visual para o resumo final e anotações do motorista.
+  doc.setDrawColor(215, 215, 215);
+  doc.roundedRect(margin, currentY + 2, pageWidth - margin * 2, 58, 1.6, 1.6, 'S');
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Total de passageiros: ${rows.length}`, margin, currentY + 7);
-  doc.text('Embarcados: __________', margin, currentY + 14);
-  doc.text('Ausentes: __________', margin, currentY + 21);
-  doc.text('Observações do motorista:', margin, currentY + 30);
-  doc.text('____________________________________', margin, currentY + 37);
-  doc.text('____________________________________', margin, currentY + 44);
-  doc.text('Assinatura do motorista: ______________________', margin, currentY + 53);
+  doc.text(`Total de passageiros: ${rows.length}`, margin + 2, currentY + 10);
+  doc.text('Embarcados: __________', margin + 2, currentY + 17);
+  doc.text('Ausentes: __________', margin + 2, currentY + 24);
+  doc.text('Observacoes do motorista:', margin + 2, currentY + 33);
+  doc.text('______________________________________________________________', margin + 2, currentY + 40);
+  doc.text('______________________________________________________________', margin + 2, currentY + 47);
+  doc.text('Assinatura do motorista: ______________________', margin + 2, currentY + 56);
 
   drawFooter();
 
