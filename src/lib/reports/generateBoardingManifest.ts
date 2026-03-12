@@ -52,6 +52,13 @@ const formatDateBR = (dateIso: string) => {
   return date.toLocaleDateString('pt-BR');
 };
 
+const formatDateForFileName = (dateIso: string) => {
+  if (!dateIso) return 'sem-data';
+  const [year, month, day] = dateIso.split('-');
+  if (!year || !month || !day) return 'sem-data';
+  return `${day}-${month}-${year}`;
+};
+
 const formatTime = (time: string | null) => (time ? time.slice(0, 5) : '--:--');
 
 const normalizeSeatForSort = (seat: string) => {
@@ -60,6 +67,36 @@ const normalizeSeatForSort = (seat: string) => {
     return numericValue.toString().padStart(4, '0');
   }
   return `ZZZ-${seat}`;
+};
+
+const sanitizeForFileName = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+const sanitizePlateForFileName = (value: string | null) => {
+  if (!value) return '';
+  return value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+};
+
+const formatPhoneForPrint = (value: string | null) => {
+  if (!value) return '-';
+
+  // Comentário de suporte: mantém somente dígitos para padronizar telefones vindos de fontes heterogêneas.
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  return value;
 };
 
 /**
@@ -175,26 +212,25 @@ export async function generateBoardingManifest({
     doc.setTextColor(20, 20, 20);
     doc.text(`Evento: ${firstRow.event_name}`, margin, cursorY);
     doc.text(`Data: ${formatDateBR(firstRow.event_date)}`, margin, cursorY + 5);
-
-    const vehicleLabel = firstRow.vehicle_plate
-      ? `${firstRow.vehicle_type ?? 'Veiculo'} - ${firstRow.vehicle_plate}`
-      : firstRow.vehicle_type ?? 'Não informado';
-    doc.text(`Veículo: ${vehicleLabel}`, margin, cursorY + 10);
-    doc.text('Motorista: ______________________', margin, cursorY + 15);
+    doc.text(`Veiculo: ${firstRow.vehicle_type ?? 'Nao informado'}`, margin, cursorY + 10);
+    doc.text(`Placa: ${firstRow.vehicle_plate ?? 'Nao informada'}`, margin, cursorY + 15);
+    doc.text('Motorista: ______________________', margin, cursorY + 20);
 
     doc.setDrawColor(220, 220, 220);
-    doc.line(margin, cursorY + 18, pageWidth - margin, cursorY + 18);
-    return cursorY + 24;
+    doc.line(margin, cursorY + 23, pageWidth - margin, cursorY + 23);
+    return cursorY + 27;
   };
 
   let currentY = drawDocumentHeader();
 
   groups.forEach((group, index) => {
     const tableRows = group.passengers.map((passenger) => [
-      '[ ]',
+      '',
+      '',
+      '',
       passenger.seat_label,
       passenger.passenger_name,
-      passenger.passenger_phone || '-',
+      formatPhoneForPrint(passenger.passenger_phone),
     ]);
 
     const drawGroupTitle = (y: number) => {
@@ -226,7 +262,7 @@ export async function generateBoardingManifest({
 
     autoTable(doc, {
       startY: currentY + 9,
-      head: [['Check', 'Poltrona', 'Passageiro', 'Telefone']],
+      head: [['E', 'D', 'R', 'Poltrona', 'Passageiro', 'Telefone']],
       body: tableRows,
       margin: { left: margin, right: margin, top: margin },
       showHead: 'everyPage',
@@ -247,10 +283,12 @@ export async function generateBoardingManifest({
         fillColor: [252, 252, 252],
       },
       columnStyles: {
-        0: { cellWidth: 18, halign: 'center' },
-        1: { cellWidth: 24, halign: 'center' },
-        2: { cellWidth: 86 },
-        3: { cellWidth: 48, halign: 'left' },
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 10, halign: 'center' },
+        2: { cellWidth: 10, halign: 'center' },
+        3: { cellWidth: 20, halign: 'center' },
+        4: { cellWidth: 88 },
+        5: { cellWidth: 48, halign: 'left' },
       },
       didDrawPage: (hookData) => {
         // Sempre redesenha o cabeçalho do grupo quando a tabela quebra de página.
@@ -271,7 +309,7 @@ export async function generateBoardingManifest({
     currentY = (tableState?.finalY ?? currentY) + 8;
   });
 
-  if (currentY > pageHeight - 55) {
+  if (currentY > pageHeight - 68) {
     doc.addPage();
     currentY = margin;
   }
@@ -282,20 +320,31 @@ export async function generateBoardingManifest({
 
   // Caixa visual para o resumo final e anotações do motorista.
   doc.setDrawColor(215, 215, 215);
-  doc.roundedRect(margin, currentY + 2, pageWidth - margin * 2, 58, 1.6, 1.6, 'S');
+  doc.roundedRect(margin, currentY + 2, pageWidth - margin * 2, 66, 1.6, 1.6, 'S');
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text(`Total de passageiros: ${rows.length}`, margin + 2, currentY + 10);
   doc.text('Embarcados: __________', margin + 2, currentY + 17);
-  doc.text('Ausentes: __________', margin + 2, currentY + 24);
-  doc.text('Observacoes do motorista:', margin + 2, currentY + 33);
-  doc.text('______________________________________________________________', margin + 2, currentY + 40);
+  doc.text('Desembarcados: __________', margin + 2, currentY + 24);
+  doc.text('Reembarcados: __________', margin + 2, currentY + 31);
+  doc.text('Observacoes do motorista:', margin + 2, currentY + 40);
   doc.text('______________________________________________________________', margin + 2, currentY + 47);
-  doc.text('Assinatura do motorista: ______________________', margin + 2, currentY + 56);
+  doc.text('______________________________________________________________', margin + 2, currentY + 54);
+  doc.text('Assinatura do motorista: ______________________', margin + 2, currentY + 61);
 
   drawFooter();
 
-  const fileName = `lista-embarque-${firstRow.event_name.toLowerCase().replace(/\s+/g, '-')}.pdf`;
-  doc.save(fileName);
+  // Comentário de suporte: nome do arquivo prioriza identificação operacional (evento/data/placa).
+  const fileNameParts = [
+    'lista-embarque',
+    sanitizeForFileName(firstRow.event_name) || 'evento',
+    formatDateForFileName(firstRow.event_date),
+  ];
+  const sanitizedPlate = sanitizePlateForFileName(firstRow.vehicle_plate);
+  if (sanitizedPlate) {
+    fileNameParts.push(sanitizedPlate);
+  }
+
+  doc.save(`${fileNameParts.join('-')}.pdf`);
 }
