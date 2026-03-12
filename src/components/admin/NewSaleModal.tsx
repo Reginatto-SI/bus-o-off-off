@@ -40,6 +40,7 @@ import { format } from 'date-fns';
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
+import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -1111,33 +1112,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       </div>
                     )}
 
-                    {/* Summary (fixo no fluxo do formulário para não sobrepor os cards de passageiro) */}
+                    {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
                     {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
                       const price = parseCurrencyInputBRL(unitPrice);
-                      const breakdown = calculateFees(price, eventFees);
-                      const hasFees = breakdown.fees.length > 0;
-                      const total = breakdown.unitPriceWithFees * passengers.length;
                       return (
-                        <div className="mt-2 space-y-2 rounded-xl border border-primary/20 bg-primary/10 p-4 shadow-sm">
-                          <div className="flex items-center justify-between text-sm">
-                            <span>Quantidade de passagens</span>
-                            <span className="font-medium">{passengers.length}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span>Valor unitário</span>
-                            <span className="font-medium">{formatCurrencyBRL(price)}</span>
-                          </div>
-                          {hasFees && breakdown.fees.map((fee, idx) => (
-                            <div key={idx} className="flex justify-between text-sm text-muted-foreground">
-                              <span>{fee.name} × {passengers.length}</span>
-                              <span>{formatCurrencyBRL(fee.amount * passengers.length)}</span>
-                            </div>
-                          ))}
-                          <div className="flex justify-between border-t pt-2 text-base font-bold text-primary">
-                            <span>Total</span>
-                            <span>{formatCurrencyBRL(total)}</span>
-                          </div>
-                        </div>
+                        <CalculationSimulationCard
+                          basePrice={price}
+                          fees={eventFees}
+                          platformFeePercent={company?.platform_fee_percent}
+                          passPlatformFeeToCustomer={false}
+                        />
                       );
                     })()}
                   </div>
