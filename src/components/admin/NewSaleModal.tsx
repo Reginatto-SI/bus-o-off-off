@@ -165,7 +165,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Step 4: Confirmation
   const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
-  const [activeTicketIndex, setActiveTicketIndex] = useState(0);
+  // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [categoryPricesMap, setCategoryPricesMap] = useState<Map<string, number>>(new Map());
 
