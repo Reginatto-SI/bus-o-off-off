@@ -94,7 +94,8 @@ import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { TicketCard, type TicketCardData } from '@/components/public/TicketCard';
+import { type TicketCardData } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
 
 function formatCpfMask(value: string): string {
