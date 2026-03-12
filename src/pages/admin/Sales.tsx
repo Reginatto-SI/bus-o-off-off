@@ -898,9 +898,7 @@ export default function Sales() {
 
     setTicketGenLoading(false);
 
-    if (fetchedTickets.length === 1) {
-      setSelectedTicketId(fetchedTickets[0].id);
-    }
+    // Agrupamento agora é feito automaticamente pelo PassengerTicketList
   };
 
   // ── Actions dropdown ──
