@@ -165,8 +165,9 @@ export default function CompanyPage() {
     social_telegram: '',
     social_twitter: '',
     social_website: '',
-    platform_fee_percent: '7.5',
-    partner_split_percent: '0',
+    // Padrão para novas empresas: comissão inicial de 3,5% + 3,5%.
+    platform_fee_percent: '3.5',
+    partner_split_percent: '3.5',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -269,8 +270,8 @@ export default function CompanyPage() {
       social_website: data?.social_website ?? '',
       // Comentário: taxas ficam no estado local do formulário para evitar autosave no onChange
       // e impedir perda de foco durante a digitação de decimais.
-      platform_fee_percent: String(data?.platform_fee_percent ?? 7.5),
-      partner_split_percent: String(data?.partner_split_percent ?? 0),
+      platform_fee_percent: String(data?.platform_fee_percent ?? 3.5),
+      partner_split_percent: String(data?.partner_split_percent ?? 3.5),
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -470,8 +471,8 @@ export default function CompanyPage() {
       social_telegram: '',
       social_twitter: '',
       social_website: '',
-      platform_fee_percent: '7.5',
-      partner_split_percent: '0',
+      platform_fee_percent: '3.5',
+      partner_split_percent: '3.5',
     });
   };
 
@@ -1615,7 +1616,7 @@ export default function CompanyPage() {
                               Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
                               {/* Comentário de regra de negócio: o desconto total exibido ao usuário
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
-                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 7.5) + (company?.partner_split_percent ?? 0)).toFixed(1)}%</strong> de comissão sobre cada venda online.
+                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3.5) + (company?.partner_split_percent ?? 3.5)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
                             <p className="text-xs text-green-700">
                               {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
