@@ -480,7 +480,7 @@ export default function EventReport() {
                       <SelectItem value="all">Todos</SelectItem>
                       {vehicles.map((vehicle) => (
                         <SelectItem key={vehicle.id} value={vehicle.id}>
-                          {`${vehicle.name}${vehicle.prefix ? ` • ${vehicle.prefix}` : ''}`}
+                          {`${[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.plate} • ${vehicle.plate}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
