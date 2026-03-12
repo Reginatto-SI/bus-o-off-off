@@ -926,6 +926,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         floors={selectedVehicle?.floors ?? 1}
                         seatsLeftSide={selectedVehicle?.seats_left_side ?? 2}
                         seatsRightSide={selectedVehicle?.seats_right_side ?? 2}
+                        showSelectionQuantityLabel
                       />
                     )}
                   </div>
@@ -951,13 +952,23 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label>Valor unitário *</Label>
+                            <Label>Preço por passagem *</Label>
                             <Input
                               type="text"
                               inputMode="numeric"
                               value={unitPrice}
                               onChange={(e) => setUnitPrice(formatCurrencyInputFromDigits(e.target.value))}
                             />
+                            {passengers.length > 0 && unitPrice && (() => {
+                              const pricePerTicket = parseCurrencyInputBRL(unitPrice);
+                              if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
+                              const subtotal = pricePerTicket * passengers.length;
+                              return (
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  {formatCurrencyBRL(pricePerTicket)} × {passengers.length} passagem{passengers.length === 1 ? '' : 'ens'} = {formatCurrencyBRL(subtotal)}
+                                </p>
+                              );
+                            })()}
                             {selectedEvent && (
                               <p className="text-xs text-muted-foreground flex items-center gap-1">
                                 <AlertTriangle className="h-3 w-3" />
@@ -987,6 +998,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             rows={2}
                           />
                         </div>
+
                       </div>
                     )}
 
@@ -1119,6 +1131,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <CalculationSimulationCard
                           basePrice={price}
                           fees={eventFees}
+                          quantity={passengers.length}
+                          showSaleTotals
                           platformFeePercent={company?.platform_fee_percent}
                           passPlatformFeeToCustomer={false}
                         />
