@@ -306,36 +306,35 @@ export default function EventReport() {
   const exportColumns = useMemo<ExportColumn[]>(() => {
     if (activeTab === REPORT_TABS.resumo) {
       return [
-        { key: 'evento', header: 'Evento' },
-        { key: 'data', header: 'Data' },
-        { key: 'veiculo', header: 'Veículo' },
-        { key: 'capacidade', header: 'Capacidade' },
-        { key: 'passagens_vendidas', header: 'Passagens vendidas' },
-        { key: 'ocupacao', header: 'Ocupação (%)' },
-        { key: 'receita', header: 'Receita' },
+        { key: 'evento', label: 'Evento' },
+        { key: 'data', label: 'Data' },
+        { key: 'veiculo', label: 'Veículo' },
+        { key: 'capacidade', label: 'Capacidade' },
+        { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+        { key: 'ocupacao', label: 'Ocupação (%)' },
+        { key: 'receita', label: 'Receita' },
       ];
     }
 
     if (activeTab === REPORT_TABS.detalhado) {
       return [
-        { key: 'data_compra', header: 'Data da compra' },
-        { key: 'evento', header: 'Evento' },
-        { key: 'id_venda', header: 'ID da venda' },
-        { key: 'passageiro', header: 'Passageiro' },
-        { key: 'poltrona', header: 'Poltrona' },
-        { key: 'vendedor', header: 'Vendedor' },
-        { key: 'valor', header: 'Valor' },
-        { key: 'status', header: 'Status' },
+        { key: 'data_compra', label: 'Data da compra' },
+        { key: 'evento', label: 'Evento' },
+        { key: 'id_venda', label: 'ID da venda' },
+        { key: 'passageiro', label: 'Passageiro' },
+        { key: 'vendedor', label: 'Vendedor' },
+        { key: 'valor', label: 'Valor' },
+        { key: 'status', label: 'Status' },
       ];
     }
 
     return [
-      { key: 'evento', header: 'Evento' },
-      { key: 'veiculo', header: 'Veículo' },
-      { key: 'capacidade', header: 'Capacidade' },
-      { key: 'passagens_vendidas', header: 'Passagens vendidas' },
-      { key: 'passagens_disponiveis', header: 'Passagens disponíveis' },
-      { key: 'ocupacao', header: 'Ocupação (%)' },
+      { key: 'evento', label: 'Evento' },
+      { key: 'veiculo', label: 'Veículo' },
+      { key: 'capacidade', label: 'Capacidade' },
+      { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+      { key: 'passagens_disponiveis', label: 'Passagens disponíveis' },
+      { key: 'ocupacao', label: 'Ocupação (%)' },
     ];
   }, [activeTab]);
 
