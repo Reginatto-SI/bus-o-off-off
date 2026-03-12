@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
+import { TicketCardData } from '@/components/public/TicketCard';
+import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import {
   CheckCircle2, Calendar, MapPin, Clock, Loader2, Ticket,
   User, Phone, ExternalLink, Armchair, AlertCircle, MessageCircle, RefreshCw,
