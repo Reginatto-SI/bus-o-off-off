@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { extractAsaasErrorMessage } from '@/lib/asaasError';
 
 type AsaasWizardStep = 1 | 2 | 3 | 4;
 type AsaasWizardMode = 'create' | 'link';
@@ -91,11 +92,16 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         body: { company_id: companyData.companyId, mode: 'create' },
       });
 
-      // supabase.functions.invoke: em status >= 400, error vem preenchido e data pode conter o body JSON
+      // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
+      // retornada pelo Asaas (se segura para UI), sem expor detalhes internos do runtime.
       if (error) {
-        // Tentar extrair mensagem do body retornado pela edge function
-        const errorMessage = (data as any)?.error || error.message || 'Não foi possível conectar sua conta Asaas.';
-        throw new Error(errorMessage);
+        const { message, statusCode } = await extractAsaasErrorMessage({
+          data,
+          error,
+          fallbackMessage: 'Não foi possível conectar sua conta Asaas.',
+        });
+        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+        throw new Error(`${message}${statusSuffix}`);
       }
 
       toast.success(data?.already_complete ? 'Conta Asaas já estava conectada.' : 'Conta Asaas conectada com sucesso.');
@@ -130,7 +136,17 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: companyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim() },
       });
-      if (error) throw new Error((data as { error?: string } | null)?.error || error.message);
+      if (error) {
+        // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
+        // mais comuns (error/message/errors[0].description) sem mudar o fluxo de sucesso.
+        const { message, statusCode } = await extractAsaasErrorMessage({
+          data,
+          error,
+          fallbackMessage: 'Erro ao vincular conta Asaas.',
+        });
+        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+        throw new Error(`${message}${statusSuffix}`);
+      }
 
       toast.success('Conta Asaas vinculada com sucesso!');
       await onSuccess?.();

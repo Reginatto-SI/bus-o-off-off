@@ -26,6 +26,7 @@ import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 import { QRCodeSVG } from 'qrcode.react';
+import { extractAsaasErrorMessage } from '@/lib/asaasError';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -381,7 +382,17 @@ export default function CompanyPage() {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
         body: { company_id: editingId, mode: 'link_existing', api_key: asaasApiKeyInput.trim() },
       });
-      if (error) throw new Error((data as any)?.error || error.message);
+      if (error) {
+        // Comentário de suporte: prioriza mensagem retornada pelo Asaas para dar autonomia
+        // no autoatendimento, mas filtra mensagens técnicas internas para fallback seguro.
+        const { message, statusCode } = await extractAsaasErrorMessage({
+          data,
+          error,
+          fallbackMessage: 'Erro ao conectar Asaas. Tente novamente.',
+        });
+        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+        throw new Error(`${message}${statusSuffix}`);
+      }
 
       if (data?.already_complete) {
         toast.success('Conta Asaas já conectada!');
