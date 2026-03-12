@@ -1880,11 +1880,7 @@ export type Database = {
     }
     Functions: {
       get_boarding_manifest_rows: {
-        Args: {
-          p_company_id: string
-          p_event_id: string
-          p_trip_id?: string
-        }
+        Args: { p_company_id: string; p_event_id: string; p_trip_id?: string }
         Returns: {
           boarding_location_id: string
           boarding_location_name: string

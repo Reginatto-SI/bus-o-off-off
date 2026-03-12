@@ -68,8 +68,8 @@ interface EventOption {
 
 interface VehicleOption {
   id: string;
-  name: string;
-  prefix: string | null;
+  model: string | null;
+  brand: string | null;
   plate: string;
 }
 
@@ -82,9 +82,8 @@ interface SaleReportRow {
   gross_amount: number | null;
   platform_fee_total: number | null;
   customer_name: string;
-  seat_number: string | null;
   event?: { id: string; name: string; date: string; status: string; is_archived: boolean } | null;
-  trip?: { id: string; capacity: number; vehicle?: { id: string; name: string; prefix: string | null; plate: string } | null } | null;
+  trip?: { id: string; capacity: number; vehicle?: { id: string; model: string | null; brand: string | null; plate: string } | null } | null;
   seller?: { name: string | null } | null;
 }
 
@@ -119,9 +118,9 @@ const REPORT_TABS = {
 type ReportTab = (typeof REPORT_TABS)[keyof typeof REPORT_TABS];
 
 const getVehicleLabel = (trip?: SaleReportRow['trip']) => {
-  const name = trip?.vehicle?.name ?? 'Sem veículo';
-  const prefix = trip?.vehicle?.prefix ? ` • ${trip.vehicle.prefix}` : '';
-  return `${name}${prefix}`;
+  if (!trip?.vehicle) return 'Sem veículo';
+  const label = [trip.vehicle.brand, trip.vehicle.model].filter(Boolean).join(' ') || trip.vehicle.plate;
+  return `${label} • ${trip.vehicle.plate}`;
 };
 
 const getSaleAmount = (sale: Pick<SaleReportRow, 'gross_amount' | 'quantity' | 'unit_price'>) => {
@@ -171,9 +170,9 @@ export default function EventReport() {
         .order('date', { ascending: false }),
       supabase
         .from('vehicles')
-        .select('id, name, prefix, plate')
+        .select('id, model, brand, plate')
         .eq('company_id', activeCompanyId)
-        .order('name'),
+        .order('plate'),
       supabase
         .from('sales')
         .select(`
@@ -185,9 +184,8 @@ export default function EventReport() {
           gross_amount,
           platform_fee_total,
           customer_name,
-          seat_number,
           event:events!inner(id, name, date, status, is_archived),
-          trip:trips(id, capacity, vehicle:vehicles(id, name, prefix, plate)),
+          trip:trips(id, capacity, vehicle:vehicles(id, model, brand, plate)),
           seller:sellers(name)
         `)
         .eq('company_id', activeCompanyId)
@@ -308,36 +306,35 @@ export default function EventReport() {
   const exportColumns = useMemo<ExportColumn[]>(() => {
     if (activeTab === REPORT_TABS.resumo) {
       return [
-        { key: 'evento', header: 'Evento' },
-        { key: 'data', header: 'Data' },
-        { key: 'veiculo', header: 'Veículo' },
-        { key: 'capacidade', header: 'Capacidade' },
-        { key: 'passagens_vendidas', header: 'Passagens vendidas' },
-        { key: 'ocupacao', header: 'Ocupação (%)' },
-        { key: 'receita', header: 'Receita' },
+        { key: 'evento', label: 'Evento' },
+        { key: 'data', label: 'Data' },
+        { key: 'veiculo', label: 'Veículo' },
+        { key: 'capacidade', label: 'Capacidade' },
+        { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+        { key: 'ocupacao', label: 'Ocupação (%)' },
+        { key: 'receita', label: 'Receita' },
       ];
     }
 
     if (activeTab === REPORT_TABS.detalhado) {
       return [
-        { key: 'data_compra', header: 'Data da compra' },
-        { key: 'evento', header: 'Evento' },
-        { key: 'id_venda', header: 'ID da venda' },
-        { key: 'passageiro', header: 'Passageiro' },
-        { key: 'poltrona', header: 'Poltrona' },
-        { key: 'vendedor', header: 'Vendedor' },
-        { key: 'valor', header: 'Valor' },
-        { key: 'status', header: 'Status' },
+        { key: 'data_compra', label: 'Data da compra' },
+        { key: 'evento', label: 'Evento' },
+        { key: 'id_venda', label: 'ID da venda' },
+        { key: 'passageiro', label: 'Passageiro' },
+        { key: 'vendedor', label: 'Vendedor' },
+        { key: 'valor', label: 'Valor' },
+        { key: 'status', label: 'Status' },
       ];
     }
 
     return [
-      { key: 'evento', header: 'Evento' },
-      { key: 'veiculo', header: 'Veículo' },
-      { key: 'capacidade', header: 'Capacidade' },
-      { key: 'passagens_vendidas', header: 'Passagens vendidas' },
-      { key: 'passagens_disponiveis', header: 'Passagens disponíveis' },
-      { key: 'ocupacao', header: 'Ocupação (%)' },
+      { key: 'evento', label: 'Evento' },
+      { key: 'veiculo', label: 'Veículo' },
+      { key: 'capacidade', label: 'Capacidade' },
+      { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+      { key: 'passagens_disponiveis', label: 'Passagens disponíveis' },
+      { key: 'ocupacao', label: 'Ocupação (%)' },
     ];
   }, [activeTab]);
 
@@ -360,7 +357,6 @@ export default function EventReport() {
         evento: sale.event?.name ?? '-',
         id_venda: sale.id,
         passageiro: sale.customer_name,
-        poltrona: sale.seat_number ?? '-',
         vendedor: sale.seller?.name ?? 'Sem vendedor',
         valor: formatCurrencyBRL(getSaleAmount(sale)),
         status: sale.status,
@@ -484,7 +480,7 @@ export default function EventReport() {
                       <SelectItem value="all">Todos</SelectItem>
                       {vehicles.map((vehicle) => (
                         <SelectItem key={vehicle.id} value={vehicle.id}>
-                          {`${vehicle.name}${vehicle.prefix ? ` • ${vehicle.prefix}` : ''}`}
+                          {`${[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.plate} • ${vehicle.plate}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -525,6 +521,7 @@ export default function EventReport() {
           </Card>
         ) : filteredSales.length === 0 ? (
           <EmptyState
+            icon={<BarChart3 className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum registro encontrado"
             description="Ajuste os filtros para visualizar os dados do relatório por evento."
           />
@@ -588,7 +585,6 @@ export default function EventReport() {
                         <TableHead>Evento</TableHead>
                         <TableHead>ID da venda</TableHead>
                         <TableHead>Passageiro</TableHead>
-                        <TableHead>Poltrona</TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
                         <TableHead>Status</TableHead>
@@ -601,7 +597,6 @@ export default function EventReport() {
                           <TableCell>{sale.event?.name ?? '-'}</TableCell>
                           <TableCell className="font-mono text-xs">{sale.id.slice(0, 8)}…</TableCell>
                           <TableCell>{sale.customer_name}</TableCell>
-                          <TableCell>{sale.seat_number ?? '-'}</TableCell>
                           <TableCell>{sale.seller?.name ?? 'Sem vendedor'}</TableCell>
                           <TableCell className="text-right">{formatCurrencyBRL(getSaleAmount(sale))}</TableCell>
                           <TableCell><StatusBadge status={sale.status} /></TableCell>
