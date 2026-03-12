@@ -830,7 +830,7 @@ export default function Sales() {
 
   const openTicketGen = async (sale: Sale) => {
     setTicketGenSale(sale);
-    setSelectedTicketId(null);
+    setTicketGenLoading(true);
     setTicketGenLoading(true);
     setTicketGenTickets([]);
     setTicketGenFees(undefined);
