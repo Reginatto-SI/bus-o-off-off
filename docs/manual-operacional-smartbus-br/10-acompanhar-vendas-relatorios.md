@@ -63,3 +63,8 @@ O acompanhamento ocorre em duas frentes:
 
 ## 8. Impacto no Sistema
 O acompanhamento contínuo fortalece controle financeiro, previsibilidade de ocupação e qualidade de operação. Também apoia decisões de preço, divulgação, alocação de frota e gestão de equipe comercial.
+
+## 9. Padrão Oficial de Telas de Relatórios
+
+> "A tela /admin/relatorios/comissao-vendedores é a tela piloto de relatórios do sistema. Todas as novas telas de relatórios devem seguir exatamente o mesmo padrão estrutural e visual."
+

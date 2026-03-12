@@ -140,9 +140,8 @@ const navigationGroups: NavigationGroup[] = [{
     icon: FileText
   }, {
     name: 'Relatório por Evento',
+    href: '/admin/relatorios/eventos',
     icon: Calendar,
-    disabled: true,
-    statusLabel: 'Em breve'
   }, {
     name: 'Lista de Embarque',
     href: '/admin/relatorios/lista-embarque',
