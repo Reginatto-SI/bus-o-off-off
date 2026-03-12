@@ -219,9 +219,11 @@ export default function Confirmation() {
     const interval = setInterval(async () => {
       attempts++;
 
-      // After 15s, force sync with payment gateway once
-      if (attempts === 5 && !verifyCalledRef.current) {
-        verifyCalledRef.current = true;
+      // FIX: Periodically call verify-payment-status every ~30s (every 10th attempt)
+      // instead of a single call at attempt 5. This ensures automatic sync with Asaas
+      // even when the webhook doesn't fire (common in Sandbox). The manual button
+      // already proves this logic works — now the polling reuses it automatically.
+      if (attempts >= 5 && attempts % 10 === 0) {
         supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
           .catch(() => {});
       }
