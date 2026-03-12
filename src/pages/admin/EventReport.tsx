@@ -184,9 +184,8 @@ export default function EventReport() {
           gross_amount,
           platform_fee_total,
           customer_name,
-          seat_number,
           event:events!inner(id, name, date, status, is_archived),
-          trip:trips(id, capacity, vehicle:vehicles(id, name, prefix, plate)),
+          trip:trips(id, capacity, vehicle:vehicles(id, model, brand, plate)),
           seller:sellers(name)
         `)
         .eq('company_id', activeCompanyId)
