@@ -1879,6 +1879,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_boarding_manifest_rows: {
+        Args: {
+          p_company_id: string
+          p_event_id: string
+          p_trip_id?: string
+        }
+        Returns: {
+          boarding_location_id: string
+          boarding_location_name: string
+          departure_time: string
+          event_date: string
+          event_id: string
+          event_name: string
+          passenger_name: string
+          passenger_phone: string
+          sale_id: string
+          seat_label: string
+          stop_order: number
+          ticket_id: string
+          trip_departure_time: string
+          trip_id: string
+          vehicle_plate: string
+          vehicle_type: string
+        }[]
+      }
       get_sales_report_kpis: {
         Args: {
           p_company_id?: string
