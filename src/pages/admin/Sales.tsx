@@ -1375,7 +1375,6 @@ export default function Sales() {
             if (!open) {
               setTicketGenSale(null);
               setTicketGenTickets([]);
-              setSelectedTicketId(null);
             }
           }}
         >
