@@ -962,20 +962,22 @@ export default function Sales() {
 
     return actions;
   };
-  const selectedTicket = ticketGenTickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
-  const selectedTicketData = selectedTicket && ticketGenSale && activeCompany
-    ? buildTicketCardData(
-        selectedTicket,
-        ticketGenSale,
-        activeCompany,
-        ticketGenBoardingTime,
-        ticketGenBoardingDate,
-        ticketGenFees,
-        ticketGenTotalPaid,
-        ticketGenPartners.length > 0 ? ticketGenPartners : undefined,
-        ticketGenSponsors.length > 0 ? ticketGenSponsors : undefined,
+  // Constrói TicketCardData para TODOS os tickets da venda (agrupamento por passageiro no componente)
+  const allTicketGenCards: TicketCardData[] = ticketGenSale && activeCompany
+    ? ticketGenTickets.map((ticket) =>
+        buildTicketCardData(
+          ticket,
+          ticketGenSale,
+          activeCompany,
+          ticketGenBoardingTime,
+          ticketGenBoardingDate,
+          ticketGenFees,
+          ticketGenTotalPaid,
+          ticketGenPartners.length > 0 ? ticketGenPartners : undefined,
+          ticketGenSponsors.length > 0 ? ticketGenSponsors : undefined,
+        )
       )
-    : null;
+    : [];
 
 
 
