@@ -696,7 +696,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           ticketCardData: buildTicketCardData(t),
         }));
         setConfirmationData(confirmData);
-        setActiveTicketIndex(0);
+        // activeTicketIndex reset removido
         setStep(4);
       } else {
         onSuccess();
