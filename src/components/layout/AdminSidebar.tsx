@@ -28,6 +28,7 @@ import {
   Building2,
   Wrench,
   Activity,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -142,6 +143,10 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Calendar,
     disabled: true,
     statusLabel: 'Em breve'
+  }, {
+    name: 'Lista de Embarque',
+    href: '/admin/relatorios/lista-embarque',
+    icon: ClipboardList
   }, {
     name: 'Comissão de Vendedores',
     href: '/admin/relatorios/comissao-vendedores',
