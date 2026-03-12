@@ -597,7 +597,6 @@ export default function EventReport() {
                           <TableCell>{sale.event?.name ?? '-'}</TableCell>
                           <TableCell className="font-mono text-xs">{sale.id.slice(0, 8)}…</TableCell>
                           <TableCell>{sale.customer_name}</TableCell>
-                          <TableCell>{sale.seat_number ?? '-'}</TableCell>
                           <TableCell>{sale.seller?.name ?? 'Sem vendedor'}</TableCell>
                           <TableCell className="text-right">{formatCurrencyBRL(getSaleAmount(sale))}</TableCell>
                           <TableCell><StatusBadge status={sale.status} /></TableCell>
