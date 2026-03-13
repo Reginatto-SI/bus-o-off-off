@@ -8,7 +8,8 @@
  *   3. Exibe cards resumidos e compactos por passageiro
  *   4. Abre o detalhe (TicketCard completo) sob demanda, com abas ida/volta
  *
- * Usado em: Confirmation, TicketLookup, Sales (admin), NewSaleModal (admin).
+ * Padrão oficial de passagem virtual do sistema.
+ * Usado em: /admin/vendas (referência), /consultar-passagens, Confirmation e NewSaleModal.
  */
 
 import { useState, useMemo } from 'react';
@@ -78,6 +79,11 @@ export function PassengerTicketList({
   allowReservedDownloads = false,
   context = 'public',
 }: PassengerTicketListProps) {
+  // Nota de manutenção: `context` existe para ajustes mínimos de container/espaçamento
+  // por tela, mas o template visual da passagem (card, bloco de passageiro e abas ida/volta)
+  // permanece único e compartilhado entre admin e público.
+  void context;
+
   // Agrupa tickets por CPF do passageiro
   const groups = useMemo<PassengerGroup[]>(() => {
     const map = new Map<string, { ida: TicketCardData | null; volta: TicketCardData | null; name: string; cpf: string }>();
@@ -240,7 +246,7 @@ function PassengerCollapsibleCard({
 
       <CollapsibleContent className="mt-2">
         {group.hasRoundTrip ? (
-          // Abas Ida / Volta quando existe ida e volta
+          // Preserva o mesmo padrão validado no admin: segmentação explícita de ida/volta com destaque do trecho ativo.
           <Tabs defaultValue="ida" className="w-full">
             <TabsList className="w-full">
               <TabsTrigger value="ida" className="flex-1">Ida</TabsTrigger>
