@@ -376,6 +376,8 @@ export default function Events() {
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const pendingImagePreviewUrlRef = useRef<string | null>(null);
+  // Ref do input usado pelo botão "Trocar" para abrir o seletor de arquivos de forma confiável.
+  const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearPendingImage = () => {
     if (pendingImagePreviewUrlRef.current) {
@@ -2967,19 +2969,29 @@ export default function Events() {
                               )}
                             </label>
                             {!isReadOnly && (
-                              <label className="inline-flex">
+                              <div className="inline-flex">
                                 <input
+                                  ref={replaceImageInputRef}
                                   type="file"
                                   accept="image/*"
                                   className="hidden"
                                   disabled={isReadOnly || uploadingImage}
                                   onChange={(e) => handleImageUpload(e.target.files?.[0])}
                                 />
-                                <Button type="button" variant="outline" size="sm" disabled={uploadingImage || isReadOnly}>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={uploadingImage || isReadOnly}
+                                  onClick={() => {
+                                    // O clique no botão aciona explicitamente o input oculto.
+                                    replaceImageInputRef.current?.click();
+                                  }}
+                                >
                                   <Upload className="h-4 w-4 mr-1" />
                                   Trocar
                                 </Button>
-                              </label>
+                              </div>
                             )}
                           </div>
                         ) : (
