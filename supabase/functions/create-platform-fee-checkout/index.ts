@@ -72,28 +72,27 @@ serve(async (req) => {
     }
 
     // Asaas exige mínimo de R$ 5,00 para billingType UNDEFINED.
-    // Se a taxa for menor, isentamos automaticamente.
+    // Se a taxa for menor, registramos isenção explícita da TAXA (sem promover a venda para paga).
+    // Fonte de verdade: sales.status continua 'reservado' até confirmação real de pagamento.
     const ASAAS_MIN_CHARGE = 5.0;
     if (feeAmount < ASAAS_MIN_CHARGE) {
       await supabaseAdmin
         .from("sales")
         .update({
-          platform_fee_status: "paid",
-          platform_fee_paid_at: new Date().toISOString(),
-          // Regra de negócio: ao quitar/isentar taxa, a venda reservada pode ser promovida para paga.
-          status: sale.status === "reservado" ? "pago" : sale.status,
+          platform_fee_status: "waived",
+          platform_fee_paid_at: null,
         })
         .eq("id", sale.id);
 
       await supabaseAdmin.from("sale_logs").insert({
         sale_id: sale.id,
         action: "platform_fee_waived",
-        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Isenta automaticamente.`,
+        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Taxa marcada como dispensada sem alterar status da venda.`,
         company_id: sale.company_id,
       });
 
       return new Response(
-        JSON.stringify({ waived: true, message: "Taxa isenta (abaixo do mínimo do gateway)" }),
+        JSON.stringify({ waived: true, message: "Taxa dispensada explicitamente (abaixo do mínimo do gateway)" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
