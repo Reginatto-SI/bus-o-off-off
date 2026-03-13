@@ -74,6 +74,7 @@ import {
   GripVertical,
   Archive,
   ArchiveRestore,
+  ArrowUpDown,
   DollarSign,
   ShieldCheck,
   ChevronLeft,
@@ -119,6 +120,25 @@ interface EventFilters {
 interface EventWithTrips extends Event {
   trips: { vehicle_id: string | null; driver_id: string | null; assistant_driver_id: string | null; capacity?: number }[];
 }
+
+type EventSortOption =
+  | 'event_date_asc'
+  | 'event_date_desc'
+  | 'created_at_desc'
+  | 'created_at_asc'
+  | 'name_asc'
+  | 'name_desc';
+
+const EVENTS_PER_PAGE = 12;
+
+const eventSortOptions: Array<{ value: EventSortOption; label: string }> = [
+  { value: 'event_date_asc', label: 'Data do evento (mais próximo primeiro)' },
+  { value: 'event_date_desc', label: 'Data do evento (mais distante primeiro)' },
+  { value: 'created_at_desc', label: 'Data de criação (mais recente primeiro)' },
+  { value: 'created_at_asc', label: 'Data de criação (mais antigo primeiro)' },
+  { value: 'name_asc', label: 'Nome do evento (A → Z)' },
+  { value: 'name_desc', label: 'Nome do evento (Z → A)' },
+];
 
 interface TripWithDetails extends Trip {
   vehicle?: Vehicle;
@@ -214,6 +234,8 @@ export default function Events() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
+  const [sortBy, setSortBy] = useState<EventSortOption>('event_date_asc');
+  const [currentPage, setCurrentPage] = useState(1);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [eventToArchiveAction, setEventToArchiveAction] = useState<EventWithTrips | null>(null);
   const [activeTab, setActiveTab] = useState('geral');
@@ -868,6 +890,43 @@ export default function Events() {
     });
   }, [events, filters, vehiclesById]);
 
+  const sortedEvents = useMemo(() => {
+    // Sequência obrigatória da listagem: primeiro filtra, depois ordena.
+    return [...filteredEvents].sort((a, b) => {
+      const eventDateA = parseDateOnlyAsLocal(a.date).getTime();
+      const eventDateB = parseDateOnlyAsLocal(b.date).getTime();
+      const createdAtA = new Date(a.created_at).getTime();
+      const createdAtB = new Date(b.created_at).getTime();
+
+      switch (sortBy) {
+        case 'event_date_desc':
+          return eventDateB - eventDateA;
+        case 'created_at_desc':
+          return createdAtB - createdAtA;
+        case 'created_at_asc':
+          return createdAtA - createdAtB;
+        case 'name_asc':
+          return a.name.localeCompare(b.name, 'pt-BR');
+        case 'name_desc':
+          return b.name.localeCompare(a.name, 'pt-BR');
+        case 'event_date_asc':
+        default:
+          return eventDateA - eventDateB;
+      }
+    });
+  }, [filteredEvents, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedEvents.length / EVENTS_PER_PAGE));
+
+  const paginatedEvents = useMemo(() => {
+    // Paginação aplicada por último, sempre sobre o resultado já filtrado e ordenado.
+    const startIndex = (currentPage - 1) * EVENTS_PER_PAGE;
+    return sortedEvents.slice(startIndex, startIndex + EVENTS_PER_PAGE);
+  }, [currentPage, sortedEvents]);
+
+  const rangeStart = sortedEvents.length === 0 ? 0 : (currentPage - 1) * EVENTS_PER_PAGE + 1;
+  const rangeEnd = sortedEvents.length === 0 ? 0 : Math.min(currentPage * EVENTS_PER_PAGE, sortedEvents.length);
+
   const hasActiveFilters = useMemo(() => {
     return (
       filters.search !== '' ||
@@ -882,6 +941,24 @@ export default function Events() {
       filters.imageStatus !== 'all'
     );
   }, [filters]);
+
+  useEffect(() => {
+    // Reset inteligente da paginação ao alterar filtros principais ou ordenação.
+    setCurrentPage(1);
+  }, [
+    filters.search,
+    filters.status,
+    filters.archiveState,
+    filters.startDate,
+    filters.endDate,
+    sortBy,
+  ]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // Count unique vehicles (fleets) - not counting ida+volta as separate
   const uniqueFleets = useMemo(() => {
@@ -2373,6 +2450,15 @@ export default function Events() {
               ],
               icon: Archive,
             },
+            {
+              id: 'sortBy',
+              label: 'Ordenar por',
+              placeholder: 'Ordenação',
+              value: sortBy,
+              onChange: (value) => setSortBy(value as EventSortOption),
+              options: eventSortOptions,
+              icon: ArrowUpDown,
+            },
           ]}
           mainFilters={
             <>
@@ -2396,7 +2482,11 @@ export default function Events() {
               />
             </>
           }
-          onClearFilters={() => setFilters(initialFilters)}
+          onClearFilters={() => {
+            setFilters(initialFilters);
+            setSortBy('event_date_asc');
+            setCurrentPage(1);
+          }}
           hasActiveFilters={hasActiveFilters}
           advancedFilters={
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2546,7 +2636,7 @@ export default function Events() {
               </Button>
             }
           />
-        ) : filteredEvents.length === 0 ? (
+        ) : sortedEvents.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum evento encontrado"
@@ -2558,8 +2648,9 @@ export default function Events() {
             }
           />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredEvents.map((event) => (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {paginatedEvents.map((event) => (
               <Card 
                 key={event.id} 
                 className={cn(
@@ -2674,8 +2765,36 @@ export default function Events() {
                   })()}
                 </CardContent>
               </Card>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 border-t px-1 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-muted-foreground">
+                Exibindo {rangeStart}–{rangeEnd} de {sortedEvents.length} eventos
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Próxima
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Event Modal with 5 Tabs */}
