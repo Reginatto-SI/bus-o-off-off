@@ -291,10 +291,10 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Orientação de acesso após a criação:</p>
       <div className="space-y-2 rounded-lg border p-4 text-sm">
-        <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{companyData?.email}</strong> será a referência principal da conta criada.</p>
+        <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
+        <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
         <p className="text-muted-foreground">Enquanto a operação estiver em testes, a conexão será criada no ambiente Sandbox do Asaas.</p>
-        <p className="font-medium">Você poderá gerenciar sua conta de pagamentos diretamente no Asaas após a criação.</p>
       </div>
     </div>
   );
