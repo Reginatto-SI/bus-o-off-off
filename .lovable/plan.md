@@ -1,34 +1,32 @@
 
+# Complete Payment Flow Overhaul — IMPLEMENTED
 
-## Analysis: Asaas Account Creation - "É necessário informar a cidade" Error
+## Changes Made
 
-### Root Cause Identified
+### Database
+- Added `pendente_pagamento` to `sale_status` enum
+- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
+- Created `sale_passengers` staging table for passenger data before payment confirmation
+- Enabled realtime on `sales` table
+- Enabled `pg_cron` and `pg_net` extensions
+- Scheduled `cleanup-expired-locks` cron job every 5 minutes
 
-Two issues found:
+### Edge Functions
+- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
+- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
+- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
 
-**1. Build Error (blocking deployment):** Line 84 selects fields from `companies` but does NOT include `phone`. Line 271 references `company.phone`, causing a TypeScript error that prevents the function from deploying.
+### Frontend
+- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
+- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
+- `StatusBadge.tsx`: Added `pendente_pagamento` badge
+- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
 
-**2. The actual Asaas error:** The payload construction (lines 290+) already uses correct camelCase (`addressNumber`, `postalCode`, `province`). However, looking at the Asaas documentation example, the API infers city from the `postalCode`. The real problem is likely that **the function cannot deploy at all** due to the build error, meaning the old/broken version is running in production.
-
-### Fix Plan
-
-**File:** `supabase/functions/create-asaas-account/index.ts`
-
-1. **Add `phone` to the select query** on line 84 so `company.phone` resolves correctly
-2. **Add enhanced diagnostic logs** for the exact payload sent and response received from Asaas
-3. No architectural changes needed - the camelCase mapping in the payload is already correct
-
-### Technical Detail
-
-```text
-Line 84 (current):
-  .select("id, name, legal_type, ... postal_code, city, state, asaas_api_key, ...")
-
-Line 84 (fix):
-  .select("id, name, legal_type, ... postal_code, city, state, phone, asaas_api_key, ...")
-                                                          ^^^^^
-                                                        MISSING
+## Architecture
 ```
-
-Once the build error is fixed, the function will redeploy with the correct payload that already uses proper camelCase field names.
-
+NEW FLOW:
+  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
+  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
+  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
+  → Frontend detects pago → Show tickets
+```

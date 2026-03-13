@@ -199,8 +199,8 @@ export type Database = {
           notes: string | null
           partner_split_percent: number
           phone: string | null
-          postal_code: string | null
           platform_fee_percent: number
+          postal_code: string | null
           primary_color: string | null
           province: string | null
           public_slug: string | null
@@ -249,8 +249,8 @@ export type Database = {
           notes?: string | null
           partner_split_percent?: number
           phone?: string | null
-          postal_code?: string | null
           platform_fee_percent?: number
+          postal_code?: string | null
           primary_color?: string | null
           province?: string | null
           public_slug?: string | null
@@ -299,8 +299,8 @@ export type Database = {
           notes?: string | null
           partner_split_percent?: number
           phone?: string | null
-          postal_code?: string | null
           platform_fee_percent?: number
+          postal_code?: string | null
           primary_color?: string | null
           province?: string | null
           public_slug?: string | null
