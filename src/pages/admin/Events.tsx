@@ -429,7 +429,7 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address')
+      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address, address_number, province, postal_code')
       .eq('id', activeCompanyId)
       .single();
 
