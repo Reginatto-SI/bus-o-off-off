@@ -369,6 +369,12 @@ export default function CompanyPage() {
       legalType: form.legal_type,
       documentNumber: documentDigits,
       email: form.email.trim(),
+      address: form.address.trim(),
+      addressNumber: form.address_number.trim(),
+      province: form.province.trim(),
+      postalCode: (form.postal_code || '').replace(/\D/g, ''),
+      city: form.city.trim(),
+      state: (form.state || '').trim(),
     };
   };
 

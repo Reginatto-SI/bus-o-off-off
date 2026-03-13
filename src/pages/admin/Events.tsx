@@ -475,6 +475,12 @@ export default function Events() {
       legalType,
       documentNumber,
       email,
+      address: (data.address || '').trim(),
+      addressNumber: (data.address_number || '').trim(),
+      province: (data.province || '').trim(),
+      postalCode: (data.postal_code || '').replace(/\D/g, ''),
+      city: (data.city || '').trim(),
+      state: (data.state || '').trim(),
     };
   };
 

@@ -377,7 +377,17 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           Voltar
         </Button>
         {step < 3 ? (
-          <Button type="button" disabled={step === 1 && !canProceed} onClick={() => setStep((prev) => (prev + 1) as AsaasWizardStep)}>
+          <Button
+            type="button"
+            disabled={step === 1 && !canProceed}
+            onClick={() => {
+              if (step === 2) {
+                handleStep2Continue();
+              } else {
+                setStep((prev) => (prev + 1) as AsaasWizardStep);
+              }
+            }}
+          >
             Continuar
           </Button>
         ) : (
