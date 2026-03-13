@@ -14,13 +14,9 @@ serve(async (req) => {
 
   try {
     const { event_id, cpf } = await req.json();
-
-    if (!event_id || typeof event_id !== "string") {
-      return new Response(
-        JSON.stringify({ error: "event_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const normalizedEventId = typeof event_id === "string" && event_id.trim().length > 0
+      ? event_id
+      : null;
 
     // Sanitise CPF: keep only digits, must be exactly 11
     const cpfDigits = (cpf || "").replace(/\D/g, "");
@@ -57,8 +53,10 @@ serve(async (req) => {
       );
     }
 
-    // 2. Filter by event
-    const filtered = ticketRows.filter((t: any) => t.trip?.event_id === event_id);
+    // 2. Fluxo wizard por CPF: o filtro por evento passa a ser opcional para manter retrocompatibilidade.
+    const filtered = normalizedEventId
+      ? ticketRows.filter((t: any) => t.trip?.event_id === normalizedEventId)
+      : ticketRows;
 
     if (filtered.length === 0) {
       return new Response(
@@ -88,19 +86,34 @@ serve(async (req) => {
       }
     }
 
-    // 4. Fetch event fees
-    const { data: feesData } = await supabaseAdmin
-      .from("event_fees")
-      .select("*")
-      .eq("event_id", event_id)
-      .eq("is_active", true);
+    // 4. Buscar taxas por todos os eventos retornados para suportar múltiplos resultados no mesmo CPF.
+    const eventIds = [
+      ...new Set(
+        filtered
+          .map((t: any) => t.trip?.event_id)
+          .filter(Boolean)
+      ),
+    ];
 
-    const eventFees = (feesData || []).map((f: any) => ({
-      name: f.name,
-      fee_type: f.fee_type,
-      value: f.value,
-      is_active: true,
-    }));
+    const { data: feesData } = eventIds.length > 0
+      ? await supabaseAdmin
+        .from("event_fees")
+        .select("event_id, name, fee_type, value")
+        .in("event_id", eventIds)
+        .eq("is_active", true)
+      : { data: [] };
+
+    const eventFeesByEvent = (feesData || []).reduce((acc: Record<string, { name: string; fee_type: string; value: number; is_active: boolean }[]>, fee: any) => {
+      const current = acc[fee.event_id] || [];
+      current.push({
+        name: fee.name,
+        fee_type: fee.fee_type,
+        value: fee.value,
+        is_active: true,
+      });
+      acc[fee.event_id] = current;
+      return acc;
+    }, {});
 
     // 5. Fetch seat data (category, floor) for tickets that have seat_id
     const seatIds = filtered.map((t: any) => t.seat_id).filter(Boolean);
@@ -152,6 +165,7 @@ serve(async (req) => {
         eventName: t.sale?.event?.name || "",
         eventDate: t.sale?.event?.date || "",
         eventCity: t.sale?.event?.city || "",
+        eventId: t.trip?.event_id || null,
         boardingToleranceMinutes: t.sale?.event?.boarding_tolerance_minutes ?? null,
         boardingLocationName: t.sale?.boarding_location?.name || "",
         boardingLocationAddress: t.sale?.boarding_location?.address || "",
@@ -175,19 +189,12 @@ serve(async (req) => {
         seatCategory: seatInfo?.category || null,
         seatFloor: seatInfo?.floor || null,
         vehicleFloors: t.trip?.vehicle?.floors || 1,
+        passPlatformFeeToCustomer: Boolean(t.sale?.event?.pass_platform_fee_to_customer),
+        platformFeePercent: company?.platform_fee_percent ?? null,
       });
     }
 
-    const passPlatformFeeToCustomer = Boolean(filtered[0]?.sale?.event?.pass_platform_fee_to_customer);
     const firstCompanyId = filtered[0]?.sale?.event?.company_id;
-    const platformFeePercent = firstCompanyId ? companyMap.get(firstCompanyId)?.platform_fee_percent ?? null : null;
-
-    if (platformFeePercent == null) {
-      return new Response(
-        JSON.stringify({ error: "platform_fee_percent not configured for company" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // 7. Fetch commercial partners for ticket display
     let commercialPartners: { name: string; logo_url: string | null }[] = [];
@@ -205,11 +212,11 @@ serve(async (req) => {
 
     // 8. Fetch event sponsors for ticket display
     let eventSponsors: { name: string; logo_url: string | null }[] = [];
-    {
+    if (normalizedEventId) {
       const { data: esData } = await supabaseAdmin
         .from("event_sponsors")
         .select("display_order, sponsor:sponsors(name, banner_url, status)")
-        .eq("event_id", event_id)
+        .eq("event_id", normalizedEventId)
         .eq("show_on_ticket", true)
         .order("display_order", { ascending: true })
         .limit(6);
@@ -219,7 +226,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ tickets: results, eventFees, passPlatformFeeToCustomer, platformFeePercent, commercialPartners, eventSponsors }),
+      JSON.stringify({ tickets: results, eventFeesByEvent, commercialPartners, eventSponsors }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
