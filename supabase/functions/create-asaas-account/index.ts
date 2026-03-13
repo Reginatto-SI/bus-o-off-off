@@ -263,57 +263,54 @@ serve(async (req) => {
       );
     }
 
-    // Asaas exige endereço no onboarding de subconta em produção.
-    // Normalizamos e validamos antes de chamar /accounts para evitar rejeição por string vazia (ex.: "   ").
+    // Normalização mínima para garantir contrato do payload oficial do Asaas.
     const normalizedAddress = (company.address || "").trim();
     const normalizedAddressNumber = (company.address_number || "").trim();
     const normalizedProvince = (company.province || "").trim();
-    const normalizedPostalCode = (company.postal_code || "").trim();
-    const normalizedCity = (company.city || "").trim();
-    const normalizedState = (company.state || "").trim().toUpperCase();
+    const normalizedPostalCode = (company.postal_code || "").replace(/\D/g, "");
+    const normalizedPhone = (company.phone || "").trim();
 
-    if (!company.postal_code || !company.address || !company.city || !company.state) {
-      throw new Error("Endereço da empresa incompleto. Complete o cadastro da empresa antes de conectar pagamentos.");
+    // Comentário de suporte: a API de criação de conta exige bloco de endereço completo.
+    if (!normalizedAddress || !normalizedAddressNumber || !normalizedProvince || !normalizedPostalCode) {
+      return new Response(
+        JSON.stringify({ error: "Endereço da empresa incompleto. Complete o cadastro antes de conectar o Asaas." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    if (!normalizedAddressNumber || !normalizedProvince) {
+    if (normalizedPostalCode.length !== 8) {
       return new Response(
-        JSON.stringify({ error: "Dados de endereço da empresa incompletos. Complete o cadastro da empresa antes de conectar pagamentos." }),
+        JSON.stringify({ error: "Endereço da empresa incompleto. Complete o cadastro antes de conectar o Asaas." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Create Asaas subaccount
     try {
-      const accountPayload: Record<string, any> = {
+      const accountPayload = {
         name: displayName,
         email: company.email,
         cpfCnpj: documentDigits,
+        // Comentário: convertemos PF/PJ para enum esperado pelo Asaas no companyType.
         companyType: legalType === "PF" ? "MEI" : "LIMITED",
-        incomeValue: 5000,
-        birthDate: "1990-01-01",
-        // Endereço obrigatório para evitar rejeição do Asaas em ambiente de produção.
-        // Enviamos valores normalizados para não mandar espaços em branco ao Asaas.
+        phone: normalizedPhone,
+        mobilePhone: normalizedPhone,
         address: normalizedAddress,
         addressNumber: normalizedAddressNumber,
         province: normalizedProvince,
         postalCode: normalizedPostalCode,
-        city: normalizedCity,
-        state: normalizedState,
+        // companies não possui "complement" hoje; enviamos vazio para manter contrato oficial.
+        complement: "",
       };
 
-      // Log de suporte: ajuda a validar rapidamente se endereço/cidade/UF chegaram preenchidos.
-      // Não registramos o endereço completo para evitar exposição de dados sensíveis.
+      // Log explícito para diagnóstico em produção do payload exato enviado ao Asaas.
+      console.log("[ASAAS] Payload final", accountPayload);
       console.log("[DIAG][ASAAS] create account payload address fields", {
         company_id,
         hasAddress: Boolean(normalizedAddress),
         hasAddressNumber: Boolean(normalizedAddressNumber),
         hasProvince: Boolean(normalizedProvince),
         hasPostalCode: Boolean(normalizedPostalCode),
-        hasCity: Boolean(normalizedCity),
-        hasState: Boolean(normalizedState),
-        city: normalizedCity,
-        state: normalizedState,
       });
 
       const createRes = await fetch(`${ASAAS_BASE_URL}/accounts`, {
@@ -332,8 +329,6 @@ serve(async (req) => {
         console.error("Asaas create account error:", JSON.stringify(createData));
         console.error("[DIAG][ASAAS] create account address diagnostic:", {
           company_id,
-          city: normalizedCity,
-          state: normalizedState,
           hasAddress: Boolean(normalizedAddress),
           hasAddressNumber: Boolean(normalizedAddressNumber),
           hasProvince: Boolean(normalizedProvince),
