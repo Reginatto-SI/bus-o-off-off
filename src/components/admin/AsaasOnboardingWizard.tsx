@@ -168,7 +168,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   };
 
   const handleLinkExistingAccount = async () => {
-    if (!companyData?.companyId) {
+    if (!localCompanyData?.companyId) {
       toast.error('Empresa não encontrada.');
       return;
     }
