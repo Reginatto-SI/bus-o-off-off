@@ -247,7 +247,7 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletId = accountData.walletId;
+        const walletId = accountData.walletId ?? accountData.wallet?.id ?? null;
 
         if (!walletId) {
           return new Response(
