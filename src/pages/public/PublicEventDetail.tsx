@@ -13,6 +13,7 @@ import { VehicleCard } from '@/components/public/VehicleCard';
 import { BoardingLocationCard } from '@/components/public/BoardingLocationCard';
 import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { parseDateOnlyAsLocal } from '@/lib/date';
 import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
@@ -41,6 +42,7 @@ export default function PublicEventDetail() {
   const [quantity, setQuantity] = useState(1);
   const [availableSeatsMap, setAvailableSeatsMap] = useState<Record<string, number>>({});
   const [isInfoDrawerOpen, setIsInfoDrawerOpen] = useState(false);
+  const [isDescriptionDialogOpen, setIsDescriptionDialogOpen] = useState(false);
   const [supportWhatsapp, setSupportWhatsapp] = useState<string | null>(null);
 
   const transportPolicy: TransportPolicy = event?.transport_policy ?? 'trecho_independente';
@@ -51,6 +53,8 @@ export default function PublicEventDetail() {
     () => (groupedPolicy ? allTrips.filter((trip) => trip.trip_type === 'ida') : allTrips),
     [groupedPolicy, allTrips]
   );
+  const eventDescription = event?.description?.trim() ?? '';
+  const hasEventDescription = eventDescription.length > 0;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -266,6 +270,23 @@ export default function PublicEventDetail() {
 
         <EventSummaryCard event={event} compact />
 
+        {/* Exibe a descrição pública do evento em card compacto somente quando houver conteúdo preenchido. */}
+        {hasEventDescription && (
+          <section className="rounded-lg border bg-card p-4 space-y-3">
+            <h2 className="text-base font-semibold">Sobre o evento</h2>
+            {/* Preview truncado em 3 linhas para manter o fluxo de compra compacto. */}
+            <p className="text-sm text-muted-foreground whitespace-pre-line line-clamp-3">{eventDescription}</p>
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto p-0 text-sm"
+              onClick={() => setIsDescriptionDialogOpen(true)}
+            >
+              Ler mais
+            </Button>
+          </section>
+        )}
+
         {event.public_info && (
           <button
             type="button"
@@ -414,6 +435,23 @@ export default function PublicEventDetail() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* Modal reutilizando o padrão do projeto para leitura completa da descrição do evento. */}
+      <Dialog open={isDescriptionDialogOpen} onOpenChange={setIsDescriptionDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Sobre o evento</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
+            <p className="whitespace-pre-wrap text-sm text-foreground">{eventDescription}</p>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setIsDescriptionDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PublicLayout>
   );
 }
