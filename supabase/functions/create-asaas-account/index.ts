@@ -293,6 +293,8 @@ serve(async (req) => {
         cpfCnpj: documentDigits,
         // Comentário: convertemos PF/PJ para enum esperado pelo Asaas no companyType.
         companyType: legalType === "PF" ? "MEI" : "LIMITED",
+        // Campo obrigatório da API Asaas: renda/faturamento mensal estimado.
+        incomeValue: legalType === "PF" ? 5000 : 50000,
         phone: normalizedPhone,
         mobilePhone: normalizedPhone,
         address: normalizedAddress,
