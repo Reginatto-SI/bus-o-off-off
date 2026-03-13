@@ -204,6 +204,19 @@ export function TicketCard({
           */}
           {isReservedReceipt ? (
             <div className="w-full rounded-lg border-2 border-dashed border-amber-400/70 bg-amber-50/40 p-4 text-center">
+              {/*
+                Mantemos um QR oculto somente para reuso do pipeline atual de exportação em PDF.
+                Ele NÃO é exibido na UI da reserva e não deve ser tratado como QR operacional.
+              */}
+              <QRCodeCanvas
+                ref={qrRef}
+                value={ticket.qrCodeToken}
+                size={180}
+                level="M"
+                includeMargin
+                className="hidden"
+                aria-hidden="true"
+              />
               <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
                 <QrCode className="h-5 w-5" />
               </div>
@@ -463,7 +476,7 @@ export function TicketCard({
           )}
 
           {/* Actions */}
-          {canDownload && !isReservedReceipt && (
+          {(canDownload || isReservedReceipt) && (
             // Mantém ações visíveis na interface, mas permite excluir este bloco do PDF.
             <div data-pdf-exclude="true" className="w-full flex flex-col sm:flex-row gap-2 pt-2">
               <Button
@@ -473,17 +486,19 @@ export function TicketCard({
                 onClick={handleDownloadPdf}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Salvar PDF
+                {isReservedReceipt ? 'Salvar Comprovante (PDF)' : 'Salvar PDF'}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={handleDownloadImage}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Salvar QR Code
-              </Button>
+              {canDownload && !isReservedReceipt && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={handleDownloadImage}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Salvar QR Code
+                </Button>
+              )}
             </div>
           )}
         </div>
