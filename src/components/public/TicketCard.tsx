@@ -2,8 +2,10 @@ import { useRef } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User } from 'lucide-react';
+import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User, QrCode, ShieldAlert } from 'lucide-react';
 import { formatDateOnlyBR } from '@/lib/date';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
@@ -82,6 +84,11 @@ interface TicketCardProps {
     returnSeatIsPlaceholder: boolean;
   };
   allowReservedDownloads?: boolean;
+  /**
+   * `receipt` descaracteriza venda reservada para não parecer passe de embarque.
+   * Mantemos `default` como comportamento legado para não afetar fluxos existentes.
+   */
+  reservedPresentation?: 'default' | 'receipt';
   // Callback para verificar status de pagamento no Stripe (on-demand)
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshing?: boolean;
@@ -99,6 +106,7 @@ export function TicketCard({
   ticket,
   consolidatedRoundTrip,
   allowReservedDownloads = false,
+  reservedPresentation = 'default',
   onRefreshStatus,
   isRefreshing,
 }: TicketCardProps) {
@@ -106,6 +114,8 @@ export function TicketCard({
   const qrRef = useRef<HTMLCanvasElement>(null);
   const ticketContainerRef = useRef<HTMLDivElement>(null);
   const isPaid = ticket.saleStatus === 'pago';
+  const isReserved = ticket.saleStatus === 'reservado';
+  const isReservedReceipt = isReserved && reservedPresentation === 'receipt';
   const canDownload = isPaid || (allowReservedDownloads && ticket.saleStatus === 'reservado');
   const isCancelled = ticket.saleStatus === 'cancelado';
   const accentColor = ticket.companyPrimaryColor || '#F97316';
@@ -188,24 +198,37 @@ export function TicketCard({
             </div>
           </div>
 
-          {/* QR Code */}
-          <div className="relative">
-            <QRCodeCanvas
-              ref={qrRef}
-              value={ticket.qrCodeToken}
-              size={180}
-              level="M"
-              includeMargin
-              className={isCancelled ? 'opacity-40' : ''}
-            />
-            {isCancelled && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-xs font-bold rotate-[-15deg]">
-                  CANCELADA
-                </span>
+          {/*
+            Regra operacional: venda reservada no fluxo de comprovante NÃO exibe QR operacional,
+            evitando confusão com ticket de embarque já pago.
+          */}
+          {isReservedReceipt ? (
+            <div className="w-full rounded-lg border-2 border-dashed border-amber-400/70 bg-amber-50/40 p-4 text-center">
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <QrCode className="h-5 w-5" />
               </div>
-            )}
-          </div>
+              <p className="text-sm font-semibold text-amber-800">QR Code de embarque indisponível</p>
+              <p className="text-xs text-amber-700">A passagem oficial com QR só é liberada após confirmação do pagamento.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <QRCodeCanvas
+                ref={qrRef}
+                value={ticket.qrCodeToken}
+                size={180}
+                level="M"
+                includeMargin
+                className={isCancelled ? 'opacity-40' : ''}
+              />
+              {isCancelled && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-xs font-bold rotate-[-15deg]">
+                    CANCELADA
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Info */}
           <div className="w-full space-y-2 text-sm">
@@ -214,6 +237,9 @@ export function TicketCard({
                 {consolidatedRoundTrip && (
                   <p className="text-xs text-primary font-semibold">Passagem — Ida e Volta</p>
                 )}
+                {isReservedReceipt && (
+                  <Badge variant="outline" className="w-fit border-amber-500 bg-amber-50 text-amber-800">RESERVA</Badge>
+                )}
                 <div className="flex items-center gap-2 font-semibold">
                   <Armchair className="h-4 w-4" style={{ color: accentColor }} />
                   Assento {seatDisplayLabel}
@@ -221,6 +247,16 @@ export function TicketCard({
               </div>
               <StatusBadge status={displayStatus} />
             </div>
+
+            {isReservedReceipt && (
+              <Alert className="border-amber-400 bg-amber-50 text-amber-900">
+                <ShieldAlert className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Comprovante de reserva.</strong> Este documento não autoriza embarque.
+                  A passagem oficial é liberada apenas quando a venda estiver com status <strong>pago</strong>.
+                </AlertDescription>
+              </Alert>
+            )}
             {/* Estrutura oficial: bloco do titular antes dos dados operacionais do evento. */}
             <div className="border-t pt-3 mt-2 space-y-3 text-muted-foreground">
               <div className="space-y-1">
@@ -427,7 +463,7 @@ export function TicketCard({
           )}
 
           {/* Actions */}
-          {canDownload && (
+          {canDownload && !isReservedReceipt && (
             // Mantém ações visíveis na interface, mas permite excluir este bloco do PDF.
             <div data-pdf-exclude="true" className="w-full flex flex-col sm:flex-row gap-2 pt-2">
               <Button
