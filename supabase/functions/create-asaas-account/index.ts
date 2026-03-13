@@ -185,7 +185,8 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletId = accountData.walletId ?? accountData.wallet?.id ?? null;
+        const walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? null;
+        const walletId = walletIdFromResponse ?? company.asaas_wallet_id ?? null;
 
         if (!walletId) {
           console.error("[ASAAS][VERIFY] Validation failed reason", {
