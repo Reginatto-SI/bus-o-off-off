@@ -211,6 +211,8 @@ async function processPlatformFeePayment(
       platform_fee_status: "paid",
       platform_fee_paid_at: new Date().toISOString(),
       platform_fee_payment_id: session.id,
+      // Regra de negócio: somente após pagamento da taxa a venda reservada vira paga.
+      status: "pago",
     })
     .eq("id", saleId)
     .eq("platform_fee_status", "pending"); // Guard de idempotência

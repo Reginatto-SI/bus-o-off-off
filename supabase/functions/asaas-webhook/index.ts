@@ -125,16 +125,11 @@ serve(async (req) => {
     }
 
     if (!saleId) {
-      const isPlatformFee = payment?.description?.includes("Taxa da Plataforma") || String(paymentId ?? "").startsWith("platform_fee_");
-      const reason = isPlatformFee ? "platform_fee_out_of_scope" : "missing_external_reference";
-
       const missingReferenceResult: ProcessingResult = {
         status: "ignored",
         httpStatus: 200,
-        message: isPlatformFee
-          ? "Evento de taxa de plataforma ignorado neste fluxo"
-          : "externalReference ausente; webhook sem vínculo de venda",
-        responseBody: { received: true, ignored: true, reason },
+        message: "externalReference ausente; webhook sem vínculo de venda",
+        responseBody: { received: true, ignored: true, reason: "missing_external_reference" },
         eventType,
         paymentId,
         externalReference,
@@ -146,6 +141,22 @@ serve(async (req) => {
       });
 
       return jsonResponse(missingReferenceResult.httpStatus, missingReferenceResult.responseBody);
+    }
+
+    // Fluxo dedicado: cobrança da taxa da plataforma usa externalReference = platform_fee_<sale_id>.
+    // Aqui promovemos reservado -> pago somente após confirmação da taxa, sem misturar com pagamento da passagem.
+    if (String(saleId).startsWith("platform_fee_")) {
+      const platformFeeResult = await processPlatformFeeWebhook(supabaseAdmin, saleId, payment, eventType);
+      platformFeeResult.eventType = eventType;
+      platformFeeResult.paymentId = paymentId;
+      platformFeeResult.externalReference = externalReference;
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...platformFeeResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(platformFeeResult.httpStatus, platformFeeResult.responseBody);
     }
 
     const { data: sale, error: saleError } = await supabaseAdmin
@@ -228,6 +239,106 @@ serve(async (req) => {
     return jsonResponse(fallbackResult.httpStatus, fallbackResult.responseBody);
   }
 });
+
+
+async function processPlatformFeeWebhook(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  externalReference: string,
+  payment: any,
+  eventType: string,
+): Promise<ProcessingResult> {
+  const saleId = externalReference.replace("platform_fee_", "");
+
+  const { data: sale, error: saleError } = await supabaseAdmin
+    .from("sales")
+    .select("id, company_id, status, platform_fee_status")
+    .eq("id", saleId)
+    .maybeSingle();
+
+  if (saleError || !sale) {
+    return {
+      status: "failed",
+      httpStatus: 404,
+      message: `Venda não localizada para taxa da plataforma: ${saleId}`,
+      responseBody: { error: "Sale not found", sale_id: saleId },
+      saleId,
+    };
+  }
+
+  if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {
+    const { error: updateError } = await supabaseAdmin
+      .from("sales")
+      .update({
+        platform_fee_status: "paid",
+        platform_fee_paid_at: new Date().toISOString(),
+        platform_fee_payment_id: payment.id,
+        // Regra de negócio: após taxa confirmada, a venda manual reservada pode virar paga.
+        status: sale.status === "reservado" ? "pago" : sale.status,
+      })
+      .eq("id", saleId)
+      .in("platform_fee_status", ["pending", "failed"]);
+
+    if (updateError) {
+      return {
+        status: "failed",
+        httpStatus: 500,
+        message: `Falha ao confirmar taxa da plataforma da venda ${saleId}`,
+        responseBody: { error: "Platform fee update failed", sale_id: saleId },
+        saleId,
+        companyId: sale.company_id,
+      };
+    }
+
+    await supabaseAdmin.from("sale_logs").insert({
+      sale_id: saleId,
+      action: "platform_fee_paid",
+      description: `Taxa da plataforma confirmada via Asaas (${eventType}, payment ${payment.id}). Venda promovida para paga quando aplicável.`,
+      company_id: sale.company_id,
+    });
+
+    return {
+      status: "success",
+      httpStatus: 200,
+      message: `Taxa da plataforma confirmada para venda ${saleId}`,
+      responseBody: { received: true, processed: true, sale_id: saleId, flow: "platform_fee" },
+      saleId,
+      companyId: sale.company_id,
+    };
+  }
+
+  const { error: failUpdateError } = await supabaseAdmin
+    .from("sales")
+    .update({ platform_fee_status: "failed" })
+    .eq("id", saleId)
+    .eq("platform_fee_status", "pending");
+
+  if (failUpdateError) {
+    return {
+      status: "failed",
+      httpStatus: 500,
+      message: `Falha ao registrar falha da taxa da plataforma da venda ${saleId}`,
+      responseBody: { error: "Platform fee failure update failed", sale_id: saleId },
+      saleId,
+      companyId: sale.company_id,
+    };
+  }
+
+  await supabaseAdmin.from("sale_logs").insert({
+    sale_id: saleId,
+    action: "platform_fee_failed",
+    description: `Falha/cancelamento da taxa da plataforma via Asaas (${eventType}, payment ${payment.id}).`,
+    company_id: sale.company_id,
+  });
+
+  return {
+    status: "success",
+    httpStatus: 200,
+    message: `Falha da taxa registrada para venda ${saleId}`,
+    responseBody: { received: true, processed: true, sale_id: saleId, flow: "platform_fee" },
+    saleId,
+    companyId: sale.company_id,
+  };
+}
 
 async function processPaymentConfirmed(
   supabaseAdmin: ReturnType<typeof createClient<any>>,

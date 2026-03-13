@@ -80,6 +80,8 @@ serve(async (req) => {
         .update({
           platform_fee_status: "paid",
           platform_fee_paid_at: new Date().toISOString(),
+          // Regra de negócio: ao quitar/isentar taxa, a venda reservada pode ser promovida para paga.
+          status: sale.status === "reservado" ? "pago" : sale.status,
         })
         .eq("id", sale.id);
 
