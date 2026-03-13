@@ -333,7 +333,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         Conta Asaas conectada com sucesso
       </p>
       <p className="text-sm text-emerald-900">
-        A conexão foi concluída para a empresa <strong>{companyData?.companyName}</strong> com o e-mail <strong>{companyData?.email}</strong>.
+        A conexão foi concluída para a empresa <strong>{localCompanyData?.companyName}</strong> com o e-mail <strong>{localCompanyData?.email}</strong>.
       </p>
     </div>
   );
