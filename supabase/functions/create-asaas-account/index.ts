@@ -81,7 +81,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
       .eq("id", company_id)
       .single();
 
