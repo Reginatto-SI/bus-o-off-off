@@ -127,7 +127,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     : maskCnpj(localCompanyData?.documentNumber ?? '');
 
   const handleCreateAsaasAccount = async () => {
-    if (!companyData?.companyId) {
+    if (!localCompanyData?.companyId) {
       toast.error('Empresa não encontrada para conectar pagamentos.');
       return;
     }
