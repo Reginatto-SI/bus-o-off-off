@@ -105,6 +105,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setMode(null);
       setSubmitting(false);
       setApiKeyInput('');
+      setShowAddressModal(false);
     }
   }, [open]);
 
