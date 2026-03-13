@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
@@ -9,23 +9,50 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Loader2, Search, Ticket } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
-import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
+import { formatDateOnlyBR } from '@/lib/date';
 
-type TicketLookupEvent = {
-  id: string;
-  name: string;
-  date: string;
-  city: string;
-  status: string;
-  is_archived: boolean;
-  event_boarding_locations?: Array<{
-    departure_date: string | null;
-  }>;
+type TicketLookupResponseTicket = {
+  ticketId: string;
+  qrCodeToken: string;
+  passengerName: string;
+  passengerCpf: string;
+  seatLabel: string;
+  boardingStatus: string;
+  eventName: string;
+  eventDate: string;
+  eventCity: string;
+  eventId?: string | null;
+  boardingToleranceMinutes?: number | null;
+  boardingLocationName: string;
+  boardingLocationAddress: string;
+  boardingDepartureTime: string | null;
+  boardingDepartureDate: string | null;
+  saleStatus?: SaleStatus;
+  saleId?: string;
+  stripeCheckoutSessionId?: string | null;
+  asaasPaymentId?: string | null;
+  unitPrice?: number;
+  companyName: string;
+  companyLogoUrl: string | null;
+  companyCity: string | null;
+  companyState: string | null;
+  companyPrimaryColor: string | null;
+  companyCnpj: string | null;
+  companyPhone: string | null;
+  companyWhatsapp: string | null;
+  companyAddress: string | null;
+  companySlogan: string | null;
+  vehicleType?: string | null;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
+  seatCategory?: string | null;
+  seatFloor?: number | null;
+  vehicleFloors?: number | null;
+  passPlatformFeeToCustomer?: boolean;
+  platformFeePercent?: number | null;
 };
 
 function formatCpfInput(value: string): string {
@@ -36,12 +63,6 @@ function formatCpfInput(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
-function formatEventDate(date: string): string {
-  // Padronização de formatação de datas no sistema sem conversão de timezone para campos DATE.
-  return formatDateOnlyBR(date);
-}
-
-
 function formatCityState(city: string): string {
   const cityStateMatch = city.match(/^(.*)\s[-–—]\s([A-Za-z]{2})$/);
   if (!cityStateMatch) return city;
@@ -49,95 +70,14 @@ function formatCityState(city: string): string {
   return `${cityName}/${state.toUpperCase()}`;
 }
 
-function formatEventOptionLabel(event: { name: string; city: string; date: string }): string {
-  return `${event.name} — ${formatCityState(event.city)} • ${formatEventDate(event.date)}`;
-}
-
-function getEventDeadlineDate(event: TicketLookupEvent, departureDate?: string | null): Date | null {
-  const eventDeadline = departureDate || event.date;
-  if (!eventDeadline) return null;
-
-  // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
-  const parsedDate = parseDateOnlyAsLocal(eventDeadline);
-  if (!parsedDate) return null;
-  parsedDate.setHours(23, 59, 59, 999);
-  return parsedDate;
-}
-
-function getLatestDepartureDate(event: TicketLookupEvent): string | null {
-  if (!event.event_boarding_locations?.length) return null;
-
-  return event.event_boarding_locations.reduce<string | null>((latest, location) => {
-    if (!location.departure_date) return latest;
-    if (!latest || location.departure_date > latest) return location.departure_date;
-    return latest;
-  }, null);
-}
-
 export default function TicketLookup() {
   const { toast } = useToast();
-  const [selectedEventId, setSelectedEventId] = useState('');
   const [cpf, setCpf] = useState('');
   const [tickets, setTickets] = useState<TicketCardData[]>([]);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
-  // Controla quais saleIds estão sendo verificados no Stripe
   const [refreshingSaleIds, setRefreshingSaleIds] = useState<Set<string>>(new Set());
 
-  const { data: events, isLoading: eventsLoading } = useQuery({
-    queryKey: ['ticket-lookup-events'],
-    queryFn: async () => {
-      // Regra da consulta pública de passagens: não depende da vitrine comercial nem da existência de tickets.
-      const { data: publicEvents } = await supabase
-        .from('events')
-        .select('id, name, date, city, status, is_archived, event_boarding_locations(departure_date)')
-        .eq('is_archived', false)
-        .in('status', ['a_venda', 'encerrado']);
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const cutoffDate = new Date(today);
-      // Suporte: manter eventos encerrados recentes visíveis por 60 dias para recuperação de passagens.
-      cutoffDate.setDate(cutoffDate.getDate() - 60);
-
-      const availableEvents = (publicEvents || []).filter((event) => {
-        const latestDepartureDate = getLatestDepartureDate(event);
-        const eventDeadline = getEventDeadlineDate(event, latestDepartureDate);
-        if (!eventDeadline) return false;
-
-        // Separação explícita de regra: consulta pública aceita evento à venda e encerrado recente.
-        return eventDeadline >= cutoffDate;
-      });
-
-      return availableEvents.sort((a, b) => {
-        const dateA = getEventDeadlineDate(a, getLatestDepartureDate(a))?.getTime() ?? Number.MIN_SAFE_INTEGER;
-        const dateB = getEventDeadlineDate(b, getLatestDepartureDate(b))?.getTime() ?? Number.MIN_SAFE_INTEGER;
-        const todayTimestamp = today.getTime();
-
-        const aIsUpcomingOrCurrent = dateA >= todayTimestamp;
-        const bIsUpcomingOrCurrent = dateB >= todayTimestamp;
-
-        // UX da consulta pública: prioriza eventos em véspera/acontecendo (futuros mais próximos primeiro).
-        if (aIsUpcomingOrCurrent && bIsUpcomingOrCurrent) {
-          const upcomingComparison = dateA - dateB;
-          if (upcomingComparison !== 0) return upcomingComparison;
-          return a.name.localeCompare(b.name, 'pt-BR');
-        }
-
-        // Depois dos futuros, mantém encerrados recentes (dentro de 60 dias) do mais recente para o mais antigo.
-        if (!aIsUpcomingOrCurrent && !bIsUpcomingOrCurrent) {
-          const recentPastComparison = dateB - dateA;
-          if (recentPastComparison !== 0) return recentPastComparison;
-          return a.name.localeCompare(b.name, 'pt-BR');
-        }
-
-        return aIsUpcomingOrCurrent ? -1 : 1;
-      });
-    },
-  });
-
-  // Verificação on-demand de status de pagamento no Stripe
   const handleRefreshStatus = useCallback(async (saleId: string) => {
     setRefreshingSaleIds((prev) => new Set(prev).add(saleId));
     try {
@@ -148,7 +88,6 @@ export default function TicketLookup() {
 
       const newStatus = data?.paymentStatus;
       if (newStatus === 'pago') {
-        // Atualizar o status do ticket na lista
         setTickets((prev) =>
           prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus } : t))
         );
@@ -169,18 +108,15 @@ export default function TicketLookup() {
     }
   }, [toast]);
 
-  // Verificação automática de vendas pendentes com checkout Stripe
   const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[]) => {
-    // Coleta saleIds únicos que estão pendentes e têm checkout session
     const pendingSaleIds = [...new Set(
       cards
         .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && (t.stripeCheckoutSessionId || t.asaasPaymentId) && t.saleId)
         .map((t) => t.saleId!)
-    )].slice(0, 3); // Máximo 3 verificações por busca
+    )].slice(0, 3);
 
     if (pendingSaleIds.length === 0) return;
 
-    // Verificar em paralelo
     const results = await Promise.allSettled(
       pendingSaleIds.map(async (saleId) => {
         const { data } = await supabase.functions.invoke('verify-payment-status', {
@@ -190,7 +126,6 @@ export default function TicketLookup() {
       })
     );
 
-    // Atualizar tickets cujo status mudou para "pago"
     const paidSaleIds = new Set<string>();
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value.status === 'pago') {
@@ -208,8 +143,8 @@ export default function TicketLookup() {
 
   const handleSearch = async () => {
     const cpfDigits = cpf.replace(/\D/g, '');
-    if (!selectedEventId || cpfDigits.length !== 11) {
-      toast({ title: 'Preencha o evento e o CPF corretamente', variant: 'destructive' });
+    if (cpfDigits.length !== 11) {
+      toast({ title: 'Preencha o CPF corretamente', variant: 'destructive' });
       return;
     }
 
@@ -217,81 +152,69 @@ export default function TicketLookup() {
     setSearched(true);
 
     try {
+      // Novo fluxo público: busca centralizada apenas por CPF, sem depender de seleção prévia de evento.
       const { data, error } = await supabase.functions.invoke('ticket-lookup', {
-        body: { event_id: selectedEventId, cpf: cpfDigits },
+        body: { cpf: cpfDigits },
       });
 
       if (error) throw error;
 
-      const ticketResults = data?.tickets || [];
-      const commercialPartners = data?.commercialPartners || [];
-      const eventSponsorsData = data?.eventSponsors || [];
-      const eventFees: EventFeeInput[] = (data?.eventFees || []).map((f: any) => ({
-        name: f.name,
-        fee_type: f.fee_type as 'fixed' | 'percent',
-        value: f.value,
-        is_active: true,
-      }));
+      const ticketResults: TicketLookupResponseTicket[] = data?.tickets || [];
+      const eventFeesByEvent = (data?.eventFeesByEvent || {}) as Record<string, EventFeeInput[]>;
 
-      const passPlatformFeeToCustomer = Boolean(data?.passPlatformFeeToCustomer);
-      const platformFeePercent = data?.platformFeePercent;
+      const cards: TicketCardData[] = ticketResults.map((ticket) => {
+        const unitPrice = ticket.unitPrice ?? 0;
+        const eventFees = ticket.eventId ? (eventFeesByEvent[ticket.eventId] || []) : [];
 
-      if (platformFeePercent == null) {
-        throw new Error('platform_fee_percent não disponível para emissão da passagem');
-      }
-
-      const cards: TicketCardData[] = ticketResults.map((t: any) => {
-        const unitPrice = t.unitPrice ?? 0;
-        const breakdown = calculateFees(unitPrice, eventFees, {
-          passToCustomer: passPlatformFeeToCustomer,
-          feePercent: Number(platformFeePercent),
-        });
+        const hasFeeConfig = ticket.platformFeePercent != null;
+        const breakdown = hasFeeConfig
+          ? calculateFees(unitPrice, eventFees, {
+              passToCustomer: Boolean(ticket.passPlatformFeeToCustomer),
+              feePercent: Number(ticket.platformFeePercent),
+            })
+          : null;
 
         return {
-          ticketId: t.ticketId,
-          qrCodeToken: t.qrCodeToken,
-          passengerName: t.passengerName,
-          passengerCpf: t.passengerCpf,
-          seatLabel: t.seatLabel,
-          boardingStatus: t.boardingStatus,
-          eventName: t.eventName,
-          eventDate: t.eventDate,
-          eventCity: t.eventCity,
-          boardingToleranceMinutes: t.boardingToleranceMinutes ?? null,
-          boardingLocationName: t.boardingLocationName,
-          boardingLocationAddress: t.boardingLocationAddress,
-          boardingDepartureTime: t.boardingDepartureTime,
-          boardingDepartureDate: t.boardingDepartureDate,
-          saleStatus: (t.saleStatus || 'reservado') as SaleStatus,
-          saleId: t.saleId || undefined,
-          stripeCheckoutSessionId: t.stripeCheckoutSessionId || null,
-          asaasPaymentId: t.asaasPaymentId || null,
-          companyName: t.companyName,
-          companyLogoUrl: t.companyLogoUrl,
-          companyCity: t.companyCity,
-          companyState: t.companyState,
-          companyPrimaryColor: t.companyPrimaryColor,
-          companyCnpj: t.companyCnpj,
-          companyPhone: t.companyPhone,
-          companyWhatsapp: t.companyWhatsapp,
-          companyAddress: t.companyAddress,
-          companySlogan: t.companySlogan,
-          vehicleType: t.vehicleType || null,
-          vehiclePlate: t.vehiclePlate || null,
-          driverName: t.driverName || null,
-          seatCategory: t.seatCategory || null,
-          seatFloor: t.seatFloor || null,
-          vehicleFloors: t.vehicleFloors || null,
-          fees: breakdown.fees.length > 0 ? breakdown.fees : undefined,
-          totalPaid: breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
-          commercialPartners: commercialPartners.length > 0 ? commercialPartners : undefined,
-          eventSponsors: eventSponsorsData.length > 0 ? eventSponsorsData : undefined,
+          ticketId: ticket.ticketId,
+          qrCodeToken: ticket.qrCodeToken,
+          passengerName: ticket.passengerName,
+          passengerCpf: ticket.passengerCpf,
+          seatLabel: ticket.seatLabel,
+          boardingStatus: ticket.boardingStatus,
+          eventName: ticket.eventName,
+          eventDate: ticket.eventDate,
+          eventCity: ticket.eventCity,
+          boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
+          boardingLocationName: ticket.boardingLocationName,
+          boardingLocationAddress: ticket.boardingLocationAddress,
+          boardingDepartureTime: ticket.boardingDepartureTime,
+          boardingDepartureDate: ticket.boardingDepartureDate,
+          saleStatus: (ticket.saleStatus || 'reservado') as SaleStatus,
+          saleId: ticket.saleId || undefined,
+          stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
+          asaasPaymentId: ticket.asaasPaymentId || null,
+          companyName: ticket.companyName,
+          companyLogoUrl: ticket.companyLogoUrl,
+          companyCity: ticket.companyCity,
+          companyState: ticket.companyState,
+          companyPrimaryColor: ticket.companyPrimaryColor,
+          companyCnpj: ticket.companyCnpj,
+          companyPhone: ticket.companyPhone,
+          companyWhatsapp: ticket.companyWhatsapp,
+          companyAddress: ticket.companyAddress,
+          companySlogan: ticket.companySlogan,
+          vehicleType: ticket.vehicleType || null,
+          vehiclePlate: ticket.vehiclePlate || null,
+          driverName: ticket.driverName || null,
+          seatCategory: ticket.seatCategory || null,
+          seatFloor: ticket.seatFloor || null,
+          vehicleFloors: ticket.vehicleFloors || null,
+          fees: breakdown && breakdown.fees.length > 0 ? breakdown.fees : undefined,
+          totalPaid: breakdown && breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
         };
       });
 
       setTickets(cards);
-
-      // Verificação automática de vendas pendentes (sem bloquear UI)
       autoVerifyPendingSales(cards);
     } catch {
       toast({ title: 'Erro ao buscar passagens', variant: 'destructive' });
@@ -300,8 +223,24 @@ export default function TicketLookup() {
     setSearching(false);
   };
 
-  const uniqueCompanies = new Set(tickets.map((ticket) => ticket.companyName).filter(Boolean));
-  const hasMultipleCompanies = uniqueCompanies.size > 1;
+  // Organização visual do resultado: agrupar por evento melhora leitura quando CPF tem múltiplas compras.
+  const ticketsByEvent = useMemo(() => {
+    const grouped = new Map<string, { title: string; subtitle: string; tickets: TicketCardData[] }>();
+
+    tickets.forEach((ticket) => {
+      const key = `${ticket.eventName}-${ticket.eventDate}-${ticket.eventCity}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          title: ticket.eventName,
+          subtitle: `${formatDateOnlyBR(ticket.eventDate)} • ${formatCityState(ticket.eventCity)}`,
+          tickets: [],
+        });
+      }
+      grouped.get(key)!.tickets.push(ticket);
+    });
+
+    return Array.from(grouped.values());
+  }, [tickets]);
 
   return (
     <PublicLayout>
@@ -319,41 +258,15 @@ export default function TicketLookup() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-3">
             <Ticket className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Encontrar minha passagem</h1>
-          <p className="text-muted-foreground">Informe o evento e o CPF utilizado na compra para localizar suas passagens.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Encontrar minhas passagens</h1>
+          <p className="text-muted-foreground">Informe o CPF utilizado na compra ou do passageiro para localizar suas passagens.</p>
         </div>
 
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">Buscar Passagens</CardTitle>
+            <CardTitle className="text-lg">Etapa 1: Buscar por CPF</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>Evento da viagem</Label>
-              {eventsLoading ? (
-                <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Carregando eventos...
-                </div>
-              ) : events && events.length === 0 ? (
-                <div className="space-y-1 py-2 text-sm text-muted-foreground">
-                  <p>Nenhum evento disponível para consulta no momento.</p>
-                  <p>Se você precisa consultar um evento antigo, fale com o organizador.</p>
-                </div>
-              ) : (
-                <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar evento" /></SelectTrigger>
-                  <SelectContent>
-                    {events?.map((e: any) => (
-                      <SelectItem key={e.id} value={e.id} className="truncate">
-                        {formatEventOptionLabel(e)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
             <div>
               <Label>CPF do Passageiro</Label>
               <Input
@@ -368,35 +281,49 @@ export default function TicketLookup() {
             <Button
               className="w-full"
               onClick={handleSearch}
-              disabled={searching || !selectedEventId || cpf.replace(/\D/g, '').length !== 11}
+              disabled={searching || cpf.replace(/\D/g, '').length !== 11}
             >
               {searching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-              Ver minhas passagens
+              Buscar minhas passagens
             </Button>
 
-            <p className="text-xs text-muted-foreground text-center pt-2">Dica: utilize o CPF informado no momento da compra da passagem.</p>
+            <p className="text-xs text-muted-foreground text-center pt-2">Dica: o CPF deve ser o mesmo informado no momento da compra da passagem.</p>
           </CardContent>
         </Card>
 
-        {/* Results */}
         {searched && !searching && (
-          <>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold text-lg">Etapa 2: Resultado da busca</h2>
+              <Button variant="outline" size="sm" onClick={() => { setSearched(false); setTickets([]); }}>
+                Refazer busca
+              </Button>
+            </div>
+
             {tickets.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Nenhuma passagem encontrada para este evento e CPF.</p>
+              <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
+                <p className="font-medium">Nenhuma passagem encontrada para este CPF.</p>
+                <p className="text-sm mt-1">Verifique se o CPF informado é o mesmo usado na compra.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                <h2 className="font-semibold text-lg">{tickets.length} passagem(ns) encontrada(s)</h2>
-                {/* Agrupamento por passageiro com ida/volta sob demanda */}
-                <PassengerTicketList
-                  tickets={tickets}
-                  onRefreshStatus={handleRefreshStatus}
-                  isRefreshingSaleIds={refreshingSaleIds}
-                />
+              <div className="space-y-6">
+                <p className="text-sm text-muted-foreground">{tickets.length} passagem(ns) encontrada(s).</p>
+                {ticketsByEvent.map((group) => (
+                  <div key={`${group.title}-${group.subtitle}`} className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-base">{group.title}</h3>
+                      <p className="text-sm text-muted-foreground">{group.subtitle}</p>
+                    </div>
+                    <PassengerTicketList
+                      tickets={group.tickets}
+                      onRefreshStatus={handleRefreshStatus}
+                      isRefreshingSaleIds={refreshingSaleIds}
+                    />
+                  </div>
+                ))}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </PublicLayout>
