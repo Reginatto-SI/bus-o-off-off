@@ -32,7 +32,8 @@ export function TrustFooter() {
       <div className="border-t py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados.
+            {/* Informação institucional obrigatória para transparência em páginas públicas. */}
+            © {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 59.461.123/0001-72
           </p>
         </div>
       </div>
