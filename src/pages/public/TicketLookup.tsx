@@ -370,10 +370,15 @@ export default function TicketLookup() {
                       <h3 className="font-semibold text-base">{group.title}</h3>
                       <p className="text-sm text-muted-foreground">{group.subtitle}</p>
                     </div>
+                    {/*
+                      Unificação do ticket virtual: a consulta pública agora reutiliza
+                      exatamente o mesmo componente padrão de /admin/vendas.
+                    */}
                     <PassengerTicketList
                       tickets={group.tickets}
                       onRefreshStatus={handleRefreshStatus}
                       isRefreshingSaleIds={refreshingSaleIds}
+                      context="public"
                     />
                   </div>
                 ))}
