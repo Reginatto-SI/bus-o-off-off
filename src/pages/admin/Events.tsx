@@ -429,7 +429,7 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address')
+      .select('id, legal_type, email, document_number, cnpj, name, trade_name, legal_name, city, state, address, address_number, province, postal_code')
       .eq('id', activeCompanyId)
       .single();
 
@@ -475,6 +475,12 @@ export default function Events() {
       legalType,
       documentNumber,
       email,
+      address: (data.address || '').trim(),
+      addressNumber: (data.address_number || '').trim(),
+      province: (data.province || '').trim(),
+      postalCode: (data.postal_code || '').replace(/\D/g, ''),
+      city: (data.city || '').trim(),
+      state: (data.state || '').trim(),
     };
   };
 

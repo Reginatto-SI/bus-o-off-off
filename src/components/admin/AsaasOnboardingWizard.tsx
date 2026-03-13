@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AsaasAddressModal, AsaasAddressData } from './AsaasAddressModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,6 +21,12 @@ export interface AsaasOnboardingCompanyData {
   legalType: 'PF' | 'PJ';
   documentNumber: string;
   email: string;
+  address: string;
+  addressNumber: string;
+  province: string;
+  postalCode: string;
+  city: string;
+  state: string;
 }
 
 interface AsaasOnboardingWizardProps {
@@ -54,6 +61,43 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [mode, setMode] = useState<AsaasWizardMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [localCompanyData, setLocalCompanyData] = useState(companyData);
+
+  // Sync localCompanyData when companyData prop changes
+  useEffect(() => {
+    setLocalCompanyData(companyData);
+  }, [companyData]);
+
+  const validateAddress = (): boolean => {
+    const d = localCompanyData;
+    if (!d) return false;
+    const cepDigits = (d.postalCode || '').replace(/\D/g, '');
+    return (
+      (d.address || '').trim().length > 0 &&
+      (d.addressNumber || '').trim().length > 0 &&
+      (d.province || '').trim().length > 0 &&
+      cepDigits.length === 8 &&
+      (d.city || '').trim().length > 0 &&
+      (d.state || '').trim().length === 2
+    );
+  };
+
+  const handleStep2Continue = () => {
+    if (validateAddress()) {
+      setStep(3);
+    } else {
+      setShowAddressModal(true);
+    }
+  };
+
+  const handleAddressSaved = (data: AsaasAddressData) => {
+    setLocalCompanyData((prev) =>
+      prev ? { ...prev, ...data } : prev
+    );
+    setShowAddressModal(false);
+    setStep(3);
+  };
 
   useEffect(() => {
     if (!open) {
@@ -61,35 +105,36 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setMode(null);
       setSubmitting(false);
       setApiKeyInput('');
+      setShowAddressModal(false);
     }
   }, [open]);
 
   const missingFields = useMemo(() => {
-    if (!companyData) return ['dados da empresa'];
+    if (!localCompanyData) return ['dados da empresa'];
     const missing: string[] = [];
-    if (!companyData.companyName.trim()) missing.push('nome da empresa');
-    const documentDigits = onlyDigits(companyData.documentNumber);
-    if (companyData.legalType === 'PF' && documentDigits.length !== 11) missing.push('CPF válido (11 dígitos)');
-    if (companyData.legalType === 'PJ' && documentDigits.length !== 14) missing.push('CNPJ válido (14 dígitos)');
-    if (!companyData.email.trim()) missing.push('e-mail');
-    else if (!emailRegex.test(companyData.email.trim())) missing.push('e-mail válido');
+    if (!localCompanyData.companyName.trim()) missing.push('nome da empresa');
+    const documentDigits = onlyDigits(localCompanyData.documentNumber);
+    if (localCompanyData.legalType === 'PF' && documentDigits.length !== 11) missing.push('CPF válido (11 dígitos)');
+    if (localCompanyData.legalType === 'PJ' && documentDigits.length !== 14) missing.push('CNPJ válido (14 dígitos)');
+    if (!localCompanyData.email.trim()) missing.push('e-mail');
+    else if (!emailRegex.test(localCompanyData.email.trim())) missing.push('e-mail válido');
     return missing;
-  }, [companyData]);
+  }, [localCompanyData]);
 
   const canProceed = missingFields.length === 0;
-  const maskedDocument = companyData?.legalType === 'PF'
-    ? maskCpf(companyData.documentNumber)
-    : maskCnpj(companyData?.documentNumber ?? '');
+  const maskedDocument = localCompanyData?.legalType === 'PF'
+    ? maskCpf(localCompanyData.documentNumber)
+    : maskCnpj(localCompanyData?.documentNumber ?? '');
 
   const handleCreateAsaasAccount = async () => {
-    if (!companyData?.companyId) {
+    if (!localCompanyData?.companyId) {
       toast.error('Empresa não encontrada para conectar pagamentos.');
       return;
     }
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: companyData.companyId, mode: 'create' },
+        body: { company_id: localCompanyData.companyId, mode: 'create' },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
@@ -123,7 +168,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   };
 
   const handleLinkExistingAccount = async () => {
-    if (!companyData?.companyId) {
+    if (!localCompanyData?.companyId) {
       toast.error('Empresa não encontrada.');
       return;
     }
@@ -134,7 +179,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: companyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim() },
+        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim() },
       });
       if (error) {
         // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
@@ -213,19 +258,19 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
         <div className="space-y-1">
           <span className="text-muted-foreground">Empresa</span>
-          <p className="font-medium">{companyData?.companyName || 'Não informado'}</p>
+          <p className="font-medium">{localCompanyData?.companyName || 'Não informado'}</p>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground">Tipo de cadastro</span>
-          <p className="font-medium">{companyData?.legalType === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</p>
+          <p className="font-medium">{localCompanyData?.legalType === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</p>
         </div>
         <div className="space-y-1">
-          <span className="text-muted-foreground">{companyData?.legalType === 'PF' ? 'CPF' : 'CNPJ'}</span>
+          <span className="text-muted-foreground">{localCompanyData?.legalType === 'PF' ? 'CPF' : 'CNPJ'}</span>
           <p className="font-medium">{maskedDocument || 'Não informado'}</p>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground">E-mail da conta Asaas</span>
-          <p className="font-medium">{companyData?.email || 'Não informado'}</p>
+          <p className="font-medium">{localCompanyData?.email || 'Não informado'}</p>
         </div>
       </div>
     </div>
@@ -246,10 +291,10 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Orientação de acesso após a criação:</p>
       <div className="space-y-2 rounded-lg border p-4 text-sm">
-        <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{companyData?.email}</strong> será a referência principal da conta criada.</p>
+        <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
+        <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
         <p className="text-muted-foreground">Enquanto a operação estiver em testes, a conexão será criada no ambiente Sandbox do Asaas.</p>
-        <p className="font-medium">Você poderá gerenciar sua conta de pagamentos diretamente no Asaas após a criação.</p>
       </div>
     </div>
   );
@@ -288,7 +333,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         Conta Asaas conectada com sucesso
       </p>
       <p className="text-sm text-emerald-900">
-        A conexão foi concluída para a empresa <strong>{companyData?.companyName}</strong> com o e-mail <strong>{companyData?.email}</strong>.
+        A conexão foi concluída para a empresa <strong>{localCompanyData?.companyName}</strong> com o e-mail <strong>{localCompanyData?.email}</strong>.
       </p>
     </div>
   );
@@ -332,7 +377,17 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           Voltar
         </Button>
         {step < 3 ? (
-          <Button type="button" disabled={step === 1 && !canProceed} onClick={() => setStep((prev) => (prev + 1) as AsaasWizardStep)}>
+          <Button
+            type="button"
+            disabled={step === 1 && !canProceed}
+            onClick={() => {
+              if (step === 2) {
+                handleStep2Continue();
+              } else {
+                setStep((prev) => (prev + 1) as AsaasWizardStep);
+              }
+            }}
+          >
             Continuar
           </Button>
         ) : (
@@ -368,6 +423,23 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           {renderFooter()}
         </DialogFooter>
       </DialogContent>
+
+      {localCompanyData && (
+        <AsaasAddressModal
+          open={showAddressModal}
+          onOpenChange={setShowAddressModal}
+          companyId={localCompanyData.companyId}
+          initialData={{
+            address: localCompanyData.address || '',
+            addressNumber: localCompanyData.addressNumber || '',
+            province: localCompanyData.province || '',
+            postalCode: localCompanyData.postalCode || '',
+            city: localCompanyData.city || '',
+            state: localCompanyData.state || '',
+          }}
+          onSaved={handleAddressSaved}
+        />
+      )}
     </Dialog>
   );
 }
