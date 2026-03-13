@@ -11,6 +11,12 @@ const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
   ? "https://api.asaas.com/v3"
   : "https://sandbox.asaas.com/api/v3";
 
+function maskSensitiveValue(value?: string | null) {
+  if (!value) return null;
+  if (value.length <= 8) return "***";
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+}
+
 /**
  * Edge function para onboarding de conta Asaas.
  * 
@@ -81,7 +87,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_onboarding_complete")
       .eq("id", company_id)
       .single();
 
@@ -102,31 +108,92 @@ serve(async (req) => {
 
     // ====== MODE: Revalidate existing integration ======
     if (mode === "revalidate") {
-      if (!company.asaas_api_key) {
+      console.log("[ASAAS][VERIFY] Starting verification", {
+        company_id,
+        has_api_key: Boolean(company.asaas_api_key),
+        has_wallet_id: Boolean(company.asaas_wallet_id),
+        has_account_id: Boolean(company.asaas_account_id),
+        onboarding_complete: Boolean(company.asaas_onboarding_complete),
+      });
+
+      const isApiKeyMode = Boolean(company.asaas_api_key);
+      const verificationEndpoint = isApiKeyMode
+        ? `${ASAAS_BASE_URL}/myAccount`
+        : company.asaas_account_id
+          ? `${ASAAS_BASE_URL}/accounts/${company.asaas_account_id}`
+          : null;
+
+      if (!verificationEndpoint) {
+        console.error("[ASAAS][VERIFY] Validation failed reason", {
+          company_id,
+          reason: "missing_api_key_and_account_id",
+        });
         return new Response(
-          JSON.stringify({ error: "Não foi possível validar a integração sem API Key cadastrada." }),
+          JSON.stringify({ error: "Integração Asaas sem credencial suficiente para validação automática. Reconecte sua conta." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      const verificationToken = isApiKeyMode ? company.asaas_api_key : PLATFORM_API_KEY;
+
+      console.log("[ASAAS][VERIFY] Using company fields", {
+        company_id,
+        mode: isApiKeyMode ? "api_key_my_account" : "platform_account_lookup",
+        endpoint: verificationEndpoint,
+        wallet_id_preview: maskSensitiveValue(company.asaas_wallet_id),
+        account_id_preview: maskSensitiveValue(company.asaas_account_id),
+        token_preview: maskSensitiveValue(verificationToken),
+      });
+
       try {
-        const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
-          headers: { "access_token": company.asaas_api_key },
+        console.log("[ASAAS][VERIFY] Endpoint called", {
+          company_id,
+          endpoint: verificationEndpoint,
+        });
+
+        const myAccountRes = await fetch(verificationEndpoint, {
+          headers: { "access_token": verificationToken },
+        });
+
+        console.log("[ASAAS][VERIFY] Response status", {
+          company_id,
+          status: myAccountRes.status,
+          endpoint: verificationEndpoint,
         });
 
         if (!myAccountRes.ok) {
           const errBody = await myAccountRes.text();
-          console.error("Asaas myAccount revalidation failed:", errBody);
+          console.error("[ASAAS][VERIFY] Validation failed reason", {
+            company_id,
+            status: myAccountRes.status,
+            endpoint: verificationEndpoint,
+            response: errBody,
+          });
+
+          const authError = myAccountRes.status === 401 || myAccountRes.status === 403;
+          const notFoundError = myAccountRes.status === 404;
+          const errorMessage = authError
+            ? "Falha de autenticação ao validar integração com o Asaas. Reconecte a conta para atualizar as credenciais."
+            : notFoundError
+              ? "Conta Asaas vinculada não encontrada para validação. Reconecte a conta e tente novamente."
+              : "Não foi possível validar a integração com o Asaas no momento. Tente novamente.";
+
           return new Response(
-            JSON.stringify({ error: "API Key inválida ou conta não encontrada. Verifique a chave e tente novamente." }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: errorMessage }),
+            { status: myAccountRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
         const accountData = await myAccountRes.json();
-        const walletId = accountData.walletId;
+        const walletId = accountData.walletId ?? accountData.wallet?.id ?? null;
 
         if (!walletId) {
+          console.error("[ASAAS][VERIFY] Validation failed reason", {
+            company_id,
+            reason: "wallet_id_missing_in_response",
+            endpoint: verificationEndpoint,
+            response_keys: Object.keys(accountData || {}),
+          });
           return new Response(
             JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -139,7 +206,7 @@ serve(async (req) => {
           .from("companies")
           .update({
             asaas_wallet_id: walletId,
-            asaas_account_id: accountData.id || null,
+            asaas_account_id: accountData.id || company.asaas_account_id || null,
             asaas_account_email: accountData.email || null,
             asaas_onboarding_complete: true,
           })

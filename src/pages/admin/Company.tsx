@@ -438,12 +438,25 @@ export default function CompanyPage() {
         body: { company_id: editingId, mode: 'revalidate' },
       });
 
-      if (error) throw new Error((data as any)?.error || error.message);
+      if (error) {
+        // Comentário de suporte: na revalidação, exibimos a causa retornada pela edge function
+        // para evitar mensagem genérica de API Key quando o problema real for outro.
+        const { message, statusCode } = await extractAsaasErrorMessage({
+          data,
+          error,
+          fallbackMessage: 'Não foi possível validar a integração com o Asaas. Tente novamente.',
+        });
+        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+        throw new Error(`${message}${statusSuffix}`);
+      }
 
       await fetchCompany();
       toast.success('Integração verificada com sucesso');
-    } catch {
-      toast.error('Não foi possível validar a integração com o Asaas. Verifique se a API Key cadastrada ainda é válida.');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error
+        ? err.message
+        : 'Não foi possível validar a integração com o Asaas. Tente novamente.';
+      toast.error(errorMessage);
     } finally {
       setAsaasRevalidating(false);
     }
