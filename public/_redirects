@@ -1,0 +1,9 @@
+# Este redirecionamento existe por compatibilidade com o domínio antigo
+# busaooffoff.com.br. Parte do material de divulgação e parceiros ainda
+# utilizam esse endereço. O redirect leva os usuários para a nova
+# página oficial dentro do SmartBus BR.
+#
+# Esse redirect também é necessário por solicitação de um dos sócios
+# do projeto para manter continuidade da marca anterior.
+https://busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!
+https://www.busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!
