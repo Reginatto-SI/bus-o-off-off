@@ -23,6 +23,9 @@ type TicketLookupEvent = {
   city: string;
   status: string;
   is_archived: boolean;
+  event_boarding_locations?: Array<{
+    departure_date: string | null;
+  }>;
 };
 
 function formatCpfInput(value: string): string {
@@ -61,6 +64,16 @@ function getEventDeadlineDate(event: TicketLookupEvent, departureDate?: string |
   return parsedDate;
 }
 
+function getLatestDepartureDate(event: TicketLookupEvent): string | null {
+  if (!event.event_boarding_locations?.length) return null;
+
+  return event.event_boarding_locations.reduce<string | null>((latest, location) => {
+    if (!location.departure_date) return latest;
+    if (!latest || location.departure_date > latest) return location.departure_date;
+    return latest;
+  }, null);
+}
+
 export default function TicketLookup() {
   const { toast } = useToast();
   const [selectedEventId, setSelectedEventId] = useState('');
@@ -74,49 +87,34 @@ export default function TicketLookup() {
   const { data: events, isLoading: eventsLoading } = useQuery({
     queryKey: ['ticket-lookup-events'],
     queryFn: async () => {
-      const { data } = await supabase.from('tickets').select('sale_id, trip_id');
-      if (!data || data.length === 0) return [];
-
-      const tripIds = [...new Set(data.map(t => t.trip_id))];
-      const { data: trips } = await supabase.from('trips').select('id, event_id').in('id', tripIds);
-      if (!trips) return [];
-
-      const eventIds = [...new Set(trips.map(t => t.event_id))];
-
-      const { data: boardingLocations } = await supabase
-        .from('event_boarding_locations')
-        .select('event_id, departure_date')
-        .in('event_id', eventIds)
-        .not('departure_date', 'is', null);
-
-      const latestDepartureByEvent = new Map<string, string>();
-      (boardingLocations || []).forEach((boarding) => {
-        if (!boarding.departure_date) return;
-        const currentLatestDate = latestDepartureByEvent.get(boarding.event_id);
-        if (!currentLatestDate || boarding.departure_date > currentLatestDate) {
-          latestDepartureByEvent.set(boarding.event_id, boarding.departure_date);
-        }
-      });
-
+      // Regra da consulta pública de passagens: não depende da vitrine comercial nem da existência de tickets.
       const { data: publicEvents } = await supabase
         .from('events')
-        .select('id, name, date, city, status, is_archived')
-        .eq('status', 'a_venda')
+        .select('id, name, date, city, status, is_archived, event_boarding_locations(departure_date)')
         .eq('is_archived', false)
-        .in('id', eventIds);
+        .in('status', ['a_venda', 'encerrado']);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      const cutoffDate = new Date(today);
+      // Suporte: manter eventos encerrados recentes visíveis por 60 dias para recuperação de passagens.
+      cutoffDate.setDate(cutoffDate.getDate() - 60);
+
       const availableEvents = (publicEvents || []).filter((event) => {
-        const eventDeadline = getEventDeadlineDate(event, latestDepartureByEvent.get(event.id));
-        return eventDeadline ? eventDeadline >= today : true;
+        const latestDepartureDate = getLatestDepartureDate(event);
+        const eventDeadline = getEventDeadlineDate(event, latestDepartureDate);
+        if (!eventDeadline) return false;
+
+        // Separação explícita de regra: consulta pública aceita evento à venda e encerrado recente.
+        return eventDeadline >= cutoffDate;
       });
 
       return availableEvents.sort((a, b) => {
-        const dateA = parseDateOnlyAsLocal(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        const dateB = parseDateOnlyAsLocal(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        const dateComparison = dateA - dateB;
+        const dateA = getEventDeadlineDate(a, getLatestDepartureDate(a))?.getTime() ?? Number.MIN_SAFE_INTEGER;
+        const dateB = getEventDeadlineDate(b, getLatestDepartureDate(b))?.getTime() ?? Number.MIN_SAFE_INTEGER;
+        // Ordenação única por data relevante desc para destacar eventos futuros/próximos e encerrados recentes.
+        const dateComparison = dateB - dateA;
         if (dateComparison !== 0) return dateComparison;
         return a.name.localeCompare(b.name, 'pt-BR');
       });
