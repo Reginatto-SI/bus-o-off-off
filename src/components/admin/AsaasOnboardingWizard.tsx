@@ -20,6 +20,12 @@ export interface AsaasOnboardingCompanyData {
   legalType: 'PF' | 'PJ';
   documentNumber: string;
   email: string;
+  address: string;
+  addressNumber: string;
+  province: string;
+  postalCode: string;
+  city: string;
+  state: string;
 }
 
 interface AsaasOnboardingWizardProps {
