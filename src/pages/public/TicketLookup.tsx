@@ -113,10 +113,26 @@ export default function TicketLookup() {
       return availableEvents.sort((a, b) => {
         const dateA = getEventDeadlineDate(a, getLatestDepartureDate(a))?.getTime() ?? Number.MIN_SAFE_INTEGER;
         const dateB = getEventDeadlineDate(b, getLatestDepartureDate(b))?.getTime() ?? Number.MIN_SAFE_INTEGER;
-        // Ordenação única por data relevante desc para destacar eventos futuros/próximos e encerrados recentes.
-        const dateComparison = dateB - dateA;
-        if (dateComparison !== 0) return dateComparison;
-        return a.name.localeCompare(b.name, 'pt-BR');
+        const todayTimestamp = today.getTime();
+
+        const aIsUpcomingOrCurrent = dateA >= todayTimestamp;
+        const bIsUpcomingOrCurrent = dateB >= todayTimestamp;
+
+        // UX da consulta pública: prioriza eventos em véspera/acontecendo (futuros mais próximos primeiro).
+        if (aIsUpcomingOrCurrent && bIsUpcomingOrCurrent) {
+          const upcomingComparison = dateA - dateB;
+          if (upcomingComparison !== 0) return upcomingComparison;
+          return a.name.localeCompare(b.name, 'pt-BR');
+        }
+
+        // Depois dos futuros, mantém encerrados recentes (dentro de 60 dias) do mais recente para o mais antigo.
+        if (!aIsUpcomingOrCurrent && !bIsUpcomingOrCurrent) {
+          const recentPastComparison = dateB - dateA;
+          if (recentPastComparison !== 0) return recentPastComparison;
+          return a.name.localeCompare(b.name, 'pt-BR');
+        }
+
+        return aIsUpcomingOrCurrent ? -1 : 1;
       });
     },
   });
