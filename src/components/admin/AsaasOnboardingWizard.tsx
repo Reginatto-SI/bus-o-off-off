@@ -423,6 +423,23 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           {renderFooter()}
         </DialogFooter>
       </DialogContent>
+
+      {localCompanyData && (
+        <AsaasAddressModal
+          open={showAddressModal}
+          onOpenChange={setShowAddressModal}
+          companyId={localCompanyData.companyId}
+          initialData={{
+            address: localCompanyData.address || '',
+            addressNumber: localCompanyData.addressNumber || '',
+            province: localCompanyData.province || '',
+            postalCode: localCompanyData.postalCode || '',
+            city: localCompanyData.city || '',
+            state: localCompanyData.state || '',
+          }}
+          onSaved={handleAddressSaved}
+        />
+      )}
     </Dialog>
   );
 }
