@@ -922,11 +922,20 @@ export default function Sales() {
       actions.push({ label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) });
     }
 
-    // Ticket/PDF virtual somente para venda efetivamente paga.
-    // Isso evita tratar 'reservado' (inclusive com taxa dispensada) como venda liquidada.
+    // Venda paga mantém ação oficial de geração de passagem operacional.
     if (sale.status === 'pago' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
       actions.push({
         label: 'Gerar Passagem',
+        icon: FileText,
+        onClick: () => openTicketGen(sale),
+      });
+    }
+
+    // Para reservado, oferecemos apenas visualização de comprovante descaracterizado.
+    // Reaproveita o mesmo modal de ticket, mas com modo visual de reserva no conteúdo.
+    if (sale.status === 'reservado' && sale.customer_name !== 'BLOQUEIO') {
+      actions.push({
+        label: 'Ver Comprovante',
         icon: FileText,
         onClick: () => openTicketGen(sale),
       });
@@ -1391,7 +1400,7 @@ export default function Sales() {
           <DialogContent className="admin-modal flex h-[95vh] max-h-[95vh] w-[100vw] max-w-none flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw] sm:max-w-4xl">
             <DialogHeader className="admin-modal__header shrink-0 px-6 py-4">
               <DialogTitle>
-                Gerar Passagem
+                {ticketGenSale?.status === 'reservado' ? 'Comprovante de Reserva' : 'Gerar Passagem'}
               </DialogTitle>
             </DialogHeader>
             {/* Área com scroll interno para garantir visualização completa da passagem sem rolar o fundo da tela. */}
@@ -1408,6 +1417,9 @@ export default function Sales() {
                   <PassengerTicketList
                     tickets={allTicketGenCards}
                     allowReservedDownloads
+                    // Quando a venda ainda está reservada, forçamos visual de comprovante
+                    // para evitar semelhança com ticket operacional de embarque.
+                    reservedPresentation={ticketGenSale?.status === 'reservado' ? 'receipt' : 'default'}
                     context="admin"
                   />
                 </div>
