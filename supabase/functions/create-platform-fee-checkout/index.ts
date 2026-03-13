@@ -71,6 +71,31 @@ serve(async (req) => {
       );
     }
 
+    // Asaas exige mínimo de R$ 5,00 para billingType UNDEFINED.
+    // Se a taxa for menor, isentamos automaticamente.
+    const ASAAS_MIN_CHARGE = 5.0;
+    if (feeAmount < ASAAS_MIN_CHARGE) {
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          platform_fee_status: "paid",
+          platform_fee_paid_at: new Date().toISOString(),
+        })
+        .eq("id", sale.id);
+
+      await supabaseAdmin.from("sale_logs").insert({
+        sale_id: sale.id,
+        action: "platform_fee_waived",
+        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Isenta automaticamente.`,
+        company_id: sale.company_id,
+      });
+
+      return new Response(
+        JSON.stringify({ waived: true, message: "Taxa isenta (abaixo do mínimo do gateway)" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
     if (!PLATFORM_API_KEY) {
       return new Response(JSON.stringify({ error: "Asaas API key not configured" }), {
