@@ -800,13 +800,19 @@ export default function Sales() {
       const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
         body: { sale_id: sale.id },
       });
-      if (error || !data?.url) {
+      if (error) {
         toast.error(data?.error || 'Erro ao criar checkout da taxa');
         return;
       }
-      // Alerta ao admin quando Pix não está habilitado na conta Stripe
-      if (data.pix_available === false) {
-        toast.warning('Pix não está habilitado na sua conta Stripe. O checkout foi aberto apenas com cartão. Para habilitar Pix, acesse Settings → Payment Methods no Dashboard do Stripe.', { duration: 10000 });
+      // Taxa isenta automaticamente (abaixo do mínimo do gateway)
+      if (data?.waived) {
+        toast.success('Taxa da plataforma isenta automaticamente (valor abaixo do mínimo do gateway).');
+        fetchSales();
+        return;
+      }
+      if (!data?.url) {
+        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+        return;
       }
       // Abre o checkout da taxa em nova aba
       window.open(data.url, '_blank');
