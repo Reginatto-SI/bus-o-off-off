@@ -110,21 +110,21 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   }, [open]);
 
   const missingFields = useMemo(() => {
-    if (!companyData) return ['dados da empresa'];
+    if (!localCompanyData) return ['dados da empresa'];
     const missing: string[] = [];
-    if (!companyData.companyName.trim()) missing.push('nome da empresa');
-    const documentDigits = onlyDigits(companyData.documentNumber);
-    if (companyData.legalType === 'PF' && documentDigits.length !== 11) missing.push('CPF válido (11 dígitos)');
-    if (companyData.legalType === 'PJ' && documentDigits.length !== 14) missing.push('CNPJ válido (14 dígitos)');
-    if (!companyData.email.trim()) missing.push('e-mail');
-    else if (!emailRegex.test(companyData.email.trim())) missing.push('e-mail válido');
+    if (!localCompanyData.companyName.trim()) missing.push('nome da empresa');
+    const documentDigits = onlyDigits(localCompanyData.documentNumber);
+    if (localCompanyData.legalType === 'PF' && documentDigits.length !== 11) missing.push('CPF válido (11 dígitos)');
+    if (localCompanyData.legalType === 'PJ' && documentDigits.length !== 14) missing.push('CNPJ válido (14 dígitos)');
+    if (!localCompanyData.email.trim()) missing.push('e-mail');
+    else if (!emailRegex.test(localCompanyData.email.trim())) missing.push('e-mail válido');
     return missing;
-  }, [companyData]);
+  }, [localCompanyData]);
 
   const canProceed = missingFields.length === 0;
-  const maskedDocument = companyData?.legalType === 'PF'
-    ? maskCpf(companyData.documentNumber)
-    : maskCnpj(companyData?.documentNumber ?? '');
+  const maskedDocument = localCompanyData?.legalType === 'PF'
+    ? maskCpf(localCompanyData.documentNumber)
+    : maskCnpj(localCompanyData?.documentNumber ?? '');
 
   const handleCreateAsaasAccount = async () => {
     if (!companyData?.companyId) {
