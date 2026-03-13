@@ -55,6 +55,16 @@ type TicketLookupResponseTicket = {
   platformFeePercent?: number | null;
 };
 
+type TicketLookupResponse = {
+  tickets?: TicketLookupResponseTicket[];
+  eventFeesByEvent?: Record<string, EventFeeInput[]>;
+  eventFees?: EventFeeInput[];
+  passPlatformFeeToCustomer?: boolean;
+  platformFeePercent?: number | null;
+  commercialPartners?: { name: string; logo_url: string | null }[];
+  eventSponsors?: { name: string; logo_url: string | null }[];
+};
+
 function formatCpfInput(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11);
   if (digits.length <= 3) return digits;
@@ -68,6 +78,68 @@ function formatCityState(city: string): string {
   if (!cityStateMatch) return city;
   const [, cityName, state] = cityStateMatch;
   return `${cityName}/${state.toUpperCase()}`;
+}
+
+function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardData[] {
+  const ticketResults = response.tickets || [];
+  const eventFeesByEvent = response.eventFeesByEvent || {};
+
+  return ticketResults.map((ticket) => {
+    const unitPrice = ticket.unitPrice ?? 0;
+    // Compatibilidade: se backend ainda estiver no formato antigo, usa eventFees/passPlatformFee globais.
+    const eventFees = ticket.eventId ? (eventFeesByEvent[ticket.eventId] || response.eventFees || []) : (response.eventFees || []);
+    const passToCustomer = ticket.passPlatformFeeToCustomer ?? Boolean(response.passPlatformFeeToCustomer);
+    const feePercent = ticket.platformFeePercent ?? response.platformFeePercent ?? null;
+
+    const hasFeeConfig = feePercent != null;
+    const breakdown = hasFeeConfig
+      ? calculateFees(unitPrice, eventFees, {
+          passToCustomer,
+          feePercent: Number(feePercent),
+        })
+      : null;
+
+    return {
+      ticketId: ticket.ticketId,
+      qrCodeToken: ticket.qrCodeToken,
+      passengerName: ticket.passengerName,
+      passengerCpf: ticket.passengerCpf,
+      seatLabel: ticket.seatLabel,
+      boardingStatus: ticket.boardingStatus,
+      eventName: ticket.eventName,
+      eventDate: ticket.eventDate,
+      eventCity: ticket.eventCity,
+      boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
+      boardingLocationName: ticket.boardingLocationName,
+      boardingLocationAddress: ticket.boardingLocationAddress,
+      boardingDepartureTime: ticket.boardingDepartureTime,
+      boardingDepartureDate: ticket.boardingDepartureDate,
+      saleStatus: (ticket.saleStatus || 'reservado') as SaleStatus,
+      saleId: ticket.saleId || undefined,
+      stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
+      asaasPaymentId: ticket.asaasPaymentId || null,
+      companyName: ticket.companyName,
+      companyLogoUrl: ticket.companyLogoUrl,
+      companyCity: ticket.companyCity,
+      companyState: ticket.companyState,
+      companyPrimaryColor: ticket.companyPrimaryColor,
+      companyCnpj: ticket.companyCnpj,
+      companyPhone: ticket.companyPhone,
+      companyWhatsapp: ticket.companyWhatsapp,
+      companyAddress: ticket.companyAddress,
+      companySlogan: ticket.companySlogan,
+      vehicleType: ticket.vehicleType || null,
+      vehiclePlate: ticket.vehiclePlate || null,
+      driverName: ticket.driverName || null,
+      seatCategory: ticket.seatCategory || null,
+      seatFloor: ticket.seatFloor || null,
+      vehicleFloors: ticket.vehicleFloors || null,
+      fees: breakdown && breakdown.fees.length > 0 ? breakdown.fees : undefined,
+      totalPaid: breakdown && breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
+      commercialPartners: response.commercialPartners?.length ? response.commercialPartners : undefined,
+      eventSponsors: response.eventSponsors?.length ? response.eventSponsors : undefined,
+    };
+  });
 }
 
 export default function TicketLookup() {
@@ -141,6 +213,33 @@ export default function TicketLookup() {
     }
   }, [toast]);
 
+  const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
+    // Fallback temporário para ambiente com edge function antiga exigindo event_id.
+    const { data: events, error: eventsError } = await supabase
+      .from('events')
+      .select('id')
+      .eq('is_archived', false)
+      .in('status', ['a_venda', 'encerrado']);
+
+    if (eventsError) throw eventsError;
+
+    const eventIds = (events || []).map((event) => event.id);
+    if (eventIds.length === 0) return [];
+
+    const cards: TicketCardData[] = [];
+
+    for (const eventId of eventIds) {
+      const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+        body: { cpf: cpfDigits, event_id: eventId },
+      });
+
+      if (error) continue;
+      cards.push(...normalizeCardsFromResponse((data || {}) as TicketLookupResponse));
+    }
+
+    return cards;
+  }, []);
+
   const handleSearch = async () => {
     const cpfDigits = cpf.replace(/\D/g, '');
     if (cpfDigits.length !== 11) {
@@ -157,73 +256,30 @@ export default function TicketLookup() {
         body: { cpf: cpfDigits },
       });
 
-      if (error) throw error;
+      if (error) {
+        const message = String(error.message || '');
+        if (!message.includes('event_id is required')) {
+          throw error;
+        }
 
-      const ticketResults: TicketLookupResponseTicket[] = data?.tickets || [];
-      const eventFeesByEvent = (data?.eventFeesByEvent || {}) as Record<string, EventFeeInput[]>;
-
-      const cards: TicketCardData[] = ticketResults.map((ticket) => {
-        const unitPrice = ticket.unitPrice ?? 0;
-        const eventFees = ticket.eventId ? (eventFeesByEvent[ticket.eventId] || []) : [];
-
-        const hasFeeConfig = ticket.platformFeePercent != null;
-        const breakdown = hasFeeConfig
-          ? calculateFees(unitPrice, eventFees, {
-              passToCustomer: Boolean(ticket.passPlatformFeeToCustomer),
-              feePercent: Number(ticket.platformFeePercent),
-            })
-          : null;
-
-        return {
-          ticketId: ticket.ticketId,
-          qrCodeToken: ticket.qrCodeToken,
-          passengerName: ticket.passengerName,
-          passengerCpf: ticket.passengerCpf,
-          seatLabel: ticket.seatLabel,
-          boardingStatus: ticket.boardingStatus,
-          eventName: ticket.eventName,
-          eventDate: ticket.eventDate,
-          eventCity: ticket.eventCity,
-          boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
-          boardingLocationName: ticket.boardingLocationName,
-          boardingLocationAddress: ticket.boardingLocationAddress,
-          boardingDepartureTime: ticket.boardingDepartureTime,
-          boardingDepartureDate: ticket.boardingDepartureDate,
-          saleStatus: (ticket.saleStatus || 'reservado') as SaleStatus,
-          saleId: ticket.saleId || undefined,
-          stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
-          asaasPaymentId: ticket.asaasPaymentId || null,
-          companyName: ticket.companyName,
-          companyLogoUrl: ticket.companyLogoUrl,
-          companyCity: ticket.companyCity,
-          companyState: ticket.companyState,
-          companyPrimaryColor: ticket.companyPrimaryColor,
-          companyCnpj: ticket.companyCnpj,
-          companyPhone: ticket.companyPhone,
-          companyWhatsapp: ticket.companyWhatsapp,
-          companyAddress: ticket.companyAddress,
-          companySlogan: ticket.companySlogan,
-          vehicleType: ticket.vehicleType || null,
-          vehiclePlate: ticket.vehiclePlate || null,
-          driverName: ticket.driverName || null,
-          seatCategory: ticket.seatCategory || null,
-          seatFloor: ticket.seatFloor || null,
-          vehicleFloors: ticket.vehicleFloors || null,
-          fees: breakdown && breakdown.fees.length > 0 ? breakdown.fees : undefined,
-          totalPaid: breakdown && breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
-        };
-      });
-
-      setTickets(cards);
-      autoVerifyPendingSales(cards);
+        // Compatibilidade: se backend ainda exigir event_id, executa fallback transparente no front.
+        const legacyCards = await fetchLegacyTicketsByCpf(cpfDigits);
+        setTickets(legacyCards);
+        autoVerifyPendingSales(legacyCards);
+      } else {
+        const response = (data || {}) as TicketLookupResponse;
+        const cards = normalizeCardsFromResponse(response);
+        setTickets(cards);
+        autoVerifyPendingSales(cards);
+      }
     } catch {
+      setTickets([]);
       toast({ title: 'Erro ao buscar passagens', variant: 'destructive' });
+    } finally {
+      setSearching(false);
     }
-
-    setSearching(false);
   };
 
-  // Organização visual do resultado: agrupar por evento melhora leitura quando CPF tem múltiplas compras.
   const ticketsByEvent = useMemo(() => {
     const grouped = new Map<string, { title: string; subtitle: string; tickets: TicketCardData[] }>();
 
