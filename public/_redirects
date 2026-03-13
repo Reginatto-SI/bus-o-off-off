@@ -5,5 +5,10 @@
 #
 # Esse redirect também é necessário por solicitação de um dos sócios
 # do projeto para manter continuidade da marca anterior.
+#
+# Incluímos HTTP e HTTPS (com e sem www) para evitar cair no redirect
+# padrão da hospedagem antes desta regra ser aplicada.
+http://busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!
 https://busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!
+http://www.busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!
 https://www.busaooffoff.com.br/* https://smartbusbr.com.br/busaooffoff/:splat 301!

@@ -1,0 +1,26 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "busaooffoff.com.br"
+        }
+      ],
+      "destination": "https://smartbusbr.com.br/busaooffoff/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.busaooffoff.com.br"
+        }
+      ],
+      "destination": "https://smartbusbr.com.br/busaooffoff/$1",
+      "permanent": true
+    }
+  ]
+}
