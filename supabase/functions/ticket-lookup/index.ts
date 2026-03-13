@@ -165,6 +165,8 @@ serve(async (req) => {
         eventName: t.sale?.event?.name || "",
         eventDate: t.sale?.event?.date || "",
         eventCity: t.sale?.event?.city || "",
+        // Mantém modelagem por trecho, mas informa política para a camada de apresentação consolidar quando obrigatório.
+        eventTransportPolicy: t.sale?.event?.transport_policy || "trecho_independente",
         eventId: t.trip?.event_id || null,
         boardingToleranceMinutes: t.sale?.event?.boarding_tolerance_minutes ?? null,
         boardingLocationName: t.sale?.boarding_location?.name || "",

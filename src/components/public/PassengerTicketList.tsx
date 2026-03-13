@@ -19,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { User, ChevronDown, Armchair, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { TransportPolicy } from '@/types/database';
 
 // ── Types ──
 
@@ -38,9 +39,11 @@ interface PassengerGroup {
   cpfKey: string;
   name: string;
   cpfDisplay: string;
+  transportPolicy: TransportPolicy;
   idaTicket: TicketCardData | null;
   voltaTicket: TicketCardData | null;
   hasRoundTrip: boolean;
+  shouldRenderConsolidatedRoundTrip: boolean;
 }
 
 // ── Helpers ──
@@ -48,6 +51,10 @@ interface PassengerGroup {
 /** Detecta se o ticket é de volta pelo prefixo VOLTA- no seatLabel */
 function isVoltaTicket(ticket: TicketCardData): boolean {
   return ticket.seatLabel.toUpperCase().startsWith('VOLTA-');
+}
+
+function isRoundTripMandatoryPolicy(policy?: TransportPolicy): boolean {
+  return policy === 'ida_volta_obrigatorio';
 }
 
 /** Mascara CPF para exibição: ***.456.789-** */
@@ -86,7 +93,13 @@ export function PassengerTicketList({
 
   // Agrupa tickets por CPF do passageiro
   const groups = useMemo<PassengerGroup[]>(() => {
-    const map = new Map<string, { ida: TicketCardData | null; volta: TicketCardData | null; name: string; cpf: string }>();
+    const map = new Map<string, {
+      ida: TicketCardData | null;
+      volta: TicketCardData | null;
+      name: string;
+      cpf: string;
+      transportPolicy: TransportPolicy;
+    }>();
 
     for (const ticket of tickets) {
       const cpfKey = ticket.passengerCpf.replace(/\D/g, '');
@@ -98,8 +111,13 @@ export function PassengerTicketList({
           volta: isVoltaTicket(ticket) ? ticket : null,
           name: ticket.passengerName,
           cpf: cpfKey,
+          transportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
         });
       } else {
+        if (ticket.eventTransportPolicy) {
+          existing.transportPolicy = ticket.eventTransportPolicy;
+        }
+
         if (isVoltaTicket(ticket)) {
           existing.volta = ticket;
         } else {
@@ -113,9 +131,12 @@ export function PassengerTicketList({
       cpfKey,
       name: data.name,
       cpfDisplay: maskCpfDisplay(data.cpf),
+      transportPolicy: data.transportPolicy,
       idaTicket: data.ida,
       voltaTicket: data.volta,
       hasRoundTrip: !!(data.ida && data.volta),
+      // Regra de negócio: só consolidamos visualmente quando a política exige ida e volta.
+      shouldRenderConsolidatedRoundTrip: !!(data.ida && data.volta && isRoundTripMandatoryPolicy(data.transportPolicy)),
     }));
   }, [tickets]);
 
@@ -187,6 +208,8 @@ function PassengerCollapsibleCard({
 
   // Label do assento de ida
   const idaSeatDisplay = group.idaTicket ? friendlySeatLabel(group.idaTicket) : null;
+  const voltaSeatDisplay = group.voltaTicket ? friendlySeatLabel(group.voltaTicket) : null;
+  const isVoltaSeatPlaceholder = !!group.voltaTicket && voltaSeatDisplay === 'Retorno incluso';
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -245,7 +268,21 @@ function PassengerCollapsibleCard({
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-2">
-        {group.hasRoundTrip ? (
+        {group.shouldRenderConsolidatedRoundTrip ? (
+          // Consolidação visual apenas para ida_volta_obrigatorio: mantém modelagem interna por trecho.
+          group.idaTicket && group.voltaTicket && (
+            <TicketCard
+              ticket={group.idaTicket}
+              consolidatedRoundTrip={{
+                returnSeatLabel: voltaSeatDisplay ?? 'Retorno incluso',
+                returnSeatIsPlaceholder: isVoltaSeatPlaceholder,
+              }}
+              allowReservedDownloads={allowReservedDownloads}
+              onRefreshStatus={onRefreshStatus}
+              isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
+            />
+          )
+        ) : group.hasRoundTrip ? (
           // Preserva o mesmo padrão validado no admin: segmentação explícita de ida/volta com destaque do trecho ativo.
           <Tabs defaultValue="ida" className="w-full">
             <TabsList className="w-full">

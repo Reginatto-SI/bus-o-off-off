@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { ArrowLeft, Loader2, Search, Ticket } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
+import type { TransportPolicy } from '@/types/database';
 import { formatDateOnlyBR } from '@/lib/date';
 
 type TicketLookupResponseTicket = {
@@ -24,6 +25,7 @@ type TicketLookupResponseTicket = {
   eventName: string;
   eventDate: string;
   eventCity: string;
+  eventTransportPolicy?: TransportPolicy;
   eventId?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
@@ -109,6 +111,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventName: ticket.eventName,
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
+      eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
       boardingLocationAddress: ticket.boardingLocationAddress,
