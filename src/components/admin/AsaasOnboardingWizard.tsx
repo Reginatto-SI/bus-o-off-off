@@ -61,6 +61,43 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [mode, setMode] = useState<AsaasWizardMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [localCompanyData, setLocalCompanyData] = useState(companyData);
+
+  // Sync localCompanyData when companyData prop changes
+  useEffect(() => {
+    setLocalCompanyData(companyData);
+  }, [companyData]);
+
+  const validateAddress = (): boolean => {
+    const d = localCompanyData;
+    if (!d) return false;
+    const cepDigits = (d.postalCode || '').replace(/\D/g, '');
+    return (
+      (d.address || '').trim().length > 0 &&
+      (d.addressNumber || '').trim().length > 0 &&
+      (d.province || '').trim().length > 0 &&
+      cepDigits.length === 8 &&
+      (d.city || '').trim().length > 0 &&
+      (d.state || '').trim().length === 2
+    );
+  };
+
+  const handleStep2Continue = () => {
+    if (validateAddress()) {
+      setStep(3);
+    } else {
+      setShowAddressModal(true);
+    }
+  };
+
+  const handleAddressSaved = (data: AsaasAddressData) => {
+    setLocalCompanyData((prev) =>
+      prev ? { ...prev, ...data } : prev
+    );
+    setShowAddressModal(false);
+    setStep(3);
+  };
 
   useEffect(() => {
     if (!open) {
