@@ -71,3 +71,9 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Regras de negócio — exibição de passagens (transporte)
+
+- Em eventos com política `ida_volta_obrigatorio`, a interface deve apresentar **uma única passagem consolidada de Ida e Volta** para o usuário final, mesmo com tickets operacionais separados por trecho internamente.
+- Em eventos com política `ida_obrigatoria_volta_opcional` ou `trecho_independente`, a interface **não deve forçar** consolidação indevida e deve manter a separação por trecho quando aplicável.
+- Placeholders técnicos internos como `VOLTA-1`, `VOLTA-2` e similares **não devem aparecer** para o usuário final; a exibição deve usar linguagem amigável (ex.: `Retorno incluso`).

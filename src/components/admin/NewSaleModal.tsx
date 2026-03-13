@@ -517,6 +517,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       eventName: selectedEvent?.name || '',
       eventDate: selectedEvent?.date || '',
       eventCity: selectedEvent?.city || '',
+      eventTransportPolicy: selectedEvent?.transport_policy ?? 'trecho_independente',
       boardingToleranceMinutes: selectedEvent?.boarding_tolerance_minutes ?? null,
       boardingLocationName: selectedBoarding?.name || '',
       boardingLocationAddress: selectedBoarding?.address || '',

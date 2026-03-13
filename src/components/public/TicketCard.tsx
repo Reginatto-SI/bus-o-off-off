@@ -10,6 +10,7 @@ import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
+import type { TransportPolicy } from '@/types/database';
 import { formatCurrencyBRL } from '@/lib/currency';
 
 export interface TicketCardData {
@@ -22,6 +23,7 @@ export interface TicketCardData {
   eventName: string;
   eventDate: string;
   eventCity: string;
+  eventTransportPolicy?: TransportPolicy;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
   boardingLocationAddress: string;
@@ -71,13 +73,35 @@ function formatCnpjDisplay(cnpj: string | null): string | null {
 
 interface TicketCardProps {
   ticket: TicketCardData;
+  /**
+   * Quando presente, a passagem é exibida de forma consolidada (Ida e Volta)
+   * mantendo o mesmo QR/ticket operacional da ida.
+   */
+  consolidatedRoundTrip?: {
+    returnSeatLabel: string;
+    returnSeatIsPlaceholder: boolean;
+  };
   allowReservedDownloads?: boolean;
   // Callback para verificar status de pagamento no Stripe (on-demand)
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshing?: boolean;
 }
 
-export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshStatus, isRefreshing }: TicketCardProps) {
+function getFriendlySeatLabel(seatLabel: string): string {
+  if (!seatLabel.toUpperCase().startsWith('VOLTA-')) return seatLabel;
+
+  const raw = seatLabel.replace(/^VOLTA-/i, '');
+  if (/^\d+$/.test(raw) || raw.toUpperCase() === 'SN') return 'Retorno incluso';
+  return raw;
+}
+
+export function TicketCard({
+  ticket,
+  consolidatedRoundTrip,
+  allowReservedDownloads = false,
+  onRefreshStatus,
+  isRefreshing,
+}: TicketCardProps) {
   const { toast } = useToast();
   const qrRef = useRef<HTMLCanvasElement>(null);
   const ticketContainerRef = useRef<HTMLDivElement>(null);
@@ -87,6 +111,7 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
   const accentColor = ticket.companyPrimaryColor || '#F97316';
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
+  const seatDisplayLabel = getFriendlySeatLabel(ticket.seatLabel);
 
   // Status visual: "processando" quando reservado mas com pagamento em andamento
   const hasPaymentPending = ticket.stripeCheckoutSessionId || ticket.asaasPaymentId;
@@ -185,9 +210,14 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
           {/* Info */}
           <div className="w-full space-y-2 text-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-semibold">
-                <Armchair className="h-4 w-4" style={{ color: accentColor }} />
-                Assento {ticket.seatLabel}
+              <div className="space-y-0.5">
+                {consolidatedRoundTrip && (
+                  <p className="text-xs text-primary font-semibold">Passagem — Ida e Volta</p>
+                )}
+                <div className="flex items-center gap-2 font-semibold">
+                  <Armchair className="h-4 w-4" style={{ color: accentColor }} />
+                  Assento {seatDisplayLabel}
+                </div>
               </div>
               <StatusBadge status={displayStatus} />
             </div>
@@ -205,8 +235,24 @@ export function TicketCard({ ticket, allowReservedDownloads = false, onRefreshSt
                 </div>
                 <div className="flex items-center gap-2">
                   <Armchair className="h-3.5 w-3.5" />
-                  Assento {ticket.seatLabel}
+                  Assento {seatDisplayLabel}
                 </div>
+                {consolidatedRoundTrip && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span>Tipo:</span>
+                      <span className="font-medium text-foreground">Ida e Volta</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span>Volta:</span>
+                      <span>
+                        {consolidatedRoundTrip.returnSeatIsPlaceholder
+                          ? 'Retorno incluso — assento da volta definido pela organização'
+                          : `Assento ${consolidatedRoundTrip.returnSeatLabel}`}
+                      </span>
+                    </div>
+                  </>
+                )}
                 {ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null && (
                   <div className="flex items-center gap-2 text-xs">
                     Pavimento: {ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}
