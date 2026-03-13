@@ -2013,6 +2013,10 @@ export type Database = {
         Returns: boolean
       }
       is_developer: { Args: { _user_id: string }; Returns: boolean }
+      is_event_public_ticket_lookup_eligible: {
+        Args: { event_row: Database["public"]["Tables"]["events"]["Row"] }
+        Returns: boolean
+      }
       normalize_city_name: { Args: { input: string }; Returns: string }
       normalize_public_slug: { Args: { input_slug: string }; Returns: string }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
