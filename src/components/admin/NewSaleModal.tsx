@@ -762,7 +762,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
         <DialogHeader className="admin-modal__header px-6 py-4">
-          <DialogTitle>{step === 4 ? 'Passagem Gerada' : 'Nova Venda'}</DialogTitle>
+          <DialogTitle>{step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}</DialogTitle>
         </DialogHeader>
 
         {step === 4 && confirmationData ? (
@@ -774,6 +774,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 <PassengerTicketList
                   tickets={confirmationData.map((item) => item.ticketCardData)}
                   allowReservedDownloads
+                  // No fluxo de venda manual reservada, usamos modo de comprovante para descaracterizar
+                  // a aparência de passe operacional (sem QR funcional e com alerta explícito).
+                  reservedPresentation="receipt"
                   context="admin"
                 />
               </div>

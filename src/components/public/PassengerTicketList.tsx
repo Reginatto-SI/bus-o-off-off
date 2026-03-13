@@ -33,6 +33,10 @@ interface PassengerTicketListProps {
   allowReservedDownloads?: boolean;
   /** Ajustes visuais por contexto */
   context?: 'public' | 'admin';
+  /**
+   * Permite forçar o modo de comprovante para status reservado em contextos específicos.
+   */
+  reservedPresentation?: 'default' | 'receipt';
 }
 
 interface PassengerGroup {
@@ -85,6 +89,7 @@ export function PassengerTicketList({
   isRefreshingSaleIds,
   allowReservedDownloads = false,
   context = 'public',
+  reservedPresentation = 'default',
 }: PassengerTicketListProps) {
   // Nota de manutenção: `context` existe para ajustes mínimos de container/espaçamento
   // por tela, mas o template visual da passagem (card, bloco de passageiro e abas ida/volta)
@@ -166,6 +171,7 @@ export function PassengerTicketList({
           allowReservedDownloads={allowReservedDownloads}
           onRefreshStatus={onRefreshStatus}
           isRefreshing={!!(groups[0].idaTicket?.saleId && isRefreshingSaleIds?.has(groups[0].idaTicket.saleId))}
+          reservedPresentation={reservedPresentation}
         />
       ) : (
         groups.map((group) => (
@@ -175,6 +181,7 @@ export function PassengerTicketList({
             allowReservedDownloads={allowReservedDownloads}
             onRefreshStatus={onRefreshStatus}
             isRefreshingSaleIds={isRefreshingSaleIds}
+            reservedPresentation={reservedPresentation}
             defaultOpen={groups.length === 1}
           />
         ))
@@ -190,6 +197,7 @@ interface PassengerCollapsibleCardProps {
   allowReservedDownloads: boolean;
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshingSaleIds?: Set<string>;
+  reservedPresentation: 'default' | 'receipt';
   defaultOpen?: boolean;
 }
 
@@ -198,6 +206,7 @@ function PassengerCollapsibleCard({
   allowReservedDownloads,
   onRefreshStatus,
   isRefreshingSaleIds,
+  reservedPresentation,
   defaultOpen = false,
 }: PassengerCollapsibleCardProps) {
   const [open, setOpen] = useState(defaultOpen);
@@ -280,6 +289,7 @@ function PassengerCollapsibleCard({
               allowReservedDownloads={allowReservedDownloads}
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
+              reservedPresentation={reservedPresentation}
             />
           )
         ) : group.hasRoundTrip ? (
@@ -296,6 +306,7 @@ function PassengerCollapsibleCard({
                   allowReservedDownloads={allowReservedDownloads}
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
+                  reservedPresentation={reservedPresentation}
                 />
               )}
             </TabsContent>
@@ -306,6 +317,7 @@ function PassengerCollapsibleCard({
                   allowReservedDownloads={allowReservedDownloads}
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.voltaTicket.saleId && isRefreshingSaleIds?.has(group.voltaTicket.saleId))}
+                  reservedPresentation={reservedPresentation}
                 />
               )}
             </TabsContent>
@@ -318,6 +330,7 @@ function PassengerCollapsibleCard({
               allowReservedDownloads={allowReservedDownloads}
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(displayTicket.saleId && isRefreshingSaleIds?.has(displayTicket.saleId))}
+              reservedPresentation={reservedPresentation}
             />
           )
         )}
