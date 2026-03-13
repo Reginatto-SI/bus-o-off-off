@@ -754,11 +754,12 @@ export default function Sales() {
   const handleChangeStatus = async (sale: Sale, newStatus: SaleStatus) => {
     if (!user || !activeCompanyId) return;
 
-    // Bloqueio frontend: impede marcar como pago se taxa da plataforma está pendente
+    // Bloqueio frontend: reforça regra oficial — reservado só vira pago após confirmação da taxa.
+    // Fluxos com platform_fee_status='waived' não são pagamento confirmado e não promovem para 'pago'.
     if (newStatus === 'pago') {
       const feeStatus = (sale as any).platform_fee_status;
-      if (feeStatus && feeStatus !== 'paid' && feeStatus !== 'not_applicable' && feeStatus !== 'waived') {
-        toast.error('Não é possível marcar como pago: taxa da plataforma pendente. Pague a taxa primeiro.');
+      if (feeStatus && feeStatus !== 'paid' && feeStatus !== 'not_applicable') {
+        toast.error('Não é possível marcar como pago: taxa da plataforma não está confirmada como paga.');
         return;
       }
     }
@@ -800,13 +801,19 @@ export default function Sales() {
       const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
         body: { sale_id: sale.id },
       });
-      if (error || !data?.url) {
+      if (error) {
         toast.error(data?.error || 'Erro ao criar checkout da taxa');
         return;
       }
-      // Alerta ao admin quando Pix não está habilitado na conta Stripe
-      if (data.pix_available === false) {
-        toast.warning('Pix não está habilitado na sua conta Stripe. O checkout foi aberto apenas com cartão. Para habilitar Pix, acesse Settings → Payment Methods no Dashboard do Stripe.', { duration: 10000 });
+      // Taxa isenta automaticamente (abaixo do mínimo do gateway)
+      if (data?.waived) {
+        toast.success('Taxa da plataforma dispensada explicitamente (valor abaixo do mínimo do gateway). A venda permanece reservada até quitação válida.');
+        fetchSales();
+        return;
+      }
+      if (!data?.url) {
+        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+        return;
       }
       // Abre o checkout da taxa em nova aba
       window.open(data.url, '_blank');
@@ -914,8 +921,9 @@ export default function Sales() {
       actions.push({ label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) });
     }
 
-    // Ticket generation action (hidden for BLOQUEIO, cancelled sales, and pending fees)
-    if (sale.status !== 'cancelado' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
+    // Ticket/PDF virtual somente para venda efetivamente paga.
+    // Isso evita tratar 'reservado' (inclusive com taxa dispensada) como venda liquidada.
+    if (sale.status === 'pago' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
       actions.push({
         label: 'Gerar Passagem',
         icon: FileText,
@@ -942,7 +950,8 @@ export default function Sales() {
         });
       }
 
-      if (sale.status === 'reservado' && !feePending) {
+      // Regra de negócio: promoção manual para pago só é permitida após taxa confirmada.
+      if (sale.status === 'reservado' && (feeStatus === 'paid' || feeStatus === 'not_applicable')) {
         actions.push({
           label: 'Marcar como Pago',
           icon: CheckCircle,

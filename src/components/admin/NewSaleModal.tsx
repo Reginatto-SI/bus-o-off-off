@@ -522,7 +522,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       boardingLocationAddress: selectedBoarding?.address || '',
       boardingDepartureTime: selectedBoarding?.departure_time || null,
       boardingDepartureDate: selectedBoarding?.departure_date || null,
-      saleStatus: (activeTab === 'manual' ? 'pago' : 'reservado') as any,
+      // A passagem de venda manual nasce como RESERVADA: só vira 'pago' após quitação da taxa da plataforma.
+      saleStatus: 'reservado' as any,
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,
@@ -602,9 +603,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const saleOrigin = isBlock ? 'admin_block' : (isManual ? 'admin_manual' : 'admin_manual');
 
       // 1. Insert sale
-      // IMPORTANTE: vendas manuais com taxa aplicável NÃO nascem como 'pago'.
-      // Elas nascem como 'reservado' com platform_fee_status='pending' até a taxa ser quitada.
-      // Isso garante que a plataforma receba sua comissão antes de liberar o status final.
+      // Regra crítica: toda venda criada manualmente no admin nasce como 'reservado'.
+      // A transição para 'pago' acontece somente após confirmação da taxa da plataforma.
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
         .insert({
@@ -616,8 +616,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
           unit_price: basePrice,
-          // Vendas manuais com taxa pendente ficam como 'reservado' até taxa ser paga
-          status: (isManual && hasPlatformFee) ? 'reservado' : (isManual ? 'pago' : 'reservado'),
+          // Mantemos 'reservado' tanto para venda manual quanto para reserva/bloqueio até a etapa final do fluxo.
+          status: 'reservado',
           gross_amount: grossTotal,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
@@ -669,9 +669,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       let logAction = '';
       let logDescription = '';
       if (isManual) {
+        // Mantemos a action legada por compatibilidade com histórico/auditoria.
         logAction = 'manual_paid_created';
         const methodLabels: Record<string, string> = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão', outro: 'Outro' };
-        logDescription = `Venda manual criada (${methodLabels[paymentMethod] ?? paymentMethod})${observation ? `. Obs: ${observation}` : ''}`;
+        logDescription = `Venda manual criada como reservada (${methodLabels[paymentMethod] ?? paymentMethod})${observation ? `. Obs: ${observation}` : ''}`;
       } else if (activeTab === 'reserva') {
         logAction = 'reservation_created';
         logDescription = `Reserva criada${observation ? `. Obs: ${observation}` : ''}`;

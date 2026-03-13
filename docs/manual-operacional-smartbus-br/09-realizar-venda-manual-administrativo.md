@@ -69,3 +69,13 @@ Na tela de vendas, o usuário inicia **Nova venda** e segue um fluxo em etapas: 
 
 ## 8. Impacto no Sistema
 A venda manual impacta diretamente ocupação, receita, controle de assentos e atendimento ao cliente. Quando bem executada, amplia conversão comercial; quando mal registrada, pode gerar overbooking, retrabalho e ruído financeiro.
+
+## 9. Regra oficial de negócio — status da venda/passagem no admin (`/admin/vendas`)
+- **Fonte de verdade do status da venda:** `sales.status`.
+- **Fonte de verdade da taxa da plataforma:** `sales.platform_fee_status` (`pending`, `paid`, `waived`, `failed`, `not_applicable`).
+- Toda passagem criada no fluxo administrativo deve nascer como **`reservado`**.
+- A passagem só pode mudar de **`reservado`** para **`pago`** após confirmação de pagamento da taxa da plataforma (`platform_fee_status = paid`) ou quando a taxa não se aplica (`not_applicable`, ex.: fluxo online legado).
+- Passagem **`reservado` não é `pago`** e **não é `isento`**.
+- `waived`/dispensa da taxa é um estado **explícito e auditável da taxa**, separado do status da venda, e não promove automaticamente a venda para `pago`.
+- Ticket virtual/PDF e ações operacionais devem respeitar o `sales.status` e não inferir quitação por ausência de pagamento.
+
