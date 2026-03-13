@@ -258,19 +258,19 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
         <div className="space-y-1">
           <span className="text-muted-foreground">Empresa</span>
-          <p className="font-medium">{companyData?.companyName || 'Não informado'}</p>
+          <p className="font-medium">{localCompanyData?.companyName || 'Não informado'}</p>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground">Tipo de cadastro</span>
-          <p className="font-medium">{companyData?.legalType === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</p>
+          <p className="font-medium">{localCompanyData?.legalType === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</p>
         </div>
         <div className="space-y-1">
-          <span className="text-muted-foreground">{companyData?.legalType === 'PF' ? 'CPF' : 'CNPJ'}</span>
+          <span className="text-muted-foreground">{localCompanyData?.legalType === 'PF' ? 'CPF' : 'CNPJ'}</span>
           <p className="font-medium">{maskedDocument || 'Não informado'}</p>
         </div>
         <div className="space-y-1">
           <span className="text-muted-foreground">E-mail da conta Asaas</span>
-          <p className="font-medium">{companyData?.email || 'Não informado'}</p>
+          <p className="font-medium">{localCompanyData?.email || 'Não informado'}</p>
         </div>
       </div>
     </div>
