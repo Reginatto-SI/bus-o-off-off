@@ -1,32 +1,57 @@
 
-# Complete Payment Flow Overhaul — IMPLEMENTED
 
-## Changes Made
+## Plan: Address Validation Modal Between Step 2 and Step 3 of Asaas Wizard
 
-### Database
-- Added `pendente_pagamento` to `sale_status` enum
-- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
-- Created `sale_passengers` staging table for passenger data before payment confirmation
-- Enabled realtime on `sales` table
-- Enabled `pg_cron` and `pg_net` extensions
-- Scheduled `cleanup-expired-locks` cron job every 5 minutes
+### What Changes
 
-### Edge Functions
-- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
-- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
-- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
+**1. New component: `AsaasAddressModal`** (`src/components/admin/AsaasAddressModal.tsx`)
 
-### Frontend
-- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
-- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
-- `StatusBadge.tsx`: Added `pendente_pagamento` badge
-- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
+A compact Dialog modal with 6 address fields pre-filled from company data. Fields: Endereço, Numero, Bairro, CEP, Cidade, UF. On save, updates the `companies` table directly and closes, allowing the wizard to proceed. Uses existing UI components (Dialog, Input, Label, Select) and `brazilianStates` from `cityUtils`.
 
-## Architecture
-```
-NEW FLOW:
-  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
-  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
-  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
-  → Frontend detects pago → Show tickets
-```
+**2. Modify: `AsaasOnboardingWizard.tsx`**
+
+- Expand `AsaasOnboardingCompanyData` interface to include address fields: `address`, `addressNumber`, `province`, `postalCode`, `city`, `state`.
+- Add state for the address modal (`showAddressModal`).
+- When user clicks "Continuar" on Step 2, validate address fields. If any are missing/empty, open `AsaasAddressModal` instead of advancing. If all present, advance to Step 3.
+- On successful save from `AsaasAddressModal`, update internal company data and proceed to Step 3.
+- Update Step 3 content to clarify that the Asaas will send an email with a password setup link after account creation.
+
+**3. Modify: `Company.tsx`**
+
+- Update `getAsaasWizardCompanyData()` to pass address fields from the form state to the wizard.
+
+### Address Validation Logic
+
+Before advancing from Step 2 to Step 3, check:
+- `address` is non-empty
+- `addressNumber` is non-empty
+- `province` is non-empty
+- `postalCode` has exactly 8 digits
+- `city` is non-empty
+- `state` is exactly 2 chars
+
+### Address Modal Behavior
+
+- Header: "Complete o endereço da empresa"
+- Brief message explaining why it's needed
+- 6 fields in a compact grid layout
+- CEP field strips non-digits on save
+- Save button updates `companies` table, then closes modal and advances wizard to Step 3
+- Cancel returns to Step 2 without advancing
+
+### Step 3 Communication Update
+
+Add explicit mention that:
+- The password is not created inside Smartbus BR
+- Asaas will send an email to the registered address with a link to set up the account password
+
+### Income/Revenue
+
+No changes - `incomeValue` remains internal in the edge function, never shown in the wizard UI.
+
+### Files Modified
+
+- `src/components/admin/AsaasAddressModal.tsx` (new)
+- `src/components/admin/AsaasOnboardingWizard.tsx` (modified)
+- `src/pages/admin/Company.tsx` (modified)
+
