@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { Bus, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
+import { Bus, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Search, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, CommercialPartner, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { EventCard, EventCardSkeletonGrid, EventsCarousel } from '@/components/public';
 import { normalizePublicSlug } from '@/lib/publicSlug';
@@ -17,6 +18,7 @@ import { EditIntroModal } from '@/components/public/showcase/EditIntroModal';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
+import { filterEventsByTerm } from '@/lib/eventSearch';
 
 // Tipo mínimo para patrocinadores públicos (whitelist estrita de campos)
 interface PublicSponsor {
@@ -43,6 +45,7 @@ export default function PublicCompanyShowcase() {
   const sellerRef = searchParams.get('ref');
   const [company, setCompany] = useState<PublicCompanyData | null>(null);
   const [events, setEvents] = useState<EventWithCompany[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [sponsors, setSponsors] = useState<PublicSponsor[]>([]);
   const [commercialPartners, setCommercialPartners] = useState<CommercialPartner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +126,7 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
+  const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
   const showcaseSlug = normalizePublicSlug(company?.public_slug || normalizedNick);
   const showcaseShortLink = showcaseSlug ? `${window.location.origin}/${showcaseSlug}` : '';
   const canRenderShowcaseQr = showcaseSlug.length > 0;
@@ -495,15 +499,26 @@ export default function PublicCompanyShowcase() {
               )}
 
               {/* Carrossel de destaques (top 5 eventos) */}
-              {!loading && events.length > 0 && (
+              {!loading && filteredEvents.length > 0 && (
                 <section>
-                  <EventsCarousel events={events.slice(0, 5)} sellerRef={sellerRef} />
+                  <EventsCarousel events={filteredEvents.slice(0, 5)} sellerRef={sellerRef} />
                 </section>
               )}
 
                {/* Grid de todos os eventos */}
                <section id="todos-eventos" className="space-y-4 scroll-mt-4">
                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
+
+                 <div className="relative">
+                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                   <Input
+                     value={searchTerm}
+                     onChange={(event) => setSearchTerm(event.target.value)}
+                     placeholder="Buscar evento, destino ou empresa"
+                     className="pl-9"
+                     aria-label="Buscar evento, destino ou empresa"
+                   />
+                 </div>
 
                  {loading ? (
                    <EventCardSkeletonGrid />
@@ -513,9 +528,20 @@ export default function PublicCompanyShowcase() {
                      title="Nenhuma passagem disponível"
                      description="No momento esta empresa não possui eventos em venda."
                    />
+                 ) : filteredEvents.length === 0 ? (
+                   <EmptyState
+                     icon={<Search className="h-8 w-8 text-muted-foreground" />}
+                     title="Nenhum evento encontrado com esse termo."
+                     description="Tente buscar por outro nome de evento, empresa ou destino."
+                     action={
+                       <Button variant="outline" onClick={() => setSearchTerm('')}>
+                         Limpar busca
+                       </Button>
+                     }
+                   />
                  ) : (
                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                     {events.map((event) => (
+                     {filteredEvents.map((event) => (
                        <EventCard key={event.id} event={event} sellerRef={sellerRef} />
                      ))}
                    </div>

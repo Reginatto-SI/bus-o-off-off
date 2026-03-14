@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Ticket } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Search, Ticket } from 'lucide-react';
+import { filterEventsByTerm } from '@/lib/eventSearch';
 import { 
   EventCard, 
   EventsCarousel, 
@@ -13,6 +16,7 @@ import {
 
 export default function PublicEvents() {
   const [events, setEvents] = useState<EventWithCompany[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const sellerRef = searchParams.get('ref');
@@ -42,6 +46,9 @@ export default function PublicEvents() {
     fetchEvents();
   }, []);
 
+  // Busca instantânea client-side para experiência de vitrine rápida, sem recarregar página.
+  const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
+
   return (
     <PublicLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
@@ -56,10 +63,10 @@ export default function PublicEvents() {
         </section>
 
         {/* Carrossel de Destaques */}
-        {!loading && events.length > 0 && (
+        {!loading && filteredEvents.length > 0 && (
           <section>
             <EventsCarousel 
-              events={events.slice(0, 5)} 
+              events={filteredEvents.slice(0, 5)} 
               sellerRef={sellerRef} 
             />
           </section>
@@ -71,6 +78,17 @@ export default function PublicEvents() {
             Todos os eventos
           </h2>
 
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar evento, destino ou empresa"
+              className="pl-9"
+              aria-label="Buscar evento, destino ou empresa"
+            />
+          </div>
+
           {loading ? (
             <EventCardSkeletonGrid />
           ) : events.length === 0 ? (
@@ -79,9 +97,20 @@ export default function PublicEvents() {
               title="Nenhuma passagem disponível"
               description="No momento não há passagens disponíveis. Volte em breve!"
             />
+          ) : filteredEvents.length === 0 ? (
+            <EmptyState
+              icon={<Search className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum evento encontrado com esse termo."
+              description="Tente buscar por outro nome de evento, empresa ou destino."
+              action={
+                <Button variant="outline" onClick={() => setSearchTerm('')}>
+                  Limpar busca
+                </Button>
+              }
+            />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {events.map((event) => (
+              {filteredEvents.map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
