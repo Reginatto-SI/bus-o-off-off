@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
@@ -233,6 +234,7 @@ function buildTicketCardData(
 
 // ── Component ──
 export default function Sales() {
+  const location = useLocation();
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [totalSalesCount, setTotalSalesCount] = useState(0);
@@ -282,6 +284,20 @@ export default function Sales() {
   const [ticketGenTotalPaid, setTicketGenTotalPaid] = useState<number | undefined>(undefined);
   const [ticketGenPartners, setTicketGenPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [ticketGenSponsors, setTicketGenSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
+
+  useEffect(() => {
+    // Comentário: mantém compatibilidade com atalho do Dashboard para abrir Nova Venda em um clique.
+    const params = new URLSearchParams(location.search);
+    const shouldOpenNewSale = params.get('novaVenda') === '1';
+    const saleTab = params.get('aba');
+
+    if (!shouldOpenNewSale) return;
+
+    // Observação: hoje o modal já inicia em "manual"; validamos a query para manter contrato explícito.
+    if (saleTab && saleTab !== 'manual') return;
+
+    setNewSaleModalOpen(true);
+  }, [location.search]);
 
   // ── Export columns ──
   const exportColumns: ExportColumn[] = [

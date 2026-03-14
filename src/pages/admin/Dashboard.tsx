@@ -4,6 +4,7 @@ import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar,
+  Ticket,
   ShoppingCart,
   XCircle,
   TrendingUp,
@@ -376,11 +377,6 @@ export default function Dashboard() {
           description="Visão geral da operação e vendas"
           actions={
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button asChild>
-                {/* Comentário: querystring sinaliza para a tela de eventos abrir com foco em criação. */}
-                <Link to="/admin/eventos?novo=1">+ Novo Evento</Link>
-              </Button>
-
               <Button variant="outline" onClick={handleOpenPublicShowcase}>
                 Abrir vitrine pública
               </Button>
@@ -398,6 +394,28 @@ export default function Dashboard() {
             </div>
           }
         />
+
+        {/* Comentário: seção compacta para centralizar os atalhos operacionais mais usados no dia a dia. */}
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-muted-foreground">Ações rápidas</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="lg" className="gap-2">
+              {/* Comentário: deep-link abre a tela de vendas e dispara o modal de Nova Venda já na aba manual. */}
+              <Link to="/admin/vendas?novaVenda=1&aba=manual">
+                <Ticket className="h-4 w-4" />
+                Vender Passagem
+              </Link>
+            </Button>
+
+            <Button asChild variant="outline" size="lg" className="gap-2">
+              {/* Comentário: reaproveita o fluxo padrão já existente de criação de evento via querystring. */}
+              <Link to="/admin/eventos?novo=1">
+                <Calendar className="h-4 w-4" />
+                + Novo Evento
+              </Link>
+            </Button>
+          </div>
+        </section>
 
         {/* ── KPIs Operacionais ───────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
