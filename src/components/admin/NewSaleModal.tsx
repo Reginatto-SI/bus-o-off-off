@@ -1137,12 +1137,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {activeTab === 'bloqueio' && (
-                      <div className="text-sm text-muted-foreground">
-                        <p>{passengers.length} poltrona(s) serão bloqueadas com nome "BLOQUEIO".</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>{passengers.length} poltrona(s) serão bloqueadas.</p>
+                        <div className="flex flex-wrap gap-2">
                           {passengers.map((p) => (
                             <Badge key={p.seatId} variant="secondary" className="font-mono">{p.seatLabel}</Badge>
                           ))}
+                        </div>
+                        <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                          <p>⚠️ Bloqueio apenas impede a venda do assento. Não gera passagem nem cobrança.</p>
                         </div>
                       </div>
                     )}
