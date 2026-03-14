@@ -398,13 +398,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       if (saleIds.length > 0) {
         const { data: salesData } = await supabase
           .from('sales')
-          .select('id, customer_name, status')
+          .select('id, status')
           .in('id', saleIds);
 
-        // Bloqueio operacional: customer_name = 'BLOQUEIO' e status != 'cancelado'
+        // Bloqueio operacional: status = 'bloqueado' e não cancelado
         blockSaleIds = new Set(
           (salesData ?? [])
-            .filter((s: any) => s.customer_name === 'BLOQUEIO' && s.status !== 'cancelado')
+            .filter((s: any) => s.status === 'bloqueado')
             .map((s: any) => s.id)
         );
       }
@@ -616,16 +616,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           customer_cpf: isBlock ? '00000000000' : passengers[0]?.cpf.replace(/\D/g, ''),
           customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
-          unit_price: basePrice,
-          // Mantemos 'reservado' tanto para venda manual quanto para reserva/bloqueio até a etapa final do fluxo.
-          status: 'reservado',
+          unit_price: isBlock ? 0 : basePrice,
+          status: isBlock ? 'bloqueado' : 'reservado',
           gross_amount: grossTotal,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
-          // Campos de controle da taxa da plataforma (vendas manuais)
           sale_origin: saleOrigin,
           platform_fee_amount: platformFeeAmount,
-          platform_fee_status: hasPlatformFee ? 'pending' : 'not_applicable',
+          platform_fee_status: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
+          block_reason: isBlock ? blockReason : null,
         } as any)
         .select('id')
         .single();
@@ -679,7 +678,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         logDescription = `Reserva criada${observation ? `. Obs: ${observation}` : ''}`;
       } else {
         logAction = 'seat_block_created';
-        const reasonLabels: Record<string, string> = { manutencao: 'Manutenção', staff: 'Staff', cortesia: 'Cortesia', seguranca: 'Segurança', outro: 'Outro' };
+        const reasonLabels: Record<string, string> = { manutencao: 'Manutenção', staff: 'Staff', seguranca: 'Segurança', outro: 'Outro' };
         logDescription = `Poltrona bloqueada (${reasonLabels[blockReason] ?? blockReason})${observation ? `. Obs: ${observation}` : ''}`;
       }
 
@@ -1064,7 +1063,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             <SelectContent>
                               <SelectItem value="manutencao">Manutenção</SelectItem>
                               <SelectItem value="staff">Staff</SelectItem>
-                              <SelectItem value="cortesia">Cortesia</SelectItem>
                               <SelectItem value="seguranca">Segurança</SelectItem>
                               <SelectItem value="outro">Outro</SelectItem>
                             </SelectContent>
@@ -1139,12 +1137,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     )}
 
                     {activeTab === 'bloqueio' && (
-                      <div className="text-sm text-muted-foreground">
-                        <p>{passengers.length} poltrona(s) serão bloqueadas com nome "BLOQUEIO".</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>{passengers.length} poltrona(s) serão bloqueadas.</p>
+                        <div className="flex flex-wrap gap-2">
                           {passengers.map((p) => (
                             <Badge key={p.seatId} variant="secondary" className="font-mono">{p.seatLabel}</Badge>
                           ))}
+                        </div>
+                        <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                          <p>⚠️ Bloqueio apenas impede a venda do assento. Não gera passagem nem cobrança.</p>
                         </div>
                       </div>
                     )}

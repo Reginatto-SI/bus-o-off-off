@@ -194,6 +194,10 @@
     @apply bg-destructive/10 text-destructive;
   }
 
+  .status-badge-blocked {
+    @apply bg-muted text-muted-foreground border border-border;
+  }
+
   /* Stats cards - Indicadores */
   .stats-card {
     @apply bg-card rounded-lg border p-4 shadow-sm;

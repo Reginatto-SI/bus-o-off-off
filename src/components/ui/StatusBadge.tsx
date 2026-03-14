@@ -3,7 +3,7 @@ import { DriverStatus, EventStatus, SaleStatus, SellerStatus, VehicleStatus } fr
 
 // "processando" é um status visual-only usado no frontend quando a venda está
 // "reservado" no banco mas existe um checkout Stripe em andamento.
-type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus | 'processando' | 'pendente_pagamento';
+type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus | 'processando' | 'pendente_pagamento' | 'bloqueado';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -19,6 +19,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   processando: { label: 'Processando', className: 'status-badge-reserved' },
   pago: { label: 'Pago', className: 'status-badge-paid' },
   cancelado: { label: 'Cancelado', className: 'status-badge-cancelled' },
+  bloqueado: { label: 'Bloqueado', className: 'status-badge-blocked' },
   ativo: { label: 'Ativo', className: 'status-badge-available' },
   inativo: { label: 'Inativo', className: 'status-badge-closed' },
 };

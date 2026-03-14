@@ -4,7 +4,6 @@ import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/databas
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -172,6 +171,14 @@ const statusLabels: Record<string, string> = {
   reservado: 'Reservado',
   pago: 'Pago',
   cancelado: 'Cancelado',
+  bloqueado: 'Bloqueado',
+};
+
+const blockReasonLabels: Record<string, string> = {
+  manutencao: 'Manutenção',
+  staff: 'Staff',
+  seguranca: 'Segurança',
+  outro: 'Outro',
 };
 
 // ── Helper to build TicketCardData ──
@@ -566,19 +573,22 @@ export default function Sales() {
 
   // ── Stats ──
   const stats = useMemo(() => {
+    // Exclude bloqueados from commercial stats
+    const commercialSales = sales.filter((s) => s.status !== 'bloqueado');
     const total = totalSalesCount;
-    const totalValue = sales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
-    const pagas = sales.filter((s) => s.status === 'pago').length;
-    const reservadas = sales.filter((s) => s.status === 'reservado').length;
-    const canceladas = sales.filter((s) => s.status === 'cancelado').length;
-    const paidSales = sales.filter((s) => s.status === 'pago');
+    const totalValue = commercialSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
+    const pagas = commercialSales.filter((s) => s.status === 'pago').length;
+    const reservadas = commercialSales.filter((s) => s.status === 'reservado').length;
+    const canceladas = commercialSales.filter((s) => s.status === 'cancelado').length;
+    const bloqueadas = sales.filter((s) => s.status === 'bloqueado').length;
+    const paidSales = commercialSales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
     const totalSellersCommission = paidSales.reduce((sum, sale) => {
       const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
       return sum + (saleGross * sellerCommissionPercent) / 100;
     }, 0);
-    return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalSellersCommission };
+    return { total, totalValue, pagas, reservadas, canceladas, bloqueadas, totalPlatformFee, totalSellersCommission };
   }, [sales, totalSalesCount]);
 
   // ── Flat data for export ──
@@ -911,6 +921,7 @@ export default function Sales() {
 
   // ── Actions dropdown ──
   const getSaleActions = (sale: Sale): ActionItem[] => {
+    const isBlock = sale.status === 'bloqueado';
     const feeStatus = (sale as any).platform_fee_status;
     const feePending = feeStatus === 'pending' || feeStatus === 'failed';
 
@@ -918,12 +929,22 @@ export default function Sales() {
       { label: 'Ver Detalhes', icon: Eye, onClick: () => openDetail(sale) },
     ];
 
+    // Bloqueios: apenas "Ver Detalhes" e "Liberar Bloqueio"
+    if (isBlock) {
+      actions.push({
+        label: 'Liberar Bloqueio',
+        icon: Ban,
+        onClick: () => setCancelSale(sale),
+        variant: 'destructive',
+      });
+      return actions;
+    }
+
     if (!feePending) {
       actions.push({ label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) });
     }
 
-    // Venda paga mantém ação oficial de geração de passagem operacional.
-    if (sale.status === 'pago' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
+    if (sale.status === 'pago' && !feePending) {
       actions.push({
         label: 'Gerar Passagem',
         icon: FileText,
@@ -931,9 +952,7 @@ export default function Sales() {
       });
     }
 
-    // Para reservado, oferecemos apenas visualização de comprovante descaracterizado.
-    // Reaproveita o mesmo modal de ticket, mas com modo visual de reserva no conteúdo.
-    if (sale.status === 'reservado' && sale.customer_name !== 'BLOQUEIO') {
+    if (sale.status === 'reservado') {
       actions.push({
         label: 'Ver Comprovante',
         icon: FileText,
@@ -951,7 +970,6 @@ export default function Sales() {
     }
 
     if (isGerente) {
-      // Ação: Pagar taxa da plataforma (quando pendente)
       if (feePending) {
         actions.push({
           label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
@@ -960,7 +978,6 @@ export default function Sales() {
         });
       }
 
-      // Regra de negócio: promoção manual para pago só é permitida após taxa confirmada.
       if (sale.status === 'reservado' && (feeStatus === 'paid' || feeStatus === 'not_applicable')) {
         actions.push({
           label: 'Marcar como Pago',
@@ -1065,6 +1082,7 @@ export default function Sales() {
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },
+                  { value: 'bloqueado', label: 'Bloqueado' },
                 ],
               },
             ]}
@@ -1218,25 +1236,30 @@ export default function Sales() {
                     const vehicle = (sale.trip as any)?.vehicle;
                     const seatLabels = seatLabelsMap[sale.id];
                     const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
+                    const isBlock = sale.status === 'bloqueado';
                     return (
-                      <TableRow key={sale.id}>
+                      <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
                         <TableCell className="text-sm whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
                         <TableCell className="text-sm">{formatEventDisplayName(sale.event) || '-'}</TableCell>
                         <TableCell>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-medium text-sm">{sale.customer_name}</p>
-                              {sale.customer_name === 'BLOQUEIO' && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Bloqueio</Badge>
+                          {isBlock ? (
+                            <div>
+                              <p className="font-medium text-sm text-muted-foreground">Bloqueio Operacional</p>
+                              <p className="text-xs text-muted-foreground">{blockReasonLabels[(sale as any).block_reason] ?? (sale as any).block_reason ?? '—'}</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-sm">{sale.customer_name}</p>
+                              </div>
+                              <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
+                              {sale.seller?.name && (
+                                <p className="text-xs text-muted-foreground mt-0.5">Vend: {sale.seller.name}</p>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
-                            {sale.seller?.name && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Vend: {sale.seller.name}</p>
-                            )}
-                          </div>
+                          )}
                         </TableCell>
                         {/* Embarque: veículo + local agrupados */}
                         <TableCell>
@@ -1252,7 +1275,7 @@ export default function Sales() {
                         {/* Passagem: quantidade + poltronas agrupados */}
                         <TableCell>
                           <div className="space-y-0.5">
-                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? 'passagem' : 'passagens'}</p>
+                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? (isBlock ? 'poltrona' : 'passagem') : (isBlock ? 'poltronas' : 'passagens')}</p>
                             {seatLabels && seatLabels.length > 3 ? (
                               <TooltipProvider>
                                 <Tooltip>
@@ -1269,7 +1292,7 @@ export default function Sales() {
                         </TableCell>
                         {canViewFinancials && (
                           <TableCell className="font-medium whitespace-nowrap text-sm">
-                            {formatCurrencyBRL((sale.quantity * sale.unit_price))}
+                            {isBlock ? '—' : formatCurrencyBRL((sale.quantity * sale.unit_price))}
                           </TableCell>
                         )}
                         <TableCell>
@@ -1442,7 +1465,7 @@ export default function Sales() {
         }}>
           <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
             <DialogHeader className="admin-modal__header px-6 py-4">
-              <DialogTitle>Detalhes da Venda</DialogTitle>
+              <DialogTitle>{detailSale?.status === 'bloqueado' ? 'Detalhes do Bloqueio' : 'Detalhes da Venda'}</DialogTitle>
             </DialogHeader>
             {detailSale && (
               <Tabs defaultValue="dados" className="flex h-full flex-col overflow-hidden">
@@ -1470,10 +1493,24 @@ export default function Sales() {
                     <>
                       {/* Tab: Dados */}
                       <TabsContent value="dados" className="mt-0 space-y-4">
+                        {detailSale.status === 'bloqueado' && (
+                          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                            ⚠️ Este registro é um bloqueio operacional, não uma venda.
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <InfoRow label="Cliente" value={detailSale.customer_name} />
-                          <InfoRow label="CPF" value={detailSale.customer_cpf} />
-                          <InfoRow label="Telefone" value={detailSale.customer_phone} />
+                          {detailSale.status === 'bloqueado' ? (
+                            <>
+                              <InfoRow label="Tipo" value="Bloqueio Operacional" />
+                              <InfoRow label="Motivo" value={blockReasonLabels[(detailSale as any).block_reason] ?? (detailSale as any).block_reason ?? '—'} />
+                            </>
+                          ) : (
+                            <>
+                              <InfoRow label="Cliente" value={detailSale.customer_name} />
+                              <InfoRow label="CPF" value={detailSale.customer_cpf} />
+                              <InfoRow label="Telefone" value={detailSale.customer_phone} />
+                            </>
+                          )}
                           <InfoRow label="Evento" value={detailSale.event?.name ?? '-'} />
                           <InfoRow
                             label="Veículo"
@@ -1488,7 +1525,7 @@ export default function Sales() {
                             label="Horário de Embarque"
                             value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
                           />
-                          <InfoRow label="Quantidade" value={String(detailSale.quantity)} />
+                          <InfoRow label="Quantidade" value={`${detailSale.quantity} ${detailSale.status === 'bloqueado' ? 'poltrona(s)' : ''}`} />
                           <InfoRow
                             label="Poltrona(s)"
                             value={detailTickets.length > 0 ? detailTickets.map(t => t.seat_label).sort((a, b) => {
@@ -1497,25 +1534,27 @@ export default function Sales() {
                               return a.localeCompare(b);
                             }).join(', ') : '-'}
                           />
-                          {canViewFinancials && (
+                          {canViewFinancials && detailSale.status !== 'bloqueado' && (
                             <>
                               <InfoRow label="Valor Unitário" value={formatCurrencyBRL(Number(detailSale.unit_price))} />
                               <InfoRow label="Valor Total" value={formatCurrencyBRL((detailSale.quantity * detailSale.unit_price))} />
                             </>
                           )}
-                          <InfoRow label="Vendedor" value={detailSale.seller?.name ?? '-'} />
+                          {detailSale.status !== 'bloqueado' && (
+                            <InfoRow label="Vendedor" value={detailSale.seller?.name ?? '-'} />
+                          )}
                           <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">Status</p>
                             <StatusBadge status={detailSale.status} />
                           </div>
                           <InfoRow
-                            label="Data da Compra"
+                            label={detailSale.status === 'bloqueado' ? 'Criado em' : 'Data da Compra'}
                             value={format(new Date(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           />
                         </div>
 
                         {/* Bloco de taxa da plataforma (vendas administrativas) */}
-                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && (
+                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && detailSale.status !== 'bloqueado' && (
                           <div className="mt-4 p-3 rounded-md border bg-muted/30 space-y-2">
                             <p className="text-sm font-semibold">Taxa da Plataforma</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
@@ -1682,9 +1721,12 @@ export default function Sales() {
         <AlertDialog open={!!cancelSale} onOpenChange={(open) => { if (!open) { setCancelSale(null); setCancelReason(''); } }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Cancelar Venda</AlertDialogTitle>
+              <AlertDialogTitle>{cancelSale?.status === 'bloqueado' ? 'Liberar Bloqueio' : 'Cancelar Venda'}</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta ação irá cancelar a venda de <strong>{cancelSale?.customer_name}</strong> e liberar os assentos. Esta ação não pode ser desfeita.
+                {cancelSale?.status === 'bloqueado'
+                  ? 'Esta ação irá liberar o bloqueio e tornar a(s) poltrona(s) disponível(is) novamente.'
+                  : <>Esta ação irá cancelar a venda de <strong>{cancelSale?.customer_name}</strong> e liberar os assentos. Esta ação não pode ser desfeita.</>
+                }
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-2 py-2">
