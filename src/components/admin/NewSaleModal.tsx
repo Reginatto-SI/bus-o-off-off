@@ -616,16 +616,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           customer_cpf: isBlock ? '00000000000' : passengers[0]?.cpf.replace(/\D/g, ''),
           customer_phone: isBlock ? '' : (passengers[0]?.phone?.replace(/\D/g, '') ?? ''),
           quantity,
-          unit_price: basePrice,
-          // Mantemos 'reservado' tanto para venda manual quanto para reserva/bloqueio até a etapa final do fluxo.
-          status: 'reservado',
+          unit_price: isBlock ? 0 : basePrice,
+          status: isBlock ? 'bloqueado' : 'reservado',
           gross_amount: grossTotal,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
-          // Campos de controle da taxa da plataforma (vendas manuais)
           sale_origin: saleOrigin,
           platform_fee_amount: platformFeeAmount,
-          platform_fee_status: hasPlatformFee ? 'pending' : 'not_applicable',
+          platform_fee_status: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
+          block_reason: isBlock ? blockReason : null,
         } as any)
         .select('id')
         .single();
