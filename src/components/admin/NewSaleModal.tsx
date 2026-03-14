@@ -1063,7 +1063,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             <SelectContent>
                               <SelectItem value="manutencao">Manutenção</SelectItem>
                               <SelectItem value="staff">Staff</SelectItem>
-                              <SelectItem value="cortesia">Cortesia</SelectItem>
                               <SelectItem value="seguranca">Segurança</SelectItem>
                               <SelectItem value="outro">Outro</SelectItem>
                             </SelectContent>
