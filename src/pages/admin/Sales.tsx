@@ -1237,25 +1237,30 @@ export default function Sales() {
                     const vehicle = (sale.trip as any)?.vehicle;
                     const seatLabels = seatLabelsMap[sale.id];
                     const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
+                    const isBlock = sale.status === 'bloqueado';
                     return (
-                      <TableRow key={sale.id}>
+                      <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
                         <TableCell className="text-sm whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                         </TableCell>
                         <TableCell className="text-sm">{formatEventDisplayName(sale.event) || '-'}</TableCell>
                         <TableCell>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-medium text-sm">{sale.customer_name}</p>
-                              {sale.customer_name === 'BLOQUEIO' && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Bloqueio</Badge>
+                          {isBlock ? (
+                            <div>
+                              <p className="font-medium text-sm text-muted-foreground">Bloqueio Operacional</p>
+                              <p className="text-xs text-muted-foreground">{blockReasonLabels[(sale as any).block_reason] ?? (sale as any).block_reason ?? '—'}</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-sm">{sale.customer_name}</p>
+                              </div>
+                              <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
+                              {sale.seller?.name && (
+                                <p className="text-xs text-muted-foreground mt-0.5">Vend: {sale.seller.name}</p>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
-                            {sale.seller?.name && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Vend: {sale.seller.name}</p>
-                            )}
-                          </div>
+                          )}
                         </TableCell>
                         {/* Embarque: veículo + local agrupados */}
                         <TableCell>
@@ -1271,7 +1276,7 @@ export default function Sales() {
                         {/* Passagem: quantidade + poltronas agrupados */}
                         <TableCell>
                           <div className="space-y-0.5">
-                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? 'passagem' : 'passagens'}</p>
+                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? (isBlock ? 'poltrona' : 'passagem') : (isBlock ? 'poltronas' : 'passagens')}</p>
                             {seatLabels && seatLabels.length > 3 ? (
                               <TooltipProvider>
                                 <Tooltip>
@@ -1288,7 +1293,7 @@ export default function Sales() {
                         </TableCell>
                         {canViewFinancials && (
                           <TableCell className="font-medium whitespace-nowrap text-sm">
-                            {formatCurrencyBRL((sale.quantity * sale.unit_price))}
+                            {isBlock ? '—' : formatCurrencyBRL((sale.quantity * sale.unit_price))}
                           </TableCell>
                         )}
                         <TableCell>
