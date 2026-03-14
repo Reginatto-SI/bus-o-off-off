@@ -678,7 +678,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         logDescription = `Reserva criada${observation ? `. Obs: ${observation}` : ''}`;
       } else {
         logAction = 'seat_block_created';
-        const reasonLabels: Record<string, string> = { manutencao: 'Manutenção', staff: 'Staff', cortesia: 'Cortesia', seguranca: 'Segurança', outro: 'Outro' };
+        const reasonLabels: Record<string, string> = { manutencao: 'Manutenção', staff: 'Staff', seguranca: 'Segurança', outro: 'Outro' };
         logDescription = `Poltrona bloqueada (${reasonLabels[blockReason] ?? blockReason})${observation ? `. Obs: ${observation}` : ''}`;
       }
 
