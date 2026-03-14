@@ -19,6 +19,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { SeatMap } from '@/components/public/SeatMap';
 import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import {
@@ -34,6 +43,10 @@ import {
   CheckCircle2,
   Users,
   CreditCard,
+  ChevronsUpDown,
+  Check,
+  Clock3,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -41,6 +54,7 @@ import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
+import { cn } from '@/lib/utils';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -77,6 +91,12 @@ interface NewSaleModalProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   company?: any;
+}
+
+interface TripAvailabilitySummary {
+  sold: number;
+  reserved: number;
+  blocked: number;
 }
 
 const vehicleTypeLabels: Record<string, string> = {
@@ -143,6 +163,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [loadingBoarding, setLoadingBoarding] = useState(false);
   const [tripSoldSeats, setTripSoldSeats] = useState<Record<string, number>>({});
+  const [tripAvailabilitySummary, setTripAvailabilitySummary] = useState<TripAvailabilitySummary>({
+    sold: 0,
+    reserved: 0,
+    blocked: 0,
+  });
+  const [eventComboboxOpen, setEventComboboxOpen] = useState(false);
+  const [eventComboboxSearch, setEventComboboxSearch] = useState('');
 
   // Step 2: Seats
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -179,6 +206,23 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const selectedVehicle = selectedTrip?.vehicle;
   const selectedTripSoldCount = selectedTripId ? (tripSoldSeats[selectedTripId] ?? 0) : 0;
   const selectedTripRemainingSeats = selectedVehicle ? Math.max(selectedVehicle.capacity - selectedTripSoldCount, 0) : 0;
+  const filteredEvents = useMemo(() => {
+    const search = eventComboboxSearch.trim().toLowerCase();
+    if (!search) return events;
+    return events.filter((event) => {
+      const label = `${event.name} ${event.city} ${formatDateOnlyBR(event.date)}`.toLowerCase();
+      return label.includes(search);
+    });
+  }, [events, eventComboboxSearch]);
+  const selectedEventLabel = selectedEvent
+    ? `${formatDateOnlyBR(selectedEvent.date)} — ${selectedEvent.name} (${selectedEvent.city})`
+    : 'Selecione o evento';
+  const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
+  const totalSeats = selectedVehicle?.capacity ?? 0;
+  const reservedSeats = tripAvailabilitySummary.reserved;
+  const soldSeats = tripAvailabilitySummary.sold;
+  const blockedSeats = tripAvailabilitySummary.blocked;
+  const availableSeats = Math.max(totalSeats - soldSeats - reservedSeats - blockedSeats, 0);
 
   // ── Reset on open/close ──
   useEffect(() => {
@@ -189,6 +233,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setSelectedTripId('');
       setSelectedReturnTripId(null);
       setIncludeReturnTrip(false);
+      setTripAvailabilitySummary({ sold: 0, reserved: 0, blocked: 0 });
       setSelectedBoardingId('');
       setSelectedSeats([]);
       setPassengers([]);
@@ -301,6 +346,35 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     };
     fetchTrips();
   }, [selectedEventId]);
+
+  useEffect(() => {
+    if (!selectedTripId || !activeCompanyId) {
+      setTripAvailabilitySummary({ sold: 0, reserved: 0, blocked: 0 });
+      return;
+    }
+
+    const fetchTripAvailabilitySummary = async () => {
+      const { data } = await supabase
+        .from('sales')
+        .select('status, quantity')
+        .eq('trip_id', selectedTripId)
+        .eq('company_id', activeCompanyId)
+        .neq('status', 'cancelado');
+
+      const summary = (data ?? []).reduce<TripAvailabilitySummary>((acc, sale: any) => {
+        const quantity = Number(sale.quantity ?? 0);
+        if (sale.status === 'pago') acc.sold += quantity;
+        if (sale.status === 'bloqueado') acc.blocked += quantity;
+        // pendente_pagamento entra como reservado para refletir indisponibilidade real.
+        if (sale.status === 'reservado' || sale.status === 'pendente_pagamento') acc.reserved += quantity;
+        return acc;
+      }, { sold: 0, reserved: 0, blocked: 0 });
+
+      setTripAvailabilitySummary(summary);
+    };
+
+    fetchTripAvailabilitySummary();
+  }, [selectedTripId, activeCompanyId]);
 
 
   useEffect(() => {
@@ -833,18 +907,74 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       {loadingEvents ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>
                       ) : (
-                        <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                          <SelectTrigger><SelectValue placeholder="Selecione o evento" /></SelectTrigger>
-                          <SelectContent>
-                            {events.map((e) => (
-                              <SelectItem key={e.id} value={e.id}>
-                                {formatDateOnlyBR(e.date)} — {e.name} ({e.city})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={eventComboboxOpen} onOpenChange={setEventComboboxOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={eventComboboxOpen}
+                              className={cn('w-full justify-between font-normal', !selectedEventId && 'text-muted-foreground')}
+                            >
+                              <span className="truncate">{selectedEventLabel}</span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Buscar evento..."
+                                value={eventComboboxSearch}
+                                onValueChange={setEventComboboxSearch}
+                              />
+                              <CommandList>
+                                <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {filteredEvents.map((event) => (
+                                    <CommandItem
+                                      key={event.id}
+                                      value={`${event.name} ${event.city}`}
+                                      onSelect={() => {
+                                        setSelectedEventId(event.id);
+                                        setEventComboboxOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
+                                      <span className="truncate">{formatDateOnlyBR(event.date)} — {event.name} ({event.city})</span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       )}
                     </div>
+
+                    {selectedEvent && (
+                      <div className="space-y-2 rounded-lg border bg-background/90 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do evento</p>
+                        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Evento</p>
+                            <p className="font-medium text-foreground">{selectedEvent.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Data</p>
+                            <p className="font-medium text-foreground">{formatDateOnlyBR(selectedEvent.date)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Destino</p>
+                            <p className="font-medium text-foreground">{selectedEvent.city}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Status</p>
+                            <Badge variant="secondary" className="capitalize">
+                              {selectedEvent.status.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Trip/Vehicle */}
                     <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
@@ -877,6 +1007,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                       )}
                       {!!selectedTrip && (
                         <div className="space-y-2 rounded-lg border bg-background/80 p-3 text-xs text-muted-foreground">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do transporte</p>
                           {groupedTransportPolicy && (
                             <div className="flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1">
                               <span>{mandatoryReturnPolicy ? 'Volta obrigatória' : 'Adicionar volta opcional'}</span>
@@ -926,6 +1057,35 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <p className="text-xs font-medium text-primary">Confira o horário de embarque para evitar atraso.</p>
                       )}
                     </div>
+
+                    {selectedBoarding && (
+                      <div className="space-y-2 rounded-lg border bg-background/90 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo do embarque</p>
+                        <div className="space-y-1 text-sm">
+                          <p className="font-medium text-foreground">{selectedBoarding.name}</p>
+                          <div className="flex flex-wrap gap-4 text-muted-foreground">
+                            <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {selectedBoarding.address || 'Endereço não informado'}</span>
+                            <span className="inline-flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {selectedBoarding.departure_time?.slice(0, 5) || '--:--'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {!!selectedTrip && (
+                      <div className="space-y-3 rounded-lg border bg-card p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-foreground">Disponibilidade do transporte</p>
+                          <Badge variant="secondary" className="text-primary">Disponíveis: {availableSeats}</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                          <div><p className="text-xs text-muted-foreground">Total</p><p className="font-medium">{totalSeats}</p></div>
+                          <div><p className="text-xs text-muted-foreground">Vendidos</p><p className="font-medium">{soldSeats}</p></div>
+                          <div><p className="text-xs text-muted-foreground">Reservados</p><p className="font-medium">{reservedSeats}</p></div>
+                          <div><p className="text-xs text-muted-foreground">Bloqueados</p><p className="font-medium">{blockedSeats}</p></div>
+                          <div><p className="text-xs text-muted-foreground">Disponíveis</p><p className="font-semibold text-primary">{availableSeats}</p></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1192,7 +1352,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   }}
                   disabled={step === 1 ? !canGoStep2 : !canGoStep3}
                 >
-                  Próximo <ChevronRight className="h-4 w-4 ml-1" />
+                  Continuar para assentos <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
               {step === 3 && (
