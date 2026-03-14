@@ -17,6 +17,7 @@ import { formatDateOnlyBR } from '@/lib/date';
 
 type TicketLookupResponseTicket = {
   ticketId: string;
+  ticketNumber?: string | null;
   qrCodeToken: string;
   passengerName: string;
   passengerCpf: string;
@@ -103,6 +104,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
 
     return {
       ticketId: ticket.ticketId,
+      ticketNumber: ticket.ticketNumber ?? null,
       qrCodeToken: ticket.qrCodeToken,
       passengerName: ticket.passengerName,
       passengerCpf: ticket.passengerCpf,

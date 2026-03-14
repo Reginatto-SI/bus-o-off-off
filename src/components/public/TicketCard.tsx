@@ -18,6 +18,7 @@ import { getTicketTransportOperatedByText, TICKET_PLATFORM_LIABILITY_TEXT, TICKE
 
 export interface TicketCardData {
   ticketId: string;
+  ticketNumber?: string | null;
   qrCodeToken: string;
   passengerName: string;
   passengerCpf: string;
@@ -123,6 +124,8 @@ export function TicketCard({
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
   const seatDisplayLabel = getFriendlySeatLabel(ticket.seatLabel);
+  const ticketNumberDisplay = ticket.ticketNumber || null;
+
 
   // Status visual: "processando" quando reservado mas com pagamento em andamento
   const hasPaymentPending = ticket.stripeCheckoutSessionId || ticket.asaasPaymentId;
@@ -254,6 +257,10 @@ export function TicketCard({
                 {isReservedReceipt && (
                   <Badge variant="outline" className="w-fit border-amber-500 bg-amber-50 text-amber-800">RESERVA</Badge>
                 )}
+                {/* Exibição oficial do número global da passagem (quando disponível), mantendo o layout padrão do card. */}
+                {ticketNumberDisplay && (
+                  <p className="text-xs font-semibold text-primary">Passagem Nº {ticketNumberDisplay}</p>
+                )}
                 <div className="flex items-center gap-2 font-semibold">
                   <Armchair className="h-4 w-4" style={{ color: accentColor }} />
                   Assento {seatDisplayLabel}
@@ -283,6 +290,12 @@ export function TicketCard({
                   <User className="h-3.5 w-3.5" />
                   CPF: {maskCpf(ticket.passengerCpf)}
                 </div>
+                {ticketNumberDisplay && (
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-3.5 w-3.5" />
+                    Passagem Nº {ticketNumberDisplay}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Armchair className="h-3.5 w-3.5" />
                   Assento {seatDisplayLabel}

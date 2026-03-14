@@ -509,6 +509,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
     return {
       ticketId: ticket.id,
+      ticketNumber: ticket.ticket_number,
       qrCodeToken: ticket.qr_code_token,
       passengerName: ticket.passenger_name,
       passengerCpf: ticket.passenger_cpf,

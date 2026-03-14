@@ -222,6 +222,7 @@ export interface TicketRecord {
   passenger_phone: string | null;
   boarding_status: string;
   qr_code_token: string;
+  ticket_number: string | null;
   company_id: string;
   created_at: string;
   updated_at: string;
