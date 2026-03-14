@@ -172,6 +172,14 @@ const statusLabels: Record<string, string> = {
   reservado: 'Reservado',
   pago: 'Pago',
   cancelado: 'Cancelado',
+  bloqueado: 'Bloqueado',
+};
+
+const blockReasonLabels: Record<string, string> = {
+  manutencao: 'Manutenção',
+  staff: 'Staff',
+  seguranca: 'Segurança',
+  outro: 'Outro',
 };
 
 // ── Helper to build TicketCardData ──
