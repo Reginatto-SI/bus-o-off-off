@@ -1466,7 +1466,7 @@ export default function Sales() {
         }}>
           <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
             <DialogHeader className="admin-modal__header px-6 py-4">
-              <DialogTitle>Detalhes da Venda</DialogTitle>
+              <DialogTitle>{detailSale?.status === 'bloqueado' ? 'Detalhes do Bloqueio' : 'Detalhes da Venda'}</DialogTitle>
             </DialogHeader>
             {detailSale && (
               <Tabs defaultValue="dados" className="flex h-full flex-col overflow-hidden">
