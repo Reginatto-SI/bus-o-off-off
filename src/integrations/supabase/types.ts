@@ -975,6 +975,7 @@ export type Database = {
           asaas_payment_id: string | null
           asaas_payment_status: string | null
           asaas_transfer_id: string | null
+          block_reason: string | null
           boarding_location_id: string
           cancel_reason: string | null
           cancelled_at: string | null
@@ -1010,6 +1011,7 @@ export type Database = {
           asaas_payment_id?: string | null
           asaas_payment_status?: string | null
           asaas_transfer_id?: string | null
+          block_reason?: string | null
           boarding_location_id: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -1045,6 +1047,7 @@ export type Database = {
           asaas_payment_id?: string | null
           asaas_payment_status?: string | null
           asaas_transfer_id?: string | null
+          block_reason?: string | null
           boarding_location_id?: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -2049,7 +2052,12 @@ export type Database = {
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"
-      sale_status: "pendente_pagamento" | "reservado" | "pago" | "cancelado"
+      sale_status:
+        | "pendente_pagamento"
+        | "reservado"
+        | "pago"
+        | "cancelado"
+        | "bloqueado"
       seller_status: "ativo" | "inativo"
       user_role: "gerente" | "operador" | "vendedor" | "motorista" | "developer"
       vehicle_type: "onibus" | "van" | "micro_onibus"
@@ -2181,7 +2189,13 @@ export const Constants = {
   public: {
     Enums: {
       event_status: ["rascunho", "a_venda", "encerrado"],
-      sale_status: ["pendente_pagamento", "reservado", "pago", "cancelado"],
+      sale_status: [
+        "pendente_pagamento",
+        "reservado",
+        "pago",
+        "cancelado",
+        "bloqueado",
+      ],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista", "developer"],
       vehicle_type: ["onibus", "van", "micro_onibus"],
