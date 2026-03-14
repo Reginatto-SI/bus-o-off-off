@@ -400,8 +400,7 @@ export default function Checkout() {
         .from('sales')
         .select('id')
         .in('id', saleIds)
-        .eq('customer_name', 'BLOQUEIO')
-        .neq('status', 'cancelado');
+        .eq('status', 'bloqueado');
       blockedSales = new Set((blockedSalesData ?? []).map((s: { id: string }) => s.id));
     }
 

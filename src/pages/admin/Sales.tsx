@@ -1555,7 +1555,7 @@ export default function Sales() {
                         </div>
 
                         {/* Bloco de taxa da plataforma (vendas administrativas) */}
-                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && (
+                        {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && detailSale.status !== 'bloqueado' && (
                           <div className="mt-4 p-3 rounded-md border bg-muted/30 space-y-2">
                             <p className="text-sm font-semibold">Taxa da Plataforma</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
