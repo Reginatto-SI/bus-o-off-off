@@ -4,7 +4,6 @@ import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/databas
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
