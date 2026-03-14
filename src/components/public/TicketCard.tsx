@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { getTicketTransportOperatedByText, TICKET_PLATFORM_LIABILITY_TEXT, TICKET_PLATFORM_SALES_TEXT } from '@/lib/intermediationPolicy';
 
 export interface TicketCardData {
   ticketId: string;
@@ -430,6 +431,13 @@ export function TicketCard({
               <p className="font-medium text-foreground text-sm mb-1">Observações Operacionais</p>
               <p>• É obrigatório apresentar documento oficial com foto no momento do embarque.</p>
               <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
+            </div>
+
+            {/* Rodapé institucional na passagem oficial para reforçar intermediação em tela, impressão e PDF. */}
+            <div className="border-t pt-2 mt-2 space-y-1 text-xs text-muted-foreground">
+              <p>{getTicketTransportOperatedByText(ticket.companyName || 'empresa organizadora')}</p>
+              <p>{TICKET_PLATFORM_SALES_TEXT}</p>
+              <p>{TICKET_PLATFORM_LIABILITY_TEXT}</p>
             </div>
 
             {/* Fee breakdown */}

@@ -18,6 +18,7 @@ import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
+import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 
 interface CompanyInfo {
   name: string;
@@ -570,6 +571,19 @@ export default function Confirmation() {
             )}
           </CardContent>
         </Card>
+
+        {/* Reforço institucional pós-compra: mantém clareza jurídica sem atrapalhar a confirmação principal. */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Informações importantes sobre sua compra</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {getConfirmationResponsibilityText(companyDisplayName || 'empresa organizadora')}
+            </p>
+          </CardContent>
+        </Card>
+
 
         <div className="bg-muted/50 rounded-lg p-4 mb-6">
           <p className="text-sm text-muted-foreground text-center">

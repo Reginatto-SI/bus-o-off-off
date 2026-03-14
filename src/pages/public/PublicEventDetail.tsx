@@ -17,6 +17,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { parseDateOnlyAsLocal } from '@/lib/date';
 import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
+import {
+  getTransportResponsibilityIntro,
+  TRANSPORT_RESPONSIBILITY_DETAILS,
+} from '@/lib/intermediationPolicy';
 
 type TransportPolicy = Event['transport_policy'];
 
@@ -44,6 +48,7 @@ export default function PublicEventDetail() {
   const [isInfoDrawerOpen, setIsInfoDrawerOpen] = useState(false);
   const [isDescriptionDialogOpen, setIsDescriptionDialogOpen] = useState(false);
   const [supportWhatsapp, setSupportWhatsapp] = useState<string | null>(null);
+  const [eventCompanyName, setEventCompanyName] = useState('empresa organizadora');
 
   const transportPolicy: TransportPolicy = event?.transport_policy ?? 'trecho_independente';
   const groupedPolicy = isGroupedPolicy(transportPolicy);
@@ -80,20 +85,21 @@ export default function PublicEventDetail() {
         const eventData = eventRes.data as Event & { whatsapp?: string | null };
         setEvent(eventData as Event);
 
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('name, trade_name, whatsapp')
+          .eq('id', eventData.company_id)
+          .single();
+
+        // Transparência jurídica: resolvemos aqui o nome oficial exibido em todos os avisos públicos.
+        setEventCompanyName(companyData?.trade_name || companyData?.name || 'empresa organizadora');
+
         // Prioridade de suporte: WhatsApp no evento (quando existir) e fallback para WhatsApp da empresa.
         const eventWhatsapp = eventData.whatsapp?.trim() || null;
-        if (eventWhatsapp) {
-          setSupportWhatsapp(eventWhatsapp);
-        } else {
-          const { data: companyData } = await supabase
-            .from('companies')
-            .select('whatsapp')
-            .eq('id', eventData.company_id)
-            .single();
-          setSupportWhatsapp(companyData?.whatsapp ?? null);
-        }
+        setSupportWhatsapp(eventWhatsapp || companyData?.whatsapp || null);
       } else {
         setSupportWhatsapp(null);
+        setEventCompanyName('empresa organizadora');
       }
 
       const fetchedTrips = (tripsRes.data ?? []) as Trip[];
@@ -269,6 +275,13 @@ export default function PublicEventDetail() {
         </Button>
 
         <EventSummaryCard event={event} compact />
+
+        {/* Aviso institucional discreto para reforçar intermediação da plataforma sem bloquear conversão. */}
+        <section className="rounded-lg border bg-card p-4 space-y-2">
+          <h2 className="text-base font-semibold">Responsável pelo transporte</h2>
+          <p className="text-sm text-muted-foreground">{getTransportResponsibilityIntro(eventCompanyName)}</p>
+          <p className="text-sm text-muted-foreground">{TRANSPORT_RESPONSIBILITY_DETAILS}</p>
+        </section>
 
         {/* Exibe a descrição pública do evento em card compacto somente quando houver conteúdo preenchido. */}
         {hasEventDescription && (

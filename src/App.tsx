@@ -48,6 +48,7 @@ import SellerRedirect from "./pages/public/SellerRedirect";
 import CompanyRegistration from "./pages/public/CompanyRegistration";
 import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
+import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 
 import NotFound from "./pages/NotFound";
 
@@ -80,6 +81,7 @@ const App = () => (
             {/* Redirect legado para manter links antigos de onboarding público. */}
             <Route path="/cadastro-empresa" element={<Navigate to="/cadastro" replace />} />
             <Route path="/empresa/:nick" element={<PublicCompanyShowcase />} />
+            <Route path="/politica-de-intermediacao" element={<IntermediationPolicy />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
