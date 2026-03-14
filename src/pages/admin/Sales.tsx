@@ -1083,6 +1083,7 @@ export default function Sales() {
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },
+                  { value: 'bloqueado', label: 'Bloqueado' },
                 ],
               },
             ]}
