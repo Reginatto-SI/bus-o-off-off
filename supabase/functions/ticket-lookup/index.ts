@@ -155,6 +155,7 @@ serve(async (req) => {
       // Return only the fields the frontend needs
       results.push({
         ticketId: t.id,
+        ticketNumber: t.ticket_number || null,
         saleId: t.sale_id,
         stripeCheckoutSessionId: t.sale?.stripe_checkout_session_id || null,
         qrCodeToken: t.qr_code_token,

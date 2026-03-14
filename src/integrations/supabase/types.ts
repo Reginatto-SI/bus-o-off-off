@@ -1604,6 +1604,7 @@ export type Database = {
           sale_id: string
           seat_id: string | null
           seat_label: string
+          ticket_number: string | null
           trip_id: string
           updated_at: string
         }
@@ -1619,6 +1620,7 @@ export type Database = {
           sale_id: string
           seat_id?: string | null
           seat_label: string
+          ticket_number?: string | null
           trip_id: string
           updated_at?: string
         }
@@ -1634,6 +1636,7 @@ export type Database = {
           sale_id?: string
           seat_id?: string | null
           seat_label?: string
+          ticket_number?: string | null
           trip_id?: string
           updated_at?: string
         }

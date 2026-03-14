@@ -254,6 +254,7 @@ export default function Confirmation() {
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(company?.cnpj);
 
+  // Encaminha ticket_number para o card oficial da passagem (mesmo template de tela/PDF).
   const ticketCards: TicketCardData[] = tickets.map((t) => {
     const unitPrice = sale?.unit_price ?? 0;
     const totalPaidPerTicket = feeLines.length > 0 && sale
@@ -264,6 +265,7 @@ export default function Confirmation() {
 
     return {
       ticketId: t.id,
+      ticketNumber: t.ticket_number,
       qrCodeToken: t.qr_code_token,
       passengerName: t.passenger_name,
       passengerCpf: t.passenger_cpf,

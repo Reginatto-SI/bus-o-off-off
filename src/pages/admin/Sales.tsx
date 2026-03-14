@@ -197,6 +197,7 @@ function buildTicketCardData(
   const companyDisplayName = company?.trade_name || company?.name || '';
   return {
     ticketId: ticket.id,
+    ticketNumber: ticket.ticket_number,
     qrCodeToken: ticket.qr_code_token,
     passengerName: ticket.passenger_name,
     passengerCpf: ticket.passenger_cpf,
@@ -248,6 +249,7 @@ export default function Sales() {
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
+  const [ticketNumbersMap, setTicketNumbersMap] = useState<Record<string, string[]>>({});
   const [boardingTimeMap, setBoardingTimeMap] = useState<Record<string, string | null>>({});
   // Ordenação ativa (nullable): quando null, aplica o padrão da tela (Data da Compra desc).
   const [sortConfig, setSortConfig] = useState<{ field: SalesSortField; direction: SalesSortDirection } | null>(null);
@@ -352,7 +354,52 @@ export default function Sales() {
 
     if (filters.search.trim()) {
       const searchTerm = filters.search.trim();
-      query = query.or(`customer_name.ilike.%${searchTerm}%,customer_cpf.ilike.%${searchTerm}%`);
+
+      // Busca ampliada: além do cliente da venda, inclui número oficial da passagem (ticket_number),
+      // dados do passageiro no ticket individual e nome do evento, sem mudar a arquitetura da listagem.
+      let saleIdsFromTicketSearch: string[] = [];
+      let eventIdsFromSearch: string[] = [];
+
+      let ticketSearchQuery = supabase
+        .from('tickets')
+        .select('sale_id')
+        .or(`ticket_number.ilike.%${searchTerm}%,passenger_name.ilike.%${searchTerm}%,passenger_cpf.ilike.%${searchTerm}%`)
+        .limit(300);
+
+      if (activeCompanyId) {
+        ticketSearchQuery = ticketSearchQuery.eq('company_id', activeCompanyId);
+      }
+
+      const { data: ticketSearchRows } = await ticketSearchQuery;
+      saleIdsFromTicketSearch = Array.from(new Set((ticketSearchRows ?? []).map((row: any) => row.sale_id).filter(Boolean)));
+
+      let eventSearchQuery = supabase
+        .from('events')
+        .select('id')
+        .ilike('name', `%${searchTerm}%`)
+        .limit(100);
+
+      if (activeCompanyId) {
+        eventSearchQuery = eventSearchQuery.eq('company_id', activeCompanyId);
+      }
+
+      const { data: eventSearchRows } = await eventSearchQuery;
+      eventIdsFromSearch = Array.from(new Set((eventSearchRows ?? []).map((row: any) => row.id).filter(Boolean)));
+
+      const orParts = [
+        `customer_name.ilike.%${searchTerm}%`,
+        `customer_cpf.ilike.%${searchTerm}%`,
+      ];
+
+      if (saleIdsFromTicketSearch.length > 0) {
+        orParts.push(`id.in.(${saleIdsFromTicketSearch.join(',')})`);
+      }
+
+      if (eventIdsFromSearch.length > 0) {
+        orParts.push(`event_id.in.(${eventIdsFromSearch.join(',')})`);
+      }
+
+      query = query.or(orParts.join(','));
     }
 
     if (filters.status !== 'all') {
@@ -397,7 +444,7 @@ export default function Sales() {
     if (saleIds.length > 0) {
       let ticketQuery = supabase
         .from('tickets')
-        .select('sale_id, seat_label')
+        .select('sale_id, seat_label, ticket_number')
         .in('sale_id', saleIds);
 
       if (activeCompanyId) {
@@ -406,11 +453,18 @@ export default function Sales() {
 
       const { data: ticketData } = await ticketQuery;
       const map: Record<string, string[]> = {};
+      const ticketNumberBySale: Record<string, string[]> = {};
       (ticketData ?? []).forEach((ticket: any) => {
         if (!map[ticket.sale_id]) map[ticket.sale_id] = [];
         map[ticket.sale_id].push(ticket.seat_label);
+
+        if (ticket.ticket_number) {
+          if (!ticketNumberBySale[ticket.sale_id]) ticketNumberBySale[ticket.sale_id] = [];
+          ticketNumberBySale[ticket.sale_id].push(ticket.ticket_number);
+        }
       });
       setSeatLabelsMap(map);
+      setTicketNumbersMap(ticketNumberBySale);
 
       const boardingKeys = Array.from(new Set((data ?? []).map((sale: any) => `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`)));
       const eventIds = Array.from(new Set((data ?? []).map((sale: any) => sale.event_id)));
@@ -442,6 +496,7 @@ export default function Sales() {
       setBoardingTimeMap(nextBoardingMap);
     } else {
       setSeatLabelsMap({});
+      setTicketNumbersMap({});
       setBoardingTimeMap({});
     }
 
@@ -1084,8 +1139,8 @@ export default function Sales() {
           <FilterCard
             searchValue={filters.search}
             onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
-            searchPlaceholder="Buscar por nome ou CPF..."
-            searchLabel="Cliente"
+            searchPlaceholder="Buscar por nº da passagem, nome, CPF ou evento..."
+            searchLabel="Busca geral"
             selects={[
               {
                 id: 'status',
@@ -1251,6 +1306,7 @@ export default function Sales() {
                   {sales.map((sale) => {
                     const vehicle = (sale.trip as any)?.vehicle;
                     const seatLabels = seatLabelsMap[sale.id];
+                    const ticketNumbers = ticketNumbersMap[sale.id] ?? [];
                     const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
                     const isBlock = sale.status === 'bloqueado';
                     return (
@@ -1292,6 +1348,10 @@ export default function Sales() {
                         <TableCell>
                           <div className="space-y-0.5">
                             <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? (isBlock ? 'poltrona' : 'passagem') : (isBlock ? 'poltronas' : 'passagens')}</p>
+                            {/* Número oficial da passagem visível na listagem para suporte operacional rápido. */}
+                            {!isBlock && ticketNumbers.length > 0 && (
+                              <p className="text-xs text-muted-foreground">Nº {ticketNumbers[0]}{ticketNumbers.length > 1 ? ` +${ticketNumbers.length - 1}` : ''}</p>
+                            )}
                             {seatLabels && seatLabels.length > 3 ? (
                               <TooltipProvider>
                                 <Tooltip>
