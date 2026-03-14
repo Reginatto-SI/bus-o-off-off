@@ -398,13 +398,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       if (saleIds.length > 0) {
         const { data: salesData } = await supabase
           .from('sales')
-          .select('id, customer_name, status')
+          .select('id, status')
           .in('id', saleIds);
 
-        // Bloqueio operacional: customer_name = 'BLOQUEIO' e status != 'cancelado'
+        // Bloqueio operacional: status = 'bloqueado' e não cancelado
         blockSaleIds = new Set(
           (salesData ?? [])
-            .filter((s: any) => s.customer_name === 'BLOQUEIO' && s.status !== 'cancelado')
+            .filter((s: any) => s.status === 'bloqueado')
             .map((s: any) => s.id)
         );
       }
