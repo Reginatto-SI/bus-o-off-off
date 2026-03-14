@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, BoardingLocation, Seat } from '@/types/database';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Collapsible,
   CollapsibleContent,
@@ -32,6 +33,11 @@ import {
 import { toast } from 'sonner';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { formatPhoneBR } from '@/lib/phone';
+import {
+  CHECKOUT_RESPONSIBILITY_HELPER_TEXT,
+  CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE,
+  getCheckoutResponsibilityAcceptanceLabel,
+} from '@/lib/intermediationPolicy';
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -118,6 +124,8 @@ export default function Checkout() {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  // Aceite jurídico obrigatório no passo final para registrar ciência da intermediação da Smartbus BR.
+  const [intermediationAccepted, setIntermediationAccepted] = useState(false);
   const mandatoryRoundTrip = event?.transport_policy === 'ida_volta_obrigatorio';
 
   // Helper: get price for a seat based on category pricing
@@ -131,6 +139,7 @@ export default function Checkout() {
   };
 
   const usesCategoryPricing = Boolean((event as any)?.use_category_pricing);
+  const eventCompanyName = (event as any)?.company?.trade_name || (event as any)?.company?.name || 'empresa organizadora';
   const hasMixedPrices = usesCategoryPricing && selectedSeats.length > 0 && new Set(selectedSeats.map(getSeatPrice)).size > 1;
 
   const seatLabels = useMemo(
@@ -254,7 +263,7 @@ export default function Checkout() {
 
       try {
         const [eventRes, tripRes, locationRes] = await Promise.all([
-          supabase.from('events').select('*').eq('id', id).single(),
+          supabase.from('events').select('*, company:companies(name, trade_name)').eq('id', id).single(),
           supabase.from('trips').select('*, vehicle:vehicles(*)').eq('id', tripId).single(),
           supabase.from('boarding_locations').select('*').eq('id', locationId).single(),
         ]);
@@ -526,6 +535,11 @@ export default function Checkout() {
     }
     if (!event || !trip || !location) return;
 
+    if (!intermediationAccepted) {
+      toast.error(CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE);
+      return;
+    }
+
     setSubmitting(true);
 
     // Revalidate seats before creating sale
@@ -645,6 +659,9 @@ export default function Checkout() {
         gross_amount: grossAmount,
         status: 'pendente_pagamento' as const,
         payment_method: paymentMethod,
+        // Lastro de aceite: registramos data/hora para auditoria da ciência do comprador no checkout público.
+        intermediation_responsibility_accepted: true,
+        intermediation_responsibility_accepted_at: new Date().toISOString(),
         company_id: event.company_id,
       })
       .select()
@@ -1095,6 +1112,27 @@ export default function Checkout() {
                 </div>
               </label>
             </RadioGroup>
+
+            {/* Aceite explícito obrigatório: reforça transparência sobre papel da plataforma e responsabilidade operacional da organizadora. */}
+            <div className={`rounded-lg border p-4 space-y-2 ${!intermediationAccepted ? 'border-orange-500/40 bg-orange-500/5' : 'bg-card'}`}>
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="intermediation-acceptance"
+                  checked={intermediationAccepted}
+                  onCheckedChange={(checked) => setIntermediationAccepted(checked === true)}
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="intermediation-acceptance" className="cursor-pointer leading-snug">
+                    {getCheckoutResponsibilityAcceptanceLabel(eventCompanyName)}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{CHECKOUT_RESPONSIBILITY_HELPER_TEXT}</p>
+                  <Link to="/politica-de-intermediacao" target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline underline-offset-2">
+                    Ler política de intermediação e responsabilidade
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1138,7 +1176,7 @@ export default function Checkout() {
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
               </Button>
             ) : (
-              <Button className="h-10 px-4" disabled={submitting} onClick={handleSubmit}>
+              <Button className="h-10 px-4" disabled={submitting || !intermediationAccepted} onClick={handleSubmit}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar para pagamento'}
               </Button>
             )}

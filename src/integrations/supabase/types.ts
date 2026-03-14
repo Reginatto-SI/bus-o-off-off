@@ -988,6 +988,8 @@ export type Database = {
           event_id: string
           gross_amount: number | null
           id: string
+          intermediation_responsibility_accepted: boolean
+          intermediation_responsibility_accepted_at: string | null
           partner_fee_amount: number | null
           payment_method: string | null
           platform_fee_amount: number | null
@@ -1024,6 +1026,8 @@ export type Database = {
           event_id: string
           gross_amount?: number | null
           id?: string
+          intermediation_responsibility_accepted?: boolean
+          intermediation_responsibility_accepted_at?: string | null
           partner_fee_amount?: number | null
           payment_method?: string | null
           platform_fee_amount?: number | null
@@ -1060,6 +1064,8 @@ export type Database = {
           event_id?: string
           gross_amount?: number | null
           id?: string
+          intermediation_responsibility_accepted?: boolean
+          intermediation_responsibility_accepted_at?: string | null
           partner_fee_amount?: number | null
           payment_method?: string | null
           platform_fee_amount?: number | null
