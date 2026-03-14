@@ -574,19 +574,22 @@ export default function Sales() {
 
   // ── Stats ──
   const stats = useMemo(() => {
+    // Exclude bloqueados from commercial stats
+    const commercialSales = sales.filter((s) => s.status !== 'bloqueado');
     const total = totalSalesCount;
-    const totalValue = sales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
-    const pagas = sales.filter((s) => s.status === 'pago').length;
-    const reservadas = sales.filter((s) => s.status === 'reservado').length;
-    const canceladas = sales.filter((s) => s.status === 'cancelado').length;
-    const paidSales = sales.filter((s) => s.status === 'pago');
+    const totalValue = commercialSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
+    const pagas = commercialSales.filter((s) => s.status === 'pago').length;
+    const reservadas = commercialSales.filter((s) => s.status === 'reservado').length;
+    const canceladas = commercialSales.filter((s) => s.status === 'cancelado').length;
+    const bloqueadas = sales.filter((s) => s.status === 'bloqueado').length;
+    const paidSales = commercialSales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
     const totalSellersCommission = paidSales.reduce((sum, sale) => {
       const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
       return sum + (saleGross * sellerCommissionPercent) / 100;
     }, 0);
-    return { total, totalValue, pagas, reservadas, canceladas, totalPlatformFee, totalSellersCommission };
+    return { total, totalValue, pagas, reservadas, canceladas, bloqueadas, totalPlatformFee, totalSellersCommission };
   }, [sales, totalSalesCount]);
 
   // ── Flat data for export ──
