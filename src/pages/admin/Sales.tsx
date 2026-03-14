@@ -1494,10 +1494,24 @@ export default function Sales() {
                     <>
                       {/* Tab: Dados */}
                       <TabsContent value="dados" className="mt-0 space-y-4">
+                        {detailSale.status === 'bloqueado' && (
+                          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                            ⚠️ Este registro é um bloqueio operacional, não uma venda.
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <InfoRow label="Cliente" value={detailSale.customer_name} />
-                          <InfoRow label="CPF" value={detailSale.customer_cpf} />
-                          <InfoRow label="Telefone" value={detailSale.customer_phone} />
+                          {detailSale.status === 'bloqueado' ? (
+                            <>
+                              <InfoRow label="Tipo" value="Bloqueio Operacional" />
+                              <InfoRow label="Motivo" value={blockReasonLabels[(detailSale as any).block_reason] ?? (detailSale as any).block_reason ?? '—'} />
+                            </>
+                          ) : (
+                            <>
+                              <InfoRow label="Cliente" value={detailSale.customer_name} />
+                              <InfoRow label="CPF" value={detailSale.customer_cpf} />
+                              <InfoRow label="Telefone" value={detailSale.customer_phone} />
+                            </>
+                          )}
                           <InfoRow label="Evento" value={detailSale.event?.name ?? '-'} />
                           <InfoRow
                             label="Veículo"
@@ -1512,7 +1526,7 @@ export default function Sales() {
                             label="Horário de Embarque"
                             value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
                           />
-                          <InfoRow label="Quantidade" value={String(detailSale.quantity)} />
+                          <InfoRow label="Quantidade" value={`${detailSale.quantity} ${detailSale.status === 'bloqueado' ? 'poltrona(s)' : ''}`} />
                           <InfoRow
                             label="Poltrona(s)"
                             value={detailTickets.length > 0 ? detailTickets.map(t => t.seat_label).sort((a, b) => {
@@ -1521,19 +1535,21 @@ export default function Sales() {
                               return a.localeCompare(b);
                             }).join(', ') : '-'}
                           />
-                          {canViewFinancials && (
+                          {canViewFinancials && detailSale.status !== 'bloqueado' && (
                             <>
                               <InfoRow label="Valor Unitário" value={formatCurrencyBRL(Number(detailSale.unit_price))} />
                               <InfoRow label="Valor Total" value={formatCurrencyBRL((detailSale.quantity * detailSale.unit_price))} />
                             </>
                           )}
-                          <InfoRow label="Vendedor" value={detailSale.seller?.name ?? '-'} />
+                          {detailSale.status !== 'bloqueado' && (
+                            <InfoRow label="Vendedor" value={detailSale.seller?.name ?? '-'} />
+                          )}
                           <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">Status</p>
                             <StatusBadge status={detailSale.status} />
                           </div>
                           <InfoRow
-                            label="Data da Compra"
+                            label={detailSale.status === 'bloqueado' ? 'Criado em' : 'Data da Compra'}
                             value={format(new Date(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           />
                         </div>
