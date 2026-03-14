@@ -362,8 +362,8 @@ export default function Events() {
     platform_fee_terms_accepted: false,
     platform_fee_terms_accepted_at: null as string | null,
     image_url: '' as string | null,
-    // Padrão comercial oficial para novos eventos: Ida obrigatória + Volta opcional.
-    transport_policy: 'ida_obrigatoria_volta_opcional' as TransportPolicy,
+    // Novo padrão de criação: 90% dos eventos operam com ida e volta obrigatória.
+    transport_policy: 'ida_volta_obrigatorio' as TransportPolicy,
     use_category_pricing: false,
   });
 
@@ -2116,7 +2116,8 @@ export default function Events() {
       platform_fee_terms_accepted: false,
       platform_fee_terms_accepted_at: null,
       image_url: null,
-      transport_policy: 'ida_obrigatoria_volta_opcional',
+      // Mantém o mesmo default ao reabrir/limpar o modal de criação.
+      transport_policy: 'ida_volta_obrigatorio',
       use_category_pricing: false,
     });
     setCategoryPrices([]);
