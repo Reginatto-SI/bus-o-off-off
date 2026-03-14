@@ -922,6 +922,7 @@ export default function Sales() {
 
   // ── Actions dropdown ──
   const getSaleActions = (sale: Sale): ActionItem[] => {
+    const isBlock = sale.status === 'bloqueado';
     const feeStatus = (sale as any).platform_fee_status;
     const feePending = feeStatus === 'pending' || feeStatus === 'failed';
 
@@ -929,12 +930,22 @@ export default function Sales() {
       { label: 'Ver Detalhes', icon: Eye, onClick: () => openDetail(sale) },
     ];
 
+    // Bloqueios: apenas "Ver Detalhes" e "Liberar Bloqueio"
+    if (isBlock) {
+      actions.push({
+        label: 'Liberar Bloqueio',
+        icon: Ban,
+        onClick: () => setCancelSale(sale),
+        variant: 'destructive',
+      });
+      return actions;
+    }
+
     if (!feePending) {
       actions.push({ label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) });
     }
 
-    // Venda paga mantém ação oficial de geração de passagem operacional.
-    if (sale.status === 'pago' && sale.customer_name !== 'BLOQUEIO' && !feePending) {
+    if (sale.status === 'pago' && !feePending) {
       actions.push({
         label: 'Gerar Passagem',
         icon: FileText,
@@ -942,9 +953,7 @@ export default function Sales() {
       });
     }
 
-    // Para reservado, oferecemos apenas visualização de comprovante descaracterizado.
-    // Reaproveita o mesmo modal de ticket, mas com modo visual de reserva no conteúdo.
-    if (sale.status === 'reservado' && sale.customer_name !== 'BLOQUEIO') {
+    if (sale.status === 'reservado') {
       actions.push({
         label: 'Ver Comprovante',
         icon: FileText,
@@ -962,7 +971,6 @@ export default function Sales() {
     }
 
     if (isGerente) {
-      // Ação: Pagar taxa da plataforma (quando pendente)
       if (feePending) {
         actions.push({
           label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
@@ -971,7 +979,6 @@ export default function Sales() {
         });
       }
 
-      // Regra de negócio: promoção manual para pago só é permitida após taxa confirmada.
       if (sale.status === 'reservado' && (feeStatus === 'paid' || feeStatus === 'not_applicable')) {
         actions.push({
           label: 'Marcar como Pago',
