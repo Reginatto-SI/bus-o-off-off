@@ -1,4 +1,4 @@
-import { Bell, Building2, ChevronDown, LogOut, User, Check } from 'lucide-react';
+import { Bell, Building2, ChevronDown, LogOut, User, Check, AlertTriangle, CheckCircle2, Info, Siren } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { Button } from '@/components/ui/button';
@@ -15,65 +15,22 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { useState } from 'react';
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: Date;
-  action?: {
-    label: string;
-    href: string;
-  };
-}
-
-// Mock notifications - será substituído por dados reais do banco
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    title: 'Novo evento criado',
-    message: 'O evento "Show de Rock" foi criado com sucesso.',
-    read: false,
-    createdAt: new Date(),
-    action: { label: 'Ver evento', href: '/admin/eventos' },
-  },
-  {
-    id: '2',
-    title: 'Venda confirmada',
-    message: '5 passagens vendidas para o evento "Festival de Verão".',
-    read: false,
-    createdAt: new Date(Date.now() - 3600000),
-    action: { label: 'Ver vendas', href: '/admin/vendas' },
-  },
-  {
-    id: '3',
-    title: 'Capacidade baixa',
-    message: 'O ônibus ABC-1234 está com 90% da capacidade ocupada.',
-    read: true,
-    createdAt: new Date(Date.now() - 86400000),
-  },
-];
+import { useAdminNotifications, type AdminNotificationSeverity } from '@/hooks/use-admin-notifications';
+import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 export function AdminHeader() {
   const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
   const hasMultipleCompanies = userCompanies.length > 1;
+  const canAccessAdminNotifications = userRole === 'gerente' || userRole === 'operador' || userRole === 'developer';
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useAdminNotifications({
+    activeCompanyId: activeCompany?.id ?? null,
+    canAccessAdminNotifications,
+  });
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
-
-  const formatTimeAgo = (date: Date) => {
+  // Tempo relativo leve para leitura operacional rápida no dropdown.
+  const formatTimeAgo = (isoDate: string) => {
+    const date = new Date(isoDate);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -84,6 +41,36 @@ export function AdminHeader() {
     if (diffMins < 60) return `${diffMins}min atrás`;
     if (diffHours < 24) return `${diffHours}h atrás`;
     return `${diffDays}d atrás`;
+  };
+
+  const getSeverityStyles = (severity: AdminNotificationSeverity) => {
+    switch (severity) {
+      case 'success':
+        return {
+          icon: CheckCircle2,
+          iconClassName: 'text-emerald-600',
+          dotClassName: 'bg-emerald-600',
+        };
+      case 'warning':
+        return {
+          icon: AlertTriangle,
+          iconClassName: 'text-amber-600',
+          dotClassName: 'bg-amber-600',
+        };
+      case 'critical':
+        return {
+          icon: Siren,
+          iconClassName: 'text-destructive',
+          dotClassName: 'bg-destructive',
+        };
+      case 'info':
+      default:
+        return {
+          icon: Info,
+          iconClassName: 'text-primary',
+          dotClassName: 'bg-primary',
+        };
+    }
   };
 
   return (
@@ -160,42 +147,52 @@ export function AdminHeader() {
                 Nenhuma notificação
               </div>
             ) : (
-              notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`border-b border-border px-4 py-3 last:border-0 ${
-                    !notification.read ? 'bg-muted/50' : ''
-                  }`}
-                  onClick={() => markAsRead(notification.id)}
-                >
+              notifications.map((notification) => {
+                const severityStyles = getSeverityStyles(notification.severity);
+                const SeverityIcon = severityStyles.icon;
+
+                return (
+                  <div
+                    key={notification.id}
+                    className={cn(
+                      'border-b border-border px-4 py-3 last:border-0',
+                      !notification.is_read && 'bg-muted/50'
+                    )}
+                    onClick={() => markAsRead(notification.id)}
+                  >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {notification.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {notification.message}
-                      </p>
-                      {notification.action && (
-                        <a
-                          href={notification.action.href}
-                          className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
-                        >
-                          {notification.action.label} →
-                        </a>
-                      )}
+                    <div className="flex flex-1 items-start gap-2">
+                      <SeverityIcon className={cn('mt-0.5 h-4 w-4 shrink-0', severityStyles.iconClassName)} />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {notification.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {notification.message}
+                        </p>
+                        {notification.action_link && (
+                          <Link
+                            to={notification.action_link}
+                            className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Ver detalhes →
+                          </Link>
+                        )}
+                      </div>
                     </div>
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                      {formatTimeAgo(notification.createdAt)}
+                      {formatTimeAgo(notification.created_at)}
                     </span>
                   </div>
-                  {!notification.read && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <div className="h-2 w-2 rounded-full bg-primary" />
+                  {!notification.is_read && (
+                    <div className="mt-1 flex justify-end">
+                      <div className={cn('h-2 w-2 rounded-full', severityStyles.dotClassName)} />
                     </div>
                   )}
-                </div>
-              ))
+                  </div>
+                );
+              })
             )}
           </div>
         </PopoverContent>
