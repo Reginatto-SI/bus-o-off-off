@@ -19,6 +19,7 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   processando: { label: 'Processando', className: 'status-badge-reserved' },
   pago: { label: 'Pago', className: 'status-badge-paid' },
   cancelado: { label: 'Cancelado', className: 'status-badge-cancelled' },
+  bloqueado: { label: 'Bloqueado', className: 'status-badge-blocked' },
   ativo: { label: 'Ativo', className: 'status-badge-available' },
   inativo: { label: 'Inativo', className: 'status-badge-closed' },
 };
