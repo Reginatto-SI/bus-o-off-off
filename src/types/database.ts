@@ -298,6 +298,8 @@ export interface Event {
   pass_platform_fee_to_customer: boolean;
   platform_fee_terms_accepted: boolean;
   platform_fee_terms_accepted_at: string | null;
+  platform_fee_terms_version: string | null;
+  platform_fee_terms_accepted_by: string | null;
   is_archived: boolean;
   image_url: string | null;
   // Política comercial por evento: controla se vende trecho solto, ida obrigatória ou pacote fechado.

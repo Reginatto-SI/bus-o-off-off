@@ -615,6 +615,8 @@ export type Database = {
           pass_platform_fee_to_customer: boolean
           platform_fee_terms_accepted: boolean
           platform_fee_terms_accepted_at: string | null
+          platform_fee_terms_accepted_by: string | null
+          platform_fee_terms_version: string | null
           public_info: string | null
           status: Database["public"]["Enums"]["event_status"]
           transport_policy: string
@@ -640,6 +642,8 @@ export type Database = {
           pass_platform_fee_to_customer?: boolean
           platform_fee_terms_accepted?: boolean
           platform_fee_terms_accepted_at?: string | null
+          platform_fee_terms_accepted_by?: string | null
+          platform_fee_terms_version?: string | null
           public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           transport_policy?: string
@@ -665,6 +669,8 @@ export type Database = {
           pass_platform_fee_to_customer?: boolean
           platform_fee_terms_accepted?: boolean
           platform_fee_terms_accepted_at?: string | null
+          platform_fee_terms_accepted_by?: string | null
+          platform_fee_terms_version?: string | null
           public_info?: string | null
           status?: Database["public"]["Enums"]["event_status"]
           transport_policy?: string

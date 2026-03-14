@@ -1745,6 +1745,15 @@ export default function Sales() {
                 }
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {cancelSale?.status !== 'bloqueado' && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Impacto financeiro do cancelamento</p>
+                {/* Transparência operacional: cancelar no sistema não devolve a taxa da plataforma e não implementa refund automático nesta etapa. */}
+                <p className="text-xs text-amber-800/90 dark:text-amber-200/90">O cancelamento desta venda não implica devolução da taxa da plataforma Smartbus BR à empresa organizadora.</p>
+                <p className="text-xs text-amber-800/90 dark:text-amber-200/90">Caso haja reembolso ao passageiro, esse valor deverá ser assumido pela empresa, conforme sua política comercial e operacional.</p>
+                <p className="text-xs text-amber-800/90 dark:text-amber-200/90">Esta ação cancela a venda no sistema, mas não representa estorno automático pelo gateway.</p>
+              </div>
+            )}
             <div className="space-y-2 py-2">
               <Label>Motivo do cancelamento *</Label>
               <Textarea
