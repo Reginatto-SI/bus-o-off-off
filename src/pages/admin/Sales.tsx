@@ -1722,9 +1722,12 @@ export default function Sales() {
         <AlertDialog open={!!cancelSale} onOpenChange={(open) => { if (!open) { setCancelSale(null); setCancelReason(''); } }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Cancelar Venda</AlertDialogTitle>
+              <AlertDialogTitle>{cancelSale?.status === 'bloqueado' ? 'Liberar Bloqueio' : 'Cancelar Venda'}</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta ação irá cancelar a venda de <strong>{cancelSale?.customer_name}</strong> e liberar os assentos. Esta ação não pode ser desfeita.
+                {cancelSale?.status === 'bloqueado'
+                  ? 'Esta ação irá liberar o bloqueio e tornar a(s) poltrona(s) disponível(is) novamente.'
+                  : <>Esta ação irá cancelar a venda de <strong>{cancelSale?.customer_name}</strong> e liberar os assentos. Esta ação não pode ser desfeita.</>
+                }
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-2 py-2">
