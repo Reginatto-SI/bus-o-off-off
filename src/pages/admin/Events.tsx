@@ -121,6 +121,10 @@ interface EventWithTrips extends Event {
   trips: { vehicle_id: string | null; driver_id: string | null; assistant_driver_id: string | null; capacity?: number }[];
 }
 
+// Versão textual do termo comercial de taxa da plataforma.
+// Mantemos constante explícita para rastreabilidade mínima sem criar arquitetura jurídica complexa.
+const PLATFORM_FEE_TERMS_VERSION = '2026-03-cancelamento-nao-devolve-taxa-v1';
+
 type EventSortOption =
   | 'event_date_asc'
   | 'event_date_desc'
@@ -261,6 +265,9 @@ export default function Events() {
       ...prev,
       platform_fee_terms_accepted: true,
       platform_fee_terms_accepted_at: prev.platform_fee_terms_accepted_at ?? new Date().toISOString(),
+      // Rastreabilidade adicional: fixa a versão do termo vigente e usuário que confirmou o aceite.
+      platform_fee_terms_version: PLATFORM_FEE_TERMS_VERSION,
+      platform_fee_terms_accepted_by: user?.id ?? null,
     }));
     setPlatformFeeTermsDialogOpen(false);
   };
@@ -361,6 +368,8 @@ export default function Events() {
     // Aceite legal obrigatório para publicação. Persistido no evento para não "desmarcar" ao reabrir.
     platform_fee_terms_accepted: false,
     platform_fee_terms_accepted_at: null as string | null,
+    platform_fee_terms_version: null as string | null,
+    platform_fee_terms_accepted_by: null as string | null,
     image_url: '' as string | null,
     // Novo padrão de criação: 90% dos eventos operam com ida e volta obrigatória.
     transport_policy: 'ida_volta_obrigatorio' as TransportPolicy,
@@ -1263,6 +1272,9 @@ export default function Events() {
       pass_platform_fee_to_customer: form.pass_platform_fee_to_customer,
       platform_fee_terms_accepted: form.platform_fee_terms_accepted,
       platform_fee_terms_accepted_at: form.platform_fee_terms_accepted ? form.platform_fee_terms_accepted_at ?? new Date().toISOString() : null,
+      // Transparência comercial: persistimos versão + usuário para fortalecer evidência de aceite.
+      platform_fee_terms_version: form.platform_fee_terms_accepted ? (form.platform_fee_terms_version ?? PLATFORM_FEE_TERMS_VERSION) : null,
+      platform_fee_terms_accepted_by: form.platform_fee_terms_accepted ? (form.platform_fee_terms_accepted_by ?? user?.id ?? null) : null,
       // Regra de integridade operacional: não permitimos troca de política após publicação/vendas
       // para evitar inconsistência entre viagens, embarques e passagens já comercializadas.
       transport_policy: isTransportPolicyLocked
@@ -1516,6 +1528,8 @@ export default function Events() {
       pass_platform_fee_to_customer: (event as any).pass_platform_fee_to_customer ?? false,
       platform_fee_terms_accepted: (event as any).platform_fee_terms_accepted ?? false,
       platform_fee_terms_accepted_at: (event as any).platform_fee_terms_accepted_at ?? null,
+      platform_fee_terms_version: (event as any).platform_fee_terms_version ?? null,
+      platform_fee_terms_accepted_by: (event as any).platform_fee_terms_accepted_by ?? null,
       image_url: (event as any).image_url ?? null,
       transport_policy: (event as any).transport_policy ?? 'trecho_independente',
       use_category_pricing: (event as any).use_category_pricing ?? false,
@@ -2115,6 +2129,8 @@ export default function Events() {
       pass_platform_fee_to_customer: false,
       platform_fee_terms_accepted: false,
       platform_fee_terms_accepted_at: null,
+      platform_fee_terms_version: null,
+      platform_fee_terms_accepted_by: null,
       image_url: null,
       // Mantém o mesmo default ao reabrir/limpar o modal de criação.
       transport_policy: 'ida_volta_obrigatorio',
@@ -3851,12 +3867,19 @@ export default function Events() {
                           <Checkbox
                             id="platform_fee_accepted"
                             checked={form.platform_fee_terms_accepted}
-                            onCheckedChange={(checked) => setForm({ ...form, platform_fee_terms_accepted: checked === true, platform_fee_terms_accepted_at: checked === true ? (form.platform_fee_terms_accepted_at ?? new Date().toISOString()) : null })}
+                            onCheckedChange={(checked) => setForm({
+                              ...form,
+                              // Transparência comercial: aceite explicita não devolução da taxa em cancelamentos/reembolsos.
+                              platform_fee_terms_accepted: checked === true,
+                              platform_fee_terms_accepted_at: checked === true ? (form.platform_fee_terms_accepted_at ?? new Date().toISOString()) : null,
+                              platform_fee_terms_version: checked === true ? (form.platform_fee_terms_version ?? PLATFORM_FEE_TERMS_VERSION) : null,
+                              platform_fee_terms_accepted_by: checked === true ? (form.platform_fee_terms_accepted_by ?? user?.id ?? null) : null,
+                            })}
                             disabled={isReadOnly}
                           />
                           <div className="text-sm leading-relaxed">
                             <label htmlFor="platform_fee_accepted" className="cursor-pointer">
-                              Li e aceito a cobrança da taxa da plataforma sobre vendas online.
+                              Li e aceito os termos da taxa da plataforma Smartbus BR, incluindo a regra de não devolução da taxa em cancelamentos ou reembolsos ao passageiro.
                             </label>{' '}
                             <Button
                               type="button"
@@ -4209,6 +4232,12 @@ export default function Events() {
                               Atenção: Corrija os itens pendentes antes de publicar o evento para venda.
                             </p>
                           )}
+                          {/* Reforço operacional: cancelar venda/reembolsar passageiro não devolve taxa da plataforma. */}
+                          <Alert className="mt-3 border-blue-500/30 bg-blue-500/5">
+                            <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                              Importante: em caso de cancelamento ou reembolso ao passageiro, a taxa da plataforma Smartbus BR permanece devida e não é devolvida à empresa organizadora.
+                            </AlertDescription>
+                          </Alert>
                         </Card>
                       )}
 
@@ -4453,14 +4482,14 @@ export default function Events() {
               <div>
                 <p className="font-semibold">1. Cobrança da taxa</p>
                 <p className="text-muted-foreground">
-                  A plataforma Smartbus aplica uma taxa sobre vendas realizadas através do checkout online disponibilizado no sistema.
+                  Ao ativar a venda de passagens neste evento, a empresa organizadora declara ciência e concordância com a cobrança da taxa da plataforma Smartbus BR sobre as vendas realizadas pelos canais digitais do sistema, conforme configuração comercial vigente da conta.
                 </p>
               </div>
 
               <div>
-                <p className="font-semibold">2. Taxa atual</p>
+                <p className="font-semibold">2. Natureza da taxa</p>
                 <p className="text-muted-foreground">
-                  A taxa atualmente praticada é de <strong>7,5%</strong> sobre o valor da passagem vendida online.
+                  A taxa da plataforma Smartbus BR remunera a intermediação da venda, a disponibilização do sistema, a estrutura tecnológica e os custos operacionais da plataforma.
                 </p>
               </div>
 
@@ -4479,16 +4508,23 @@ export default function Events() {
               </div>
 
               <div>
-                <p className="font-semibold">5. Atualização de taxas</p>
+                <p className="font-semibold">5. Cancelamento, reembolso e taxa da plataforma</p>
                 <p className="text-muted-foreground">
-                  A taxa da plataforma poderá ser ajustada futuramente conforme política comercial da plataforma ou acordo com a empresa organizadora.
+                  Em caso de cancelamento da venda, cancelamento da passagem ou reembolso ao passageiro, a taxa da plataforma Smartbus BR não será devolvida à empresa organizadora.
                 </p>
               </div>
 
               <div>
-                <p className="font-semibold">6. Aceite</p>
+                <p className="font-semibold">6. Responsabilidade por reembolso</p>
                 <p className="text-muted-foreground">
-                  Ao publicar um evento utilizando o sistema de venda online da plataforma, o organizador declara estar ciente da cobrança da taxa da plataforma.
+                  Caso a empresa opte por reembolsar total ou parcialmente o passageiro, esse reembolso será de responsabilidade da própria empresa organizadora, conforme sua política comercial e operacional, sem implicar devolução da taxa da plataforma.
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">7. Aceite e rastreabilidade</p>
+                <p className="text-muted-foreground">
+                  Ao publicar um evento utilizando o sistema de venda online da plataforma, o organizador declara estar ciente destes termos. O sistema registra data/hora, versão do termo e usuário responsável pelo aceite.
                 </p>
               </div>
             </div>
