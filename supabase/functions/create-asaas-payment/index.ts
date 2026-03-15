@@ -351,7 +351,11 @@ serve(async (req) => {
         }),
       });
 
-      const customerData = await createCustomerRes.json();
+      const customerData = await safeJson(createCustomerRes);
+      if (!customerData) {
+        console.error("[create-asaas-payment] Asaas customer create returned empty response", { sale_id: sale.id, status: createCustomerRes.status });
+        return jsonResponse({ error: "Resposta vazia ao criar cliente no Asaas" }, 502);
+      }
       if (!createCustomerRes.ok) {
         console.error("[create-asaas-payment] Asaas customer create error", {
           sale_id: sale.id,
