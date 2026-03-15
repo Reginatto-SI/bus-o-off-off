@@ -53,6 +53,16 @@ function buildAsaasPaymentDescription(params: {
   return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
 }
 
+async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return null;
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
