@@ -312,7 +312,11 @@ serve(async (req) => {
       `${ASAAS_BASE_URL}/customers?cpfCnpj=${customerCpf}`,
       { headers: { "access_token": companyApiKey } }
     );
-    const searchData = await searchRes.json();
+    const searchData = await safeJson(searchRes) as Record<string, unknown> | null;
+    if (!searchData) {
+      console.error("[create-asaas-payment] Asaas customer search returned empty response", { sale_id: sale.id, status: searchRes.status });
+      return jsonResponse({ error: "Resposta vazia ao buscar cliente no Asaas" }, 502);
+    }
 
     if (!searchRes.ok) {
       console.error("[create-asaas-payment] Asaas customer search error", {
