@@ -99,13 +99,15 @@ serve(async (req) => {
       });
     }
 
-    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
     if (!PLATFORM_API_KEY) {
-      return new Response(JSON.stringify({ error: "Asaas API key not configured on platform" }), {
+      return new Response(JSON.stringify({ error: `Asaas API key not configured on platform (env: ${IS_SANDBOX ? "sandbox" : "production"})` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log(`[create-asaas-account] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
 
     // ====== MODE: Revalidate existing integration ======
     if (mode === "revalidate") {

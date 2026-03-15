@@ -73,8 +73,10 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
-    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
     const apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY;
+
+    console.log(`[verify-payment-status] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
 
     if (!apiKeyToUse) {
       return new Response(

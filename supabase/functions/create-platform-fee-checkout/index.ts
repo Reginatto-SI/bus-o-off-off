@@ -92,7 +92,7 @@ serve(async (req) => {
       );
     }
 
-    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
     if (!PLATFORM_API_KEY) {
       return new Response(JSON.stringify({ error: "Asaas API key not configured" }), {
         status: 500,

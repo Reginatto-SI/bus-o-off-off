@@ -227,7 +227,7 @@ serve(async (req) => {
 
     // A plataforma deve continuar recebendo comissão via split,
     // mesmo com a cobrança sendo criada na conta da empresa.
-    const platformWalletFromEnv = Deno.env.get("ASAAS_WALLET_ID");
+    const platformWalletFromEnv = Deno.env.get(IS_SANDBOX ? "ASAAS_WALLET_ID_SANDBOX" : "ASAAS_WALLET_ID");
     let platformWalletId = platformWalletFromEnv ?? null;
 
     if (!platformWalletId && platformFeePercent > 0) {
