@@ -4,6 +4,7 @@ import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar,
+  Globe,
   Ticket,
   ShoppingCart,
   XCircle,
@@ -377,13 +378,16 @@ export default function Dashboard() {
           description="Visão geral da operação e vendas"
           actions={
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button variant="outline" onClick={handleOpenPublicShowcase}>
+              <Button variant="outline" onClick={handleOpenPublicShowcase} className="gap-2">
+                <Globe className="h-4 w-4" />
                 Abrir vitrine pública
               </Button>
 
               <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
+                {/* Comentário de suporte: mantemos o mesmo padrão visual do botão ao lado (ícone + label) para evitar sobreposição e garantir consistência no header. */}
+                <SelectTrigger className="w-[200px] gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Últimos 30 dias" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">Últimos 7 dias</SelectItem>
