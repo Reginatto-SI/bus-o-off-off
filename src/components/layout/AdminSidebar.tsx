@@ -38,6 +38,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
 import { normalizePublicSlug } from '@/lib/publicSlug';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
+import collapsedSidebarOfficialIcon from '@/assets/brand/sidebar-collapsed-official.svg';
 import logoAdmin from '@/assets/logo_admin.png';
 import { toast } from 'sonner';
 
@@ -549,7 +550,8 @@ export function AdminSidebar() {
       {/* Header */}
       <div className="flex flex-col items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 py-4">
         <div className="h-8 w-8 flex items-center justify-center rounded-lg">
-          <img src={busaoIcon} alt="Smartbus BR" className="h-full w-full rounded-lg object-contain" />
+          {/* Atualização intencional: estado colapsado usa o novo ícone oficial da marca sem alterar o logo do menu expandido. */}
+          <img src={collapsedSidebarOfficialIcon} alt="Smartbus BR" className="h-full w-full rounded-lg object-contain" />
         </div>
         <Button variant="ghost" size="icon" className="text-sidebar-foreground hover:bg-[#1E293B] h-7 w-7" onClick={toggleCollapsed}>
           <PanelLeftOpen className="h-4 w-4" />

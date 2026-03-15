@@ -1,0 +1,19 @@
+<!-- Placeholder temporário: substitua este arquivo pelo novo ícone oficial da sidebar colapsada quando disponível. -->
+<svg width="687" height="599" xmlns="http://www.w3.org/2000/svg">
+
+ <g>
+  <title>Layer 1</title>
+  <rect stroke="#444444" rx="90" id="svg_28" height="598.99996" width="588.00003" y="0.00002" x="49.49997" stroke-width="0" fill="#ff7f00"/>
+  <g id="svg_29">
+   <rect stroke="#000" stroke-width="0" rx="30" id="svg_2" height="376.99999" width="369" y="88.80001" x="159" fill="#ffffff"/>
+   <path stroke="#000" id="svg_3" d="m169.99998,171.80002c0,-5.43379 4.56621,-10 10,-10l327.00003,0c5.43379,0 10,4.56621 10,10l0,132c0,5.43379 -4.56621,10 -10,10l-327.00003,0c-5.43379,0 -10,-4.56621 -10,-10l0,-132z" opacity="undefined" stroke-width="0" fill="#ff7f00"/>
+   <ellipse ry="30.5" rx="30.5" id="svg_4" cy="384.30001" cx="217.39999" stroke-width="0" stroke="#000" fill="#ff7f00"/>
+   <ellipse ry="30.5" rx="30.5" id="svg_6" cy="386.30001" cx="468.39999" stroke-width="0" stroke="#000" fill="#ff7f00"/>
+   <rect stroke="#000" stroke-width="0" rx="8" id="svg_7" height="61" width="57.00001" y="442.80001" x="186" fill="#ffffff"/>
+   <rect stroke="#000" stroke-width="0" rx="8" id="svg_8" height="61" width="57.00001" y="442.80001" x="444" fill="#ffffff"/>
+   <rect stroke="#000" stroke-width="0" rx="8" id="svg_9" height="134" width="26.00001" y="177.80001" x="138" fill="#ffffff"/>
+   <rect stroke="#000" stroke-width="0" rx="8" id="svg_10" height="134" width="26.00001" y="172.80001" x="523" fill="#ffffff"/>
+   <rect stroke="#000" stroke-width="0" rx="10" id="svg_11" height="14" width="229.00003" y="120.80002" x="228.99998" fill="#ff7f00"/>
+  </g>
+ </g>
+</svg>
