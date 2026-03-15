@@ -134,10 +134,13 @@ serve(async (req) => {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
 
-    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
     if (!PLATFORM_API_KEY) {
-      return jsonResponse({ error: "Asaas API key not configured on platform" }, 500);
+      return jsonResponse({ error: `Asaas API key not configured on platform (env: ${IS_SANDBOX ? "sandbox" : "production"})` }, 500);
     }
+
+    console.log(`[create-asaas-payment] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
+
 
     // Importante: a cobrança precisa ser criada no contexto da conta da empresa.
     // Se cair no token da plataforma, o checkout exibe o emissor incorreto.
