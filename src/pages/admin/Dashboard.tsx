@@ -4,6 +4,7 @@ import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar,
+  Globe,
   Ticket,
   ShoppingCart,
   XCircle,
@@ -36,6 +37,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrencyBRL } from '@/lib/currency';
@@ -376,14 +378,32 @@ export default function Dashboard() {
           title="Painel"
           description="Visão geral da operação e vendas"
           actions={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button variant="outline" onClick={handleOpenPublicShowcase}>
-                Abrir vitrine pública
-              </Button>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {/* UX improvement: added globe icon to the "Abrir vitrine pública" button
+                  to make it clearer that this action opens the public storefront page. */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" className="gap-2" onClick={handleOpenPublicShowcase}>
+                      <Globe className="h-4 w-4" />
+                      Abrir vitrine pública
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Abrir a página pública da empresa com os eventos disponíveis para compra.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
               <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue />
+                {/* Comentário: aumenta a largura mínima do filtro para evitar quebra entre ícone e rótulo em resoluções menores. */}
+                <SelectTrigger className="w-[190px]">
+                  {/* UX improvement: added calendar icon to the date filter
+                      to improve visual recognition of the period selector. */}
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <Calendar className="h-4 w-4" />
+                    <SelectValue />
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">Últimos 7 dias</SelectItem>
