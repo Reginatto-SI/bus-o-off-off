@@ -53,6 +53,16 @@ function buildAsaasPaymentDescription(params: {
   return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
 }
 
+async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return null;
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -241,7 +251,7 @@ serve(async (req) => {
         });
 
         if (myAccountRes.ok) {
-          const myAccountData = await myAccountRes.json();
+          const myAccountData = await safeJson(myAccountRes);
           platformWalletId = myAccountData?.walletId ?? null;
           console.log("[create-asaas-payment] fallback /myAccount resolved", {
             sale_id: sale.id,
@@ -302,7 +312,11 @@ serve(async (req) => {
       `${ASAAS_BASE_URL}/customers?cpfCnpj=${customerCpf}`,
       { headers: { "access_token": companyApiKey } }
     );
-    const searchData = await searchRes.json();
+    const searchData = await safeJson(searchRes) as Record<string, unknown> | null;
+    if (!searchData) {
+      console.error("[create-asaas-payment] Asaas customer search returned empty response", { sale_id: sale.id, status: searchRes.status });
+      return jsonResponse({ error: "Resposta vazia ao buscar cliente no Asaas" }, 502);
+    }
 
     if (!searchRes.ok) {
       console.error("[create-asaas-payment] Asaas customer search error", {
@@ -337,7 +351,11 @@ serve(async (req) => {
         }),
       });
 
-      const customerData = await createCustomerRes.json();
+      const customerData = await safeJson(createCustomerRes);
+      if (!customerData) {
+        console.error("[create-asaas-payment] Asaas customer create returned empty response", { sale_id: sale.id, status: createCustomerRes.status });
+        return jsonResponse({ error: "Resposta vazia ao criar cliente no Asaas" }, 502);
+      }
       if (!createCustomerRes.ok) {
         console.error("[create-asaas-payment] Asaas customer create error", {
           sale_id: sale.id,
@@ -404,7 +422,12 @@ serve(async (req) => {
       body: JSON.stringify(paymentPayload),
     });
 
-    const paymentData = await paymentRes.json();
+    const paymentData = await safeJson(paymentRes);
+    if (!paymentData) {
+      console.error("[create-asaas-payment] Asaas payment create returned empty response", { sale_id: sale.id, status: paymentRes.status });
+      await insertIntegrationLog("failed", "Resposta vazia do Asaas ao criar cobrança", paymentPayload, null);
+      return jsonResponse({ error: "Resposta vazia ao criar cobrança no Asaas" }, 502);
+    }
 
     if (!paymentRes.ok) {
       console.error("[create-asaas-payment] Asaas payment create error", {
