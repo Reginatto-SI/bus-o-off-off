@@ -398,11 +398,11 @@ export default function Dashboard() {
               <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
                 {/* Comentário: aumenta a largura mínima do filtro para evitar quebra entre ícone e rótulo em resoluções menores. */}
                 <SelectTrigger className="w-[190px]">
-                  {/* UX improvement: added calendar icon to the date filter
-                      to improve visual recognition of the period selector. */}
-                  <span className="flex items-center gap-2 whitespace-nowrap">
-                    <Calendar className="h-4 w-4" />
-                    <SelectValue />
+                  {/* UX fix: align calendar icon with label in dashboard date filter
+                      to match the visual pattern used by the "Abrir vitrine pública" button. */}
+                  <span className="flex items-center gap-2 whitespace-nowrap leading-none">
+                    <Calendar className="h-4 w-4 shrink-0" />
+                    <SelectValue className="leading-none" />
                   </span>
                 </SelectTrigger>
                 <SelectContent>
