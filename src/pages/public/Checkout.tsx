@@ -540,6 +540,10 @@ export default function Checkout() {
       return;
     }
 
+    // Comentário de suporte: abrimos a aba de pagamento ainda no clique do usuário
+    // para evitar bloqueio de pop-up após as etapas assíncronas do checkout.
+    const preOpenedPaymentTab = window.open('', '_blank');
+
     setSubmitting(true);
 
     // Revalidate seats before creating sale
@@ -547,6 +551,7 @@ export default function Checkout() {
     if (!seatsValid) {
       setStep(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -558,6 +563,7 @@ export default function Checkout() {
 
     if (availableSeats !== null && quantity > availableSeats) {
       toast.error(`Apenas ${availableSeats} vaga${availableSeats !== 1 ? 's' : ''} disponível`);
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -566,6 +572,7 @@ export default function Checkout() {
 
     if (mandatoryRoundTrip && !returnTripId) {
       toast.error('Este evento exige ida e volta. Volte e selecione a volta.');
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -577,6 +584,7 @@ export default function Checkout() {
 
       if (returnAvailable !== null && quantity > returnAvailable) {
         toast.error(`Volta com apenas ${returnAvailable} vaga${returnAvailable !== 1 ? 's' : ''} disponível`);
+        preOpenedPaymentTab?.close();
         setSubmitting(false);
         return;
       }
@@ -601,6 +609,7 @@ export default function Checkout() {
     // Calculate fees
     if (platformFeePercent == null) {
       toast.error('Taxa da plataforma da empresa indisponível.');
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -639,6 +648,7 @@ export default function Checkout() {
       } else {
         toast.error('Erro ao reservar assentos temporariamente. Tente novamente.');
       }
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -676,6 +686,7 @@ export default function Checkout() {
         ? 'Este evento não está disponível para compra online no momento.'
         : 'Erro ao finalizar compra. Tente novamente.';
       toast.error(msg);
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -725,6 +736,7 @@ export default function Checkout() {
       await supabase.from('seat_locks').delete().eq('sale_id', sale.id);
       await supabase.from('sales').delete().eq('id', sale.id);
       toast.error('Erro ao registrar dados dos passageiros. Tente novamente.');
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     }
@@ -737,8 +749,12 @@ export default function Checkout() {
       );
 
       if (!checkoutError && checkoutData?.url) {
-        // Open payment in new tab
-        window.open(checkoutData.url, '_blank');
+        // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up.
+        if (preOpenedPaymentTab) {
+          preOpenedPaymentTab.location.href = checkoutData.url;
+        } else {
+          window.open(checkoutData.url, '_blank');
+        }
         // Navigate to waiting/confirmation screen in current tab
         navigate(`/confirmacao/${sale.id}`);
         return;
@@ -758,6 +774,7 @@ export default function Checkout() {
       if (errorCode === 'no_asaas_account') {
         // Company has no Asaas — fallback to reservation (keep as pendente)
         console.log('Asaas not configured, falling back to confirmation');
+        preOpenedPaymentTab?.close();
         navigate(`/confirmacao/${sale.id}`);
         return;
       }
@@ -767,11 +784,13 @@ export default function Checkout() {
       await supabase.from('sale_passengers').delete().eq('sale_id', sale.id);
       await supabase.from('seat_locks').delete().eq('sale_id', sale.id);
       await supabase.from('sales').delete().eq('id', sale.id);
+      preOpenedPaymentTab?.close();
       setSubmitting(false);
       return;
     } catch (err) {
       // Network error or edge function unavailable — fallback to confirmation
       console.log('Asaas checkout not available, falling back to confirmation:', err);
+      preOpenedPaymentTab?.close();
       navigate(`/confirmacao/${sale.id}`);
     }
   };
