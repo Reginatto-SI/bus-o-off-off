@@ -22,7 +22,8 @@ serve(async (req) => {
   }
 
   try {
-    const asaasBaseUrl = getAsaasBaseUrl();
+    const asaasBaseUrl = ASAAS_BASE_URL;
+    console.log(`[create-platform-fee-checkout] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
 
     const { sale_id } = await req.json();
     if (!sale_id) {
