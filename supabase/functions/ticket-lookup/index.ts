@@ -175,6 +175,7 @@ serve(async (req) => {
         boardingDepartureTime,
         boardingDepartureDate,
         saleStatus: t.sale?.status || "reservado",
+        saleOrigin: t.sale?.sale_origin || null,
         purchaseConfirmedAt: t.sale?.payment_confirmed_at || ((t.sale?.status === "pago" && !t.sale?.asaas_payment_id) ? (t.sale?.platform_fee_paid_at || null) : null),
         unitPrice: t.sale?.unit_price ?? 0,
         companyName: company?.trade_name || company?.name || "",

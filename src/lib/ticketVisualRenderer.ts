@@ -158,17 +158,26 @@ export async function renderTicketVisual(
 
   if (ticket.ticketNumber) {
     y += 32;
+    const headerBaseY = y;
     ctx.fillStyle = '#f97316';
     ctx.font = '600 20px Inter, Arial, sans-serif';
     ctx.fillText(`Passagem Nº ${ticket.ticketNumber}`, cardX + 34, y);
 
     if (ticket.purchaseConfirmedAt) {
+      // Mantém o texto operacional equivalente ao card web para evitar divergência no export.
       ctx.fillStyle = '#64748b';
       ctx.font = '400 18px Inter, Arial, sans-serif';
       ctx.fillText(`Compra em: ${formatPurchaseDateTimeBR(ticket.purchaseConfirmedAt)}`, cardX + 280, y);
     }
 
-    y -= 32;
+    if (ticket.purchaseOriginLabel) {
+      y += 26;
+      ctx.fillStyle = '#64748b';
+      ctx.font = '400 18px Inter, Arial, sans-serif';
+      ctx.fillText(`Origem da compra: ${ticket.purchaseOriginLabel}`, cardX + 34, y);
+    }
+
+    y = headerBaseY;
   }
 
   const statusLabel = ticket.saleStatus === 'pago' ? 'Pago' : ticket.saleStatus === 'reservado' ? 'Reservado' : 'Cancelado';

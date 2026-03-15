@@ -20,6 +20,38 @@ type ProcessingResult = {
   externalReference?: string | null;
 };
 
+function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim();
+
+  // Quando Asaas já fornece data/hora completa, preservamos o instante exato.
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime()) && (trimmed.includes("T") || trimmed.includes(":"))) {
+    return parsed.toISOString();
+  }
+
+  // Se vier apenas data (yyyy-mm-dd), não inventamos horário.
+  return null;
+}
+
+function resolveAsaasConfirmedAt(payment: any, webhookCreatedAt?: string | null): string {
+  const candidates = [
+    payment?.clientPaymentDate,
+    payment?.confirmedDate,
+    payment?.paymentDate,
+    payment?.dateCreated,
+    webhookCreatedAt,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAsaasConfirmationTimestamp(candidate);
+    if (normalized) return normalized;
+  }
+
+  // Fallback seguro: timestamp de processamento quando o payload não trouxe data/hora confiável.
+  return new Date().toISOString();
+}
+
 /**
  * Webhook do Asaas para processar notificações de pagamento.
  * Eventos processados:
@@ -148,7 +180,13 @@ serve(async (req) => {
     // Fluxo dedicado: cobrança da taxa da plataforma usa externalReference = platform_fee_<sale_id>.
     // Aqui promovemos reservado -> pago somente após confirmação da taxa, sem misturar com pagamento da passagem.
     if (String(saleId).startsWith("platform_fee_")) {
-      const platformFeeResult = await processPlatformFeeWebhook(supabaseAdmin, saleId, payment, eventType);
+      const platformFeeResult = await processPlatformFeeWebhook(
+        supabaseAdmin,
+        saleId,
+        payment,
+        eventType,
+        requestPayload?.dateCreated ?? null,
+      );
       platformFeeResult.eventType = eventType;
       platformFeeResult.paymentId = paymentId;
       platformFeeResult.externalReference = externalReference;
@@ -191,7 +229,13 @@ serve(async (req) => {
     let result: ProcessingResult;
 
     if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {
-      result = await processPaymentConfirmed(supabaseAdmin, sale, payment, eventType);
+      result = await processPaymentConfirmed(
+        supabaseAdmin,
+        sale,
+        payment,
+        eventType,
+        requestPayload?.dateCreated ?? null,
+      );
     } else {
       result = await processPaymentFailed(supabaseAdmin, sale, payment, eventType);
     }
@@ -248,6 +292,7 @@ async function processPlatformFeeWebhook(
   externalReference: string,
   payment: any,
   eventType: string,
+  webhookCreatedAt?: string | null,
 ): Promise<ProcessingResult> {
   const saleId = externalReference.replace("platform_fee_", "");
 
@@ -267,16 +312,18 @@ async function processPlatformFeeWebhook(
     };
   }
 
+  const confirmedAt = resolveAsaasConfirmedAt(payment, webhookCreatedAt);
+
   if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {
     const { error: updateError } = await supabaseAdmin
       .from("sales")
       .update({
         platform_fee_status: "paid",
-        platform_fee_paid_at: new Date().toISOString(),
+        platform_fee_paid_at: confirmedAt,
         platform_fee_payment_id: payment.id,
         // Regra de negócio: após taxa confirmada, a venda manual reservada pode virar paga.
         status: sale.status === "reservado" ? "pago" : sale.status,
-        payment_confirmed_at: new Date().toISOString(),
+        payment_confirmed_at: confirmedAt,
       })
       .eq("id", saleId)
       .in("platform_fee_status", ["pending", "failed"]);
@@ -347,9 +394,11 @@ async function processPaymentConfirmed(
   supabaseAdmin: ReturnType<typeof createClient<any>>,
   sale: any,
   payment: any,
-  eventType: string
+  eventType: string,
+  webhookCreatedAt?: string | null,
 ): Promise<ProcessingResult> {
   const saleId = sale.id;
+  const confirmedAt = resolveAsaasConfirmedAt(payment, webhookCreatedAt);
 
   if (sale.status !== "pago") {
     const { data: updatedSale, error: updateError } = await supabaseAdmin
@@ -357,7 +406,7 @@ async function processPaymentConfirmed(
       .update({
         status: "pago",
         asaas_payment_status: payment.status,
-        payment_confirmed_at: new Date().toISOString(),
+        payment_confirmed_at: confirmedAt,
       })
       .eq("id", saleId)
       .in("status", ["pendente_pagamento", "reservado"])

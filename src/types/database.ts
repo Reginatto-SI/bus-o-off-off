@@ -379,8 +379,10 @@ export interface Sale {
   asaas_payment_id: string | null;
   asaas_payment_status: string | null;
   asaas_transfer_id: string | null;
+  sale_origin: string;
   payment_method: "pix" | "credit_card" | null;
   payment_confirmed_at: string | null;
+  platform_fee_paid_at: string | null;
   // Lastro jurídico do checkout público: registra ciência sobre intermediação da plataforma.
   intermediation_responsibility_accepted: boolean;
   intermediation_responsibility_accepted_at: string | null;

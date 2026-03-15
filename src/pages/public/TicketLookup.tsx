@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatDateOnlyBR } from '@/lib/date';
+import { resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
 type TicketLookupResponseTicket = {
   ticketId: string;
@@ -38,6 +39,7 @@ type TicketLookupResponseTicket = {
   saleId?: string;
   stripeCheckoutSessionId?: string | null;
   asaasPaymentId?: string | null;
+  saleOrigin?: string | null;
   unitPrice?: number;
   companyName: string;
   companyLogoUrl: string | null;
@@ -122,6 +124,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       boardingDepartureDate: ticket.boardingDepartureDate,
       saleStatus: (ticket.saleStatus || 'reservado') as SaleStatus,
       purchaseConfirmedAt: ticket.purchaseConfirmedAt ?? null,
+      purchaseOriginLabel: resolveTicketPurchaseOriginLabel(ticket.saleOrigin ?? null),
       saleId: ticket.saleId || undefined,
       stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
       asaasPaymentId: ticket.asaasPaymentId || null,

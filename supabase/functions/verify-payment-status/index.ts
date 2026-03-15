@@ -12,6 +12,33 @@ const ASAAS_BASE_URL = IS_SANDBOX
   ? "https://sandbox.asaas.com/api/v3"
   : "https://api.asaas.com/v3";
 
+function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim();
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime()) && (trimmed.includes("T") || trimmed.includes(":"))) {
+    return parsed.toISOString();
+  }
+  return null;
+}
+
+function resolveAsaasConfirmedAtFromPayment(paymentData: any): string {
+  const candidates = [
+    paymentData?.clientPaymentDate,
+    paymentData?.confirmedDate,
+    paymentData?.paymentDate,
+    paymentData?.dateCreated,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAsaasConfirmationTimestamp(candidate);
+    if (normalized) return normalized;
+  }
+
+  // Em fallback, usamos o instante de sincronização para não deixar pagamento pago sem lastro temporal.
+  return new Date().toISOString();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -125,13 +152,14 @@ serve(async (req) => {
     const asaasStatus = paymentData.status;
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
+      const confirmedAt = resolveAsaasConfirmedAtFromPayment(paymentData);
       // Payment confirmed — accept both pendente_pagamento and reservado
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
           status: "pago",
           asaas_payment_status: asaasStatus,
-          payment_confirmed_at: new Date().toISOString(),
+          payment_confirmed_at: confirmedAt,
         })
         .eq("id", sale_id)
         .in("status", ["pendente_pagamento", "reservado"]);
