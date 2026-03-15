@@ -396,14 +396,12 @@ export default function Dashboard() {
               </TooltipProvider>
 
               <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v) as Period)}>
-                {/* Comentário: aumenta a largura mínima do filtro para evitar quebra entre ícone e rótulo em resoluções menores. */}
-                <SelectTrigger className="w-[190px]">
-                  {/* UX fix: align calendar icon with label in dashboard date filter
-                      to match the visual pattern used by the "Abrir vitrine pública" button. */}
-                  <span className="flex items-center gap-2 whitespace-nowrap leading-none">
+                {/* Comentário: estrutura interna explícita para alinhar o seletor de período ao padrão visual do header do dashboard. */}
+                <SelectTrigger className="h-10 w-[190px] px-4 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Calendar className="h-4 w-4 shrink-0" />
-                    <SelectValue className="leading-none" />
-                  </span>
+                    <SelectValue />
+                  </div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">Últimos 7 dias</SelectItem>
