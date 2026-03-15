@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getAsaasWebhookTokenSecretName,
+  resolvePaymentEnvironment,
+} from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,9 +96,15 @@ serve(async (req) => {
   }));
 
   try {
-    const isSandbox = Deno.env.get("ASAAS_ENV") !== "production";
-    const webhookToken = Deno.env.get(isSandbox ? "ASAAS_WEBHOOK_TOKEN_SANDBOX" : "ASAAS_WEBHOOK_TOKEN");
-    console.log(`[asaas-webhook] Asaas env: ${isSandbox ? "SANDBOX" : "PRODUCTION"}`);
+    // Regra centralizada por host: fora do domínio oficial, sempre sandbox.
+    const runtimeEnv = resolvePaymentEnvironment(req);
+    const webhookTokenSecretName = getAsaasWebhookTokenSecretName(runtimeEnv.resolved_env);
+    const webhookToken = Deno.env.get(webhookTokenSecretName);
+    console.log("[asaas-webhook] Asaas runtime resolved", {
+      resolved_env: runtimeEnv.resolved_env,
+      request_host: runtimeEnv.host,
+      selected_key_source: `platform_secret:${webhookTokenSecretName}`,
+    });
     if (webhookToken) {
       const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-webhook-token");
       if (receivedToken !== webhookToken) {

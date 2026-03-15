@@ -1,16 +1,17 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getAsaasBaseUrl,
+  getAsaasPlatformApiKeySecretName,
+  getAsaasPlatformWalletSecretName,
+  resolvePaymentEnvironment,
+} from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const IS_SANDBOX = Deno.env.get("ASAAS_ENV") !== "production";
-const ASAAS_BASE_URL = IS_SANDBOX
-  ? "https://sandbox.asaas.com/api/v3"
-  : "https://api.asaas.com/v3";
 
 type IntegrationLogStatus = "requested" | "success" | "failed";
 
@@ -86,6 +87,13 @@ serve(async (req) => {
   }
 
   try {
+    // Regra centralizada: só os domínios oficiais entram em produção.
+    // Qualquer host fora da allowlist (incluindo localhost/lovable/preview) usa sandbox.
+    const runtimeEnv = resolvePaymentEnvironment(req);
+    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
+    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
+    const platformWalletSecretName = getAsaasPlatformWalletSecretName(runtimeEnv.resolved_env);
+
     const { sale_id, payment_method } = await req.json();
     console.log("[create-asaas-payment] request received", { sale_id, payment_method });
 
@@ -144,12 +152,17 @@ serve(async (req) => {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
 
-    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
     if (!PLATFORM_API_KEY) {
-      return jsonResponse({ error: `Asaas API key not configured on platform (env: ${IS_SANDBOX ? "sandbox" : "production"})` }, 500);
+      return jsonResponse({ error: `Asaas API key not configured on platform (env: ${runtimeEnv.resolved_env})` }, 500);
     }
 
-    console.log(`[create-asaas-payment] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
+    console.log("[create-asaas-payment] Asaas runtime resolved", {
+      resolved_env: runtimeEnv.resolved_env,
+      request_host: runtimeEnv.host,
+      selected_base_url: asaasBaseUrl,
+      selected_key_source: `platform_secret:${platformApiKeySecretName}`,
+    });
 
 
     // Importante: a cobrança precisa ser criada no contexto da conta da empresa.
@@ -237,7 +250,7 @@ serve(async (req) => {
 
     // A plataforma deve continuar recebendo comissão via split,
     // mesmo com a cobrança sendo criada na conta da empresa.
-    const platformWalletFromEnv = Deno.env.get(IS_SANDBOX ? "ASAAS_WALLET_ID_SANDBOX" : "ASAAS_WALLET_ID");
+    const platformWalletFromEnv = Deno.env.get(platformWalletSecretName);
     let platformWalletId = platformWalletFromEnv ?? null;
 
     if (!platformWalletId && platformFeePercent > 0) {
@@ -246,7 +259,7 @@ serve(async (req) => {
         company_id: sale.company_id,
       });
       try {
-        const myAccountRes = await fetch(`${ASAAS_BASE_URL}/myAccount`, {
+        const myAccountRes = await fetch(`${asaasBaseUrl}/myAccount`, {
           headers: { "access_token": PLATFORM_API_KEY },
         });
 
@@ -309,7 +322,7 @@ serve(async (req) => {
     let customerId: string | null = null;
 
     const searchRes = await fetch(
-      `${ASAAS_BASE_URL}/customers?cpfCnpj=${customerCpf}`,
+      `${asaasBaseUrl}/customers?cpfCnpj=${customerCpf}`,
       { headers: { "access_token": companyApiKey } }
     );
     const searchData = await safeJson(searchRes) as Record<string, unknown> | null;
@@ -337,7 +350,7 @@ serve(async (req) => {
     if (searchData?.data?.length > 0) {
       customerId = searchData.data[0].id;
     } else {
-      const createCustomerRes = await fetch(`${ASAAS_BASE_URL}/customers`, {
+      const createCustomerRes = await fetch(`${asaasBaseUrl}/customers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -413,7 +426,7 @@ serve(async (req) => {
 
     await insertIntegrationLog("requested", "Solicitação de criação de cobrança enviada ao Asaas", paymentPayload, null);
 
-    const paymentRes = await fetch(`${ASAAS_BASE_URL}/payments`, {
+    const paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

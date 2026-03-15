@@ -1,16 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getAsaasBaseUrl,
+  resolvePaymentEnvironment,
+} from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const IS_SANDBOX = Deno.env.get("ASAAS_ENV") !== "production";
-const ASAAS_BASE_URL = IS_SANDBOX
-  ? "https://sandbox.asaas.com/api/v3"
-  : "https://api.asaas.com/v3";
 
 function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -45,6 +44,10 @@ serve(async (req) => {
   }
 
   try {
+    // Regra centralizada: apenas domínios oficiais operam em produção.
+    const runtimeEnv = resolvePaymentEnvironment(req);
+    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
+
     const { sale_id } = await req.json();
 
     if (!sale_id || typeof sale_id !== "string") {
@@ -109,26 +112,27 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
-    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
-    const apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY;
+    const apiKeyToUse = company?.asaas_api_key;
 
-    console.log(`[verify-payment-status] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
+    console.log("[verify-payment-status] Asaas runtime resolved", {
+      resolved_env: runtimeEnv.resolved_env,
+      request_host: runtimeEnv.host,
+      selected_base_url: asaasBaseUrl,
+      selected_key_source: apiKeyToUse ? "company.asaas_api_key" : "missing_company_key",
+    });
 
+    // Segurança: não usamos fallback para chave global para evitar consulta em conta incorreta.
     if (!apiKeyToUse) {
       return new Response(
-        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas API key not configured" }),
+        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas company API key not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    if (!company?.asaas_api_key && PLATFORM_API_KEY) {
-      console.warn(`[verify-payment-status] Empresa ${sale.company_id} sem asaas_api_key — usando chave global como fallback`);
     }
 
     // Query Asaas for payment status
     let paymentData: any;
     try {
-      const res = await fetch(`${ASAAS_BASE_URL}/payments/${sale.asaas_payment_id}`, {
+      const res = await fetch(`${asaasBaseUrl}/payments/${sale.asaas_payment_id}`, {
         headers: { "access_token": apiKeyToUse },
       });
 

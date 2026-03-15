@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getAsaasBaseUrl,
+  getAsaasPlatformApiKeySecretName,
+  resolvePaymentEnvironment,
+} from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const IS_SANDBOX = Deno.env.get("ASAAS_ENV") !== "production";
-const ASAAS_BASE_URL = IS_SANDBOX
-  ? "https://sandbox.asaas.com/api/v3"
-  : "https://api.asaas.com/v3";
 
 /**
  * Cobra a taxa da plataforma em vendas manuais/conversão de reserva via Asaas.
@@ -22,8 +22,17 @@ serve(async (req) => {
   }
 
   try {
-    const asaasBaseUrl = ASAAS_BASE_URL;
-    console.log(`[create-platform-fee-checkout] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
+    // Regra centralizada: produção somente nos hosts oficiais.
+    const runtimeEnv = resolvePaymentEnvironment(req);
+    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
+    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
+
+    console.log("[create-platform-fee-checkout] Asaas runtime resolved", {
+      resolved_env: runtimeEnv.resolved_env,
+      request_host: runtimeEnv.host,
+      selected_base_url: asaasBaseUrl,
+      selected_key_source: `platform_secret:${platformApiKeySecretName}`,
+    });
 
     const { sale_id } = await req.json();
     if (!sale_id) {
@@ -92,7 +101,7 @@ serve(async (req) => {
       );
     }
 
-    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
     if (!PLATFORM_API_KEY) {
       return new Response(JSON.stringify({ error: "Asaas API key not configured" }), {
         status: 500,
