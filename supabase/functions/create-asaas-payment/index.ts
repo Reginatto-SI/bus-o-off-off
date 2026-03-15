@@ -251,7 +251,7 @@ serve(async (req) => {
         });
 
         if (myAccountRes.ok) {
-          const myAccountData = await myAccountRes.json();
+          const myAccountData = await safeJson(myAccountRes);
           platformWalletId = myAccountData?.walletId ?? null;
           console.log("[create-asaas-payment] fallback /myAccount resolved", {
             sale_id: sale.id,
