@@ -276,6 +276,7 @@ async function processPlatformFeeWebhook(
         platform_fee_payment_id: payment.id,
         // Regra de negócio: após taxa confirmada, a venda manual reservada pode virar paga.
         status: sale.status === "reservado" ? "pago" : sale.status,
+        payment_confirmed_at: new Date().toISOString(),
       })
       .eq("id", saleId)
       .in("platform_fee_status", ["pending", "failed"]);
@@ -356,6 +357,7 @@ async function processPaymentConfirmed(
       .update({
         status: "pago",
         asaas_payment_status: payment.status,
+        payment_confirmed_at: new Date().toISOString(),
       })
       .eq("id", saleId)
       .in("status", ["pendente_pagamento", "reservado"])

@@ -18,6 +18,7 @@ import { formatDateOnlyBR } from '@/lib/date';
 type TicketLookupResponseTicket = {
   ticketId: string;
   ticketNumber?: string | null;
+  purchaseConfirmedAt?: string | null;
   qrCodeToken: string;
   passengerName: string;
   passengerCpf: string;
@@ -120,6 +121,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       boardingDepartureTime: ticket.boardingDepartureTime,
       boardingDepartureDate: ticket.boardingDepartureDate,
       saleStatus: (ticket.saleStatus || 'reservado') as SaleStatus,
+      purchaseConfirmedAt: ticket.purchaseConfirmedAt ?? null,
       saleId: ticket.saleId || undefined,
       stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
       asaasPaymentId: ticket.asaasPaymentId || null,
@@ -166,7 +168,7 @@ export default function TicketLookup() {
       const newStatus = data?.paymentStatus;
       if (newStatus === 'pago') {
         setTickets((prev) =>
-          prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus } : t))
+          prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: data?.paymentConfirmedAt ?? t.purchaseConfirmedAt ?? null } : t))
         );
         toast({ title: 'Pagamento confirmado ✅' });
       } else if (newStatus === 'processando') {
@@ -199,20 +201,22 @@ export default function TicketLookup() {
         const { data } = await supabase.functions.invoke('verify-payment-status', {
           body: { sale_id: saleId },
         });
-        return { saleId, status: data?.paymentStatus };
+        return { saleId, status: data?.paymentStatus, paymentConfirmedAt: data?.paymentConfirmedAt ?? null };
       })
     );
 
-    const paidSaleIds = new Set<string>();
+    const paidSaleInfo = new Map<string, string | null>();
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value.status === 'pago') {
-        paidSaleIds.add(result.value.saleId);
+        paidSaleInfo.set(result.value.saleId, result.value.paymentConfirmedAt ?? null);
       }
     }
 
-    if (paidSaleIds.size > 0) {
+    if (paidSaleInfo.size > 0) {
       setTickets((prev) =>
-        prev.map((t) => (t.saleId && paidSaleIds.has(t.saleId) ? { ...t, saleStatus: 'pago' as SaleStatus } : t))
+        prev.map((t) => (t.saleId && paidSaleInfo.has(t.saleId)
+          ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(t.saleId) ?? t.purchaseConfirmedAt ?? null }
+          : t))
       );
       toast({ title: 'Status de pagamento atualizado ✅' });
     }

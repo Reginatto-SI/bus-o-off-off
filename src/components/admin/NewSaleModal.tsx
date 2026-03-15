@@ -600,6 +600,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       boardingDepartureDate: selectedBoarding?.departure_date || null,
       // A passagem de venda manual nasce como RESERVADA: só vira 'pago' após quitação da taxa da plataforma.
       saleStatus: 'reservado' as any,
+      purchaseConfirmedAt: null,
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,

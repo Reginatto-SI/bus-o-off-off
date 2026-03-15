@@ -194,7 +194,7 @@ export default function Confirmation() {
         const { data: freshTickets } = await supabase
           .from('tickets').select('*').eq('sale_id', id).order('seat_label', { ascending: true });
         if (freshTickets) setTickets(freshTickets as TicketRecord[]);
-        setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
+        setSale((prev) => (prev ? { ...prev, status: 'pago', payment_confirmed_at: data?.paymentConfirmedAt ?? prev.payment_confirmed_at } : prev));
         toast({ title: 'Pagamento confirmado ✅' });
       } else if (data?.paymentStatus === 'processando') {
         toast({ title: 'Pagamento ainda em processamento' });
@@ -230,13 +230,13 @@ export default function Confirmation() {
           .catch(() => {});
       }
 
-      const { data } = await supabase.from('sales').select('status').eq('id', id).maybeSingle();
+      const { data } = await supabase.from('sales').select('status, payment_confirmed_at, asaas_payment_id, platform_fee_paid_at').eq('id', id).maybeSingle();
 
       if (data?.status === 'pago') {
         const { data: freshTickets } = await supabase
           .from('tickets').select('*').eq('sale_id', id).order('seat_label', { ascending: true });
         if (freshTickets) setTickets(freshTickets as TicketRecord[]);
-        setSale((prev) => (prev ? { ...prev, status: 'pago' } : prev));
+        setSale((prev) => (prev ? { ...prev, status: 'pago', payment_confirmed_at: data?.payment_confirmed_at ?? ((data?.status === 'pago' && !data?.asaas_payment_id) ? data?.platform_fee_paid_at ?? null : prev.payment_confirmed_at) } : prev));
         clearInterval(interval);
       } else if (data?.status === 'cancelado') {
         setSale((prev) => (prev ? { ...prev, status: 'cancelado' } : prev));
@@ -281,6 +281,7 @@ export default function Confirmation() {
       boardingDepartureTime: boardingDepartureTime,
       boardingDepartureDate: boardingDepartureDate,
       saleStatus: (sale?.status || 'reservado') as SaleStatus,
+      purchaseConfirmedAt: sale?.payment_confirmed_at ?? (((sale?.status || 'reservado') === 'pago' && !sale?.asaas_payment_id) ? ((sale as any)?.platform_fee_paid_at ?? null) : null),
       saleId: sale?.id,
       stripeCheckoutSessionId: sale?.stripe_checkout_session_id || null,
       asaasPaymentId: (sale as any)?.asaas_payment_id || null,

@@ -1,4 +1,4 @@
-import { formatDateOnlyBR } from '@/lib/date';
+import { formatDateOnlyBR, formatPurchaseDateTimeBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { formatCurrencyBRL } from '@/lib/currency';
@@ -155,6 +155,21 @@ export async function renderTicketVisual(
   ctx.fillStyle = '#111827';
   ctx.font = '600 30px Inter, Arial, sans-serif';
   ctx.fillText(`Assento ${ticket.seatLabel}`, cardX + 34, y);
+
+  if (ticket.ticketNumber) {
+    y += 32;
+    ctx.fillStyle = '#f97316';
+    ctx.font = '600 20px Inter, Arial, sans-serif';
+    ctx.fillText(`Passagem Nº ${ticket.ticketNumber}`, cardX + 34, y);
+
+    if (ticket.purchaseConfirmedAt) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '400 18px Inter, Arial, sans-serif';
+      ctx.fillText(`Compra em: ${formatPurchaseDateTimeBR(ticket.purchaseConfirmedAt)}`, cardX + 280, y);
+    }
+
+    y -= 32;
+  }
 
   const statusLabel = ticket.saleStatus === 'pago' ? 'Pago' : ticket.saleStatus === 'reservado' ? 'Reservado' : 'Cancelado';
   const statusColor = ticket.saleStatus === 'pago' ? '#16a34a' : ticket.saleStatus === 'reservado' ? '#d97706' : '#dc2626';

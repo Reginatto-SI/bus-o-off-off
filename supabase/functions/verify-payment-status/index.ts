@@ -34,7 +34,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount")
+      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at")
       .eq("id", sale_id)
       .single();
 
@@ -46,8 +46,17 @@ serve(async (req) => {
     }
 
     if (sale.status === "pago") {
+      const { data: paidSale } = await supabaseAdmin
+        .from("sales")
+        .select("payment_confirmed_at, platform_fee_paid_at, asaas_payment_id")
+        .eq("id", sale_id)
+        .single();
+
       return new Response(
-        JSON.stringify({ paymentStatus: "pago" }),
+        JSON.stringify({
+          paymentStatus: "pago",
+          paymentConfirmedAt: paidSale?.payment_confirmed_at ?? ((!paidSale?.asaas_payment_id) ? paidSale?.platform_fee_paid_at : null),
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -122,6 +131,7 @@ serve(async (req) => {
         .update({
           status: "pago",
           asaas_payment_status: asaasStatus,
+          payment_confirmed_at: new Date().toISOString(),
         })
         .eq("id", sale_id)
         .in("status", ["pendente_pagamento", "reservado"]);
@@ -187,8 +197,17 @@ serve(async (req) => {
         });
       }
 
+      const { data: paidSaleAfterUpdate } = await supabaseAdmin
+        .from("sales")
+        .select("payment_confirmed_at, platform_fee_paid_at, asaas_payment_id")
+        .eq("id", sale_id)
+        .single();
+
       return new Response(
-        JSON.stringify({ paymentStatus: "pago" }),
+        JSON.stringify({
+          paymentStatus: "pago",
+          paymentConfirmedAt: paidSaleAfterUpdate?.payment_confirmed_at ?? ((!paidSaleAfterUpdate?.asaas_payment_id) ? paidSaleAfterUpdate?.platform_fee_paid_at : null),
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
