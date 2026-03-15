@@ -97,6 +97,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { type TicketCardData } from '@/components/public/TicketCard';
 import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
 function formatCpfMask(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
@@ -213,7 +214,14 @@ function buildTicketCardData(
     boardingDepartureTime,
     boardingDepartureDate,
     saleStatus: sale.status as any,
-    purchaseConfirmedAt: sale.payment_confirmed_at ?? ((sale.status === 'pago' && !sale.asaas_payment_id) ? (sale as any).platform_fee_paid_at ?? null : null),
+    // Fonte única: só exibimos data de confirmação real (nunca created_at/reserva).
+    purchaseConfirmedAt: resolveTicketPurchaseConfirmedAt({
+      saleStatus: sale.status,
+      paymentConfirmedAt: sale.payment_confirmed_at,
+      platformFeePaidAt: sale.platform_fee_paid_at,
+      asaasPaymentId: sale.asaas_payment_id,
+    }),
+    purchaseOriginLabel: resolveTicketPurchaseOriginLabel(sale.sale_origin),
     companyName: companyDisplayName,
     companyLogoUrl: company?.logo_url || null,
     companyCity: company?.city || null,

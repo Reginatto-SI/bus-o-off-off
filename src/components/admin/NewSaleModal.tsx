@@ -52,6 +52,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
+import { resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { cn } from '@/lib/utils';
@@ -601,6 +602,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // A passagem de venda manual nasce como RESERVADA: só vira 'pago' após quitação da taxa da plataforma.
       saleStatus: 'reservado' as any,
       purchaseConfirmedAt: null,
+      // Preview de venda criada no admin: origem manual explícita no ticket.
+      purchaseOriginLabel: resolveTicketPurchaseOriginLabel('admin_manual'),
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
       companyCity: company?.city || null,

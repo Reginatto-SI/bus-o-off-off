@@ -19,6 +19,7 @@ import { formatBoardingDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
+import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
 interface CompanyInfo {
   name: string;
@@ -281,7 +282,14 @@ export default function Confirmation() {
       boardingDepartureTime: boardingDepartureTime,
       boardingDepartureDate: boardingDepartureDate,
       saleStatus: (sale?.status || 'reservado') as SaleStatus,
-      purchaseConfirmedAt: sale?.payment_confirmed_at ?? (((sale?.status || 'reservado') === 'pago' && !sale?.asaas_payment_id) ? ((sale as any)?.platform_fee_paid_at ?? null) : null),
+      // Centralizamos a regra para nunca mostrar data inventada em reservas/cancelamentos.
+      purchaseConfirmedAt: resolveTicketPurchaseConfirmedAt({
+        saleStatus: (sale?.status || 'reservado') as SaleStatus,
+        paymentConfirmedAt: sale?.payment_confirmed_at,
+        platformFeePaidAt: sale?.platform_fee_paid_at,
+        asaasPaymentId: sale?.asaas_payment_id,
+      }),
+      purchaseOriginLabel: resolveTicketPurchaseOriginLabel(sale?.sale_origin),
       saleId: sale?.id,
       stripeCheckoutSessionId: sale?.stripe_checkout_session_id || null,
       asaasPaymentId: (sale as any)?.asaas_payment_id || null,

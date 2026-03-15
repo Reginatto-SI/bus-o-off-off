@@ -20,6 +20,7 @@ export interface TicketCardData {
   ticketId: string;
   ticketNumber?: string | null;
   purchaseConfirmedAt?: string | null;
+  purchaseOriginLabel?: string | null;
   qrCodeToken: string;
   passengerName: string;
   passengerCpf: string;
@@ -262,10 +263,13 @@ export function TicketCard({
                 )}
                 {/* Exibição oficial do número global da passagem (quando disponível), mantendo o layout padrão do card. */}
                 {ticketNumberDisplay && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                  <div className="space-y-0.5 text-xs">
                     <p className="font-semibold text-primary">Passagem Nº {ticketNumberDisplay}</p>
                     {purchaseConfirmedLabel && (
                       <p className="text-muted-foreground">Compra em: {purchaseConfirmedLabel}</p>
+                    )}
+                    {ticket.purchaseOriginLabel && (
+                      <p className="text-muted-foreground">Origem da compra: {ticket.purchaseOriginLabel}</p>
                     )}
                   </div>
                 )}
