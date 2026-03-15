@@ -7,9 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
-  ? "https://api.asaas.com/v3"
-  : "https://sandbox.asaas.com/api/v3";
+const IS_SANDBOX = Deno.env.get("ASAAS_ENV") !== "production";
+const ASAAS_BASE_URL = IS_SANDBOX
+  ? "https://sandbox.asaas.com/api/v3"
+  : "https://api.asaas.com/v3";
 
 function maskSensitiveValue(value?: string | null) {
   if (!value) return null;
@@ -98,13 +99,15 @@ serve(async (req) => {
       });
     }
 
-    const PLATFORM_API_KEY = Deno.env.get("ASAAS_API_KEY");
+    const PLATFORM_API_KEY = Deno.env.get(IS_SANDBOX ? "ASAAS_API_KEY_SANDBOX" : "ASAAS_API_KEY");
     if (!PLATFORM_API_KEY) {
-      return new Response(JSON.stringify({ error: "Asaas API key not configured on platform" }), {
+      return new Response(JSON.stringify({ error: `Asaas API key not configured on platform (env: ${IS_SANDBOX ? "sandbox" : "production"})` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log(`[create-asaas-account] Asaas env: ${IS_SANDBOX ? "SANDBOX" : "PRODUCTION"}`);
 
     // ====== MODE: Revalidate existing integration ======
     if (mode === "revalidate") {

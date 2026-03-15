@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_notifications: {
+        Row: {
+          action_link: string | null
+          company_id: string
+          created_at: string
+          dedupe_key: string | null
+          id: string
+          is_read: boolean
+          message: string
+          read_at: string | null
+          related_entity_id: string | null
+          related_entity_type: string | null
+          severity: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          action_link?: string | null
+          company_id: string
+          created_at?: string
+          dedupe_key?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          read_at?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          severity: string
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          action_link?: string | null
+          company_id?: string
+          created_at?: string
+          dedupe_key?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          read_at?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          severity?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boarding_locations: {
         Row: {
           address: string
@@ -1906,6 +1965,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_admin_notification: {
+        Args: {
+          p_action_link?: string
+          p_company_id: string
+          p_dedupe_key?: string
+          p_message: string
+          p_related_entity_id?: string
+          p_related_entity_type?: string
+          p_severity?: string
+          p_title: string
+          p_type: string
+        }
+        Returns: undefined
+      }
+      generate_event_starting_soon_notifications: {
+        Args: { p_company_id: string; p_window_hours?: number }
+        Returns: number
+      }
       get_boarding_manifest_rows: {
         Args: { p_company_id: string; p_event_id: string; p_trip_id?: string }
         Returns: {

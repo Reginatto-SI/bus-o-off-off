@@ -60,7 +60,9 @@ serve(async (req) => {
   }));
 
   try {
-    const webhookToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
+    const isSandbox = Deno.env.get("ASAAS_ENV") !== "production";
+    const webhookToken = Deno.env.get(isSandbox ? "ASAAS_WEBHOOK_TOKEN_SANDBOX" : "ASAAS_WEBHOOK_TOKEN");
+    console.log(`[asaas-webhook] Asaas env: ${isSandbox ? "SANDBOX" : "PRODUCTION"}`);
     if (webhookToken) {
       const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-webhook-token");
       if (receivedToken !== webhookToken) {

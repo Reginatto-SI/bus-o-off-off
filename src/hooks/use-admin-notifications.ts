@@ -65,7 +65,7 @@ export function useAdminNotifications({
       return;
     }
 
-    setNotifications((data || []) as AdminNotification[]);
+    setNotifications((data || []) as unknown as AdminNotification[]);
     setLoading(false);
   }, [activeCompanyId, canAccessAdminNotifications]);
 
