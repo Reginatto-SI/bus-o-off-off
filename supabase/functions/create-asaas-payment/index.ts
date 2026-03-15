@@ -422,7 +422,12 @@ serve(async (req) => {
       body: JSON.stringify(paymentPayload),
     });
 
-    const paymentData = await paymentRes.json();
+    const paymentData = await safeJson(paymentRes);
+    if (!paymentData) {
+      console.error("[create-asaas-payment] Asaas payment create returned empty response", { sale_id: sale.id, status: paymentRes.status });
+      await insertIntegrationLog("failed", "Resposta vazia do Asaas ao criar cobrança", paymentPayload, null);
+      return jsonResponse({ error: "Resposta vazia ao criar cobrança no Asaas" }, 502);
+    }
 
     if (!paymentRes.ok) {
       console.error("[create-asaas-payment] Asaas payment create error", {
