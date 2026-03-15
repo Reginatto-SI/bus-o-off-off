@@ -7,9 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ASAAS_BASE_URL = Deno.env.get("ASAAS_ENV") === "production"
-  ? "https://api.asaas.com/v3"
-  : "https://sandbox.asaas.com/api/v3";
+const IS_SANDBOX = Deno.env.get("ASAAS_ENV") !== "production";
+const ASAAS_BASE_URL = IS_SANDBOX
+  ? "https://sandbox.asaas.com/api/v3"
+  : "https://api.asaas.com/v3";
 
 type IntegrationLogStatus = "requested" | "success" | "failed";
 
