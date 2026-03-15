@@ -46,3 +46,24 @@ export function formatDateTimeBR(
     ...options,
   }).format(date);
 }
+
+
+export function formatPurchaseDateTimeBR(
+  value: string | Date,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  const formatted = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone,
+  }).format(date);
+
+  return formatted.replace(',', ' às');
+}

@@ -1059,6 +1059,7 @@ export type Database = {
           payment_method: string | null
           platform_fee_amount: number | null
           platform_fee_paid_at: string | null
+          payment_confirmed_at: string | null
           platform_fee_payment_id: string | null
           platform_fee_status: string
           platform_fee_total: number | null
@@ -1097,6 +1098,7 @@ export type Database = {
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
+          payment_confirmed_at?: string | null
           platform_fee_payment_id?: string | null
           platform_fee_status?: string
           platform_fee_total?: number | null
@@ -1135,6 +1137,7 @@ export type Database = {
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
+          payment_confirmed_at?: string | null
           platform_fee_payment_id?: string | null
           platform_fee_status?: string
           platform_fee_total?: number | null

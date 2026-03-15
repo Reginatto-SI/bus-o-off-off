@@ -33,6 +33,7 @@ async function processPaymentConfirmed(
     .from("sales")
     .update({
       status: "pago",
+      payment_confirmed_at: new Date().toISOString(),
       stripe_payment_intent_id: (session.payment_intent as string) || null,
     })
     .eq("id", saleId)
@@ -213,6 +214,7 @@ async function processPlatformFeePayment(
       platform_fee_payment_id: session.id,
       // Regra de negócio: somente após pagamento da taxa a venda reservada vira paga.
       status: "pago",
+      payment_confirmed_at: new Date().toISOString(),
     })
     .eq("id", saleId)
     .eq("platform_fee_status", "pending"); // Guard de idempotência

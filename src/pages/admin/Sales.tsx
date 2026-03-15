@@ -213,6 +213,7 @@ function buildTicketCardData(
     boardingDepartureTime,
     boardingDepartureDate,
     saleStatus: sale.status as any,
+    purchaseConfirmedAt: sale.payment_confirmed_at ?? ((sale.status === 'pago' && !sale.asaas_payment_id) ? (sale as any).platform_fee_paid_at ?? null : null),
     companyName: companyDisplayName,
     companyLogoUrl: company?.logo_url || null,
     companyCity: company?.city || null,

@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User, QrCode, ShieldAlert } from 'lucide-react';
-import { formatDateOnlyBR } from '@/lib/date';
+import { formatDateOnlyBR, formatPurchaseDateTimeBR } from '@/lib/date';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
 import { formatBoardingDateTime } from '@/lib/utils';
@@ -19,6 +19,7 @@ import { getTicketTransportOperatedByText, TICKET_PLATFORM_LIABILITY_TEXT, TICKE
 export interface TicketCardData {
   ticketId: string;
   ticketNumber?: string | null;
+  purchaseConfirmedAt?: string | null;
   qrCodeToken: string;
   passengerName: string;
   passengerCpf: string;
@@ -125,7 +126,9 @@ export function TicketCard({
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
   const seatDisplayLabel = getFriendlySeatLabel(ticket.seatLabel);
   const ticketNumberDisplay = ticket.ticketNumber || null;
-
+  const purchaseConfirmedLabel = ticket.purchaseConfirmedAt
+    ? formatPurchaseDateTimeBR(ticket.purchaseConfirmedAt)
+    : null;
 
   // Status visual: "processando" quando reservado mas com pagamento em andamento
   const hasPaymentPending = ticket.stripeCheckoutSessionId || ticket.asaasPaymentId;
@@ -259,7 +262,12 @@ export function TicketCard({
                 )}
                 {/* Exibição oficial do número global da passagem (quando disponível), mantendo o layout padrão do card. */}
                 {ticketNumberDisplay && (
-                  <p className="text-xs font-semibold text-primary">Passagem Nº {ticketNumberDisplay}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                    <p className="font-semibold text-primary">Passagem Nº {ticketNumberDisplay}</p>
+                    {purchaseConfirmedLabel && (
+                      <p className="text-muted-foreground">Compra em: {purchaseConfirmedLabel}</p>
+                    )}
+                  </div>
                 )}
                 <div className="flex items-center gap-2 font-semibold">
                   <Armchair className="h-4 w-4" style={{ color: accentColor }} />
