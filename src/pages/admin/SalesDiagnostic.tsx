@@ -182,6 +182,30 @@ interface TimelineEntry {
   color: string;
 }
 
+type PaymentConfirmationSource = 'webhook' | 'on_demand' | 'none';
+
+function detectPaymentConfirmationSource(
+  sale: DiagnosticSale,
+  saleLogs: SaleLog[],
+  integrationLogs: SaleIntegrationLog[]
+): PaymentConfirmationSource {
+  // Regra de diagnóstico: se houve webhook Asaas recebido para a venda, ele tem prioridade como origem.
+  const hasWebhookLog = integrationLogs.some((log) => log.direction === 'incoming_webhook' && log.provider === 'asaas');
+  if (hasWebhookLog) return 'webhook';
+
+  // Sem webhook técnico, tentamos identificar confirmação por verificação on-demand via trilha funcional.
+  const hasOnDemandConfirmation = saleLogs.some((log) => (
+    log.action === 'payment_confirmed' &&
+    log.description.toLowerCase().includes('verify-payment-status')
+  ));
+
+  if (hasOnDemandConfirmation || (sale.status === 'pago' && sale.asaas_payment_status === 'CONFIRMED')) {
+    return 'on_demand';
+  }
+
+  return 'none';
+}
+
 function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
   const entries: TimelineEntry[] = [];
 
@@ -819,6 +843,7 @@ export default function SalesDiagnostic() {
                     {(() => {
                       const webhookLog = detailIntegrationLogs.find((log) => log.direction === 'incoming_webhook' && log.provider === 'asaas');
                       const webhookReceived = !!webhookLog;
+                      const confirmationSource = detectPaymentConfirmationSource(detailSale, detailLogs, detailIntegrationLogs);
                       const statusLabelMap: Record<SaleIntegrationLog['processing_status'], string> = {
                         received: 'Recebido',
                         ignored: 'Ignorado',
@@ -839,6 +864,14 @@ export default function SalesDiagnostic() {
                               <span className="text-muted-foreground">Webhook recebido</span>
                               <p className={webhookReceived ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
                                 {webhookReceived ? 'Sim' : 'Não detectado'}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Origem da confirmação</span>
+                              <p className="font-medium">
+                                {confirmationSource === 'webhook' && 'Webhook'}
+                                {confirmationSource === 'on_demand' && 'Verificação on-demand (verify-payment-status)'}
+                                {confirmationSource === 'none' && 'Não identificada'}
                               </p>
                             </div>
                             {webhookLog && (
@@ -872,7 +905,11 @@ export default function SalesDiagnostic() {
                           </div>
                           {!webhookReceived && (
                             <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                              <p>Nenhum log técnico de webhook encontrado para esta venda.</p>
+                              {confirmationSource === 'on_demand' ? (
+                                <p>Nenhum log de webhook encontrado, mas o pagamento foi confirmado por verificação on-demand.</p>
+                              ) : (
+                                <p>Nenhum log técnico de webhook encontrado para esta venda.</p>
+                              )}
                             </div>
                           )}
                         </div>
