@@ -80,19 +80,19 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
 
   const isProduction = rawEnv === "production";
 
-  // Guard de segurança: produção só é permitida em hosts oficiais
+  // Guard de segurança: produção só é permitida em hosts oficiais.
+  // Se o host não pertence à allowlist, rebaixa automaticamente para sandbox.
   if (isProduction && !PRODUCTION_HOST_ALLOWLIST.has(host)) {
-    console.warn("[runtime-env] Bloqueio: tentativa de produção fora do domínio oficial", {
+    console.warn("[runtime-env] Downgrade automático para sandbox: host fora da allowlist", {
       asaas_env: rawEnv,
       host,
       allowed_hosts: [...PRODUCTION_HOST_ALLOWLIST],
     });
     return {
-      resolved_env: "production",
-      isProduction: true,
+      resolved_env: "sandbox",
+      isProduction: false,
       host,
-      blocked: true,
-      blockReason: `Ambiente de produção bloqueado: host "${host}" não pertence à allowlist de domínios oficiais.`,
+      blocked: false,
     };
   }
 
