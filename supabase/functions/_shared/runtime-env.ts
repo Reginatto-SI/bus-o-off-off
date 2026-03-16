@@ -41,17 +41,22 @@ function normalizeHost(rawValue: string): string {
 }
 
 function extractRequestHost(req: Request): string {
+  // IMPORTANT: In Supabase Edge Functions the "host" header is always
+  // "edge-runtime.supabase.com" (the runtime itself), NOT the client origin.
+  // We must prioritise origin/referer which carry the actual client domain.
   const headerCandidates = [
-    req.headers.get("x-forwarded-host"),
-    req.headers.get("host"),
     req.headers.get("origin"),
     req.headers.get("referer"),
+    req.headers.get("x-forwarded-host"),
+    // "host" is intentionally last — it reflects the Edge Function runtime,
+    // not the calling client, and would cause false-positive blocks.
+    req.headers.get("host"),
   ];
 
   for (const candidate of headerCandidates) {
     if (!candidate) continue;
     const normalized = normalizeHost(candidate);
-    if (normalized) return normalized;
+    if (normalized && normalized !== "edge-runtime.supabase.com") return normalized;
   }
 
   return "unknown";
