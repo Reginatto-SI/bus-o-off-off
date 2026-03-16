@@ -95,6 +95,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
       isProduction: false,
       host,
       blocked: false,
+      downgraded: true,
     };
   }
 
