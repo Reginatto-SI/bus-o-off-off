@@ -17,6 +17,8 @@ export interface EnvironmentResolution {
   host: string;
   blocked: boolean;
   blockReason?: string;
+  /** true quando ASAAS_ENV era production mas o host forçou downgrade para sandbox */
+  downgraded: boolean;
 }
 
 const PRODUCTION_HOST_ALLOWLIST = new Set([
