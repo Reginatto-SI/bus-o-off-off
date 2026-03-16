@@ -118,19 +118,34 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
-    const apiKeyToUse = company?.asaas_api_key;
+    // Em modo downgrade (sandbox), a cobrança foi criada com a chave da plataforma sandbox,
+    // então devemos usar essa mesma chave para consultar o pagamento.
+    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
+    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
+
+    let apiKeyToUse: string | null;
+    if (runtimeEnv.downgraded) {
+      console.log("[verify-payment-status] Downgrade ativo: usando chave da plataforma sandbox", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+      });
+      apiKeyToUse = PLATFORM_API_KEY ?? null;
+    } else {
+      // Em produção, tenta a chave da empresa; fallback para a chave da plataforma
+      // para cobranças legadas criadas antes da migração para credenciais por empresa.
+      apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY || null;
+    }
 
     console.log("[verify-payment-status] Asaas runtime resolved", {
       resolved_env: runtimeEnv.resolved_env,
       request_host: runtimeEnv.host,
       selected_base_url: asaasBaseUrl,
-      selected_key_source: apiKeyToUse ? "company.asaas_api_key" : "missing_company_key",
+      selected_key_source: runtimeEnv.downgraded ? "platform_sandbox_key" : (company?.asaas_api_key ? "company.asaas_api_key" : "platform_fallback"),
     });
 
-    // Segurança: não usamos fallback para chave global para evitar consulta em conta incorreta.
     if (!apiKeyToUse) {
       return new Response(
-        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas company API key not configured" }),
+        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas API key not available" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
