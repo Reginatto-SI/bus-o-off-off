@@ -112,6 +112,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
     isProduction,
     host,
     blocked: false,
+    downgraded: false,
   };
 }
 
