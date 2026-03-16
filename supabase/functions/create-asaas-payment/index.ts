@@ -54,7 +54,8 @@ function buildAsaasPaymentDescription(params: {
   return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
 }
 
-async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+// deno-lint-ignore no-explicit-any
+async function safeJson(res: Response): Promise<any> {
   try {
     const text = await res.text();
     if (!text || !text.trim()) return null;
