@@ -1056,10 +1056,10 @@ export type Database = {
           intermediation_responsibility_accepted: boolean
           intermediation_responsibility_accepted_at: string | null
           partner_fee_amount: number | null
+          payment_confirmed_at: string | null
           payment_method: string | null
           platform_fee_amount: number | null
           platform_fee_paid_at: string | null
-          payment_confirmed_at: string | null
           platform_fee_payment_id: string | null
           platform_fee_status: string
           platform_fee_total: number | null
@@ -1095,10 +1095,10 @@ export type Database = {
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
           partner_fee_amount?: number | null
+          payment_confirmed_at?: string | null
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
-          payment_confirmed_at?: string | null
           platform_fee_payment_id?: string | null
           platform_fee_status?: string
           platform_fee_total?: number | null
@@ -1134,10 +1134,10 @@ export type Database = {
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
           partner_fee_amount?: number | null
+          payment_confirmed_at?: string | null
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
-          payment_confirmed_at?: string | null
           platform_fee_payment_id?: string | null
           platform_fee_status?: string
           platform_fee_total?: number | null

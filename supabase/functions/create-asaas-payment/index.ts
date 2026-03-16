@@ -54,7 +54,8 @@ function buildAsaasPaymentDescription(params: {
   return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
 }
 
-async function safeJson(res: Response): Promise<Record<string, unknown> | null> {
+// deno-lint-ignore no-explicit-any
+async function safeJson(res: Response): Promise<any> {
   try {
     const text = await res.text();
     if (!text || !text.trim()) return null;
@@ -87,9 +88,10 @@ serve(async (req) => {
   }
 
   try {
-    // Regra centralizada: só os domínios oficiais entram em produção.
-    // Qualquer host fora da allowlist (incluindo localhost/lovable/preview) usa sandbox.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return jsonResponse({ error: runtimeEnv.blockReason, error_code: "environment_blocked" }, 403);
+    }
     const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
     const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
     const platformWalletSecretName = getAsaasPlatformWalletSecretName(runtimeEnv.resolved_env);

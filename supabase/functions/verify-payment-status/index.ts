@@ -44,8 +44,13 @@ serve(async (req) => {
   }
 
   try {
-    // Regra centralizada: apenas domínios oficiais operam em produção.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
 
     const { sale_id } = await req.json();

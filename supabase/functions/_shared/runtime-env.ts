@@ -1,24 +1,34 @@
 /**
- * Fonte única de verdade para resolver ambiente de pagamento por host.
+ * Fonte única de verdade para resolver ambiente de pagamento (Asaas).
  *
- * Regra oficial do projeto:
- * - Produção somente para smartbusbr.com.br e www.smartbusbr.com.br
- * - Qualquer outro host opera em Sandbox (inclui localhost, lovable.dev e previews)
+ * Modelo híbrido:
+ * 1. ASAAS_ENV (secret) = fonte primária de verdade ("sandbox" | "production")
+ * 2. Host da requisição = validação de segurança adicional
+ *    - production: somente smartbusbr.com.br / www.smartbusbr.com.br
+ *    - sandbox: qualquer host é aceito
+ * 3. Se ASAAS_ENV ausente ou inválido → erro explícito (nunca fallback)
  */
 
 export type PaymentEnvironment = "production" | "sandbox";
 
-const PRODUCTION_HOST_ALLOWLIST = new Set(["smartbusbr.com.br", "www.smartbusbr.com.br"]);
+export interface EnvironmentResolution {
+  resolved_env: PaymentEnvironment;
+  isProduction: boolean;
+  host: string;
+  blocked: boolean;
+  blockReason?: string;
+}
+
+const PRODUCTION_HOST_ALLOWLIST = new Set([
+  "smartbusbr.com.br",
+  "www.smartbusbr.com.br",
+]);
 
 function normalizeHost(rawValue: string): string {
   const trimmed = rawValue.trim().toLowerCase();
-
-  // Header pode vir com múltiplos hosts separados por vírgula (proxy chain).
   const firstValue = trimmed.split(",")[0]?.trim() ?? "";
-
   if (!firstValue) return "";
 
-  // Se vier URL completa, usamos URL parser para extrair hostname.
   if (firstValue.includes("://")) {
     try {
       return new URL(firstValue).hostname.toLowerCase();
@@ -27,7 +37,6 @@ function normalizeHost(rawValue: string): string {
     }
   }
 
-  // Remove porta quando vier como host:port
   return firstValue.replace(/:\d+$/, "");
 }
 
@@ -48,18 +57,52 @@ function extractRequestHost(req: Request): string {
   return "unknown";
 }
 
-export function resolvePaymentEnvironment(req: Request): {
-  resolved_env: PaymentEnvironment;
-  isProduction: boolean;
-  host: string;
-} {
+export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
+  const rawEnv = (Deno.env.get("ASAAS_ENV") ?? "").trim().toLowerCase();
   const host = extractRequestHost(req);
-  const isProduction = PRODUCTION_HOST_ALLOWLIST.has(host);
+
+  // ASAAS_ENV ausente ou inválido → bloqueio explícito
+  if (rawEnv !== "sandbox" && rawEnv !== "production") {
+    console.error("[runtime-env] ASAAS_ENV ausente ou inválido", { rawEnv, host });
+    return {
+      resolved_env: "sandbox",
+      isProduction: false,
+      host,
+      blocked: true,
+      blockReason: `ASAAS_ENV não configurado ou inválido (valor: "${rawEnv}"). Configure como "sandbox" ou "production".`,
+    };
+  }
+
+  const isProduction = rawEnv === "production";
+
+  // Guard de segurança: produção só é permitida em hosts oficiais
+  if (isProduction && !PRODUCTION_HOST_ALLOWLIST.has(host)) {
+    console.warn("[runtime-env] Bloqueio: tentativa de produção fora do domínio oficial", {
+      asaas_env: rawEnv,
+      host,
+      allowed_hosts: [...PRODUCTION_HOST_ALLOWLIST],
+    });
+    return {
+      resolved_env: "production",
+      isProduction: true,
+      host,
+      blocked: true,
+      blockReason: `Ambiente de produção bloqueado: host "${host}" não pertence à allowlist de domínios oficiais.`,
+    };
+  }
+
+  console.log("[runtime-env] Ambiente resolvido", {
+    asaas_env: rawEnv,
+    resolved_env: rawEnv,
+    host,
+    blocked: false,
+  });
 
   return {
-    resolved_env: isProduction ? "production" : "sandbox",
+    resolved_env: rawEnv as PaymentEnvironment,
     isProduction,
     host,
+    blocked: false,
   };
 }
 

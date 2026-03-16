@@ -22,8 +22,13 @@ serve(async (req) => {
   }
 
   try {
-    // Regra centralizada: produção somente nos hosts oficiais.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
     const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
 

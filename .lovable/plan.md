@@ -1,69 +1,32 @@
 
+# Complete Payment Flow Overhaul — IMPLEMENTED
 
-# Plano: Modelo Híbrido ASAAS_ENV + Validação de Host + Fix Build Errors
+## Changes Made
 
-## Problema atual
+### Database
+- Added `pendente_pagamento` to `sale_status` enum
+- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
+- Created `sale_passengers` staging table for passenger data before payment confirmation
+- Enabled realtime on `sales` table
+- Enabled `pg_cron` and `pg_net` extensions
+- Scheduled `cleanup-expired-locks` cron job every 5 minutes
 
-1. **`runtime-env.ts`** decide o ambiente **apenas por host/header HTTP** — headers podem ser manipulados por proxies, CDNs e previews, gerando cobranças no ambiente errado.
-2. **Build errors** em `create-asaas-payment/index.ts` — a função `safeJson` retorna `Record<string, unknown> | null` e o código acessa propriedades como `.data.length`, `.errors[0].description`, `.id` sem cast adequado.
+### Edge Functions
+- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
+- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
+- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
 
-## Estratégia
+### Frontend
+- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
+- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
+- `StatusBadge.tsx`: Added `pendente_pagamento` badge
+- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
 
-### 1. Reescrever `runtime-env.ts` com modelo híbrido
-
-- `ASAAS_ENV` (secret) = fonte primária de verdade
-- Se `ASAAS_ENV = "production"` → valida que o host pertence à allowlist (`smartbusbr.com.br`, `www.smartbusbr.com.br`). Se host inválido → retorna `blocked: true` com motivo
-- Se `ASAAS_ENV = "sandbox"` → qualquer host é aceito
-- Se `ASAAS_ENV` ausente/inválido → throw Error explícito (nunca fallback)
-- O retorno ganha campo `blocked: boolean` e `blockReason?: string`
-
-### 2. Atualizar cada Edge Function para checar `blocked`
-
-Todas as 5 funções (`create-asaas-payment`, `create-asaas-account`, `create-platform-fee-checkout`, `verify-payment-status`, `asaas-webhook`) adicionam guard logo após `resolvePaymentEnvironment`:
-
-```typescript
-const runtimeEnv = resolvePaymentEnvironment(req);
-if (runtimeEnv.blocked) {
-  return jsonResponse({ error: runtimeEnv.blockReason }, 403);
-}
+## Architecture
 ```
-
-### 3. Fix build errors em `create-asaas-payment/index.ts`
-
-Tipagem correta para `safeJson`:
-
-```typescript
-// deno-lint-ignore no-explicit-any
-async function safeJson(res: Response): Promise<any> {
-  try {
-    const text = await res.text();
-    if (!text || !text.trim()) return null;
-    return JSON.parse(text);
-  } catch { return null; }
-}
+NEW FLOW:
+  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
+  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
+  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
+  → Frontend detects pago → Show tickets
 ```
-
-Retornar `any` elimina todos os 7 erros de tipo sem alterar lógica. Os acessos a `.data.length`, `.errors[0].description`, `.id`, `.walletId` passam a funcionar naturalmente.
-
-## Arquivos alterados
-
-| Arquivo | Alteração |
-|---|---|
-| `supabase/functions/_shared/runtime-env.ts` | Reescrita: ASAAS_ENV primário + host como guard + campo `blocked` |
-| `supabase/functions/create-asaas-payment/index.ts` | Guard `blocked` + fix `safeJson` return type para `any` |
-| `supabase/functions/create-asaas-account/index.ts` | Guard `blocked` após resolvePaymentEnvironment |
-| `supabase/functions/create-platform-fee-checkout/index.ts` | Guard `blocked` |
-| `supabase/functions/verify-payment-status/index.ts` | Guard `blocked` |
-| `supabase/functions/asaas-webhook/index.ts` | Guard `blocked` |
-
-## O que NÃO muda
-- Frontend, checkout UX, fluxo de assentos, tabelas, RLS
-- Secrets existentes (ASAAS_ENV já configurado)
-- Lógica de split, customer, tickets, webhook processing
-
-## Checklist pós-implementação
-1. `ASAAS_ENV=sandbox` → criar cobrança → logs mostram `asaas_env: sandbox`, URL `sandbox.asaas.com`
-2. `ASAAS_ENV=production` + request de preview → retorna 403 com motivo claro
-3. `ASAAS_ENV=production` + request do domínio oficial → funciona normalmente
-4. Build sem erros de tipo
-
