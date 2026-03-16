@@ -17,6 +17,8 @@ export interface EnvironmentResolution {
   host: string;
   blocked: boolean;
   blockReason?: string;
+  /** true quando ASAAS_ENV era production mas o host forçou downgrade para sandbox */
+  downgraded: boolean;
 }
 
 const PRODUCTION_HOST_ALLOWLIST = new Set([
@@ -75,6 +77,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
       host,
       blocked: true,
       blockReason: `ASAAS_ENV não configurado ou inválido (valor: "${rawEnv}"). Configure como "sandbox" ou "production".`,
+      downgraded: false,
     };
   }
 
@@ -93,6 +96,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
       isProduction: false,
       host,
       blocked: false,
+      downgraded: true,
     };
   }
 
@@ -108,6 +112,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
     isProduction,
     host,
     blocked: false,
+    downgraded: false,
   };
 }
 
