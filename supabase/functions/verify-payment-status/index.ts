@@ -118,16 +118,17 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
-    // Em modo downgrade (sandbox), a cobrança foi criada com a chave da plataforma sandbox,
+    // Em sandbox (direto ou downgrade), a cobrança foi criada com a chave da plataforma,
     // então devemos usar essa mesma chave para consultar o pagamento.
     const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
     const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
 
     let apiKeyToUse: string | null;
-    if (runtimeEnv.downgraded) {
-      console.log("[verify-payment-status] Downgrade ativo: usando chave da plataforma sandbox", {
+    if (!runtimeEnv.isProduction) {
+      console.log("[verify-payment-status] Ambiente sandbox: usando chave da plataforma", {
         sale_id: sale.id,
         company_id: sale.company_id,
+        downgraded: runtimeEnv.downgraded,
       });
       apiKeyToUse = PLATFORM_API_KEY ?? null;
     } else {
@@ -140,7 +141,7 @@ serve(async (req) => {
       resolved_env: runtimeEnv.resolved_env,
       request_host: runtimeEnv.host,
       selected_base_url: asaasBaseUrl,
-      selected_key_source: runtimeEnv.downgraded ? "platform_sandbox_key" : (company?.asaas_api_key ? "company.asaas_api_key" : "platform_fallback"),
+      selected_key_source: !runtimeEnv.isProduction ? "platform_sandbox_key" : (company?.asaas_api_key ? "company.asaas_api_key" : "platform_fallback"),
     });
 
     if (!apiKeyToUse) {
