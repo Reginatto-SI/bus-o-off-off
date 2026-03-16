@@ -301,7 +301,11 @@ serve(async (req) => {
       }
     }
 
-    if (platformFeePercent > 0) {
+    // Quando em downgrade (sandbox), a cobrança é criada com a chave da plataforma,
+    // tornando a plataforma a dona da cobrança. Nesse caso, incluir a própria wallet
+    // no split causa erro "Não é permitido split para sua própria carteira".
+    // Portanto, omitimos o split da plataforma quando ela é a charge owner.
+    if (platformFeePercent > 0 && !runtimeEnv.downgraded) {
       if (!platformWalletId) {
         return jsonResponse({ error: "Não foi possível obter wallet da plataforma para aplicar o split.", error_code: "missing_platform_wallet" }, 500);
       }
