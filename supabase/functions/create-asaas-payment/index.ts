@@ -167,14 +167,25 @@ serve(async (req) => {
     });
 
 
-    // Importante: a cobrança precisa ser criada no contexto da conta da empresa.
-    // Se cair no token da plataforma, o checkout exibe o emissor incorreto.
-    const companyApiKey = company.asaas_api_key;
-    if (!companyApiKey) {
-      return jsonResponse({
-        error: "Empresa sem API Key do Asaas vinculada. Reconecte a conta Asaas da empresa para emitir cobranças no nome correto.",
-        error_code: "missing_company_asaas_api_key",
-      }, 400);
+    // Quando o ambiente é produção legítimo, a cobrança usa a API key da empresa.
+    // Quando houve downgrade automático para sandbox (preview/dev), a chave da empresa
+    // é de produção e não funciona no sandbox — usamos a chave da plataforma sandbox.
+    let companyApiKey: string;
+    if (runtimeEnv.downgraded) {
+      console.log("[create-asaas-payment] Downgrade ativo: usando chave da plataforma sandbox no lugar da chave da empresa", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+      });
+      companyApiKey = PLATFORM_API_KEY;
+    } else {
+      const storedKey = company.asaas_api_key;
+      if (!storedKey) {
+        return jsonResponse({
+          error: "Empresa sem API Key do Asaas vinculada. Reconecte a conta Asaas da empresa para emitir cobranças no nome correto.",
+          error_code: "missing_company_asaas_api_key",
+        }, 400);
+      }
+      companyApiKey = storedKey;
     }
 
     const platformFeePercent = Number(company.platform_fee_percent ?? 0);
