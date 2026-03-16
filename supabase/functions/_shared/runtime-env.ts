@@ -77,6 +77,7 @@ export function resolvePaymentEnvironment(req: Request): EnvironmentResolution {
       host,
       blocked: true,
       blockReason: `ASAAS_ENV não configurado ou inválido (valor: "${rawEnv}"). Configure como "sandbox" ou "production".`,
+      downgraded: false,
     };
   }
 
