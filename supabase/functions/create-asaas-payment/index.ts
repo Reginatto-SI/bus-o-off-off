@@ -167,14 +167,15 @@ serve(async (req) => {
     });
 
 
-    // Quando o ambiente é produção legítimo, a cobrança usa a API key da empresa.
-    // Quando houve downgrade automático para sandbox (preview/dev), a chave da empresa
-    // é de produção e não funciona no sandbox — usamos a chave da plataforma sandbox.
+    // Quando o ambiente resolvido é sandbox (seja por ASAAS_ENV=sandbox direto ou por
+    // downgrade automático), usamos a chave da plataforma sandbox. A chave da empresa
+    // é de produção e não funciona no ambiente sandbox do Asaas.
     let companyApiKey: string;
-    if (runtimeEnv.downgraded) {
-      console.log("[create-asaas-payment] Downgrade ativo: usando chave da plataforma sandbox no lugar da chave da empresa", {
+    if (!runtimeEnv.isProduction) {
+      console.log("[create-asaas-payment] Ambiente sandbox: usando chave da plataforma", {
         sale_id: sale.id,
         company_id: sale.company_id,
+        downgraded: runtimeEnv.downgraded,
       });
       companyApiKey = PLATFORM_API_KEY;
     } else {
@@ -301,11 +302,10 @@ serve(async (req) => {
       }
     }
 
-    // Quando em downgrade (sandbox), a cobrança é criada com a chave da plataforma,
-    // tornando a plataforma a dona da cobrança. Nesse caso, incluir a própria wallet
+    // Quando em sandbox (direto ou downgrade), a cobrança é criada com a chave da
+    // plataforma, tornando a plataforma a dona da cobrança. Incluir a própria wallet
     // no split causa erro "Não é permitido split para sua própria carteira".
-    // Portanto, omitimos o split da plataforma quando ela é a charge owner.
-    if (platformFeePercent > 0 && !runtimeEnv.downgraded) {
+    if (platformFeePercent > 0 && runtimeEnv.isProduction) {
       if (!platformWalletId) {
         return jsonResponse({ error: "Não foi possível obter wallet da plataforma para aplicar o split.", error_code: "missing_platform_wallet" }, 500);
       }
