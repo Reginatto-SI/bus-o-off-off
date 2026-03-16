@@ -96,8 +96,10 @@ serve(async (req) => {
   }));
 
   try {
-    // Regra centralizada por host: fora do domínio oficial, sempre sandbox.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return jsonResponse(403, { error: runtimeEnv.blockReason });
+    }
     const webhookTokenSecretName = getAsaasWebhookTokenSecretName(runtimeEnv.resolved_env);
     const webhookToken = Deno.env.get(webhookTokenSecretName);
     console.log("[asaas-webhook] Asaas runtime resolved", {

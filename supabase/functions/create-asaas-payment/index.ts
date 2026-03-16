@@ -88,9 +88,10 @@ serve(async (req) => {
   }
 
   try {
-    // Regra centralizada: só os domínios oficiais entram em produção.
-    // Qualquer host fora da allowlist (incluindo localhost/lovable/preview) usa sandbox.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return jsonResponse({ error: runtimeEnv.blockReason, error_code: "environment_blocked" }, 403);
+    }
     const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
     const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
     const platformWalletSecretName = getAsaasPlatformWalletSecretName(runtimeEnv.resolved_env);

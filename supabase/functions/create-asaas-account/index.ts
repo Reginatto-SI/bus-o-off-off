@@ -31,8 +31,13 @@ serve(async (req) => {
   }
 
   try {
-    // Regra centralizada: somente smartbusbr.com.br/www operam em produção.
     const runtimeEnv = resolvePaymentEnvironment(req);
+    if (runtimeEnv.blocked) {
+      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
     const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
 
