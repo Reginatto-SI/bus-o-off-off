@@ -167,14 +167,15 @@ serve(async (req) => {
     });
 
 
-    // Quando o ambiente é produção legítimo, a cobrança usa a API key da empresa.
-    // Quando houve downgrade automático para sandbox (preview/dev), a chave da empresa
-    // é de produção e não funciona no sandbox — usamos a chave da plataforma sandbox.
+    // Quando o ambiente resolvido é sandbox (seja por ASAAS_ENV=sandbox direto ou por
+    // downgrade automático), usamos a chave da plataforma sandbox. A chave da empresa
+    // é de produção e não funciona no ambiente sandbox do Asaas.
     let companyApiKey: string;
-    if (runtimeEnv.downgraded) {
-      console.log("[create-asaas-payment] Downgrade ativo: usando chave da plataforma sandbox no lugar da chave da empresa", {
+    if (!runtimeEnv.isProduction) {
+      console.log("[create-asaas-payment] Ambiente sandbox: usando chave da plataforma", {
         sale_id: sale.id,
         company_id: sale.company_id,
+        downgraded: runtimeEnv.downgraded,
       });
       companyApiKey = PLATFORM_API_KEY;
     } else {
