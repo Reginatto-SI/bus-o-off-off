@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getAsaasBaseUrl,
-  getAsaasPlatformApiKeySecretName,
-  resolvePaymentEnvironment,
+  getAsaasApiKeySecretName,
+  type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
@@ -35,7 +35,6 @@ function resolveAsaasConfirmedAtFromPayment(paymentData: any): string {
     if (normalized) return normalized;
   }
 
-  // Em fallback, usamos o instante de sincronização para não deixar pagamento pago sem lastro temporal.
   return new Date().toISOString();
 }
 
@@ -45,15 +44,6 @@ serve(async (req) => {
   }
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
-
     const { sale_id } = await req.json();
 
     if (!sale_id || typeof sale_id !== "string") {
@@ -70,7 +60,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at")
+      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
       .eq("id", sale_id)
       .single();
 
@@ -82,16 +72,10 @@ serve(async (req) => {
     }
 
     if (sale.status === "pago") {
-      const { data: paidSale } = await supabaseAdmin
-        .from("sales")
-        .select("payment_confirmed_at, platform_fee_paid_at, asaas_payment_id")
-        .eq("id", sale_id)
-        .single();
-
       return new Response(
         JSON.stringify({
           paymentStatus: "pago",
-          paymentConfirmedAt: paidSale?.payment_confirmed_at ?? ((!paidSale?.asaas_payment_id) ? paidSale?.platform_fee_paid_at : null),
+          paymentConfirmedAt: sale.payment_confirmed_at ?? ((!sale.asaas_payment_id) ? sale.platform_fee_paid_at : null),
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -111,37 +95,32 @@ serve(async (req) => {
       );
     }
 
-    // Buscar empresa com asaas_api_key e dados de comissão
+    // ── Usar ambiente salvo na venda (nunca recalcular por host) ──
+    const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
+    const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
+    const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
+    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
+
+    // Buscar empresa
     const { data: company } = await supabaseAdmin
       .from("companies")
       .select("asaas_api_key, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
-    // Em sandbox (direto ou downgrade), a cobrança foi criada com a chave da plataforma,
-    // então devemos usar essa mesma chave para consultar o pagamento.
-    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
-    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
-
     let apiKeyToUse: string | null;
-    if (!runtimeEnv.isProduction) {
-      console.log("[verify-payment-status] Ambiente sandbox: usando chave da plataforma", {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-        downgraded: runtimeEnv.downgraded,
-      });
+    if (saleEnv === "sandbox") {
       apiKeyToUse = PLATFORM_API_KEY ?? null;
     } else {
-      // Em produção, tenta a chave da empresa; fallback para a chave da plataforma
-      // para cobranças legadas criadas antes da migração para credenciais por empresa.
+      // Produção: chave da empresa, fallback para plataforma (cobranças legadas)
       apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY || null;
     }
 
-    console.log("[verify-payment-status] Asaas runtime resolved", {
-      resolved_env: runtimeEnv.resolved_env,
-      request_host: runtimeEnv.host,
-      selected_base_url: asaasBaseUrl,
-      selected_key_source: !runtimeEnv.isProduction ? "platform_sandbox_key" : (company?.asaas_api_key ? "company.asaas_api_key" : "platform_fallback"),
+    console.log("[verify-payment-status] Consultando Asaas", {
+      sale_id: sale.id,
+      sale_environment: saleEnv,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: saleEnv === "sandbox" ? `platform (${apiKeySecretName})` : (company?.asaas_api_key ? "company" : "platform_fallback"),
     });
 
     if (!apiKeyToUse) {
@@ -179,7 +158,6 @@ serve(async (req) => {
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
       const confirmedAt = resolveAsaasConfirmedAtFromPayment(paymentData);
-      // Payment confirmed — accept both pendente_pagamento and reservado
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
@@ -202,13 +180,9 @@ serve(async (req) => {
 
       console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago'`);
 
-      // Create tickets from sale_passengers (same logic as webhook)
       await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
-
-      // Release seat locks
       await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
 
-      // Calculate financial data
       if (company?.platform_fee_percent != null) {
         const platformFeePercent = Number(company.platform_fee_percent);
         const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
@@ -251,17 +225,8 @@ serve(async (req) => {
         });
       }
 
-      const { data: paidSaleAfterUpdate } = await supabaseAdmin
-        .from("sales")
-        .select("payment_confirmed_at, platform_fee_paid_at, asaas_payment_id")
-        .eq("id", sale_id)
-        .single();
-
       return new Response(
-        JSON.stringify({
-          paymentStatus: "pago",
-          paymentConfirmedAt: paidSaleAfterUpdate?.payment_confirmed_at ?? ((!paidSaleAfterUpdate?.asaas_payment_id) ? paidSaleAfterUpdate?.platform_fee_paid_at : null),
-        }),
+        JSON.stringify({ paymentStatus: "pago", paymentConfirmedAt: confirmedAt }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -293,16 +258,11 @@ serve(async (req) => {
   }
 });
 
-/**
- * Creates tickets from sale_passengers staging table.
- * Same logic as asaas-webhook to ensure consistency.
- */
 async function createTicketsFromPassengers(
   supabaseAdmin: ReturnType<typeof createClient<any>>,
   saleId: string,
   companyId: string
 ) {
-  // Idempotency: skip if tickets already exist
   const { count: existingTickets } = await supabaseAdmin
     .from("tickets")
     .select("id", { count: "exact", head: true })
@@ -350,7 +310,5 @@ async function createTicketsFromPassengers(
   }
 
   console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} via verify-payment-status`);
-
-  // Clean up staging data
   await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
 }
