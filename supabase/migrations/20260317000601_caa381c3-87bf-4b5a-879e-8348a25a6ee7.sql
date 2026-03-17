@@ -1,0 +1,1 @@
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS payment_environment text NOT NULL DEFAULT 'sandbox';
