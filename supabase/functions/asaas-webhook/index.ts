@@ -4,6 +4,7 @@ import {
   getAsaasWebhookTokenSecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
+import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,9 +139,21 @@ serve(async (req) => {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
 
+    logPaymentTrace("info", "asaas-webhook", "webhook_received", {
+      sale_id: actualSaleId || null,
+      payment_environment: saleEnv ?? "unknown",
+      payment_owner_type: saleEnv ? inferPaymentOwnerType({ environment: saleEnv, isPlatformFeeFlow: isPlatformFee }) : "unknown",
+      event_type: eventType,
+      asaas_payment_id: paymentId,
+      external_reference: externalReference,
+      token_validation_mode: saleEnv ? "sale_environment" : "dual_token_fallback",
+    });
+
     // Validar token do webhook
     const { valid: tokenValid } = validateWebhookToken(req, saleEnv);
     const hasAnyToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN") || Deno.env.get("ASAAS_WEBHOOK_TOKEN_SANDBOX");
+    // Comentário Step 1 (zona cinzenta): quando saleEnv é desconhecido, validação cai em "ambos tokens".
+    // Mantido por compatibilidade até centralização de contexto no Step 2.
 
     if (hasAnyToken && !tokenValid) {
       const unauthorizedResult: ProcessingResult = {
@@ -308,6 +321,12 @@ serve(async (req) => {
 
     return jsonResponse(result.httpStatus, result.responseBody);
   } catch (error) {
+    logPaymentTrace("error", "asaas-webhook", "unexpected_error", {
+      event_type: eventType,
+      asaas_payment_id: paymentId,
+      external_reference: externalReference,
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     const fallbackResult: ProcessingResult = {
       status: "failed",
       httpStatus: 500,
