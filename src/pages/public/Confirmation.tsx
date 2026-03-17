@@ -231,8 +231,16 @@ export default function Confirmation() {
       // already proves this logic works — now the polling reuses it automatically.
       if (attempts >= 5 && attempts % 10 === 0) {
         console.info('[confirmation] polling:trigger_verify_payment_status', { sale_id: id, attempts });
-        supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
-          .catch(() => {});
+        // Hotfix Etapa 1: não engolir falha silenciosa no polling automático.
+        // Mantemos UX discreta (sem toast automático), mas registramos o erro para suporte/diagnóstico.
+        try {
+          const { error } = await supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } });
+          if (error) {
+            console.error('[confirmation] polling:verify-payment-status:error', { sale_id: id, attempts, error });
+          }
+        } catch (pollingError) {
+          console.error('[confirmation] polling:verify-payment-status:exception', { sale_id: id, attempts, error: pollingError });
+        }
       }
 
       const { data } = await supabase.from('sales').select('status, payment_confirmed_at, asaas_payment_id, platform_fee_paid_at').eq('id', id).maybeSingle();

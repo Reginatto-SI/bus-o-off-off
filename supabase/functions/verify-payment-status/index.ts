@@ -69,6 +69,32 @@ serve(async (req) => {
     }
 
     if (sale.status === "pago") {
+      // Hotfix Etapa 1: venda "pago" sem ticket é estado crítico.
+      // Não podemos retornar sucesso saudável sem confirmar existência real de passagem.
+      const paidSaleReconciliation = await ensureTicketsForPaidSale(
+        supabaseAdmin,
+        sale.id,
+        sale.company_id,
+      );
+
+      if (!paidSaleReconciliation.ok) {
+        logPaymentTrace("error", "verify-payment-status", "paid_sale_without_tickets", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: sale.payment_environment,
+          reconciliation_reason: paidSaleReconciliation.reason,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: "Venda paga sem passagem gerada",
+            error_code: "paid_sale_without_tickets",
+            paymentStatus: "inconsistente_sem_passagem",
+          }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({
           paymentStatus: "pago",
@@ -210,8 +236,35 @@ serve(async (req) => {
 
       console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago'`);
 
+      // Hotfix Etapa 1: após confirmar pagamento, só consideramos sucesso se ticket existir ao final.
       await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
       await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
+
+      const finalizedSaleReconciliation = await ensureTicketsForPaidSale(
+        supabaseAdmin,
+        sale_id,
+        sale.company_id,
+      );
+
+      if (!finalizedSaleReconciliation.ok) {
+        logPaymentTrace("error", "verify-payment-status", "payment_confirmed_but_ticket_missing", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          asaas_payment_id: sale.asaas_payment_id,
+          asaas_status: asaasStatus,
+          reconciliation_reason: finalizedSaleReconciliation.reason,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: "Pagamento confirmado, mas a passagem não foi gerada",
+            error_code: "ticket_generation_incomplete",
+            paymentStatus: "inconsistente_sem_passagem",
+          }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       logPaymentTrace("info", "verify-payment-status", "status_transition_success", {
         sale_id: sale.id,
@@ -370,4 +423,34 @@ async function createTicketsFromPassengers(
 
   console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} via verify-payment-status`);
   await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
+}
+
+async function ensureTicketsForPaidSale(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  saleId: string,
+  companyId: string,
+): Promise<{ ok: boolean; reason: "already_exists" | "created_on_reconciliation" | "missing_sale_passengers_or_insert_failure" }> {
+  const { count: ticketsBefore } = await supabaseAdmin
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("sale_id", saleId);
+
+  if ((ticketsBefore ?? 0) > 0) {
+    return { ok: true, reason: "already_exists" };
+  }
+
+  // Hotfix Etapa 1: quando a venda já está paga mas sem ticket, tentamos reconciliação imediata.
+  // Isso evita falso positivo operacional (cliente pago sem passagem).
+  await createTicketsFromPassengers(supabaseAdmin, saleId, companyId);
+
+  const { count: ticketsAfter } = await supabaseAdmin
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("sale_id", saleId);
+
+  if ((ticketsAfter ?? 0) > 0) {
+    return { ok: true, reason: "created_on_reconciliation" };
+  }
+
+  return { ok: false, reason: "missing_sale_passengers_or_insert_failure" };
 }
