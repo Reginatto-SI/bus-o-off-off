@@ -120,7 +120,21 @@ serve(async (req) => {
       decision_trace: paymentContext.decisionTrace,
     });
 
-    console.log("[verify-payment-status] Consultando Asaas", {
+    const apiKeyToUse = paymentContext.apiKey;
+
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      asaas_payment_id: sale.asaas_payment_id,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
+    });
+
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
       sale_id: sale.id,
       sale_environment: paymentContext.environment,
       asaas_base_url: paymentContext.baseUrl,
