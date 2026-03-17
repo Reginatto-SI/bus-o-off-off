@@ -99,6 +99,9 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
+    // Pré-Step 5: fallback legado só pode ser habilitado explicitamente por feature flag temporária.
+    const allowLegacyVerifyFallback = Deno.env.get("ASAAS_VERIFY_ALLOW_LEGACY_FALLBACK") === "true";
+
     const paymentContext = resolvePaymentContext({
       mode: "verify",
       sale,
@@ -136,6 +139,15 @@ serve(async (req) => {
         }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (paymentContext.apiKeySource.includes("platform_fallback")) {
+      logPaymentTrace("warn", "verify-payment-status", "legacy_fallback_used", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        api_key_source: paymentContext.apiKeySource,
+      });
     }
 
     // Query Asaas for payment status
