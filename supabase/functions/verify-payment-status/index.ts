@@ -182,7 +182,17 @@ serve(async (req) => {
       });
 
       if (!res.ok) {
-        console.error("Asaas payment retrieve error:", await res.text());
+        const responseText = await res.text();
+        console.error("Asaas payment retrieve error:", responseText);
+        logPaymentTrace("error", "verify-payment-status", "payment_status_fetch_failed", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          asaas_payment_id: sale.asaas_payment_id,
+          http_status: res.status,
+          result: "unexpected_error",
+          detail: responseText,
+        });
         return new Response(
           JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -192,6 +202,14 @@ serve(async (req) => {
       paymentData = await res.json();
     } catch (err) {
       console.error("Asaas API error:", err);
+      logPaymentTrace("error", "verify-payment-status", "payment_status_fetch_exception", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_payment_id: sale.asaas_payment_id,
+        result: "unexpected_error",
+        error_message: err instanceof Error ? err.message : String(err),
+      });
       return new Response(
         JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -319,6 +337,13 @@ serve(async (req) => {
     }
 
     if (asaasStatus === "OVERDUE") {
+      logPaymentTrace("info", "verify-payment-status", "payment_not_confirmed", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_status: asaasStatus,
+        result: "payment_not_confirmed",
+      });
       return new Response(
         JSON.stringify({ paymentStatus: "expirado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -326,11 +351,27 @@ serve(async (req) => {
     }
 
     if (asaasStatus === "PENDING" || asaasStatus === "AWAITING_RISK_ANALYSIS") {
+      logPaymentTrace("info", "verify-payment-status", "payment_not_confirmed", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_status: asaasStatus,
+        result: "payment_not_confirmed",
+      });
       return new Response(
         JSON.stringify({ paymentStatus: "processando" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    logPaymentTrace("info", "verify-payment-status", "payment_status_unchanged", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      asaas_status: asaasStatus,
+      result: "payment_not_confirmed",
+      current_sale_status: sale.status,
+    });
 
     return new Response(
       JSON.stringify({ paymentStatus: sale.status, asaas_status: asaasStatus }),

@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logPaymentTrace } from "./payment-observability.ts";
+import { logPaymentTrace, logSaleOperationalEvent } from "./payment-observability.ts";
 
 export type TicketCreationStatus = "created" | "skipped_existing" | "skipped_no_passengers" | "error";
 
@@ -24,6 +24,7 @@ export type SaleConsistencyInspection = {
     asaas_payment_id: string | null;
     payment_confirmed_at: string | null;
     platform_fee_paid_at: string | null;
+    payment_environment: string | null;
   } | null;
   ticketsCount: number;
   reason: string;
@@ -35,7 +36,7 @@ export async function inspectSaleConsistency(
 ): Promise<SaleConsistencyInspection> {
   const { data: sale, error: saleError } = await supabaseAdmin
     .from("sales")
-    .select("id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at")
+    .select("id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at, payment_environment")
     .eq("id", saleId)
     .maybeSingle();
 
@@ -156,6 +157,7 @@ export async function finalizeConfirmedPayment(params: {
     id: string;
     company_id: string;
     status: string;
+    payment_environment?: string | null;
   };
   confirmedAt: string;
   asaasStatus: string;
@@ -177,6 +179,17 @@ export async function finalizeConfirmedPayment(params: {
   const allowStatusUpdate = params.allowStatusUpdate ?? true;
   const writeSaleLog = params.writeSaleLog ?? true;
 
+  // Etapa 4: trilha operacional mínima por venda para facilitar suporte por sale_id.
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId: sale.id,
+    companyId: sale.company_id,
+    action: "payment_finalize_started",
+    source,
+    result: "started",
+    paymentEnvironment: sale.payment_environment ?? null,
+  });
+
   let transitionedToPaid = false;
 
   if (sale.status !== "pago" && allowStatusUpdate) {
@@ -193,6 +206,17 @@ export async function finalizeConfirmedPayment(params: {
       .maybeSingle();
 
     if (updateError) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_finalize_failed",
+        source,
+        result: "error",
+        paymentEnvironment: sale.payment_environment ?? null,
+        errorCode: "sale_update_failed",
+        detail: updateError.message,
+      });
       return {
         ok: false,
         httpStatus: 500,
@@ -233,6 +257,18 @@ export async function finalizeConfirmedPayment(params: {
       allow_status_update: allowStatusUpdate,
     });
 
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "payment_finalize_inconsistent",
+      source,
+      result: "inconsistent_paid_without_ticket",
+      paymentEnvironment: sale.payment_environment ?? null,
+      errorCode: "inconsistent_paid_without_ticket",
+      detail: ticketResult.status,
+    });
+
     return {
       ok: false,
       httpStatus: 409,
@@ -246,6 +282,17 @@ export async function finalizeConfirmedPayment(params: {
   const { error: seatLockError } = await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale.id);
 
   if (seatLockError) {
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "payment_finalize_failed",
+      source,
+      result: "error",
+      paymentEnvironment: sale.payment_environment ?? null,
+      errorCode: "seat_lock_cleanup_failed",
+      detail: seatLockError.message,
+    });
     return {
       ok: false,
       httpStatus: 500,
@@ -266,6 +313,17 @@ export async function finalizeConfirmedPayment(params: {
       company_id: sale.company_id,
     });
   }
+
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId: sale.id,
+    companyId: sale.company_id,
+    action: "payment_finalize_completed",
+    source,
+    result: transitionedToPaid ? "payment_confirmed" : "healthy",
+    paymentEnvironment: sale.payment_environment ?? null,
+    detail: `ticket_status=${ticketResult.status}`,
+  });
 
   return {
     ok: true,

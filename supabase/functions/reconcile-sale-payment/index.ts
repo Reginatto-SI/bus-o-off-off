@@ -15,6 +15,7 @@ type ReconcileItemResult = {
   message: string;
   tickets_before: number;
   tickets_after: number;
+  payment_environment: string | null;
 };
 
 serve(async (req) => {
@@ -50,35 +51,55 @@ serve(async (req) => {
       const ticketsBefore = inspection.ticketsCount;
 
       if (inspection.state === "not_found") {
+        logPaymentTrace("warn", "reconcile-sale-payment", "sale_not_found", {
+          sale_id: saleId,
+          result: "not_found",
+        });
         results.push({
           sale_id: saleId,
           state: "not_found",
           message: inspection.reason,
           tickets_before: ticketsBefore,
           tickets_after: ticketsBefore,
+          payment_environment: null,
         });
         continue;
       }
 
       if (inspection.state === "healthy") {
         // Etapa 3: venda saudável não deve ser alterada por reconciliação manual.
+        logPaymentTrace("info", "reconcile-sale-payment", "sale_already_healthy", {
+          sale_id: saleId,
+          company_id: inspection.sale?.company_id ?? null,
+          payment_environment: inspection.sale?.payment_environment ?? null,
+          result: "healthy",
+        });
         results.push({
           sale_id: saleId,
           state: "healthy",
           message: inspection.reason,
           tickets_before: ticketsBefore,
           tickets_after: ticketsBefore,
+          payment_environment: inspection.sale?.payment_environment ?? null,
         });
         continue;
       }
 
       if (inspection.state === "not_paid" || !inspection.sale) {
+        logPaymentTrace("info", "reconcile-sale-payment", "sale_not_eligible", {
+          sale_id: saleId,
+          company_id: inspection.sale?.company_id ?? null,
+          payment_environment: inspection.sale?.payment_environment ?? null,
+          result: "not_eligible",
+          reason: inspection.reason,
+        });
         results.push({
           sale_id: saleId,
           state: "not_eligible",
           message: inspection.reason,
           tickets_before: ticketsBefore,
           tickets_after: ticketsBefore,
+          payment_environment: inspection.sale?.payment_environment ?? null,
         });
         continue;
       }
@@ -97,28 +118,52 @@ serve(async (req) => {
       const postInspection = await inspectSaleConsistency(supabaseAdmin, saleId);
 
       if (finalization.ok) {
+        logPaymentTrace("info", "reconcile-sale-payment", "sale_reconciled", {
+          sale_id: saleId,
+          company_id: inspection.sale.company_id,
+          payment_environment: inspection.sale.payment_environment ?? null,
+          result: "reconciled",
+          ticket_status: finalization.ticketStatus,
+        });
         results.push({
           sale_id: saleId,
           state: "reconciled",
           message: finalization.message,
           tickets_before: ticketsBefore,
           tickets_after: postInspection.ticketsCount,
+          payment_environment: inspection.sale.payment_environment ?? null,
         });
       } else if (finalization.state === "inconsistent") {
+        logPaymentTrace("warn", "reconcile-sale-payment", "sale_inconsistent_unresolved", {
+          sale_id: saleId,
+          company_id: inspection.sale.company_id,
+          payment_environment: inspection.sale.payment_environment ?? null,
+          result: "inconsistent_paid_without_ticket",
+          ticket_status: finalization.ticketStatus,
+        });
         results.push({
           sale_id: saleId,
           state: "inconsistent_unresolved",
           message: finalization.message,
           tickets_before: ticketsBefore,
           tickets_after: postInspection.ticketsCount,
+          payment_environment: inspection.sale.payment_environment ?? null,
         });
       } else {
+        logPaymentTrace("error", "reconcile-sale-payment", "sale_reconciliation_error", {
+          sale_id: saleId,
+          company_id: inspection.sale.company_id,
+          payment_environment: inspection.sale.payment_environment ?? null,
+          result: "unexpected_error",
+          message: finalization.message,
+        });
         results.push({
           sale_id: saleId,
           state: "error",
           message: finalization.message,
           tickets_before: ticketsBefore,
           tickets_after: postInspection.ticketsCount,
+          payment_environment: inspection.sale.payment_environment ?? null,
         });
       }
     }
@@ -140,6 +185,7 @@ serve(async (req) => {
       not_eligible: summary.not_eligible,
       not_found: summary.not_found,
       error: summary.error,
+      payment_environments: [...new Set(results.map((r) => r.payment_environment).filter(Boolean))],
     });
 
     return jsonResponse(200, { summary, results });
