@@ -62,8 +62,11 @@ export default function MySales() {
   };
 
   const totalSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
-  const totalValue = sales.reduce((sum, sale) => sum + sale.quantity * sale.unit_price, 0);
-  const estimatedCommission = seller ? totalValue * (seller.commission_percent / 100) : 0;
+  // Mantemos total gerado para visão comercial e total pago para comissão oficial.
+  const totalGeneratedValue = sales.reduce((sum, sale) => sum + sale.quantity * sale.unit_price, 0);
+  const paidSales = sales.filter((sale) => sale.status === 'pago');
+  const paidValue = paidSales.reduce((sum, sale) => sum + sale.quantity * sale.unit_price, 0);
+  const estimatedCommission = seller ? paidValue * (seller.commission_percent / 100) : 0;
 
   if (loading) {
     return (
@@ -135,8 +138,8 @@ export default function MySales() {
                   <ShoppingCart className="h-5 w-5 text-success" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Vendido</p>
-                  <p className="text-2xl font-bold">{formatCurrencyBRL(totalValue)}</p>
+                  <p className="text-sm text-muted-foreground">Valor Gerado</p>
+                  <p className="text-2xl font-bold">{formatCurrencyBRL(totalGeneratedValue)}</p>
                 </div>
               </div>
             </CardContent>
@@ -150,7 +153,7 @@ export default function MySales() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    Comissão Estimada ({seller?.commission_percent}%)
+                    Comissão Oficial (somente pagas) ({seller?.commission_percent}%)
                   </p>
                   <p className="text-2xl font-bold">{formatCurrencyBRL(estimatedCommission)}</p>
                 </div>
@@ -192,7 +195,9 @@ export default function MySales() {
                 <TableBody>
                   {sales.map((sale) => {
                     const saleValue = sale.quantity * sale.unit_price;
-                    const commission = seller ? saleValue * (seller.commission_percent / 100) : 0;
+                    const commission = seller && sale.status === 'pago'
+                      ? saleValue * (seller.commission_percent / 100)
+                      : 0;
                     return (
                       <TableRow key={sale.id}>
                         <TableCell className="text-sm">

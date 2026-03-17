@@ -56,6 +56,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { useAuth } from '@/contexts/AuthContext';
+import { StatsCard } from '@/components/admin/StatsCard';
 
 // ── Types ──
 interface DiagnosticFilters {
@@ -84,6 +85,23 @@ interface DiagnosticSale extends Sale {
   event_name?: string;
   event_date?: string;
   ticket_count?: number;
+  active_lock_count?: number;
+  latest_lock_expires_at?: string | null;
+}
+
+type OperationalCategory = 'saudavel' | 'atencao' | 'problema' | 'pago' | 'cancelado';
+
+interface DiagnosticOperationalView {
+  category: OperationalCategory;
+  categoryLabel: string;
+  categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  categoryClassName?: string;
+  priority: number;
+  createdAgoLabel: string;
+  expirationLabel: string | null;
+  lockLabel: string;
+  lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  hasGatewayDivergence: boolean;
 }
 
 interface SaleIntegrationLog {
@@ -108,6 +126,130 @@ interface SaleIntegrationLog {
 
 function formatPaymentEnvironmentLabel(value?: string | null): string {
   return value === 'production' ? 'Produção' : 'Sandbox';
+}
+
+function formatElapsedMinutesLabel(createdAt: string): string {
+  const elapsedMs = Date.now() - new Date(createdAt).getTime();
+  const elapsedMinutes = Math.max(Math.floor(elapsedMs / 60000), 0);
+  if (elapsedMinutes < 1) return 'Criado há menos de 1 min';
+  return `Criado há ${elapsedMinutes} min`;
+}
+
+function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView {
+  const createdAgoLabel = formatElapsedMinutesLabel(sale.created_at);
+  const pendingStatuses: SaleStatus[] = ['pendente_pagamento', 'reservado'];
+  const isPending = pendingStatuses.includes(sale.status);
+  const lockExpiresAt = sale.latest_lock_expires_at ? new Date(sale.latest_lock_expires_at).getTime() : null;
+  const hasActiveLock = (sale.active_lock_count ?? 0) > 0 && lockExpiresAt !== null && lockExpiresAt > Date.now();
+  const hasExpiredLock = (sale.active_lock_count ?? 0) <= 0 && lockExpiresAt !== null && lockExpiresAt <= Date.now();
+  const hasMissingLock = (sale.active_lock_count ?? 0) <= 0;
+  const hasPartialLock = (sale.active_lock_count ?? 0) > 0 && (sale.active_lock_count ?? 0) < Math.max(sale.quantity, 1);
+
+  const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
+  const hasGatewayDivergence = (isPending && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
+
+  let lockLabel = '⚠️ Lock ausente';
+  let lockVariant: DiagnosticOperationalView['lockVariant'] = 'destructive';
+  if (hasActiveLock) {
+    lockLabel = '✔️ Lock ativo';
+    lockVariant = 'default';
+  } else if (hasExpiredLock) {
+    lockLabel = '❌ Lock expirado';
+    lockVariant = 'destructive';
+  }
+
+  if (sale.status === 'pago') {
+    return {
+      category: 'pago',
+      categoryLabel: '🔵 Pago',
+      categoryVariant: 'default',
+      priority: 4,
+      createdAgoLabel,
+      expirationLabel: null,
+      lockLabel,
+      lockVariant,
+      hasGatewayDivergence,
+    };
+  }
+
+  if (sale.status === 'cancelado') {
+    return {
+      category: 'cancelado',
+      categoryLabel: '⚫ Cancelado',
+      categoryVariant: 'outline',
+      categoryClassName: 'border-zinc-400 text-zinc-700',
+      priority: 5,
+      createdAgoLabel,
+      expirationLabel: null,
+      lockLabel,
+      lockVariant,
+      hasGatewayDivergence,
+    };
+  }
+
+  if (!isPending) {
+    return {
+      category: 'atencao',
+      categoryLabel: '🟡 Atenção',
+      categoryVariant: 'secondary',
+      priority: 3,
+      createdAgoLabel,
+      expirationLabel: null,
+      lockLabel,
+      lockVariant,
+      hasGatewayDivergence,
+    };
+  }
+
+  // Regra operacional Step 3:
+  // - até 10min com lock ativo: saudável
+  // - entre 10 e 15min, ou lock parcial: atenção
+  // - >15min, lock ausente/expirado ou divergência gateway: problema
+  const elapsedMinutes = Math.max(Math.floor((Date.now() - new Date(sale.created_at).getTime()) / 60000), 0);
+  const remaining = 15 - elapsedMinutes;
+  const expirationLabel = remaining >= 0 ? `Expira em ${remaining} min` : `Expirado há ${Math.abs(remaining)} min`;
+
+  const isProblem = elapsedMinutes > 15 || hasMissingLock || hasExpiredLock || hasGatewayDivergence;
+  if (isProblem) {
+    return {
+      category: 'problema',
+      categoryLabel: '🔴 Problema',
+      categoryVariant: 'destructive',
+      priority: 1,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel,
+      lockVariant,
+      hasGatewayDivergence,
+    };
+  }
+
+  const isAttention = elapsedMinutes > 10 || hasPartialLock;
+  if (isAttention) {
+    return {
+      category: 'atencao',
+      categoryLabel: '🟡 Atenção',
+      categoryVariant: 'secondary',
+      priority: 2,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel,
+      lockVariant,
+      hasGatewayDivergence,
+    };
+  }
+
+  return {
+    category: 'saudavel',
+    categoryLabel: '🟢 Saudável',
+    categoryVariant: 'default',
+    priority: 3,
+    createdAgoLabel,
+    expirationLabel,
+    lockLabel,
+    lockVariant,
+    hasGatewayDivergence,
+  };
 }
 
 // ── Flow stage computation ──
@@ -313,6 +455,30 @@ export default function SalesDiagnostic() {
     filters.dateTo !== ''
   ), [filters]);
 
+  const salesWithOperationalView = useMemo(() => {
+    return sales
+      .map((sale) => ({ sale, operational: computeOperationalView(sale) }))
+      .sort((a, b) => {
+        // Diagnóstico operacional: problemas ficam no topo para leitura imediata de suporte.
+        if (a.operational.priority !== b.operational.priority) {
+          return a.operational.priority - b.operational.priority;
+        }
+        return new Date(b.sale.created_at).getTime() - new Date(a.sale.created_at).getTime();
+      });
+  }, [sales]);
+
+  const operationalSummary = useMemo(() => {
+    return salesWithOperationalView.reduce((acc, entry) => {
+      acc.total += 1;
+      if (entry.operational.category === 'saudavel') acc.saudavel += 1;
+      if (entry.operational.category === 'atencao') acc.atencao += 1;
+      if (entry.operational.category === 'problema') acc.problema += 1;
+      if (entry.operational.category === 'pago') acc.pago += 1;
+      if (entry.operational.category === 'cancelado') acc.cancelado += 1;
+      return acc;
+    }, { total: 0, saudavel: 0, atencao: 0, problema: 0, pago: 0, cancelado: 0 });
+  }, [salesWithOperationalView]);
+
   const fetchSales = async () => {
     setLoading(true);
 
@@ -365,17 +531,44 @@ export default function SalesDiagnostic() {
 
     const rawSales = (data ?? []) as any[];
 
-    // Fetch ticket counts for these sales
+    // Fetch ticket counts and current seat locks for these sales.
+    // Comentário de manutenção: usamos seat_locks para diagnosticar lock ativo/ausente/expirado
+    // sem alterar a regra de negócio do checkout/expiração definida nos steps anteriores.
     const saleIds = rawSales.map((s) => s.id);
-    let ticketCounts: Record<string, number> = {};
+    const ticketCounts: Record<string, number> = {};
+    const activeLockCountBySale: Record<string, number> = {};
+    const latestLockExpiryBySale: Record<string, string> = {};
     if (saleIds.length > 0) {
-      const { data: tickets } = await supabase
-        .from('tickets')
-        .select('sale_id')
-        .in('sale_id', saleIds);
+      const [ticketsRes, locksRes] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select('sale_id')
+          .in('sale_id', saleIds),
+        supabase
+          .from('seat_locks')
+          .select('sale_id, expires_at')
+          .in('sale_id', saleIds),
+      ]);
+
+      const tickets = ticketsRes.data ?? [];
+      const seatLocks = locksRes.data ?? [];
 
       (tickets ?? []).forEach((t: any) => {
         ticketCounts[t.sale_id] = (ticketCounts[t.sale_id] ?? 0) + 1;
+      });
+
+      seatLocks.forEach((lock: any) => {
+        const saleId = lock.sale_id as string | null;
+        if (!saleId) return;
+
+        if (new Date(lock.expires_at).getTime() > Date.now()) {
+          activeLockCountBySale[saleId] = (activeLockCountBySale[saleId] ?? 0) + 1;
+        }
+
+        const currentLatest = latestLockExpiryBySale[saleId];
+        if (!currentLatest || new Date(lock.expires_at).getTime() > new Date(currentLatest).getTime()) {
+          latestLockExpiryBySale[saleId] = lock.expires_at;
+        }
       });
     }
 
@@ -385,6 +578,8 @@ export default function SalesDiagnostic() {
       event_name: s.event?.name ?? '-',
       event_date: s.event?.date ?? null,
       ticket_count: ticketCounts[s.id] ?? 0,
+      active_lock_count: activeLockCountBySale[s.id] ?? 0,
+      latest_lock_expires_at: latestLockExpiryBySale[s.id] ?? null,
     }));
 
     // Client-side filters for gateway and payment status
@@ -576,6 +771,17 @@ export default function SalesDiagnostic() {
           />
         </div>
 
+        {!loading && sales.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <StatsCard label="Total" value={operationalSummary.total} icon={Activity} />
+            <StatsCard label="Pendentes saudáveis" value={operationalSummary.saudavel} icon={CheckCircle} variant="success" />
+            <StatsCard label="Pendentes atenção" value={operationalSummary.atencao} icon={AlertTriangle} variant="warning" />
+            <StatsCard label="Pendentes problema" value={operationalSummary.problema} icon={XCircle} variant="destructive" />
+            <StatsCard label="Pagas" value={operationalSummary.pago} icon={Ticket} variant="success" />
+            <StatsCard label="Canceladas" value={operationalSummary.cancelado} icon={Clock} />
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -598,13 +804,16 @@ export default function SalesDiagnostic() {
                   <TableHead className="w-[105px]">Valor</TableHead>
                   <TableHead className="w-[95px]">Gateway</TableHead>
                   <TableHead className="w-[105px]">Ambiente</TableHead>
+                  <TableHead className="w-[140px]">Diagnóstico</TableHead>
+                  <TableHead className="w-[170px]">Tempo</TableHead>
+                  <TableHead className="w-[140px]">Lock</TableHead>
                   <TableHead className="w-[190px]">Status</TableHead>
                   <TableHead className="w-[170px]">Fluxo</TableHead>
                   <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {sales.map((sale) => {
+                {salesWithOperationalView.map(({ sale, operational }) => {
                   const gateway = computeGateway(sale);
                   const paymentStatus = computePaymentStatus(sale);
                   const flowStage = computeFlowStage(sale);
@@ -620,7 +829,7 @@ export default function SalesDiagnostic() {
                   ];
 
                   return (
-                    <TableRow key={sale.id}>
+                    <TableRow key={sale.id} className={operational.category === 'problema' ? 'bg-destructive/5' : ''}>
                       <TableCell className="whitespace-nowrap py-5 text-sm">
                         {format(parseISO(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                       </TableCell>
@@ -641,7 +850,26 @@ export default function SalesDiagnostic() {
                       <TableCell className="py-5">
                         {/* Suporte: mostra o ambiente persistido da venda (fonte de verdade do fluxo). */}
                         <Badge variant="outline" className="text-xs">
-                          {formatPaymentEnvironmentLabel((sale as any).payment_environment)}
+                          {(sale as any).payment_environment === 'production' ? '🌐 Produção' : '🧪 Sandbox'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-5">
+                        <Badge variant={operational.categoryVariant} className={`text-xs whitespace-nowrap ${operational.categoryClassName ?? ''}`}>
+                          {operational.categoryLabel}
+                        </Badge>
+                        {operational.hasGatewayDivergence && (
+                          <Badge variant="destructive" className="text-xs mt-1">Divergência gateway</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-5">
+                        <div className="space-y-1 text-xs">
+                          <p>{operational.createdAgoLabel}</p>
+                          {operational.expirationLabel && <p className="text-muted-foreground">{operational.expirationLabel}</p>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-5">
+                        <Badge variant={operational.lockVariant} className="text-xs whitespace-nowrap">
+                          {operational.lockLabel}
                         </Badge>
                       </TableCell>
                       <TableCell className="py-5">

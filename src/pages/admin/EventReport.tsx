@@ -271,8 +271,9 @@ export default function EventReport() {
         platformFee: 0,
       };
 
-      const isSold = sale.status !== 'cancelado';
-      if (isSold) {
+      // Regra oficial do Step 2: ocupação/receita consolidadas usam somente vendas pagas.
+      const isFinanciallyConfirmed = sale.status === 'pago';
+      if (isFinanciallyConfirmed) {
         row.soldTickets += Number(sale.quantity);
         row.grossRevenue += getSaleAmount(sale);
         row.platformFee += Number(sale.platform_fee_total ?? 0);
@@ -310,9 +311,9 @@ export default function EventReport() {
         { key: 'data', label: 'Data' },
         { key: 'veiculo', label: 'Veículo' },
         { key: 'capacidade', label: 'Capacidade' },
-        { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+        { key: 'passagens_vendidas', label: 'Passagens pagas' },
         { key: 'ocupacao', label: 'Ocupação (%)' },
-        { key: 'receita', label: 'Receita' },
+        { key: 'receita', label: 'Receita (pagas)' },
       ];
     }
 
@@ -332,7 +333,7 @@ export default function EventReport() {
       { key: 'evento', label: 'Evento' },
       { key: 'veiculo', label: 'Veículo' },
       { key: 'capacidade', label: 'Capacidade' },
-      { key: 'passagens_vendidas', label: 'Passagens vendidas' },
+      { key: 'passagens_vendidas', label: 'Passagens pagas' },
       { key: 'passagens_disponiveis', label: 'Passagens disponíveis' },
       { key: 'ocupacao', label: 'Ocupação (%)' },
     ];
@@ -384,7 +385,7 @@ export default function EventReport() {
       <div className="page-container">
         <PageHeader
           title="Relatório por Evento"
-          description="Análise gerencial de desempenho dos eventos: vendas, ocupação e receita."
+          description="Análise gerencial de desempenho dos eventos com consolidação financeira apenas de vendas pagas."
           actions={(
             <>
               <Button variant="outline" size="sm" onClick={refreshReportData}>
@@ -405,10 +406,10 @@ export default function EventReport() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <StatsCard label="Eventos analisados" value={kpis.eventsCount} icon={Calendar} />
-          <StatsCard label="Passagens vendidas" value={kpis.soldTickets} icon={Ticket} />
-          <StatsCard label="Receita bruta" value={canViewFinancials ? formatCurrencyBRL(kpis.grossRevenue) : '—'} icon={DollarSign} variant="success" />
+          <StatsCard label="Passagens pagas" value={kpis.soldTickets} icon={Ticket} />
+          <StatsCard label="Receita bruta (pagas)" value={canViewFinancials ? formatCurrencyBRL(kpis.grossRevenue) : '—'} icon={DollarSign} variant="success" />
           <StatsCard label="Taxa da plataforma" value={canViewFinancials ? formatCurrencyBRL(kpis.platformFee) : '—'} icon={Percent} />
-          <StatsCard label="Receita líquida" value={canViewFinancials ? formatCurrencyBRL(kpis.netRevenue) : '—'} icon={Wallet} variant="success" />
+          <StatsCard label="Receita líquida (pagas)" value={canViewFinancials ? formatCurrencyBRL(kpis.netRevenue) : '—'} icon={Wallet} variant="success" />
           <StatsCard label="Ocupação média" value={`${kpis.avgOccupancy.toFixed(2)}%`} icon={BarChart3} />
         </div>
 
@@ -552,9 +553,9 @@ export default function EventReport() {
                         <TableHead>Data</TableHead>
                         <TableHead>Veículo</TableHead>
                         <TableHead className="text-center">Capacidade</TableHead>
-                        <TableHead className="text-center">Passagens vendidas</TableHead>
+                        <TableHead className="text-center">Passagens pagas</TableHead>
                         <TableHead className="text-center">Ocupação (%)</TableHead>
-                        <TableHead className="text-right">Receita</TableHead>
+                        <TableHead className="text-right">Receita (pagas)</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -617,7 +618,7 @@ export default function EventReport() {
                         <TableHead>Evento</TableHead>
                         <TableHead>Veículo</TableHead>
                         <TableHead className="text-center">Capacidade</TableHead>
-                        <TableHead className="text-center">Passagens vendidas</TableHead>
+                        <TableHead className="text-center">Passagens pagas</TableHead>
                         <TableHead className="text-center">Passagens disponíveis</TableHead>
                         <TableHead className="text-center">Ocupação (%)</TableHead>
                       </TableRow>

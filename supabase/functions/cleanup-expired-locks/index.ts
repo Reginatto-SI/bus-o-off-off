@@ -9,7 +9,12 @@ const corsHeaders = {
 
 /**
  * Cleanup expired seat locks and cancel corresponding pending sales.
- * Called via pg_cron every 5 minutes.
+ * Called automatically by pg_cron (migration dedicada deste Step 1).
+ *
+ * Regra operacional protegida aqui:
+ * - seat_locks expiram em 15 minutos no checkout público;
+ * - venda só é cancelada automaticamente se continuar em `pendente_pagamento`;
+ * - locks expirados sempre são removidos para liberar assentos no mapa público.
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -22,11 +27,14 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // 1. Find expired locks
+    const nowIso = new Date().toISOString();
+
+    // 1) Busca locks expirados no momento atual.
+    // A consulta é repetível e idempotente: se nada expirou, retorna rapidamente.
     const { data: expiredLocks, error: locksError } = await supabaseAdmin
       .from("seat_locks")
       .select("id, sale_id")
-      .lt("expires_at", new Date().toISOString());
+      .lt("expires_at", nowIso);
 
     if (locksError) {
       console.error("Error fetching expired locks:", locksError);
@@ -45,19 +53,42 @@ serve(async (req) => {
 
     console.log(`Found ${expiredLocks.length} expired seat locks`);
 
-    // 2. Get unique sale IDs from expired locks
-    const saleIds = [...new Set(expiredLocks.map(l => l.sale_id).filter(Boolean))] as string[];
+    // 2) Extrai vendas candidatas ao cancelamento.
+    // Nem toda venda com lock expirado deve ser cancelada imediatamente: primeiro
+    // validamos se ainda não restou lock ativo para a mesma venda.
+    const saleIds = [...new Set(expiredLocks.map((l) => l.sale_id).filter(Boolean))] as string[];
+    let cancellableSaleIds = saleIds;
 
-    // 3. Cancel pending sales whose locks expired
     if (saleIds.length > 0) {
+      const { data: activeLocksForSales, error: activeLocksError } = await supabaseAdmin
+        .from("seat_locks")
+        .select("sale_id")
+        .in("sale_id", saleIds)
+        .gt("expires_at", nowIso);
+
+      if (activeLocksError) {
+        console.error("Error fetching active locks for candidate sales:", activeLocksError);
+        return new Response(JSON.stringify({ error: "Failed to validate active locks" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const salesWithActiveLocks = new Set((activeLocksForSales ?? []).map((row) => row.sale_id).filter(Boolean));
+      cancellableSaleIds = saleIds.filter((id) => !salesWithActiveLocks.has(id));
+    }
+
+    // 3) Cancela somente vendas ainda pendentes E sem lock ativo remanescente.
+    // Essa condição evita cancelamento precoce em cenários de lock parcial.
+    if (cancellableSaleIds.length > 0) {
       const { data: cancelledSales } = await supabaseAdmin
         .from("sales")
         .update({
           status: "cancelado",
-          cancel_reason: "Tempo de pagamento expirado",
-          cancelled_at: new Date().toISOString(),
+          cancel_reason: "Reserva expirada automaticamente após 15 minutos sem confirmação de pagamento",
+          cancelled_at: nowIso,
         })
-        .in("id", saleIds)
+        .in("id", cancellableSaleIds)
         .eq("status", "pendente_pagamento")
         .select("id, company_id");
 
@@ -65,32 +96,38 @@ serve(async (req) => {
         console.log(`Cancelled ${cancelledSales.length} expired pending sales`);
 
         // Log cancellations
-        const logs = cancelledSales.map((s: any) => ({
+        const logs = cancelledSales.map((s) => ({
           sale_id: s.id,
           action: "auto_cancelled",
-          description: "Venda cancelada automaticamente: tempo de pagamento expirado.",
+          description: "Venda cancelada automaticamente por expiração de reserva (15 minutos sem confirmação de pagamento).",
           company_id: s.company_id,
         }));
         await supabaseAdmin.from("sale_logs").insert(logs);
 
-        // Clean up sale_passengers for cancelled sales
+        // Limpeza de staging: impede resíduos de passageiros em vendas expiradas.
+        // Fluxos de pagamento confirmado (webhook/verify) já removem esse staging na finalização.
         for (const s of cancelledSales) {
           await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", s.id);
         }
       }
     }
 
-    // 4. Delete all expired locks
+    // 4) Remove locks expirados para liberar assentos no mapa público.
+    // Checkout e seat map consideram somente locks com expires_at > now.
     const { error: deleteError } = await supabaseAdmin
       .from("seat_locks")
       .delete()
-      .lt("expires_at", new Date().toISOString());
+      .lt("expires_at", nowIso);
 
     if (deleteError) {
       console.error("Error deleting expired locks:", deleteError);
     }
 
-    return new Response(JSON.stringify({ cleaned: expiredLocks.length, cancelled_sales: saleIds.length }), {
+    return new Response(JSON.stringify({
+      cleaned: expiredLocks.length,
+      candidate_sales: saleIds.length,
+      cancellable_sales: cancellableSaleIds.length,
+    }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

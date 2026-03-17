@@ -656,12 +656,14 @@ export default function Sales() {
     // Exclude bloqueados from commercial stats
     const commercialSales = sales.filter((s) => s.status !== 'bloqueado');
     const total = totalSalesCount;
-    const totalValue = commercialSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
-    const pagas = commercialSales.filter((s) => s.status === 'pago').length;
-    const reservadas = commercialSales.filter((s) => s.status === 'reservado').length;
+    // Financeiro oficial: total arrecadado considera somente vendas pagas.
+    const paidSales = commercialSales.filter((s) => s.status === 'pago');
+    const totalValue = paidSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
+    const pagas = paidSales.length;
+    // Pendente e reservado permanecem visíveis como pipeline operacional, não financeiro.
+    const reservadas = commercialSales.filter((s) => s.status === 'reservado' || s.status === 'pendente_pagamento').length;
     const canceladas = commercialSales.filter((s) => s.status === 'cancelado').length;
     const bloqueadas = sales.filter((s) => s.status === 'bloqueado').length;
-    const paidSales = commercialSales.filter((s) => s.status === 'pago');
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
     const totalSellersCommission = paidSales.reduce((sum, sale) => {
       const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
@@ -1128,10 +1130,10 @@ export default function Sales() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <StatsCard label="Total de Vendas" value={stats.total} icon={ShoppingCart} />
           {canViewFinancials && (
-            <StatsCard label="Total Arrecadado" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
+            <StatsCard label="Total Arrecadado (Pagas)" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
           )}
           <StatsCard label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
-          <StatsCard label="Reservadas" value={stats.reservadas} icon={Clock} variant="warning" />
+          <StatsCard label="Reservadas/Pendentes" value={stats.reservadas} icon={Clock} variant="warning" />
           <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
         </div>
 
@@ -1159,6 +1161,7 @@ export default function Sales() {
                 onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
                 options: [
                   { value: 'all', label: 'Todos' },
+                  { value: 'pendente_pagamento', label: 'Pendente pagamento' },
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },
