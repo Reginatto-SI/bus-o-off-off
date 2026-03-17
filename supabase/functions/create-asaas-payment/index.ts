@@ -1,16 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  resolveEnvironmentFromHost,
-  getAsaasBaseUrl,
-  getAsaasApiKeySecretName,
-  getAsaasWalletSecretName,
-  type PaymentEnvironment,
-} from "../_shared/runtime-env.ts";
-import {
-  inferPaymentOwnerType,
-  logPaymentTrace,
-} from "../_shared/payment-observability.ts";
+import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import { resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,22 +73,8 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Resolver ambiente pelo host (única vez, único ponto) ──
-    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
-    const isProduction = paymentEnv === "production";
-    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
-    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
-    const walletSecretName = getAsaasWalletSecretName(paymentEnv);
-
-    const paymentOwnerType = inferPaymentOwnerType({ environment: paymentEnv });
-
-    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
-    if (!PLATFORM_API_KEY) {
-      return jsonResponse({ error: `Asaas API key not configured (env: ${paymentEnv}, secret: ${apiKeySecretName})` }, 500);
-    }
-
     const { sale_id, payment_method } = await req.json();
-    console.log("[create-asaas-payment] request received", { sale_id, payment_method, host_detected: detectedHost, environment_selected: paymentEnv });
+    console.log("[create-asaas-payment] request received", { sale_id, payment_method });
 
     logPaymentTrace("info", "create-asaas-payment", "environment_resolved", {
       sale_id,
@@ -163,31 +140,47 @@ serve(async (req) => {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
 
-    // ── 4. Selecionar chave de API ──
-    // Sandbox: usa chave da plataforma (sandbox). A empresa não tem chave sandbox.
-    // Produção: usa chave da empresa.
-    let companyApiKey: string;
-    let apiKeySource: string;
+    const paymentContext = resolvePaymentContext({
+      mode: "create",
+      request: req,
+      sale,
+      company,
+    });
 
-    if (!isProduction) {
-      companyApiKey = PLATFORM_API_KEY;
-      apiKeySource = `platform_sandbox (${apiKeySecretName})`;
-    } else {
-      if (!company.asaas_api_key) {
-        return jsonResponse({
-          error: "Empresa sem API Key do Asaas vinculada.",
-          error_code: "missing_company_asaas_api_key",
-        }, 400);
-      }
-      companyApiKey = company.asaas_api_key;
-      apiKeySource = "company.asaas_api_key";
+    const paymentEnv = paymentContext.environment;
+    const asaasBaseUrl = paymentContext.baseUrl;
+    const isProduction = paymentContext.splitPolicy.enabled;
+    const companyApiKey = paymentContext.apiKey;
+    const apiKeySource = paymentContext.apiKeySource;
+
+    logPaymentTrace("info", "create-asaas-payment", "payment_context_resolved", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      api_key_source: paymentContext.apiKeySource,
+      asaas_base_url: paymentContext.baseUrl,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
+    });
+
+    if (!companyApiKey) {
+      return jsonResponse({
+        error: `Asaas API key not configured (${paymentContext.apiKeySource})`,
+      }, 500);
+    }
+
+    if (paymentContext.ownerType === "company" && !company.asaas_api_key) {
+      return jsonResponse({
+        error: "Empresa sem API Key do Asaas vinculada.",
+        error_code: "missing_company_asaas_api_key",
+      }, 400);
     }
 
     console.log("[create-asaas-payment] Ambiente configurado", {
-      host_detected: detectedHost,
-      environment_selected: paymentEnv,
-      asaas_base_url: asaasBaseUrl,
-      api_key_source: apiKeySource,
+      environment_selected: paymentContext.environment,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
       sale_id: sale.id,
       company_id: sale.company_id,
     });
@@ -264,7 +257,7 @@ serve(async (req) => {
 
       // Em produção, a empresa é dona da cobrança. Plataforma e sócio entram no split.
       if (platformFeePercent > 0) {
-        const platformWalletId = Deno.env.get(walletSecretName);
+        const platformWalletId = Deno.env.get(paymentContext.platformWalletSecretName);
         if (!platformWalletId) {
           return jsonResponse({ error: "Wallet da plataforma não configurada", error_code: "missing_platform_wallet" }, 500);
         }
@@ -407,8 +400,8 @@ serve(async (req) => {
     logPaymentTrace("info", "create-asaas-payment", "payment_created", {
       sale_id: sale.id,
       company_id: sale.company_id,
-      payment_environment: paymentEnv,
-      payment_owner_type: paymentOwnerType,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
       asaas_payment_id: paymentData.id,
       asaas_payment_status: paymentData.status,
       external_reference: sale.id,
@@ -422,7 +415,7 @@ serve(async (req) => {
         asaas_payment_id: paymentData.id,
         asaas_payment_status: paymentData.status,
         payment_method: normalizedPaymentMethod,
-        payment_environment: paymentEnv,
+        payment_environment: paymentContext.environment,
       })
       .eq("id", sale.id);
 
