@@ -119,6 +119,7 @@ const vehicleTypeLabels: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   pago: 'Pago',
   cancelado: 'Cancelado',
@@ -504,7 +505,8 @@ export default function SalesReport() {
   const selectedEventFilterLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
   const selectedSellerFilterLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
 
-  const ticketMedio = stats.totalSales > 0 ? stats.grossRevenue / stats.totalSales : 0;
+  // KPI financeiro oficial: ticket médio considera somente vendas pagas.
+  const ticketMedio = stats.paidSales > 0 ? stats.grossRevenue / stats.paidSales : 0;
   const cancelPercent = stats.totalSales > 0 ? (stats.cancelledSales / stats.totalSales) * 100 : 0;
 
   useEffect(() => {
@@ -576,7 +578,7 @@ export default function SalesReport() {
     { key: 'cancelled_sales', label: 'Canceladas' },
     ...(canViewFinancials
       ? [
-          { key: 'gross_revenue', label: 'Receita Bruta', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'gross_revenue', label: 'Receita Bruta (Pagas)', format: (v: any) => formatCurrencyBRL(Number(v)) },
           { key: 'platform_fee', label: 'Custo da Plataforma', format: (v: any) => formatCurrencyBRL(Number(v)) },
           { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v: any) => formatCurrencyBRL(Number(v)) },
         ]
@@ -681,9 +683,9 @@ export default function SalesReport() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           {canViewFinancials && (
-            <StatsCard label="Receita Bruta" value={formatCurrencyBRL(stats.grossRevenue)} icon={DollarSign} variant="success" />
+            <StatsCard label="Receita Bruta (Pagas)" value={formatCurrencyBRL(stats.grossRevenue)} icon={DollarSign} variant="success" />
           )}
-          <StatsCard label="Total de Vendas" value={stats.totalSales} icon={ShoppingCart} />
+          <StatsCard label="Vendas Geradas" value={stats.totalSales} icon={ShoppingCart} />
           <StatsCard label="Vendas Pagas" value={stats.paidSales} icon={CheckCircle} variant="success" />
           <StatsCard label="Ticket Médio" value={formatCurrencyBRL(ticketMedio)} icon={TrendingUp} />
           {/* Exibimos quantidade para manter semântica igual à tela /admin/vendas. */}
@@ -712,6 +714,7 @@ export default function SalesReport() {
                 onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
                 options: [
                   { value: 'all', label: 'Todos' },
+                  { value: 'pendente_pagamento', label: 'Pendente pagamento' },
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },
@@ -869,7 +872,7 @@ export default function SalesReport() {
                         <TableHead className="text-center">Nº de Vendas</TableHead>
                         <TableHead className="text-center">Pagas</TableHead>
                         <TableHead className="text-center">Canceladas</TableHead>
-                        {canViewFinancials && <TableHead className="text-right">Receita Bruta</TableHead>}
+                        {canViewFinancials && <TableHead className="text-right">Receita Bruta (Pagas)</TableHead>}
                         {canViewFinancials && <TableHead className="text-right">Custo da Plataforma</TableHead>}
                         {canViewFinancials && <TableHead className="text-right">Comissão dos Vendedores</TableHead>}
                       </TableRow>

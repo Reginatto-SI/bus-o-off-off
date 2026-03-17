@@ -221,7 +221,8 @@ export default function SellerDashboard() {
 
   // KPIs
   const totalSold = filteredSales.reduce((sum, s) => sum + s.quantity, 0);
-  const totalValue = filteredSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
+  // Mantemos visão de geração comercial separada da consolidação financeira (pagas).
+  const totalGeneratedValue = filteredSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
   const paidSales = filteredSales.filter((s) => s.status === 'pago');
   const paidValue = paidSales.reduce((sum, s) => sum + s.quantity * s.unit_price, 0);
   // Comissão agregada usa apenas vendas pagas e o percentual já configurado para o vendedor.
@@ -368,8 +369,8 @@ export default function SellerDashboard() {
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Total Vendido</p>
-                      <p className="text-lg font-bold">{formatCurrencyBRL(totalValue)}</p>
+                      <p className="text-xs text-muted-foreground">Valor Gerado</p>
+                      <p className="text-lg font-bold">{formatCurrencyBRL(totalGeneratedValue)}</p>
                     </div>
                   </div>
                 </CardContent>
