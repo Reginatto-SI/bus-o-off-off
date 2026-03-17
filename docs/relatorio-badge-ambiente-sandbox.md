@@ -31,5 +31,5 @@ Produção não mostra nada por decisão explícita de UX e de contrato funciona
 ## 5. Observações técnicas
 
 - A implementação é somente de leitura/indicador visual; não altera regras de pagamento nem o backend transacional.
-- Em caso de falha pontual da consulta frontend ao endpoint, o hook faz fallback para `production` (não mostrar badge), para evitar falso positivo de sandbox.
+- Em caso de falha da consulta frontend ao endpoint (ex.: function ainda não publicada no projeto remoto), o hook aplica fallback pela mesma regra oficial por host, mantendo coerência com o contrato sandbox/produção.
 - Se no futuro existir toggle/manual override oficial no backend, a badge deve continuar refletindo a **fonte única oficial** (resolvedor backend), sem lógica paralela no frontend.
