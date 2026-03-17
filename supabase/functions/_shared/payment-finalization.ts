@@ -12,6 +12,77 @@ export type PaymentFinalizationResult = {
   ticketsCount: number;
 };
 
+export type SaleConsistencyState = "healthy" | "inconsistent_paid_without_ticket" | "not_paid" | "not_found";
+
+export type SaleConsistencyInspection = {
+  state: SaleConsistencyState;
+  sale: {
+    id: string;
+    company_id: string;
+    status: string;
+    asaas_payment_status: string | null;
+    asaas_payment_id: string | null;
+    payment_confirmed_at: string | null;
+    platform_fee_paid_at: string | null;
+  } | null;
+  ticketsCount: number;
+  reason: string;
+};
+
+export async function inspectSaleConsistency(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  saleId: string,
+): Promise<SaleConsistencyInspection> {
+  const { data: sale, error: saleError } = await supabaseAdmin
+    .from("sales")
+    .select("id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at")
+    .eq("id", saleId)
+    .maybeSingle();
+
+  if (saleError || !sale) {
+    return {
+      state: "not_found",
+      sale: null,
+      ticketsCount: 0,
+      reason: `Venda ${saleId} não encontrada`,
+    };
+  }
+
+  const { count: ticketsCount } = await supabaseAdmin
+    .from("tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("sale_id", saleId);
+
+  const safeTicketsCount = ticketsCount ?? 0;
+
+  // Etapa 3: critério objetivo e auditável de inconsistência.
+  // "pago" sem tickets é estado inconsistente que exige reconciliação.
+  if (sale.status === "pago" && safeTicketsCount <= 0) {
+    return {
+      state: "inconsistent_paid_without_ticket",
+      sale,
+      ticketsCount: safeTicketsCount,
+      reason: `Venda ${saleId} está paga e sem tickets`,
+    };
+  }
+
+  if (sale.status !== "pago") {
+    return {
+      state: "not_paid",
+      sale,
+      ticketsCount: safeTicketsCount,
+      reason: `Venda ${saleId} não está paga (status=${sale.status})`,
+    };
+  }
+
+  return {
+    state: "healthy",
+    sale,
+    ticketsCount: safeTicketsCount,
+    reason: `Venda ${saleId} já está saudável`,
+  };
+}
+
 export async function createTicketsFromPassengersShared(
   supabaseAdmin: ReturnType<typeof createClient>,
   saleId: string,
@@ -88,7 +159,7 @@ export async function finalizeConfirmedPayment(params: {
   };
   confirmedAt: string;
   asaasStatus: string;
-  source: "asaas-webhook" | "verify-payment-status";
+  source: "asaas-webhook" | "verify-payment-status" | "reconcile-sale-payment";
   paymentId?: string | null;
   eventType?: string | null;
   allowStatusUpdate?: boolean;
@@ -142,7 +213,8 @@ export async function finalizeConfirmedPayment(params: {
       .eq("id", sale.id);
   }
 
-  // Centralização Etapa 2: webhook e verify executam exatamente a mesma rotina de geração/reconciliação.
+  // Centralização Etapa 2/3: qualquer reconciliação passa por esta mesma rotina,
+  // evitando fluxo paralelo que poderia divergir de webhook/verify.
   const ticketResult = await createTicketsFromPassengersShared(supabaseAdmin, sale.id, sale.company_id);
 
   const { count: ticketsCount } = await supabaseAdmin
@@ -185,7 +257,7 @@ export async function finalizeConfirmedPayment(params: {
   }
 
   // Comentário operacional: logamos apenas quando houve transição real ou reconciliação.
-  // Isso preserva idempotência e evita ruído em chamadas repetidas (webhook duplicado/polling).
+  // Isso preserva idempotência e evita ruído em chamadas repetidas (webhook duplicado/polling/reprocessamento).
   if (writeSaleLog && (transitionedToPaid || ticketResult.status === "created")) {
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: sale.id,
