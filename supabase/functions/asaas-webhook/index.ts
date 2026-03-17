@@ -52,19 +52,21 @@ function resolveAsaasConfirmedAt(payment: any, webhookCreatedAt?: string | null)
 
 /**
  * Busca o payment_environment da venda no banco.
- * Se não encontrado, retorna 'sandbox' como fallback seguro.
+ * Hardening Step 5: sem ambiente persistido, o webhook não processa o evento.
  */
 async function getSaleEnvironment(
   supabaseAdmin: ReturnType<typeof createClient<any>>,
   saleId: string
-): Promise<PaymentEnvironment> {
+): Promise<PaymentEnvironment | null> {
   const { data } = await supabaseAdmin
     .from("sales")
     .select("payment_environment")
     .eq("id", saleId)
     .maybeSingle();
 
-  return data?.payment_environment === "production" ? "production" : "sandbox";
+  if (data?.payment_environment === "production") return "production";
+  if (data?.payment_environment === "sandbox") return "sandbox";
+  return null;
 }
 
 serve(async (req) => {
@@ -161,7 +163,7 @@ serve(async (req) => {
       const missingSecretResult: ProcessingResult = {
         status: "failed",
         httpStatus: 500,
-        message: `Secret de webhook ausente para ambiente ${paymentContext.environment}` ,
+        message: `Secret de webhook ausente para ambiente ${paymentContext.environment}`,
         responseBody: { error: "Webhook secret not configured", expected_secret: expectedTokenSecretName },
         saleId: actualSaleId || null,
         eventType,
@@ -593,8 +595,8 @@ async function upsertFinancialSnapshot(
   const partnerSplitPercent = company?.partner_split_percent ?? 50;
   const { data: partner } = await supabaseAdmin
     .from("partners")
-    .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
-    // Pré-Step 5: escopo multi-tenant obrigatório para evitar parceiro de outra empresa.
+    .select("id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
+    // Hardening Step 5: escopo multi-tenant obrigatório para evitar parceiro de outra empresa.
     .eq("company_id", companyId)
     .eq("status", "ativo")
     .limit(1)
@@ -612,8 +614,8 @@ async function upsertFinancialSnapshot(
     partner_id: partner?.id ?? null,
     partner_wallet_selected: partnerWalletId,
     partner_wallet_source: paymentEnvironment === "production"
-      ? (partner?.asaas_wallet_id_production ? "partner.production" : (partner?.asaas_wallet_id ? "partner.legacy" : "none"))
-      : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : (partner?.asaas_wallet_id ? "partner.legacy" : "none")),
+      ? (partner?.asaas_wallet_id_production ? "partner.production" : "none")
+      : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : "none"),
   });
 
   if (partnerWalletId && partner?.status === "ativo") {

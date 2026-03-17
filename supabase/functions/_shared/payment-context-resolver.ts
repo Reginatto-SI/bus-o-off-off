@@ -45,11 +45,6 @@ type MinimalSale = {
 };
 
 type MinimalCompany = {
-  asaas_api_key?: string | null;
-  asaas_wallet_id?: string | null;
-  asaas_account_id?: string | null;
-  asaas_account_email?: string | null;
-  asaas_onboarding_complete?: boolean | null;
   asaas_api_key_production?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_account_id_production?: string | null;
@@ -63,7 +58,6 @@ type MinimalCompany = {
 };
 
 type MinimalPartner = {
-  asaas_wallet_id?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
 };
@@ -82,37 +76,31 @@ function readEnvironmentCompanyConfig(company: MinimalCompany | null | undefined
 
   if (environment === "production") {
     return {
-      apiKey: company.asaas_api_key_production ?? company.asaas_api_key ?? null,
-      walletId: company.asaas_wallet_id_production ?? company.asaas_wallet_id ?? null,
-      accountId: company.asaas_account_id_production ?? company.asaas_account_id ?? null,
-      accountEmail: company.asaas_account_email_production ?? company.asaas_account_email ?? null,
-      onboardingComplete: Boolean(
-        (company.asaas_onboarding_complete_production ?? false)
-        || (company.asaas_onboarding_complete ?? false)
-      ),
-      source: company.asaas_api_key_production ? "production_field" : "legacy_fallback",
+      apiKey: company.asaas_api_key_production ?? null,
+      walletId: company.asaas_wallet_id_production ?? null,
+      accountId: company.asaas_account_id_production ?? null,
+      accountEmail: company.asaas_account_email_production ?? null,
+      onboardingComplete: Boolean(company.asaas_onboarding_complete_production ?? false),
+      source: company.asaas_api_key_production ? "production_field" : "missing_production_field",
     };
   }
 
   return {
-    apiKey: company.asaas_api_key_sandbox ?? company.asaas_api_key ?? null,
-    walletId: company.asaas_wallet_id_sandbox ?? company.asaas_wallet_id ?? null,
-    accountId: company.asaas_account_id_sandbox ?? company.asaas_account_id ?? null,
-    accountEmail: company.asaas_account_email_sandbox ?? company.asaas_account_email ?? null,
-    onboardingComplete: Boolean(
-      (company.asaas_onboarding_complete_sandbox ?? false)
-      || (company.asaas_onboarding_complete ?? false)
-    ),
-    source: company.asaas_api_key_sandbox ? "sandbox_field" : "legacy_fallback",
+    apiKey: company.asaas_api_key_sandbox ?? null,
+    walletId: company.asaas_wallet_id_sandbox ?? null,
+    accountId: company.asaas_account_id_sandbox ?? null,
+    accountEmail: company.asaas_account_email_sandbox ?? null,
+    onboardingComplete: Boolean(company.asaas_onboarding_complete_sandbox ?? false),
+    source: company.asaas_api_key_sandbox ? "sandbox_field" : "missing_sandbox_field",
   };
 }
 
 export function resolvePartnerWalletByEnvironment(partner: MinimalPartner | null | undefined, environment: PaymentEnvironment): string | null {
   if (!partner) return null;
   if (environment === "production") {
-    return partner.asaas_wallet_id_production ?? partner.asaas_wallet_id ?? null;
+    return partner.asaas_wallet_id_production ?? null;
   }
-  return partner.asaas_wallet_id_sandbox ?? partner.asaas_wallet_id ?? null;
+  return partner.asaas_wallet_id_sandbox ?? null;
 }
 
 export function resolvePaymentContext(params: {
@@ -121,7 +109,6 @@ export function resolvePaymentContext(params: {
   company?: MinimalCompany | null;
   partner?: MinimalPartner | null;
   request?: Request;
-  allowLegacyVerifyFallback?: boolean;
   isPlatformFeeFlow?: boolean;
 }): ResolvedPaymentContext {
   const saleEnvRaw = params.sale?.payment_environment;
@@ -164,17 +151,12 @@ export function resolvePaymentContext(params: {
       apiKeySource = `company.api_key (${companyEnvConfig.source})`;
     }
   } else if (params.mode === "verify") {
-    // Pré-Step 5: fallback legado de verify passa a ser opt-in explícito (default = false).
-    const allowFallback = params.allowLegacyVerifyFallback ?? false;
     if (companyApiKey) {
       apiKey = companyApiKey;
       apiKeySource = `company.api_key (${companyEnvConfig.source})`;
-    } else if (allowFallback) {
-      apiKey = platformApiKey;
-      apiKeySource = `platform_fallback (${apiKeySecretName})`;
     } else {
       apiKey = null;
-      apiKeySource = "missing_company_api_key_without_fallback";
+      apiKeySource = "missing_company_api_key";
     }
   } else if (params.mode === "platform_fee") {
     apiKey = platformApiKey;

@@ -95,7 +95,7 @@ serve(async (req) => {
     // Buscar empresa
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("asaas_api_key, asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
+      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -106,7 +106,6 @@ serve(async (req) => {
       mode: "verify",
       sale,
       company,
-      allowLegacyVerifyFallback,
     });
 
     const apiKeyToUse = paymentContext.apiKey;
@@ -121,8 +120,6 @@ serve(async (req) => {
       api_key_source: paymentContext.apiKeySource,
       split_policy: paymentContext.splitPolicy.type,
       decision_trace: paymentContext.decisionTrace,
-      legacy_fallback_allowed: allowLegacyVerifyFallback,
-      legacy_fallback_used: paymentContext.apiKeySource.includes("platform_fallback"),
     });
 
     if (!apiKeyToUse) {
@@ -131,7 +128,6 @@ serve(async (req) => {
         company_id: sale.company_id,
         payment_environment: paymentContext.environment,
         api_key_source: paymentContext.apiKeySource,
-        legacy_fallback_allowed: allowLegacyVerifyFallback,
         failure_reason: "company_missing_api_key_for_sale_environment",
       });
 
@@ -238,8 +234,8 @@ serve(async (req) => {
         const partnerSplitPercent = company?.partner_split_percent ?? 50;
         const { data: partner } = await supabaseAdmin
           .from("partners")
-          .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
-          // Pré-Step 5: escopo multi-tenant obrigatório para não cruzar sócios entre empresas.
+          .select("id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
+          // Hardening Step 5: escopo multi-tenant obrigatório para não cruzar sócios entre empresas.
           .eq("company_id", sale.company_id)
           .eq("status", "ativo")
           .limit(1)
@@ -257,8 +253,8 @@ serve(async (req) => {
           partner_id: partner?.id ?? null,
           partner_wallet_selected: partnerWalletId,
           partner_wallet_source: paymentContext.environment === "production"
-            ? (partner?.asaas_wallet_id_production ? "partner.production" : (partner?.asaas_wallet_id ? "partner.legacy" : "none"))
-            : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : (partner?.asaas_wallet_id ? "partner.legacy" : "none")),
+            ? (partner?.asaas_wallet_id_production ? "partner.production" : "none")
+            : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : "none"),
         });
 
         if (partnerWalletId && partner?.status === "ativo") {
