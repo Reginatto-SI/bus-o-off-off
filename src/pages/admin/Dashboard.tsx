@@ -87,11 +87,13 @@ interface RankItem {
    ═══════════════════════════════════════════════════ */
 const STATUS_COLORS: Record<string, string> = {
   pago: 'hsl(var(--success))',
+  pendente_pagamento: 'hsl(var(--warning))',
   reservado: 'hsl(var(--warning))',
   cancelado: 'hsl(var(--destructive))',
 };
 const STATUS_LABELS: Record<string, string> = {
   pago: 'Pago',
+  pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   cancelado: 'Cancelado',
 };
@@ -288,7 +290,8 @@ export default function Dashboard() {
     queryKey: ['dashboard-status', activeCompanyId, period],
     enabled,
     queryFn: async (): Promise<StatusDist[]> => {
-      const statuses = ['reservado', 'pago', 'cancelado'] as const;
+      // Incluímos pendente para separar pipeline operacional de venda já paga.
+      const statuses = ['pendente_pagamento', 'reservado', 'pago', 'cancelado'] as const;
       const results: StatusDist[] = [];
 
       for (const status of statuses) {
