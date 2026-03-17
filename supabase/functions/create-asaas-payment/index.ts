@@ -76,6 +76,17 @@ serve(async (req) => {
     const { sale_id, payment_method } = await req.json();
     console.log("[create-asaas-payment] request received", { sale_id, payment_method });
 
+    logPaymentTrace("info", "create-asaas-payment", "environment_resolved", {
+      sale_id,
+      payment_environment: paymentEnv,
+      payment_owner_type: paymentOwnerType,
+      host_detected: detectedHost,
+      asaas_base_url: asaasBaseUrl,
+      api_key_secret_name: apiKeySecretName,
+      split_policy: isProduction ? "production_split_enabled" : "sandbox_no_split",
+      decision_origin: "resolveEnvironmentFromHost + runtime-env + function rules",
+    });
+
     if (!sale_id) {
       return jsonResponse({ error: "sale_id is required" }, 400);
     }

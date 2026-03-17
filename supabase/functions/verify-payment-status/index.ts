@@ -120,6 +120,17 @@ serve(async (req) => {
       decision_trace: paymentContext.decisionTrace,
     });
 
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: saleEnv,
+      payment_owner_type: paymentOwnerType,
+      asaas_payment_id: sale.asaas_payment_id,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: saleEnv === "sandbox" ? `platform (${apiKeySecretName})` : (company?.asaas_api_key ? "company" : "platform_fallback"),
+      decision_origin: "sales.payment_environment + function credential rule",
+    });
+
     console.log("[verify-payment-status] Consultando Asaas", {
       sale_id: sale.id,
       sale_environment: paymentContext.environment,
