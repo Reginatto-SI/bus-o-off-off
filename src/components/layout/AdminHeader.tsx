@@ -16,13 +16,16 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useAdminNotifications, type AdminNotificationSeverity } from '@/hooks/use-admin-notifications';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
 
 export function AdminHeader() {
   const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany } = useAuth();
   const hasMultipleCompanies = userCompanies.length > 1;
   const canAccessAdminNotifications = userRole === 'gerente' || userRole === 'operador' || userRole === 'developer';
+  const { isSandbox } = useRuntimePaymentEnvironment();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useAdminNotifications({
     activeCompanyId: activeCompany?.id ?? null,
     canAccessAdminNotifications,
@@ -109,6 +112,16 @@ export function AdminHeader() {
             <span className="font-medium text-foreground">{activeCompany.name}</span>
           </div>
         ) : null}
+
+        {/*
+          Badge operacional: aparece somente quando a API oficial resolve sandbox.
+          Não há regra paralela no frontend; o valor vem da mesma lógica de decisão do backend.
+        */}
+        {isSandbox && (
+          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-50">
+            Sandbox
+          </Badge>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
