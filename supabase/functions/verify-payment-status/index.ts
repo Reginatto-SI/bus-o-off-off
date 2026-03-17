@@ -123,14 +123,34 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
-    // Pré-Step 5: fallback legado só pode ser habilitado explicitamente por feature flag temporária.
-    const allowLegacyVerifyFallback = Deno.env.get("ASAAS_VERIFY_ALLOW_LEGACY_FALLBACK") === "true";
+    /**
+     * Regra operacional:
+     * após o nascimento da venda, verify deve obedecer APENAS o ambiente persistido nela.
+     * Se a venda estiver sem ambiente válido, o fluxo falha explicitamente para suporte.
+     */
+    let paymentContext;
+    try {
+      paymentContext = resolvePaymentContext({
+        mode: "verify",
+        sale,
+        company,
+      });
+    } catch (contextError) {
+      logPaymentTrace("error", "verify-payment-status", "payment_environment_unresolved", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        failure_reason: contextError instanceof Error ? contextError.message : String(contextError),
+      });
 
-    const paymentContext = resolvePaymentContext({
-      mode: "verify",
-      sale,
-      company,
-    });
+      return new Response(
+        JSON.stringify({
+          error: "Ambiente da venda inválido ou ausente",
+          error_code: "payment_environment_unresolved",
+          paymentStatus: sale.status,
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const apiKeyToUse = paymentContext.apiKey;
 
@@ -163,15 +183,6 @@ serve(async (req) => {
         }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    if (paymentContext.apiKeySource.includes("platform_fallback")) {
-      logPaymentTrace("warn", "verify-payment-status", "legacy_fallback_used", {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-        payment_environment: paymentContext.environment,
-        api_key_source: paymentContext.apiKeySource,
-      });
     }
 
     // Query Asaas for payment status
@@ -388,4 +399,3 @@ serve(async (req) => {
     );
   }
 });
-

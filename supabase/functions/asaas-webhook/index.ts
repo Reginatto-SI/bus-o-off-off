@@ -22,6 +22,9 @@ type ProcessingResult = {
   eventType?: string | null;
   paymentId?: string | null;
   externalReference?: string | null;
+  paymentEnvironment?: PaymentEnvironment | null;
+  environmentDecisionSource?: "sale" | "host" | null;
+  environmentHostDetected?: string | null;
 };
 
 function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
@@ -170,6 +173,9 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: paymentContext.environment,
+        environmentDecisionSource: paymentContext.decisionTrace.environmentSource,
+        environmentHostDetected: paymentContext.decisionTrace.hostDetected,
       };
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -190,6 +196,9 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: paymentContext.environment,
+        environmentDecisionSource: paymentContext.decisionTrace.environmentSource,
+        environmentHostDetected: paymentContext.decisionTrace.hostDetected,
       };
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -333,6 +342,9 @@ serve(async (req) => {
     result.eventType = eventType;
     result.paymentId = paymentId;
     result.externalReference = externalReference;
+    result.paymentEnvironment = paymentContext.environment;
+    result.environmentDecisionSource = paymentContext.decisionTrace.environmentSource;
+    result.environmentHostDetected = paymentContext.decisionTrace.hostDetected;
 
     await persistIntegrationLog(supabaseAdmin, {
       ...result,
@@ -680,6 +692,9 @@ async function persistIntegrationLog(
     await supabaseAdmin.from("sale_integration_logs").insert({
       sale_id: params.saleId ?? null,
       company_id: params.companyId ?? null,
+      payment_environment: params.paymentEnvironment ?? null,
+      environment_decision_source: params.environmentDecisionSource ?? null,
+      environment_host_detected: params.environmentHostDetected ?? null,
       provider: "asaas",
       direction: "incoming_webhook",
       event_type: params.eventType ?? null,

@@ -125,12 +125,46 @@ serve(async (req) => {
       return jsonResponse({ error: "Company not found" }, 404);
     }
 
-    const paymentContext = resolvePaymentContext({
-      mode: "create",
-      request: req,
-      sale,
-      company,
-    });
+    /**
+     * Regra oficial do projeto:
+     * - smartbusbr.com.br / www.smartbusbr.com.br => produção
+     * - qualquer outro host => sandbox
+     *
+     * Segurança operacional:
+     * - a venda só vira fonte de verdade após a primeira cobrança criada;
+     * - antes disso, a decisão nasce pelo host de origem da requisição;
+     * - sem decisão determinística, o fluxo falha (sem fallback silencioso).
+     */
+    let paymentContext;
+    try {
+      const canReusePersistedEnvironment =
+        (sale.payment_environment === "production" || sale.payment_environment === "sandbox")
+        && Boolean(sale.asaas_payment_id);
+
+      paymentContext = resolvePaymentContext({
+        mode: "create",
+        request: req,
+        sale: canReusePersistedEnvironment ? sale : undefined,
+        company,
+      });
+    } catch (contextError) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: null,
+        errorCode: "payment_environment_unresolved",
+        detail: contextError instanceof Error ? contextError.message : String(contextError),
+      });
+
+      return jsonResponse({
+        error: "Não foi possível determinar o ambiente da venda com segurança",
+        error_code: "payment_environment_unresolved",
+      }, 400);
+    }
 
     // Hardening Step 5: exige configuração explícita por ambiente (sem fallback legado).
     if (!paymentContext.companyWalletByEnvironment || !paymentContext.companyOnboardingCompleteByEnvironment) {
@@ -219,6 +253,9 @@ serve(async (req) => {
       const { error: logError } = await supabaseAdmin.from("sale_integration_logs").insert({
         sale_id: sale.id,
         company_id: sale.company_id,
+        payment_environment: paymentEnv,
+        environment_decision_source: paymentContext.decisionTrace.environmentSource,
+        environment_host_detected: paymentContext.decisionTrace.hostDetected,
         provider: "asaas",
         direction: "outgoing_request",
         event_type: "create_payment",

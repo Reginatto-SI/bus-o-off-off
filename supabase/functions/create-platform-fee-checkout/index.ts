@@ -84,10 +84,23 @@ serve(async (req) => {
       );
     }
 
-    const paymentContext = resolvePaymentContext({
-      mode: "platform_fee",
-      sale,
-    });
+    // Regra de blindagem: cobrança de taxa usa estritamente o ambiente persistido na venda.
+    let paymentContext;
+    try {
+      paymentContext = resolvePaymentContext({
+        mode: "platform_fee",
+        sale,
+      });
+    } catch (contextError) {
+      return new Response(JSON.stringify({
+        error: "Ambiente da venda inválido ou ausente",
+        error_code: "payment_environment_unresolved",
+        detail: contextError instanceof Error ? contextError.message : String(contextError),
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     logPaymentTrace("info", "create-platform-fee-checkout", "payment_context_loaded", {
       sale_id: sale.id,
