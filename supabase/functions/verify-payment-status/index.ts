@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
-import { resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,7 +95,7 @@ serve(async (req) => {
     // Buscar empresa
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("asaas_api_key, platform_fee_percent, partner_split_percent")
+      .select("asaas_api_key, asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -120,18 +120,21 @@ serve(async (req) => {
       decision_trace: paymentContext.decisionTrace,
     });
 
+    const apiKeyToUse = paymentContext.apiKey;
+
     logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
       sale_id: sale.id,
       company_id: sale.company_id,
-      payment_environment: saleEnv,
-      payment_owner_type: paymentOwnerType,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
       asaas_payment_id: sale.asaas_payment_id,
-      asaas_base_url: asaasBaseUrl,
-      api_key_source: saleEnv === "sandbox" ? `platform (${apiKeySecretName})` : (company?.asaas_api_key ? "company" : "platform_fallback"),
-      decision_origin: "sales.payment_environment + function credential rule",
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
     });
 
-    console.log("[verify-payment-status] Consultando Asaas", {
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
       sale_id: sale.id,
       sale_environment: paymentContext.environment,
       asaas_base_url: paymentContext.baseUrl,
@@ -229,7 +232,7 @@ serve(async (req) => {
         const partnerSplitPercent = company?.partner_split_percent ?? 50;
         const { data: partner } = await supabaseAdmin
           .from("partners")
-          .select("id, asaas_wallet_id, status")
+          .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
           .eq("status", "ativo")
           .limit(1)
           .maybeSingle();
@@ -237,7 +240,9 @@ serve(async (req) => {
         let partnerFeeAmount = 0;
         let platformNetAmount = platformFeeTotal;
 
-        if (partner?.asaas_wallet_id && partner.status === "ativo") {
+        const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentContext.environment);
+
+        if (partnerWalletId && partner?.status === "ativo") {
           const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
           partnerFeeAmount = partnerFeeCents / 100;
           platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;

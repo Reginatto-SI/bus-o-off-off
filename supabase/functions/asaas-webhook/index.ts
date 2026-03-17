@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { type PaymentEnvironment } from "../_shared/runtime-env.ts";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
-import { isWebhookTokenValidForContext, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import { isWebhookTokenValidForContext, resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -242,7 +242,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, company_id, status, unit_price, quantity, gross_amount")
+      .select("id, company_id, status, unit_price, quantity, gross_amount, payment_environment")
       .eq("id", saleId)
       .maybeSingle();
 
@@ -494,7 +494,7 @@ async function processPaymentConfirmed(
     };
   }
 
-  await upsertFinancialSnapshot(supabaseAdmin, saleId, sale.company_id, sale, payment);
+  await upsertFinancialSnapshot(supabaseAdmin, saleId, sale.company_id, sale, payment, sale.payment_environment === "production" ? "production" : "sandbox");
 
   await supabaseAdmin.from("sale_logs").insert({
     sale_id: saleId,
@@ -519,6 +519,7 @@ async function upsertFinancialSnapshot(
   companyId: string,
   sale: any,
   payment: any,
+  paymentEnvironment: PaymentEnvironment,
 ) {
   const { data: company } = await supabaseAdmin
     .from("companies")
@@ -545,7 +546,7 @@ async function upsertFinancialSnapshot(
   const partnerSplitPercent = company?.partner_split_percent ?? 50;
   const { data: partner } = await supabaseAdmin
     .from("partners")
-    .select("id, asaas_wallet_id, status")
+    .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
     .eq("status", "ativo")
     .limit(1)
     .maybeSingle();
@@ -553,7 +554,9 @@ async function upsertFinancialSnapshot(
   let partnerFeeAmount = 0;
   let platformNetAmount = platformFeeTotal;
 
-  if (partner?.asaas_wallet_id && partner.status === "ativo") {
+  const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentEnvironment);
+
+  if (partnerWalletId && partner.status === "ativo") {
     const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
     partnerFeeAmount = partnerFeeCents / 100;
     platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;

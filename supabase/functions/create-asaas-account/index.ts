@@ -4,6 +4,7 @@ import {
   resolveEnvironmentFromHost,
   getAsaasBaseUrl,
   getAsaasApiKeySecretName,
+  type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
 import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
 
@@ -19,6 +20,34 @@ function maskSensitiveValue(value?: string | null) {
   return `${value.slice(0, 4)}***${value.slice(-4)}`;
 }
 
+
+function resolveTargetEnvironment(params: { requestedEnv?: string | null; hostEnv: PaymentEnvironment }): PaymentEnvironment {
+  if (params.requestedEnv === "production" || params.requestedEnv === "sandbox") {
+    return params.requestedEnv;
+  }
+  return params.hostEnv;
+}
+
+function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
+  if (environment === "production") {
+    return {
+      apiKey: "asaas_api_key_production",
+      walletId: "asaas_wallet_id_production",
+      accountId: "asaas_account_id_production",
+      accountEmail: "asaas_account_email_production",
+      onboardingComplete: "asaas_onboarding_complete_production",
+    } as const;
+  }
+
+  return {
+    apiKey: "asaas_api_key_sandbox",
+    walletId: "asaas_wallet_id_sandbox",
+    accountId: "asaas_account_id_sandbox",
+    accountEmail: "asaas_account_email_sandbox",
+    onboardingComplete: "asaas_onboarding_complete_sandbox",
+  } as const;
+}
+
 /**
  * Edge function para onboarding de conta Asaas.
  * 
@@ -32,10 +61,10 @@ serve(async (req) => {
   }
 
   try {
-    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
-    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
-    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
-    const paymentOwnerType = inferPaymentOwnerType({ environment: paymentEnv, isPlatformFeeFlow: true });
+    const { env: hostResolvedEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
+    let asaasBaseUrl = getAsaasBaseUrl(hostResolvedEnv);
+    let apiKeySecretName = getAsaasApiKeySecretName(hostResolvedEnv);
+    let paymentOwnerType = inferPaymentOwnerType({ environment: hostResolvedEnv, isPlatformFeeFlow: true });
 
     // Authenticate admin user
     const authHeader = req.headers.get("Authorization");
@@ -73,7 +102,13 @@ serve(async (req) => {
       });
     }
 
-    const { company_id, mode, api_key } = await req.json();
+    const { company_id, mode, api_key, target_environment } = await req.json();
+
+    const paymentEnv = resolveTargetEnvironment({ requestedEnv: target_environment ?? null, hostEnv: hostResolvedEnv });
+    const envFields = getEnvironmentCompanyFields(paymentEnv);
+    asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
+    apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
+    paymentOwnerType = inferPaymentOwnerType({ environment: paymentEnv, isPlatformFeeFlow: true });
 
     logPaymentTrace("info", "create-asaas-account", "onboarding_request_received", {
       company_id: company_id ?? null,
@@ -105,7 +140,7 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_onboarding_complete")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_account_email, asaas_onboarding_complete, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox")
       .eq("id", company_id)
       .single();
 
@@ -115,6 +150,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const companyConfig = company as Record<string, unknown>;
 
     const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
     if (!PLATFORM_API_KEY) {
@@ -135,17 +172,20 @@ serve(async (req) => {
     if (mode === "revalidate") {
       console.log("[ASAAS][VERIFY] Starting verification", {
         company_id,
-        has_api_key: Boolean(company.asaas_api_key),
-        has_wallet_id: Boolean(company.asaas_wallet_id),
-        has_account_id: Boolean(company.asaas_account_id),
-        onboarding_complete: Boolean(company.asaas_onboarding_complete),
+        payment_environment: paymentEnv,
+        has_api_key: Boolean(companyConfig[envFields.apiKey] || company.asaas_api_key),
+        has_wallet_id: Boolean(companyConfig[envFields.walletId] || company.asaas_wallet_id),
+        has_account_id: Boolean(companyConfig[envFields.accountId] || company.asaas_account_id),
+        onboarding_complete: Boolean(companyConfig[envFields.onboardingComplete] || company.asaas_onboarding_complete),
       });
 
-      const isApiKeyMode = Boolean(company.asaas_api_key);
+      const environmentApiKey = companyConfig[envFields.apiKey] || company.asaas_api_key || null;
+      const environmentAccountId = companyConfig[envFields.accountId] || company.asaas_account_id || null;
+      const isApiKeyMode = Boolean(environmentApiKey);
       const verificationEndpoint = isApiKeyMode
         ? `${asaasBaseUrl}/myAccount`
-        : company.asaas_account_id
-          ? `${asaasBaseUrl}/accounts/${company.asaas_account_id}`
+        : environmentAccountId
+          ? `${asaasBaseUrl}/accounts/${environmentAccountId}`
           : null;
 
       if (!verificationEndpoint) {
@@ -159,14 +199,14 @@ serve(async (req) => {
         );
       }
 
-      const verificationToken = isApiKeyMode ? company.asaas_api_key : PLATFORM_API_KEY;
+      const verificationToken = isApiKeyMode ? environmentApiKey : PLATFORM_API_KEY;
 
       console.log("[ASAAS][VERIFY] Using company fields", {
         company_id,
         mode: isApiKeyMode ? "api_key_my_account" : "platform_account_lookup",
         endpoint: verificationEndpoint,
-        wallet_id_preview: maskSensitiveValue(company.asaas_wallet_id),
-        account_id_preview: maskSensitiveValue(company.asaas_account_id),
+        wallet_id_preview: maskSensitiveValue(String(companyConfig[envFields.walletId] || company.asaas_wallet_id || "")),
+        account_id_preview: maskSensitiveValue(String(companyConfig[envFields.accountId] || company.asaas_account_id || "")),
         token_preview: maskSensitiveValue(verificationToken),
       });
 
@@ -235,6 +275,10 @@ serve(async (req) => {
             asaas_account_id: accountData.id || company.asaas_account_id || null,
             asaas_account_email: accountData.email || null,
             asaas_onboarding_complete: true,
+            [envFields.walletId]: walletId,
+            [envFields.accountId]: accountData.id || environmentAccountId || null,
+            [envFields.accountEmail]: accountData.email || null,
+            [envFields.onboardingComplete]: true,
           })
           .eq("id", company_id);
 
@@ -291,6 +335,11 @@ serve(async (req) => {
             // Mantém o e-mail efetivo da conta vinculada para exibição em /admin/empresa.
             asaas_account_email: accountData.email || null,
             asaas_onboarding_complete: true,
+            [envFields.walletId]: walletId,
+            [envFields.apiKey]: api_key,
+            [envFields.accountId]: accountData.id || null,
+            [envFields.accountEmail]: accountData.email || null,
+            [envFields.onboardingComplete]: true,
           })
           .eq("id", company_id);
 
@@ -313,11 +362,11 @@ serve(async (req) => {
 
     // ====== MODE: Create subaccount (default) ======
     // If already onboarded, return status
-    if (company.asaas_wallet_id && company.asaas_onboarding_complete) {
+    if ((companyConfig[envFields.walletId] || company.asaas_wallet_id) && ((companyConfig[envFields.onboardingComplete] ?? false) || company.asaas_onboarding_complete)) {
       return new Response(
         JSON.stringify({
           already_complete: true,
-          wallet_id: company.asaas_wallet_id,
+          wallet_id: companyConfig[envFields.walletId] || company.asaas_wallet_id,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -455,6 +504,11 @@ serve(async (req) => {
           asaas_account_email: company.email,
           asaas_api_key: createData.apiKey || null,
           asaas_onboarding_complete: true,
+          [envFields.walletId]: walletId,
+          [envFields.accountId]: accountId,
+          [envFields.accountEmail]: company.email,
+          [envFields.apiKey]: createData.apiKey || null,
+          [envFields.onboardingComplete]: true,
         })
         .eq("id", company_id);
 

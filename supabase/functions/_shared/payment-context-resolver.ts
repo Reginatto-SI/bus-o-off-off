@@ -33,6 +33,11 @@ export type ResolvedPaymentContext = {
   splitPolicy: PaymentContextSplitPolicy;
   decisionTrace: PaymentContextDecisionTrace;
   platformWalletSecretName: string;
+  companyApiKeyByEnvironment: string | null;
+  companyWalletByEnvironment: string | null;
+  companyAccountIdByEnvironment: string | null;
+  companyAccountEmailByEnvironment: string | null;
+  companyOnboardingCompleteByEnvironment: boolean;
 };
 
 type MinimalSale = {
@@ -41,12 +46,80 @@ type MinimalSale = {
 
 type MinimalCompany = {
   asaas_api_key?: string | null;
+  asaas_wallet_id?: string | null;
+  asaas_account_id?: string | null;
+  asaas_account_email?: string | null;
+  asaas_onboarding_complete?: boolean | null;
+  asaas_api_key_production?: string | null;
+  asaas_wallet_id_production?: string | null;
+  asaas_account_id_production?: string | null;
+  asaas_account_email_production?: string | null;
+  asaas_onboarding_complete_production?: boolean | null;
+  asaas_api_key_sandbox?: string | null;
+  asaas_wallet_id_sandbox?: string | null;
+  asaas_account_id_sandbox?: string | null;
+  asaas_account_email_sandbox?: string | null;
+  asaas_onboarding_complete_sandbox?: boolean | null;
 };
+
+type MinimalPartner = {
+  asaas_wallet_id?: string | null;
+  asaas_wallet_id_production?: string | null;
+  asaas_wallet_id_sandbox?: string | null;
+};
+
+function readEnvironmentCompanyConfig(company: MinimalCompany | null | undefined, environment: PaymentEnvironment) {
+  if (!company) {
+    return {
+      apiKey: null,
+      walletId: null,
+      accountId: null,
+      accountEmail: null,
+      onboardingComplete: false,
+      source: "none",
+    };
+  }
+
+  if (environment === "production") {
+    return {
+      apiKey: company.asaas_api_key_production ?? company.asaas_api_key ?? null,
+      walletId: company.asaas_wallet_id_production ?? company.asaas_wallet_id ?? null,
+      accountId: company.asaas_account_id_production ?? company.asaas_account_id ?? null,
+      accountEmail: company.asaas_account_email_production ?? company.asaas_account_email ?? null,
+      onboardingComplete: Boolean(
+        (company.asaas_onboarding_complete_production ?? false)
+        || (company.asaas_onboarding_complete ?? false)
+      ),
+      source: company.asaas_api_key_production ? "production_field" : "legacy_fallback",
+    };
+  }
+
+  return {
+    apiKey: company.asaas_api_key_sandbox ?? company.asaas_api_key ?? null,
+    walletId: company.asaas_wallet_id_sandbox ?? company.asaas_wallet_id ?? null,
+    accountId: company.asaas_account_id_sandbox ?? company.asaas_account_id ?? null,
+    accountEmail: company.asaas_account_email_sandbox ?? company.asaas_account_email ?? null,
+    onboardingComplete: Boolean(
+      (company.asaas_onboarding_complete_sandbox ?? false)
+      || (company.asaas_onboarding_complete ?? false)
+    ),
+    source: company.asaas_api_key_sandbox ? "sandbox_field" : "legacy_fallback",
+  };
+}
+
+export function resolvePartnerWalletByEnvironment(partner: MinimalPartner | null | undefined, environment: PaymentEnvironment): string | null {
+  if (!partner) return null;
+  if (environment === "production") {
+    return partner.asaas_wallet_id_production ?? partner.asaas_wallet_id ?? null;
+  }
+  return partner.asaas_wallet_id_sandbox ?? partner.asaas_wallet_id ?? null;
+}
 
 export function resolvePaymentContext(params: {
   mode: PaymentContextMode;
   sale?: MinimalSale | null;
   company?: MinimalCompany | null;
+  partner?: MinimalPartner | null;
   request?: Request;
   allowLegacyVerifyFallback?: boolean;
   isPlatformFeeFlow?: boolean;
@@ -76,7 +149,8 @@ export function resolvePaymentContext(params: {
 
   const apiKeySecretName = getAsaasApiKeySecretName(environment);
   const platformApiKey = Deno.env.get(apiKeySecretName) ?? null;
-  const companyApiKey = params.company?.asaas_api_key ?? null;
+  const companyEnvConfig = readEnvironmentCompanyConfig(params.company, environment);
+  const companyApiKey = companyEnvConfig.apiKey;
 
   let apiKey: string | null = null;
   let apiKeySource = "not_used";
@@ -87,7 +161,7 @@ export function resolvePaymentContext(params: {
       apiKeySource = `platform (${apiKeySecretName})`;
     } else {
       apiKey = companyApiKey;
-      apiKeySource = "company.asaas_api_key";
+      apiKeySource = `company.api_key (${companyEnvConfig.source})`;
     }
   } else if (params.mode === "verify") {
     if (environment === "sandbox") {
@@ -97,7 +171,7 @@ export function resolvePaymentContext(params: {
       const allowFallback = params.allowLegacyVerifyFallback ?? true;
       if (companyApiKey) {
         apiKey = companyApiKey;
-        apiKeySource = "company.asaas_api_key";
+        apiKeySource = `company.api_key (${companyEnvConfig.source})`;
       } else if (allowFallback) {
         apiKey = platformApiKey;
         apiKeySource = `platform_fallback (${apiKeySecretName})`;
@@ -113,7 +187,7 @@ export function resolvePaymentContext(params: {
     // Comentário Step 2: webhook não consulta API Asaas hoje, então credencial fica apenas descritiva.
     apiKey = ownerType === "company" ? companyApiKey : platformApiKey;
     apiKeySource = ownerType === "company"
-      ? "company.asaas_api_key (descritivo_webhook)"
+      ? `company.api_key (${companyEnvConfig.source}) (descritivo_webhook)`
       : `platform (${apiKeySecretName}) (descritivo_webhook)`;
   }
 
@@ -152,6 +226,11 @@ export function resolvePaymentContext(params: {
       splitDecision: splitPolicy.enabled ? "split_enabled_like_current_rule" : "split_disabled_like_current_rule",
     },
     platformWalletSecretName: getAsaasWalletSecretName(environment),
+    companyApiKeyByEnvironment: companyEnvConfig.apiKey,
+    companyWalletByEnvironment: companyEnvConfig.walletId,
+    companyAccountIdByEnvironment: companyEnvConfig.accountId,
+    companyAccountEmailByEnvironment: companyEnvConfig.accountEmail,
+    companyOnboardingCompleteByEnvironment: companyEnvConfig.onboardingComplete,
   };
 }
 
