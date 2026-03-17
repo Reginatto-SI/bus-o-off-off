@@ -5,6 +5,7 @@ import {
   getAsaasApiKeySecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
+import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -90,6 +91,17 @@ serve(async (req) => {
     // ── Usar ambiente salvo na venda ──
     const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
     const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
+    const paymentOwnerType = inferPaymentOwnerType({ environment: saleEnv, isPlatformFeeFlow: true });
+
+    logPaymentTrace("info", "create-platform-fee-checkout", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: saleEnv,
+      payment_owner_type: paymentOwnerType,
+      asaas_base_url: asaasBaseUrl,
+      split_policy: "not_applicable_platform_fee_checkout",
+      decision_origin: "sales.payment_environment + platform_fee_flow",
+    });
     const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
 
     console.log("[create-platform-fee-checkout] Ambiente da venda", {
@@ -201,6 +213,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    logPaymentTrace("error", "create-platform-fee-checkout", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("Error in create-platform-fee-checkout:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),

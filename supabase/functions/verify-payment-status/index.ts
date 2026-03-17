@@ -5,6 +5,7 @@ import {
   getAsaasApiKeySecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
+import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,6 +99,7 @@ serve(async (req) => {
     // ── Usar ambiente salvo na venda (nunca recalcular por host) ──
     const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
     const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
+    const paymentOwnerType = inferPaymentOwnerType({ environment: saleEnv, isPlatformFeeFlow: !sale.asaas_payment_id });
     const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
     const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
 
@@ -112,9 +114,21 @@ serve(async (req) => {
     if (saleEnv === "sandbox") {
       apiKeyToUse = PLATFORM_API_KEY ?? null;
     } else {
-      // Produção: chave da empresa, fallback para plataforma (cobranças legadas)
+      // Comentário Step 1 (zona cinzenta mapeada): produção ainda aceita fallback para plataforma
+      // por compatibilidade com cobranças legadas. Candidato direto para centralização no Step 2.
       apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY || null;
     }
+
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: saleEnv,
+      payment_owner_type: paymentOwnerType,
+      asaas_payment_id: sale.asaas_payment_id,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: saleEnv === "sandbox" ? `platform (${apiKeySecretName})` : (company?.asaas_api_key ? "company" : "platform_fallback"),
+      decision_origin: "sales.payment_environment + function credential rule",
+    });
 
     console.log("[verify-payment-status] Consultando Asaas", {
       sale_id: sale.id,
@@ -158,6 +172,16 @@ serve(async (req) => {
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
       const confirmedAt = resolveAsaasConfirmedAtFromPayment(paymentData);
+      logPaymentTrace("info", "verify-payment-status", "status_transition_attempt", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: saleEnv,
+        payment_owner_type: paymentOwnerType,
+        previous_status: sale.status,
+        next_status: "pago",
+        asaas_payment_id: sale.asaas_payment_id,
+        asaas_status: asaasStatus,
+      });
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
@@ -182,6 +206,17 @@ serve(async (req) => {
 
       await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
       await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
+
+      logPaymentTrace("info", "verify-payment-status", "status_transition_success", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: saleEnv,
+        payment_owner_type: paymentOwnerType,
+        previous_status: sale.status,
+        next_status: "pago",
+        tickets_generation: "attempted",
+        seat_locks_cleanup: "attempted",
+      });
 
       if (company?.platform_fee_percent != null) {
         const platformFeePercent = Number(company.platform_fee_percent);
@@ -250,6 +285,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    logPaymentTrace("error", "verify-payment-status", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("[verify-payment-status] Error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),

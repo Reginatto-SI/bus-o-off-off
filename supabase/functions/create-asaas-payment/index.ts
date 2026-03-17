@@ -7,6 +7,10 @@ import {
   getAsaasWalletSecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
+import {
+  inferPaymentOwnerType,
+  logPaymentTrace,
+} from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,6 +89,8 @@ serve(async (req) => {
     const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
     const walletSecretName = getAsaasWalletSecretName(paymentEnv);
 
+    const paymentOwnerType = inferPaymentOwnerType({ environment: paymentEnv });
+
     const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
     if (!PLATFORM_API_KEY) {
       return jsonResponse({ error: `Asaas API key not configured (env: ${paymentEnv}, secret: ${apiKeySecretName})` }, 500);
@@ -92,6 +98,17 @@ serve(async (req) => {
 
     const { sale_id, payment_method } = await req.json();
     console.log("[create-asaas-payment] request received", { sale_id, payment_method, host_detected: detectedHost, environment_selected: paymentEnv });
+
+    logPaymentTrace("info", "create-asaas-payment", "environment_resolved", {
+      sale_id,
+      payment_environment: paymentEnv,
+      payment_owner_type: paymentOwnerType,
+      host_detected: detectedHost,
+      asaas_base_url: asaasBaseUrl,
+      api_key_secret_name: apiKeySecretName,
+      split_policy: isProduction ? "production_split_enabled" : "sandbox_no_split",
+      decision_origin: "resolveEnvironmentFromHost + runtime-env + function rules",
+    });
 
     if (!sale_id) {
       return jsonResponse({ error: "sale_id is required" }, 400);
@@ -387,6 +404,18 @@ serve(async (req) => {
     await insertIntegrationLog("success", "Cobrança criada com sucesso no Asaas", paymentPayload, paymentData, paymentData.id);
 
     // 9. Salvar ID do pagamento E o ambiente na venda (fonte de verdade para demais funções)
+    logPaymentTrace("info", "create-asaas-payment", "payment_created", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentEnv,
+      payment_owner_type: paymentOwnerType,
+      asaas_payment_id: paymentData.id,
+      asaas_payment_status: paymentData.status,
+      external_reference: sale.id,
+      split_attempted: splitArray.length > 0,
+      split_recipients: splitArray.length,
+    });
+
     await supabaseAdmin
       .from("sales")
       .update({
@@ -403,6 +432,9 @@ serve(async (req) => {
       status: paymentData.status,
     }, 200);
   } catch (error) {
+    logPaymentTrace("error", "create-asaas-payment", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("Error in create-asaas-payment:", error);
     return jsonResponse({ error: error instanceof Error ? error.message : "Internal server error" }, 500);
   }

@@ -5,6 +5,7 @@ import {
   getAsaasBaseUrl,
   getAsaasApiKeySecretName,
 } from "../_shared/runtime-env.ts";
+import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +35,7 @@ serve(async (req) => {
     const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
     const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
     const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
+    const paymentOwnerType = inferPaymentOwnerType({ environment: paymentEnv, isPlatformFeeFlow: true });
 
     // Authenticate admin user
     const authHeader = req.headers.get("Authorization");
@@ -72,6 +74,17 @@ serve(async (req) => {
     }
 
     const { company_id, mode, api_key } = await req.json();
+
+    logPaymentTrace("info", "create-asaas-account", "onboarding_request_received", {
+      company_id: company_id ?? null,
+      payment_environment: paymentEnv,
+      payment_owner_type: paymentOwnerType,
+      asaas_base_url: asaasBaseUrl,
+      api_key_secret_name: apiKeySecretName,
+      onboarding_mode: mode ?? "create",
+      decision_origin: "resolveEnvironmentFromHost + onboarding function mode",
+    });
+
     if (!company_id) {
       return new Response(JSON.stringify({ error: "company_id is required" }), {
         status: 400,
@@ -461,6 +474,9 @@ serve(async (req) => {
       );
     }
   } catch (error) {
+    logPaymentTrace("error", "create-asaas-account", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("Error in create-asaas-account:", error);
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     const isAddressValidationError = errorMessage.includes("Endereço da empresa incompleto");

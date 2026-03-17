@@ -1,4 +1,13 @@
 /**
+ * Contrato operacional vigente (Step 1):
+ * 1) create-asaas-payment resolve por host
+ * 2) persiste em sales.payment_environment
+ * 3) verify/webhook/platform-fee leem da venda (não recalculam host)
+ *
+ * Zona cinzenta mapeada: host ainda é o gatilho inicial da decisão.
+ * Candidato de centralização para Step 2 (resolvedor único de contexto).
+ */
+/**
  * Resolução de ambiente de pagamento Asaas — baseada exclusivamente no host.
  *
  * Regra única:
