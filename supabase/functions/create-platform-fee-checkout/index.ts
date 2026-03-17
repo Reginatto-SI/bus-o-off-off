@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getAsaasBaseUrl,
-  getAsaasPlatformApiKeySecretName,
-  resolvePaymentEnvironment,
+  getAsaasApiKeySecretName,
+  type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
@@ -14,7 +14,7 @@ const corsHeaders = {
 
 /**
  * Cobra a taxa da plataforma em vendas manuais/conversão de reserva via Asaas.
- * Cobrança na conta da plataforma (sem split — 100% para a plataforma).
+ * Usa o payment_environment salvo na venda (nunca recalcula por host).
  */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -22,23 +22,6 @@ serve(async (req) => {
   }
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
-    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
-
-    console.log("[create-platform-fee-checkout] Asaas runtime resolved", {
-      resolved_env: runtimeEnv.resolved_env,
-      request_host: runtimeEnv.host,
-      selected_base_url: asaasBaseUrl,
-      selected_key_source: `platform_secret:${platformApiKeySecretName}`,
-    });
-
     const { sale_id } = await req.json();
     if (!sale_id) {
       return new Response(JSON.stringify({ error: "sale_id is required" }), {
@@ -81,8 +64,6 @@ serve(async (req) => {
     }
 
     // Asaas exige mínimo de R$ 5,00 para billingType UNDEFINED.
-    // Se a taxa for menor, registramos isenção explícita da TAXA (sem promover a venda para paga).
-    // Fonte de verdade: sales.status continua 'reservado' até confirmação real de pagamento.
     const ASAAS_MIN_CHARGE = 5.0;
     if (feeAmount < ASAAS_MIN_CHARGE) {
       await supabaseAdmin
@@ -96,19 +77,31 @@ serve(async (req) => {
       await supabaseAdmin.from("sale_logs").insert({
         sale_id: sale.id,
         action: "platform_fee_waived",
-        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Taxa marcada como dispensada sem alterar status da venda.`,
+        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Taxa marcada como dispensada.`,
         company_id: sale.company_id,
       });
 
       return new Response(
-        JSON.stringify({ waived: true, message: "Taxa dispensada explicitamente (abaixo do mínimo do gateway)" }),
+        JSON.stringify({ waived: true, message: "Taxa dispensada (abaixo do mínimo do gateway)" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
+    // ── Usar ambiente salvo na venda ──
+    const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
+    const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
+    const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
+
+    console.log("[create-platform-fee-checkout] Ambiente da venda", {
+      sale_id: sale.id,
+      sale_environment: saleEnv,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: apiKeySecretName,
+    });
+
+    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
     if (!PLATFORM_API_KEY) {
-      return new Response(JSON.stringify({ error: "Asaas API key not configured" }), {
+      return new Response(JSON.stringify({ error: `Asaas API key not configured (${apiKeySecretName})` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -161,7 +154,7 @@ serve(async (req) => {
       customerId = customerData.id;
     }
 
-    // Create payment for the platform fee (no split — 100% platform)
+    // Create payment for the platform fee
     const eventName = sale.event?.name || "Evento";
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
@@ -191,7 +184,6 @@ serve(async (req) => {
       );
     }
 
-    // Save reference
     await supabaseAdmin
       .from("sales")
       .update({ platform_fee_payment_id: paymentData.id })

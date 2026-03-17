@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getAsaasWebhookTokenSecretName,
-  resolvePaymentEnvironment,
+  type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
@@ -27,14 +27,10 @@ type ProcessingResult = {
 function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const trimmed = value.trim();
-
-  // Quando Asaas já fornece data/hora completa, preservamos o instante exato.
   const parsed = new Date(trimmed);
   if (!Number.isNaN(parsed.getTime()) && (trimmed.includes("T") || trimmed.includes(":"))) {
     return parsed.toISOString();
   }
-
-  // Se vier apenas data (yyyy-mm-dd), não inventamos horário.
   return null;
 }
 
@@ -52,16 +48,52 @@ function resolveAsaasConfirmedAt(payment: any, webhookCreatedAt?: string | null)
     if (normalized) return normalized;
   }
 
-  // Fallback seguro: timestamp de processamento quando o payload não trouxe data/hora confiável.
   return new Date().toISOString();
 }
 
 /**
- * Webhook do Asaas para processar notificações de pagamento.
- * Eventos processados:
- * - PAYMENT_CONFIRMED / PAYMENT_RECEIVED → marca venda como pago + gera tickets
- * - PAYMENT_OVERDUE / PAYMENT_DELETED / PAYMENT_REFUNDED → cancela venda + libera locks
+ * Busca o payment_environment da venda no banco.
+ * Se não encontrado, retorna 'sandbox' como fallback seguro.
  */
+async function getSaleEnvironment(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  saleId: string
+): Promise<PaymentEnvironment> {
+  const { data } = await supabaseAdmin
+    .from("sales")
+    .select("payment_environment")
+    .eq("id", saleId)
+    .maybeSingle();
+
+  return data?.payment_environment === "production" ? "production" : "sandbox";
+}
+
+/**
+ * Valida o token do webhook contra AMBOS os ambientes (sandbox e production).
+ * O webhook pode receber chamadas de qualquer ambiente, então tentamos validar
+ * contra o token correspondente ao ambiente da venda.
+ * Se não temos a venda ainda (ex: externalReference ausente), tentamos ambos.
+ */
+function validateWebhookToken(
+  req: Request,
+  saleEnv?: PaymentEnvironment
+): { valid: boolean } {
+  const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-webhook-token");
+  if (!receivedToken) return { valid: false };
+
+  if (saleEnv) {
+    // Validar contra o token do ambiente da venda
+    const secretName = getAsaasWebhookTokenSecretName(saleEnv);
+    const expectedToken = Deno.env.get(secretName);
+    return { valid: receivedToken === expectedToken };
+  }
+
+  // Se não sabemos o ambiente, tentamos ambos
+  const prodToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
+  const sandboxToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN_SANDBOX");
+  return { valid: receivedToken === prodToken || receivedToken === sandboxToken };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -84,7 +116,6 @@ serve(async (req) => {
   const paymentId = payment?.id ?? null;
   const externalReference = payment?.externalReference ?? null;
 
-  // Log estruturado para facilitar debug no painel de Edge Functions.
   console.log(JSON.stringify({
     source: "asaas-webhook",
     stage: "received",
@@ -96,38 +127,44 @@ serve(async (req) => {
   }));
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return jsonResponse(403, { error: runtimeEnv.blockReason });
+    // Determinar o saleId real (pode ser platform_fee_<uuid>)
+    const rawSaleId = String(externalReference ?? "");
+    const isPlatformFee = rawSaleId.startsWith("platform_fee_");
+    const actualSaleId = isPlatformFee ? rawSaleId.replace("platform_fee_", "") : rawSaleId;
+
+    // Buscar ambiente da venda para validar token correto
+    let saleEnv: PaymentEnvironment | undefined;
+    if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
+      saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
-    const webhookTokenSecretName = getAsaasWebhookTokenSecretName(runtimeEnv.resolved_env);
-    const webhookToken = Deno.env.get(webhookTokenSecretName);
-    console.log("[asaas-webhook] Asaas runtime resolved", {
-      resolved_env: runtimeEnv.resolved_env,
-      request_host: runtimeEnv.host,
-      selected_key_source: `platform_secret:${webhookTokenSecretName}`,
+
+    // Validar token do webhook
+    const { valid: tokenValid } = validateWebhookToken(req, saleEnv);
+    const hasAnyToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN") || Deno.env.get("ASAAS_WEBHOOK_TOKEN_SANDBOX");
+
+    if (hasAnyToken && !tokenValid) {
+      const unauthorizedResult: ProcessingResult = {
+        status: "unauthorized",
+        httpStatus: 401,
+        message: "Token de webhook inválido",
+        responseBody: { error: "Invalid token" },
+        eventType,
+        paymentId,
+        externalReference,
+      };
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...unauthorizedResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(unauthorizedResult.httpStatus, unauthorizedResult.responseBody);
+    }
+
+    console.log("[asaas-webhook] Token validado", {
+      sale_environment: saleEnv ?? "unknown",
+      is_platform_fee: isPlatformFee,
     });
-    if (webhookToken) {
-      const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-webhook-token");
-      if (receivedToken !== webhookToken) {
-        const unauthorizedResult: ProcessingResult = {
-          status: "unauthorized",
-          httpStatus: 401,
-          message: "Token de webhook inválido",
-          responseBody: { error: "Invalid token" },
-          eventType,
-          paymentId,
-          externalReference,
-        };
-
-        await persistIntegrationLog(supabaseAdmin, {
-          ...unauthorizedResult,
-          payload: requestPayload,
-        });
-
-        return jsonResponse(unauthorizedResult.httpStatus, unauthorizedResult.responseBody);
-      }
-    }
 
     if (!eventType || !payment) {
       const invalidPayloadResult: ProcessingResult = {
@@ -189,9 +226,8 @@ serve(async (req) => {
       return jsonResponse(missingReferenceResult.httpStatus, missingReferenceResult.responseBody);
     }
 
-    // Fluxo dedicado: cobrança da taxa da plataforma usa externalReference = platform_fee_<sale_id>.
-    // Aqui promovemos reservado -> pago somente após confirmação da taxa, sem misturar com pagamento da passagem.
-    if (String(saleId).startsWith("platform_fee_")) {
+    // Fluxo dedicado: cobrança da taxa da plataforma
+    if (isPlatformFee) {
       const platformFeeResult = await processPlatformFeeWebhook(
         supabaseAdmin,
         saleId,
@@ -218,7 +254,6 @@ serve(async (req) => {
       .maybeSingle();
 
     if (saleError || !sale) {
-      // Não retornamos 200 aqui para evitar falso sucesso quando o evento era aplicável a uma venda.
       const saleNotFoundResult: ProcessingResult = {
         status: "failed",
         httpStatus: 404,
@@ -266,14 +301,9 @@ serve(async (req) => {
       stage: "finished",
       eventType,
       paymentId,
-      paymentStatus: payment?.status ?? null,
-      billingType: payment?.billingType ?? null,
       externalReference,
       saleId: result.saleId,
-      companyId: result.companyId,
       processingStatus: result.status,
-      httpStatus: result.httpStatus,
-      message: result.message,
     }));
 
     return jsonResponse(result.httpStatus, result.responseBody);
@@ -281,7 +311,7 @@ serve(async (req) => {
     const fallbackResult: ProcessingResult = {
       status: "failed",
       httpStatus: 500,
-      message: `Erro inesperado no processamento principal: ${error instanceof Error ? error.message : "unknown_error"}`,
+      message: `Erro inesperado: ${error instanceof Error ? error.message : "unknown_error"}`,
       responseBody: { error: "Webhook processing failed" },
       eventType,
       paymentId,
@@ -333,7 +363,6 @@ async function processPlatformFeeWebhook(
         platform_fee_status: "paid",
         platform_fee_paid_at: confirmedAt,
         platform_fee_payment_id: payment.id,
-        // Regra de negócio: após taxa confirmada, a venda manual reservada pode virar paga.
         status: sale.status === "reservado" ? "pago" : sale.status,
         payment_confirmed_at: confirmedAt,
       })
@@ -354,7 +383,7 @@ async function processPlatformFeeWebhook(
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: saleId,
       action: "platform_fee_paid",
-      description: `Taxa da plataforma confirmada via Asaas (${eventType}, payment ${payment.id}). Venda promovida para paga quando aplicável.`,
+      description: `Taxa da plataforma confirmada via Asaas (${eventType}, payment ${payment.id}).`,
       company_id: sale.company_id,
     });
 
@@ -426,7 +455,6 @@ async function processPaymentConfirmed(
       .single();
 
     if (updateError || !updatedSale) {
-      // Falha crítica: sem status pago consistente não podemos confirmar sucesso ao Asaas.
       return {
         status: "failed",
         httpStatus: 500,
@@ -437,7 +465,6 @@ async function processPaymentConfirmed(
       };
     }
   } else {
-    // Idempotência: webhook repetido de venda já paga não deve duplicar efeitos colaterais.
     await supabaseAdmin
       .from("sales")
       .update({ asaas_payment_status: payment.status })
@@ -446,7 +473,6 @@ async function processPaymentConfirmed(
 
   const ticketsResult = await createTicketsFromPassengers(supabaseAdmin, saleId, sale.company_id);
   if (ticketsResult.status === "error") {
-    // Parcial: a venda foi paga, mas sem tickets operacionais não concluímos o fluxo.
     return {
       status: "partial_failure",
       httpStatus: 500,
@@ -459,7 +485,6 @@ async function processPaymentConfirmed(
 
   const { error: seatLockError } = await supabaseAdmin.from("seat_locks").delete().eq("sale_id", saleId);
   if (seatLockError) {
-    // Falha crítica operacional: locks presos causam inconsistência de ocupação.
     return {
       status: "failed",
       httpStatus: 500,
@@ -480,7 +505,7 @@ async function processPaymentConfirmed(
   });
 
   return {
-    status: ticketsResult.status === "skipped_existing" ? "success" : "success",
+    status: "success",
     httpStatus: 200,
     message: ticketsResult.message,
     responseBody: { received: true, processed: true, sale_id: saleId },
@@ -567,7 +592,6 @@ async function processPaymentFailed(
     .in("status", ["pendente_pagamento", "reservado"]);
 
   if (updateError) {
-    // Falha crítica: cancelamento inconsistente precisa de retry do provedor.
     return {
       status: "failed",
       httpStatus: 500,
@@ -610,10 +634,6 @@ async function processPaymentFailed(
   };
 }
 
-/**
- * Creates tickets from sale_passengers staging table (new public checkout flow).
- * If no sale_passengers exist (admin/legacy flow), does nothing.
- */
 async function createTicketsFromPassengers(
   supabaseAdmin: ReturnType<typeof createClient<any>>,
   saleId: string,
@@ -686,7 +706,6 @@ async function persistIntegrationLog(
   params: ProcessingResult & { payload: unknown }
 ) {
   try {
-    // Persistimos a trilha técnica para diagnóstico administrativo e auditoria de integração.
     await supabaseAdmin.from("sale_integration_logs").insert({
       sale_id: params.saleId ?? null,
       company_id: params.companyId ?? null,

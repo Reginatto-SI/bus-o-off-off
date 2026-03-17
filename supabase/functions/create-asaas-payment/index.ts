@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  resolveEnvironmentFromHost,
   getAsaasBaseUrl,
-  getAsaasPlatformApiKeySecretName,
-  getAsaasPlatformWalletSecretName,
-  resolvePaymentEnvironment,
+  getAsaasApiKeySecretName,
+  getAsaasWalletSecretName,
+  type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
@@ -23,7 +24,6 @@ function toSingleLineText(value: unknown, fallback: string) {
 }
 
 function getShortSaleId(saleId: string) {
-  // Comentário de suporte: quando a venda é UUID exibimos apenas o prefixo para facilitar leitura humana.
   return /^[0-9a-fA-F-]{36}$/.test(saleId) ? saleId.split("-")[0] : saleId;
 }
 
@@ -72,39 +72,31 @@ function jsonResponse(payload: Record<string, unknown>, status: number) {
   });
 }
 
-/**
- * Cria cobrança no Asaas com split dinâmico.
- *
- * Regra de split:
- *   empresa  = 100 - (taxa_plataforma + taxa_socio)
- *   plataforma = taxa_plataforma  (fica na conta principal da plataforma)
- *   sócio    = taxa_socio         (enviado via walletId do sócio ativo)
- *
- * Se taxa_socio = 0 ou não há sócio ativo com wallet válido, o sócio é omitido do split.
- */
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return jsonResponse({ error: runtimeEnv.blockReason, error_code: "environment_blocked" }, 403);
+    // ── 1. Resolver ambiente pelo host (única vez, único ponto) ──
+    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
+    const isProduction = paymentEnv === "production";
+    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
+    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
+    const walletSecretName = getAsaasWalletSecretName(paymentEnv);
+
+    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
+    if (!PLATFORM_API_KEY) {
+      return jsonResponse({ error: `Asaas API key not configured (env: ${paymentEnv}, secret: ${apiKeySecretName})` }, 500);
     }
-    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
-    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
-    const platformWalletSecretName = getAsaasPlatformWalletSecretName(runtimeEnv.resolved_env);
 
     const { sale_id, payment_method } = await req.json();
-    console.log("[create-asaas-payment] request received", { sale_id, payment_method });
+    console.log("[create-asaas-payment] request received", { sale_id, payment_method, host_detected: detectedHost, environment_selected: paymentEnv });
 
     if (!sale_id) {
       return jsonResponse({ error: "sale_id is required" }, 400);
     }
 
-    // Mudança crítica de segurança: só aceitamos métodos explícitos do checkout.
-    // Isso evita fallback silencioso para PIX quando o front falhar ao enviar payment_method.
     if (payment_method !== "pix" && payment_method !== "credit_card") {
       return jsonResponse({
         error: "payment_method must be 'pix' or 'credit_card'",
@@ -120,7 +112,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // 1. Buscar venda com evento
+    // 2. Buscar venda com evento
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select("*, event:events(*)")
@@ -139,7 +131,7 @@ serve(async (req) => {
       return jsonResponse({ error: "Sale is not in 'reservado' or 'pendente_pagamento' status" }, 400);
     }
 
-    // 2. Buscar empresa com configuração de comissão
+    // 3. Buscar empresa
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select("name, asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
@@ -154,40 +146,34 @@ serve(async (req) => {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
 
-    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
-    if (!PLATFORM_API_KEY) {
-      return jsonResponse({ error: `Asaas API key not configured on platform (env: ${runtimeEnv.resolved_env})` }, 500);
-    }
-
-    console.log("[create-asaas-payment] Asaas runtime resolved", {
-      resolved_env: runtimeEnv.resolved_env,
-      request_host: runtimeEnv.host,
-      selected_base_url: asaasBaseUrl,
-      selected_key_source: `platform_secret:${platformApiKeySecretName}`,
-    });
-
-
-    // Quando o ambiente resolvido é sandbox (seja por ASAAS_ENV=sandbox direto ou por
-    // downgrade automático), usamos a chave da plataforma sandbox. A chave da empresa
-    // é de produção e não funciona no ambiente sandbox do Asaas.
+    // ── 4. Selecionar chave de API ──
+    // Sandbox: usa chave da plataforma (sandbox). A empresa não tem chave sandbox.
+    // Produção: usa chave da empresa.
     let companyApiKey: string;
-    if (!runtimeEnv.isProduction) {
-      console.log("[create-asaas-payment] Ambiente sandbox: usando chave da plataforma", {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-        downgraded: runtimeEnv.downgraded,
-      });
+    let apiKeySource: string;
+
+    if (!isProduction) {
       companyApiKey = PLATFORM_API_KEY;
+      apiKeySource = `platform_sandbox (${apiKeySecretName})`;
     } else {
-      const storedKey = company.asaas_api_key;
-      if (!storedKey) {
+      if (!company.asaas_api_key) {
         return jsonResponse({
-          error: "Empresa sem API Key do Asaas vinculada. Reconecte a conta Asaas da empresa para emitir cobranças no nome correto.",
+          error: "Empresa sem API Key do Asaas vinculada.",
           error_code: "missing_company_asaas_api_key",
         }, 400);
       }
-      companyApiKey = storedKey;
+      companyApiKey = company.asaas_api_key;
+      apiKeySource = "company.asaas_api_key";
     }
+
+    console.log("[create-asaas-payment] Ambiente configurado", {
+      host_detected: detectedHost,
+      environment_selected: paymentEnv,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: apiKeySource,
+      sale_id: sale.id,
+      company_id: sale.company_id,
+    });
 
     const platformFeePercent = Number(company.platform_fee_percent ?? 0);
     const partnerSplitPercent = Number(company.partner_split_percent ?? 0);
@@ -196,8 +182,6 @@ serve(async (req) => {
       return jsonResponse({ error: "Taxa da plataforma inválida", error_code: "platform_fee_missing" }, 400);
     }
 
-    // Mantém compatibilidade com dados antigos: prioriza gross_amount persistido,
-    // e só calcula via unit_price * quantity quando necessário.
     const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
     if (typeof grossAmount !== "number" || !Number.isFinite(grossAmount) || grossAmount <= 0) {
       return jsonResponse({ error: "Valor bruto da venda inválido", error_code: "invalid_gross_amount" }, 400);
@@ -232,13 +216,14 @@ serve(async (req) => {
       }
     };
 
-    // 3. Buscar sócio ativo (máximo 1) para incluir no split
+    // 5. Buscar sócio ativo para split (apenas produção)
     let activePartner: { asaas_wallet_id: string } | null = null;
-    if (partnerSplitPercent > 0) {
+    const effectivePartnerFee = isProduction && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
+
+    if (effectivePartnerFee > 0) {
       const { data: partnerData } = await supabaseAdmin
         .from("partners")
         .select("asaas_wallet_id")
-        // Mudança crítica multiempresa: impede split com wallet de parceiro de outra empresa.
         .eq("company_id", sale.company_id)
         .eq("status", "ativo")
         .limit(1)
@@ -249,82 +234,33 @@ serve(async (req) => {
       }
     }
 
-    // 4. Montar split dinâmico
-    // Se sócio ativo com wallet válido e taxa > 0: split triplo (empresa + plataforma + sócio)
-    // Caso contrário: split duplo (empresa + plataforma)
-    const effectivePartnerFee = activePartner ? partnerSplitPercent : 0;
-    const totalFee = platformFeePercent + effectivePartnerFee;
-
-    if (totalFee > 100) {
-      return jsonResponse({ error: "Soma das taxas (plataforma + sócio) excede 100%", error_code: "fee_exceeds_limit" }, 400);
-    }
-
-    // Array de split: apenas plataforma + sócio (empresa recebe o restante automaticamente como dona da cobrança)
+    // 6. Montar split (somente produção)
     const splitArray: Array<{ walletId: string; percentualValue: number }> = [];
 
-    // A plataforma deve continuar recebendo comissão via split,
-    // mesmo com a cobrança sendo criada na conta da empresa.
-    const platformWalletFromEnv = Deno.env.get(platformWalletSecretName);
-    let platformWalletId = platformWalletFromEnv ?? null;
+    if (isProduction) {
+      const actualPartnerFee = activePartner ? effectivePartnerFee : 0;
+      const totalFee = platformFeePercent + actualPartnerFee;
 
-    if (!platformWalletId && platformFeePercent > 0) {
-      console.log("[create-asaas-payment] ASAAS_WALLET_ID not set, falling back to /myAccount", {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-      });
-      try {
-        const myAccountRes = await fetch(`${asaasBaseUrl}/myAccount`, {
-          headers: { "access_token": PLATFORM_API_KEY },
-        });
+      if (totalFee > 100) {
+        return jsonResponse({ error: "Soma das taxas (plataforma + sócio) excede 100%", error_code: "fee_exceeds_limit" }, 400);
+      }
 
-        if (myAccountRes.ok) {
-          const myAccountData = await safeJson(myAccountRes);
-          platformWalletId = myAccountData?.walletId ?? null;
-          console.log("[create-asaas-payment] fallback /myAccount resolved", {
-            sale_id: sale.id,
-            company_id: sale.company_id,
-            has_wallet: Boolean(platformWalletId),
-          });
-        } else {
-          console.error("[create-asaas-payment] fallback /myAccount failed", {
-            sale_id: sale.id,
-            company_id: sale.company_id,
-            status: myAccountRes.status,
-            response: await myAccountRes.text(),
-          });
+      // Em produção, a empresa é dona da cobrança. Plataforma e sócio entram no split.
+      if (platformFeePercent > 0) {
+        const platformWalletId = Deno.env.get(walletSecretName);
+        if (!platformWalletId) {
+          return jsonResponse({ error: "Wallet da plataforma não configurada", error_code: "missing_platform_wallet" }, 500);
         }
-      } catch (fetchErr) {
-        console.error("[create-asaas-payment] fallback /myAccount fetch error", {
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          error: fetchErr,
-        });
-      }
-    }
-
-    // Quando em sandbox (direto ou downgrade), a cobrança é criada com a chave da
-    // plataforma, tornando a plataforma a dona da cobrança. Incluir a própria wallet
-    // no split causa erro "Não é permitido split para sua própria carteira".
-    if (platformFeePercent > 0 && runtimeEnv.isProduction) {
-      if (!platformWalletId) {
-        return jsonResponse({ error: "Não foi possível obter wallet da plataforma para aplicar o split.", error_code: "missing_platform_wallet" }, 500);
+        splitArray.push({ walletId: platformWalletId, percentualValue: platformFeePercent });
       }
 
-      splitArray.push({
-        walletId: platformWalletId,
-        percentualValue: platformFeePercent,
-      });
+      if (activePartner && actualPartnerFee > 0) {
+        splitArray.push({ walletId: activePartner.asaas_wallet_id, percentualValue: actualPartnerFee });
+      }
     }
+    // Em sandbox: sem split (plataforma é dona da cobrança via sua própria chave)
 
-    // Incluir sócio no split somente se aplicável
-    if (activePartner && effectivePartnerFee > 0) {
-      splitArray.push({
-        walletId: activePartner.asaas_wallet_id,
-        percentualValue: effectivePartnerFee,
-      });
-    }
-
-    // 5. Criar ou encontrar cliente no Asaas
+    // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
     if (!customerCpf || (customerCpf.length !== 11 && customerCpf.length !== 14)) {
       await insertIntegrationLog(
@@ -355,12 +291,7 @@ serve(async (req) => {
         status: searchRes.status,
         response: searchData,
       });
-      await insertIntegrationLog(
-        "failed",
-        "Erro ao buscar cliente no Asaas",
-        { cpfCnpj: customerCpf, externalReference: sale.id },
-        searchData
-      );
+      await insertIntegrationLog("failed", "Erro ao buscar cliente no Asaas", { cpfCnpj: customerCpf, externalReference: sale.id }, searchData);
       return jsonResponse({ error: "Erro ao buscar cliente no Asaas" }, 400);
     }
 
@@ -383,34 +314,21 @@ serve(async (req) => {
 
       const customerData = await safeJson(createCustomerRes);
       if (!customerData) {
-        console.error("[create-asaas-payment] Asaas customer create returned empty response", { sale_id: sale.id, status: createCustomerRes.status });
         return jsonResponse({ error: "Resposta vazia ao criar cliente no Asaas" }, 502);
       }
       if (!createCustomerRes.ok) {
-        console.error("[create-asaas-payment] Asaas customer create error", {
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          payload: { cpfCnpj: customerCpf, externalReference: sale.id },
-          response: customerData,
-        });
-        await insertIntegrationLog(
-          "failed",
-          "Erro ao criar cliente no Asaas",
-          { cpfCnpj: customerCpf, externalReference: sale.id },
-          customerData
-        );
+        await insertIntegrationLog("failed", "Erro ao criar cliente no Asaas", { cpfCnpj: customerCpf }, customerData);
         return jsonResponse({ error: customerData?.errors?.[0]?.description || "Erro ao criar cliente no Asaas" }, 400);
       }
       customerId = customerData.id;
     }
 
-    // 6. Criar cobrança com split
+    // 8. Criar cobrança
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
     const dueDateStr = dueDate.toISOString().split("T")[0];
 
     const eventName = sale.event?.name || "Evento";
-    const saleExternalReference = sale.id;
     const paymentDescription = buildAsaasPaymentDescription({
       companyName: company.name,
       eventName,
@@ -425,20 +343,16 @@ serve(async (req) => {
       value: grossAmount,
       dueDate: dueDateStr,
       description: paymentDescription,
-      externalReference: saleExternalReference,
+      externalReference: sale.id,
       split: splitArray,
     };
 
     console.log("[create-asaas-payment] sending payment payload", {
       sale_id: sale.id,
-      company_id: sale.company_id,
-      payment_method_received: payment_method,
-      payment_method_normalized: normalizedPaymentMethod,
       billingType,
       grossAmount,
-      platformWalletId,
-      partnerWalletId: activePartner?.asaas_wallet_id ?? null,
       splitArray,
+      environment: paymentEnv,
     });
 
     await insertIntegrationLog("requested", "Solicitação de criação de cobrança enviada ao Asaas", paymentPayload, null);
@@ -454,53 +368,35 @@ serve(async (req) => {
 
     const paymentData = await safeJson(paymentRes);
     if (!paymentData) {
-      console.error("[create-asaas-payment] Asaas payment create returned empty response", { sale_id: sale.id, status: paymentRes.status });
       await insertIntegrationLog("failed", "Resposta vazia do Asaas ao criar cobrança", paymentPayload, null);
       return jsonResponse({ error: "Resposta vazia ao criar cobrança no Asaas" }, 502);
     }
 
     if (!paymentRes.ok) {
-      console.error("[create-asaas-payment] Asaas payment create error", {
-        sale_id: sale.id,
-        company_id: sale.company_id,
-        billingType,
-        splitArray,
-        response: paymentData,
-      });
       await insertIntegrationLog("failed", "Erro ao criar cobrança no Asaas", paymentPayload, paymentData);
       return jsonResponse({ error: paymentData?.errors?.[0]?.description || "Erro ao criar cobrança no Asaas" }, 400);
     }
 
     console.log("[create-asaas-payment] payment created", {
       sale_id: sale.id,
-      company_id: sale.company_id,
       payment_id: paymentData.id,
       payment_status: paymentData.status,
-      billingType,
-      invoiceUrl: paymentData.invoiceUrl ?? null,
+      environment: paymentEnv,
     });
 
-    await insertIntegrationLog(
-      "success",
-      "Cobrança criada com sucesso no Asaas",
-      paymentPayload,
-      paymentData,
-      paymentData.id
-    );
+    await insertIntegrationLog("success", "Cobrança criada com sucesso no Asaas", paymentPayload, paymentData, paymentData.id);
 
-    // 7. Salvar ID do pagamento na venda
+    // 9. Salvar ID do pagamento E o ambiente na venda (fonte de verdade para demais funções)
     await supabaseAdmin
       .from("sales")
       .update({
         asaas_payment_id: paymentData.id,
         asaas_payment_status: paymentData.status,
         payment_method: normalizedPaymentMethod,
+        payment_environment: paymentEnv,
       })
       .eq("id", sale.id);
 
-    // 8. Retornar URL para redirect
-    // Mantemos invoiceUrl para PIX e CREDIT_CARD porque o checkout atual usa redirecionamento
-    // para a página hospedada do Asaas, e essa URL vem padronizada nesse campo na API /payments.
     return jsonResponse({
       url: paymentData.invoiceUrl,
       payment_id: paymentData.id,

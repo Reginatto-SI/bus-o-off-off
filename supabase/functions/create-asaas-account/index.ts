@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  resolveEnvironmentFromHost,
   getAsaasBaseUrl,
-  getAsaasPlatformApiKeySecretName,
-  resolvePaymentEnvironment,
+  getAsaasApiKeySecretName,
 } from "../_shared/runtime-env.ts";
 
 const corsHeaders = {
@@ -31,15 +31,9 @@ serve(async (req) => {
   }
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
-    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
+    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
+    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
+    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
 
     // Authenticate admin user
     const authHeader = req.headers.get("Authorization");
@@ -109,19 +103,19 @@ serve(async (req) => {
       });
     }
 
-    const PLATFORM_API_KEY = Deno.env.get(platformApiKeySecretName);
+    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
     if (!PLATFORM_API_KEY) {
-      return new Response(JSON.stringify({ error: `Asaas API key not configured on platform (env: ${runtimeEnv.resolved_env})` }), {
+      return new Response(JSON.stringify({ error: `Asaas API key not configured (${apiKeySecretName})` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("[create-asaas-account] Asaas runtime resolved", {
-      resolved_env: runtimeEnv.resolved_env,
-      request_host: runtimeEnv.host,
-      selected_base_url: asaasBaseUrl,
-      selected_key_source: `platform_secret:${platformApiKeySecretName}`,
+    console.log("[create-asaas-account] Ambiente configurado", {
+      host_detected: detectedHost,
+      environment_selected: paymentEnv,
+      asaas_base_url: asaasBaseUrl,
+      api_key_source: apiKeySecretName,
     });
 
     // ====== MODE: Revalidate existing integration ======
