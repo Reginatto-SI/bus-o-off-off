@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,7 +58,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
       .eq("id", sale_id)
       .single();
 
@@ -69,29 +70,26 @@ serve(async (req) => {
     }
 
     if (sale.status === "pago") {
-      // Hotfix Etapa 1: venda "pago" sem ticket é estado crítico.
-      // Não podemos retornar sucesso saudável sem confirmar existência real de passagem.
-      const paidSaleReconciliation = await ensureTicketsForPaidSale(
+      // Etapa 2: verify também usa a rotina central de finalização para manter simetria com webhook.
+      const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
-        sale.id,
-        sale.company_id,
-      );
+        sale,
+        confirmedAt: sale.payment_confirmed_at ?? sale.platform_fee_paid_at ?? new Date().toISOString(),
+        asaasStatus: sale.asaas_payment_status ?? "CONFIRMED",
+        source: "verify-payment-status",
+        paymentId: sale.asaas_payment_id,
+        allowStatusUpdate: false,
+        writeSaleLog: false,
+      });
 
-      if (!paidSaleReconciliation.ok) {
-        logPaymentTrace("error", "verify-payment-status", "paid_sale_without_tickets", {
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          payment_environment: sale.payment_environment,
-          reconciliation_reason: paidSaleReconciliation.reason,
-        });
-
+      if (!finalization.ok) {
         return new Response(
           JSON.stringify({
             error: "Venda paga sem passagem gerada",
             error_code: "paid_sale_without_tickets",
             paymentStatus: "inconsistente_sem_passagem",
           }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -214,46 +212,26 @@ serve(async (req) => {
         asaas_payment_id: sale.asaas_payment_id,
         asaas_status: asaasStatus,
       });
-      const { error: updateError } = await supabaseAdmin
-        .from("sales")
-        .update({
-          status: "pago",
-          asaas_payment_status: asaasStatus,
-          payment_confirmed_at: confirmedAt,
-        })
-        .eq("id", sale_id)
-        .in("status", ["pendente_pagamento", "reservado"]);
-
-      if (updateError) {
-        console.error("Error updating sale:", updateError);
-        const { data: freshSale } = await supabaseAdmin
-          .from("sales").select("status").eq("id", sale_id).single();
-        return new Response(
-          JSON.stringify({ paymentStatus: freshSale?.status || sale.status }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago'`);
-
-      // Hotfix Etapa 1: após confirmar pagamento, só consideramos sucesso se ticket existir ao final.
-      await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
-      await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
-
-      const finalizedSaleReconciliation = await ensureTicketsForPaidSale(
+      const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
-        sale_id,
-        sale.company_id,
-      );
+        sale,
+        confirmedAt,
+        asaasStatus,
+        source: "verify-payment-status",
+        paymentId: sale.asaas_payment_id,
+        allowStatusUpdate: true,
+        writeSaleLog: false,
+      });
 
-      if (!finalizedSaleReconciliation.ok) {
+      if (!finalization.ok) {
         logPaymentTrace("error", "verify-payment-status", "payment_confirmed_but_ticket_missing", {
           sale_id: sale.id,
           company_id: sale.company_id,
           payment_environment: paymentContext.environment,
           asaas_payment_id: sale.asaas_payment_id,
           asaas_status: asaasStatus,
-          reconciliation_reason: finalizedSaleReconciliation.reason,
+          finalization_state: finalization.state,
+          ticket_status: finalization.ticketStatus,
         });
 
         return new Response(
@@ -262,7 +240,7 @@ serve(async (req) => {
             error_code: "ticket_generation_incomplete",
             paymentStatus: "inconsistente_sem_passagem",
           }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -370,87 +348,3 @@ serve(async (req) => {
   }
 });
 
-async function createTicketsFromPassengers(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  saleId: string,
-  companyId: string
-) {
-  const { count: existingTickets } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if (existingTickets && existingTickets > 0) {
-    console.log(`Tickets already exist for sale ${saleId}, skipping`);
-    return;
-  }
-
-  const { data: passengers, error: passError } = await supabaseAdmin
-    .from("sale_passengers")
-    .select("*")
-    .eq("sale_id", saleId)
-    .order("sort_order");
-
-  if (passError) {
-    console.error("Error fetching sale_passengers:", passError);
-    return;
-  }
-
-  if (!passengers || passengers.length === 0) {
-    console.log(`No sale_passengers for sale ${saleId} (legacy/admin flow)`);
-    return;
-  }
-
-  const ticketInserts = passengers.map((p: any) => ({
-    sale_id: saleId,
-    trip_id: p.trip_id,
-    seat_id: p.seat_id,
-    seat_label: p.seat_label,
-    passenger_name: p.passenger_name,
-    passenger_cpf: p.passenger_cpf,
-    passenger_phone: p.passenger_phone,
-    company_id: companyId,
-  }));
-
-  const { error: ticketError } = await supabaseAdmin
-    .from("tickets")
-    .insert(ticketInserts);
-
-  if (ticketError) {
-    console.error("Error creating tickets:", ticketError);
-    return;
-  }
-
-  console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} via verify-payment-status`);
-  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
-}
-
-async function ensureTicketsForPaidSale(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  saleId: string,
-  companyId: string,
-): Promise<{ ok: boolean; reason: "already_exists" | "created_on_reconciliation" | "missing_sale_passengers_or_insert_failure" }> {
-  const { count: ticketsBefore } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if ((ticketsBefore ?? 0) > 0) {
-    return { ok: true, reason: "already_exists" };
-  }
-
-  // Hotfix Etapa 1: quando a venda já está paga mas sem ticket, tentamos reconciliação imediata.
-  // Isso evita falso positivo operacional (cliente pago sem passagem).
-  await createTicketsFromPassengers(supabaseAdmin, saleId, companyId);
-
-  const { count: ticketsAfter } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if ((ticketsAfter ?? 0) > 0) {
-    return { ok: true, reason: "created_on_reconciliation" };
-  }
-
-  return { ok: false, reason: "missing_sale_passengers_or_insert_failure" };
-}
