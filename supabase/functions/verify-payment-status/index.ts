@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  getAsaasBaseUrl,
-  getAsaasApiKeySecretName,
-  type PaymentEnvironment,
-} from "../_shared/runtime-env.ts";
+import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,32 +92,39 @@ serve(async (req) => {
       );
     }
 
-    // ── Usar ambiente salvo na venda (nunca recalcular por host) ──
-    const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
-    const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
-    const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
-    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
-
     // Buscar empresa
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("asaas_api_key, platform_fee_percent, partner_split_percent")
+      .select("asaas_api_key, asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
-    let apiKeyToUse: string | null;
-    if (saleEnv === "sandbox") {
-      apiKeyToUse = PLATFORM_API_KEY ?? null;
-    } else {
-      // Produção: chave da empresa, fallback para plataforma (cobranças legadas)
-      apiKeyToUse = company?.asaas_api_key || PLATFORM_API_KEY || null;
-    }
+    const paymentContext = resolvePaymentContext({
+      mode: "verify",
+      sale,
+      company,
+      allowLegacyVerifyFallback: true,
+    });
+
+    const apiKeyToUse = paymentContext.apiKey;
+
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      asaas_payment_id: sale.asaas_payment_id,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
+    });
 
     console.log("[verify-payment-status] Consultando Asaas", {
       sale_id: sale.id,
-      sale_environment: saleEnv,
-      asaas_base_url: asaasBaseUrl,
-      api_key_source: saleEnv === "sandbox" ? `platform (${apiKeySecretName})` : (company?.asaas_api_key ? "company" : "platform_fallback"),
+      sale_environment: paymentContext.environment,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
     });
 
     if (!apiKeyToUse) {
@@ -133,7 +137,7 @@ serve(async (req) => {
     // Query Asaas for payment status
     let paymentData: any;
     try {
-      const res = await fetch(`${asaasBaseUrl}/payments/${sale.asaas_payment_id}`, {
+      const res = await fetch(`${paymentContext.baseUrl}/payments/${sale.asaas_payment_id}`, {
         headers: { "access_token": apiKeyToUse },
       });
 
@@ -158,6 +162,16 @@ serve(async (req) => {
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
       const confirmedAt = resolveAsaasConfirmedAtFromPayment(paymentData);
+      logPaymentTrace("info", "verify-payment-status", "status_transition_attempt", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        payment_owner_type: paymentContext.ownerType,
+        previous_status: sale.status,
+        next_status: "pago",
+        asaas_payment_id: sale.asaas_payment_id,
+        asaas_status: asaasStatus,
+      });
       const { error: updateError } = await supabaseAdmin
         .from("sales")
         .update({
@@ -183,6 +197,17 @@ serve(async (req) => {
       await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
       await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
 
+      logPaymentTrace("info", "verify-payment-status", "status_transition_success", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        payment_owner_type: paymentContext.ownerType,
+        previous_status: sale.status,
+        next_status: "pago",
+        tickets_generation: "attempted",
+        seat_locks_cleanup: "attempted",
+      });
+
       if (company?.platform_fee_percent != null) {
         const platformFeePercent = Number(company.platform_fee_percent);
         const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
@@ -193,7 +218,7 @@ serve(async (req) => {
         const partnerSplitPercent = company?.partner_split_percent ?? 50;
         const { data: partner } = await supabaseAdmin
           .from("partners")
-          .select("id, asaas_wallet_id, status")
+          .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
           .eq("status", "ativo")
           .limit(1)
           .maybeSingle();
@@ -201,7 +226,9 @@ serve(async (req) => {
         let partnerFeeAmount = 0;
         let platformNetAmount = platformFeeTotal;
 
-        if (partner?.asaas_wallet_id && partner.status === "ativo") {
+        const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentContext.environment);
+
+        if (partnerWalletId && partner?.status === "ativo") {
           const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
           partnerFeeAmount = partnerFeeCents / 100;
           platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
@@ -250,6 +277,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    logPaymentTrace("error", "verify-payment-status", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("[verify-payment-status] Error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),

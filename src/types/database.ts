@@ -52,6 +52,17 @@ export interface Company {
   asaas_wallet_id: string | null;
   asaas_api_key: string | null;
   asaas_onboarding_complete: boolean;
+  // Step 3: configuração explícita por ambiente (mantendo campos legados acima)
+  asaas_account_id_production?: string | null;
+  asaas_account_email_production?: string | null;
+  asaas_wallet_id_production?: string | null;
+  asaas_api_key_production?: string | null;
+  asaas_onboarding_complete_production?: boolean;
+  asaas_account_id_sandbox?: string | null;
+  asaas_account_email_sandbox?: string | null;
+  asaas_wallet_id_sandbox?: string | null;
+  asaas_api_key_sandbox?: string | null;
+  asaas_onboarding_complete_sandbox?: boolean;
   // Comissionamento variável
   platform_fee_percent: number;
   partner_split_percent: number;
@@ -415,8 +426,12 @@ export interface SaleLog {
 export interface Partner {
   id: string;
   name: string;
-  /** Identificador da carteira Asaas para split direto no pagamento. */
+  /** Identificador legado da carteira Asaas para split direto no pagamento. */
   asaas_wallet_id: string | null;
+  /** Step 3: wallet explícita para produção. */
+  asaas_wallet_id_production?: string | null;
+  /** Step 3: wallet explícita para sandbox (uso futuro no Step 4). */
+  asaas_wallet_id_sandbox?: string | null;
   // Campos legados do Stripe — mantidos para histórico, não usados no fluxo atual.
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;

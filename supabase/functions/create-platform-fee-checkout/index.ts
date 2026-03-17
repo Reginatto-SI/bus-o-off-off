@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  getAsaasBaseUrl,
-  getAsaasApiKeySecretName,
-  type PaymentEnvironment,
-} from "../_shared/runtime-env.ts";
+import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import { resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,21 +84,32 @@ serve(async (req) => {
       );
     }
 
-    // ── Usar ambiente salvo na venda ──
-    const saleEnv: PaymentEnvironment = sale.payment_environment === "production" ? "production" : "sandbox";
-    const asaasBaseUrl = getAsaasBaseUrl(saleEnv);
-    const apiKeySecretName = getAsaasApiKeySecretName(saleEnv);
+    const paymentContext = resolvePaymentContext({
+      mode: "platform_fee",
+      sale,
+    });
+
+    logPaymentTrace("info", "create-platform-fee-checkout", "payment_context_loaded", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
+    });
 
     console.log("[create-platform-fee-checkout] Ambiente da venda", {
       sale_id: sale.id,
-      sale_environment: saleEnv,
-      asaas_base_url: asaasBaseUrl,
-      api_key_source: apiKeySecretName,
+      sale_environment: paymentContext.environment,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
     });
 
-    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
+    const PLATFORM_API_KEY = paymentContext.apiKey;
     if (!PLATFORM_API_KEY) {
-      return new Response(JSON.stringify({ error: `Asaas API key not configured (${apiKeySecretName})` }), {
+      return new Response(JSON.stringify({ error: `Asaas API key not configured (${paymentContext.apiKeySource})` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -121,7 +129,7 @@ serve(async (req) => {
 
     if (companyDoc) {
       const searchRes = await fetch(
-        `${asaasBaseUrl}/customers?cpfCnpj=${companyDoc}`,
+        `${paymentContext.baseUrl}/customers?cpfCnpj=${companyDoc}`,
         { headers: { "access_token": PLATFORM_API_KEY } }
       );
       const searchData = await searchRes.json();
@@ -131,7 +139,7 @@ serve(async (req) => {
     }
 
     if (!customerId) {
-      const createRes = await fetch(`${asaasBaseUrl}/customers`, {
+      const createRes = await fetch(`${paymentContext.baseUrl}/customers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -159,7 +167,7 @@ serve(async (req) => {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
 
-    const paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
+    const paymentRes = await fetch(`${paymentContext.baseUrl}/payments`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -201,6 +209,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    logPaymentTrace("error", "create-platform-fee-checkout", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("Error in create-platform-fee-checkout:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),

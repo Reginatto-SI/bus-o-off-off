@@ -62,6 +62,8 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showAddressModal, setShowAddressModal] = useState(false);
+  // Step 3: ambiente-alvo explícito para preparar onboarding separado por sandbox/produção.
+  const [targetEnvironment, setTargetEnvironment] = useState<'automatic' | 'sandbox' | 'production'>('automatic');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
 
   // Sync localCompanyData when companyData prop changes
@@ -106,6 +108,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
+      setTargetEnvironment('automatic');
     }
   }, [open]);
 
@@ -134,7 +137,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'create' },
+        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
@@ -179,7 +182,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim() },
+        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
       });
       if (error) {
         // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
@@ -255,6 +258,19 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           </AlertDescription>
         </Alert>
       )}
+      <div className="space-y-2">
+        <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+          <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
+            <SelectItem value="sandbox">Sandbox</SelectItem>
+            <SelectItem value="production">Produção</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">No Step 3 este seletor prepara o cadastro por ambiente sem alterar o checkout público atual.</p>
+      </div>
+
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
         <div className="space-y-1">
           <span className="text-muted-foreground">Empresa</span>
@@ -305,6 +321,18 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       <p className="text-sm text-muted-foreground">
         Informe a API Key da sua conta Asaas para vincular automaticamente. Você encontra a chave no painel do Asaas em <strong>Configurações &gt; Integrações</strong>.
       </p>
+      <div className="space-y-2">
+        <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+          <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
+            <SelectItem value="sandbox">Sandbox</SelectItem>
+            <SelectItem value="production">Produção</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="asaas-api-key">API Key do Asaas</Label>
         <Input

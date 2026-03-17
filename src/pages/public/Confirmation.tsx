@@ -184,6 +184,8 @@ export default function Confirmation() {
     setIsVerifyingPayment(true);
     // Guardamos a última tentativa para dar feedback claro ao usuário em estados pendentes.
     setLastVerificationAt(new Date());
+    // Comentário Step 1: log objetivo para correlação frontend <-> edge function por sale_id.
+    console.info('[confirmation] verify-payment-status:start', { sale_id: id, origin: 'manual_button_or_retry' });
     try {
       const { data, error } = await supabase.functions.invoke('verify-payment-status', {
         body: { sale_id: id },
@@ -202,6 +204,7 @@ export default function Confirmation() {
       } else if (data?.paymentStatus === 'expirado') {
         toast({ title: 'Sessão de pagamento expirada', variant: 'destructive' });
       }
+      console.info('[confirmation] verify-payment-status:finish', { sale_id: id, result_status: data?.paymentStatus ?? 'unknown' });
     } catch {
       toast({ title: 'Erro ao verificar pagamento', variant: 'destructive' });
     } finally {
@@ -227,6 +230,7 @@ export default function Confirmation() {
       // even when the webhook doesn't fire (common in Sandbox). The manual button
       // already proves this logic works — now the polling reuses it automatically.
       if (attempts >= 5 && attempts % 10 === 0) {
+        console.info('[confirmation] polling:trigger_verify_payment_status', { sale_id: id, attempts });
         supabase.functions.invoke('verify-payment-status', { body: { sale_id: id } })
           .catch(() => {});
       }
