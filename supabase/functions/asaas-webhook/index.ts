@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { type PaymentEnvironment } from "../_shared/runtime-env.ts";
+import { getAsaasWebhookTokenSecretName, type PaymentEnvironment } from "../_shared/runtime-env.ts";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { isWebhookTokenValidForContext, resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
@@ -105,17 +105,41 @@ serve(async (req) => {
     const isPlatformFee = rawSaleId.startsWith("platform_fee_");
     const actualSaleId = isPlatformFee ? rawSaleId.replace("platform_fee_", "") : rawSaleId;
 
-    // Buscar ambiente da venda para validar token correto (ou cair em dual-token legado quando indeterminado)
+    // Pré-Step 5: webhook só segue quando o ambiente da venda foi determinado de forma explícita.
     let saleEnv: PaymentEnvironment | undefined;
     if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
 
+    if (!saleEnv) {
+      const unresolvedContextResult: ProcessingResult = {
+        status: "failed",
+        httpStatus: 400,
+        message: "Ambiente da venda não determinado; webhook rejeitado",
+        responseBody: { error: "Sale environment unresolved", external_reference: externalReference },
+        saleId: actualSaleId || null,
+        eventType,
+        paymentId,
+        externalReference,
+      };
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...unresolvedContextResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(unresolvedContextResult.httpStatus, unresolvedContextResult.responseBody);
+    }
+
     const paymentContext = resolvePaymentContext({
       mode: "webhook",
-      sale: saleEnv ? { payment_environment: saleEnv } : undefined,
+      sale: { payment_environment: saleEnv },
       isPlatformFeeFlow: isPlatformFee,
     });
+
+    const expectedTokenSecretName = getAsaasWebhookTokenSecretName(paymentContext.environment);
+    const hasExpectedToken = paymentContext.webhookTokenCandidates.length > 0;
+    const tokenValid = isWebhookTokenValidForContext(req, paymentContext);
 
     logPaymentTrace("info", "asaas-webhook", "webhook_received", {
       sale_id: actualSaleId || null,
@@ -128,19 +152,38 @@ serve(async (req) => {
       asaas_base_url: paymentContext.baseUrl,
       split_policy: paymentContext.splitPolicy.type,
       decision_trace: paymentContext.decisionTrace,
-      token_validation_mode: paymentContext.decisionTrace.environmentSource === "fallback" ? "dual_token_fallback" : "single_environment_token",
+      token_validation_mode: "single_environment_token",
+      expected_token_secret: expectedTokenSecretName,
+      token_validation_result: tokenValid ? "valid" : "invalid",
     });
 
-    // Comentário Step 2: validação de token centralizada no payment-context-resolver.
-    const tokenValid = isWebhookTokenValidForContext(req, paymentContext);
-    const hasAnyToken = paymentContext.webhookTokenCandidates.length > 0;
+    if (!hasExpectedToken) {
+      const missingSecretResult: ProcessingResult = {
+        status: "failed",
+        httpStatus: 500,
+        message: `Secret de webhook ausente para ambiente ${paymentContext.environment}` ,
+        responseBody: { error: "Webhook secret not configured", expected_secret: expectedTokenSecretName },
+        saleId: actualSaleId || null,
+        eventType,
+        paymentId,
+        externalReference,
+      };
 
-    if (hasAnyToken && !tokenValid) {
+      await persistIntegrationLog(supabaseAdmin, {
+        ...missingSecretResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(missingSecretResult.httpStatus, missingSecretResult.responseBody);
+    }
+
+    if (!tokenValid) {
       const unauthorizedResult: ProcessingResult = {
         status: "unauthorized",
         httpStatus: 401,
         message: "Token de webhook inválido",
         responseBody: { error: "Invalid token" },
+        saleId: actualSaleId || null,
         eventType,
         paymentId,
         externalReference,
@@ -155,7 +198,11 @@ serve(async (req) => {
     }
 
     console.log("[asaas-webhook] Token validado", {
-      sale_environment: saleEnv ?? "unknown",
+      sale_id: actualSaleId || null,
+      sale_environment: saleEnv,
+      external_reference: externalReference,
+      expected_token_secret: expectedTokenSecretName,
+      validation_result: "valid",
       is_platform_fee: isPlatformFee,
     });
 
@@ -547,6 +594,8 @@ async function upsertFinancialSnapshot(
   const { data: partner } = await supabaseAdmin
     .from("partners")
     .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
+    // Pré-Step 5: escopo multi-tenant obrigatório para evitar parceiro de outra empresa.
+    .eq("company_id", companyId)
     .eq("status", "ativo")
     .limit(1)
     .maybeSingle();
@@ -556,7 +605,18 @@ async function upsertFinancialSnapshot(
 
   const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentEnvironment);
 
-  if (partnerWalletId && partner.status === "ativo") {
+  logPaymentTrace("info", "asaas-webhook", "financial_partner_selected", {
+    sale_id: saleId,
+    company_id: companyId,
+    payment_environment: paymentEnvironment,
+    partner_id: partner?.id ?? null,
+    partner_wallet_selected: partnerWalletId,
+    partner_wallet_source: paymentEnvironment === "production"
+      ? (partner?.asaas_wallet_id_production ? "partner.production" : (partner?.asaas_wallet_id ? "partner.legacy" : "none"))
+      : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : (partner?.asaas_wallet_id ? "partner.legacy" : "none")),
+  });
+
+  if (partnerWalletId && partner?.status === "ativo") {
     const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
     partnerFeeAmount = partnerFeeCents / 100;
     platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;

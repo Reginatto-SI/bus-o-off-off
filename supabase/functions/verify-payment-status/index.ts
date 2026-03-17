@@ -99,11 +99,14 @@ serve(async (req) => {
       .eq("id", sale.company_id)
       .single();
 
+    // Pré-Step 5: fallback legado só pode ser habilitado explicitamente por feature flag temporária.
+    const allowLegacyVerifyFallback = Deno.env.get("ASAAS_VERIFY_ALLOW_LEGACY_FALLBACK") === "true";
+
     const paymentContext = resolvePaymentContext({
       mode: "verify",
       sale,
       company,
-      allowLegacyVerifyFallback: true, // Step 4: mantém fallback legado apenas para verificação retrocompatível
+      allowLegacyVerifyFallback,
     });
 
     const apiKeyToUse = paymentContext.apiKey;
@@ -118,20 +121,37 @@ serve(async (req) => {
       api_key_source: paymentContext.apiKeySource,
       split_policy: paymentContext.splitPolicy.type,
       decision_trace: paymentContext.decisionTrace,
-    });
-
-    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
-      sale_id: sale.id,
-      sale_environment: paymentContext.environment,
-      asaas_base_url: paymentContext.baseUrl,
-      api_key_source: paymentContext.apiKeySource,
+      legacy_fallback_allowed: allowLegacyVerifyFallback,
+      legacy_fallback_used: paymentContext.apiKeySource.includes("platform_fallback"),
     });
 
     if (!apiKeyToUse) {
+      logPaymentTrace("error", "verify-payment-status", "missing_company_api_key", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        api_key_source: paymentContext.apiKeySource,
+        legacy_fallback_allowed: allowLegacyVerifyFallback,
+        failure_reason: "company_missing_api_key_for_sale_environment",
+      });
+
       return new Response(
-        JSON.stringify({ paymentStatus: sale.status, detail: "Asaas API key not available" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "Empresa sem API key Asaas para o ambiente da venda",
+          error_code: "missing_company_asaas_api_key",
+          paymentStatus: sale.status,
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (paymentContext.apiKeySource.includes("platform_fallback")) {
+      logPaymentTrace("warn", "verify-payment-status", "legacy_fallback_used", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        api_key_source: paymentContext.apiKeySource,
+      });
     }
 
     // Query Asaas for payment status
@@ -219,6 +239,8 @@ serve(async (req) => {
         const { data: partner } = await supabaseAdmin
           .from("partners")
           .select("id, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
+          // Pré-Step 5: escopo multi-tenant obrigatório para não cruzar sócios entre empresas.
+          .eq("company_id", sale.company_id)
           .eq("status", "ativo")
           .limit(1)
           .maybeSingle();
@@ -227,6 +249,17 @@ serve(async (req) => {
         let platformNetAmount = platformFeeTotal;
 
         const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentContext.environment);
+
+        logPaymentTrace("info", "verify-payment-status", "financial_partner_selected", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          partner_id: partner?.id ?? null,
+          partner_wallet_selected: partnerWalletId,
+          partner_wallet_source: paymentContext.environment === "production"
+            ? (partner?.asaas_wallet_id_production ? "partner.production" : (partner?.asaas_wallet_id ? "partner.legacy" : "none"))
+            : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : (partner?.asaas_wallet_id ? "partner.legacy" : "none")),
+        });
 
         if (partnerWalletId && partner?.status === "ativo") {
           const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));

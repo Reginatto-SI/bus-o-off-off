@@ -164,7 +164,8 @@ export function resolvePaymentContext(params: {
       apiKeySource = `company.api_key (${companyEnvConfig.source})`;
     }
   } else if (params.mode === "verify") {
-    const allowFallback = params.allowLegacyVerifyFallback ?? true;
+    // Pré-Step 5: fallback legado de verify passa a ser opt-in explícito (default = false).
+    const allowFallback = params.allowLegacyVerifyFallback ?? false;
     if (companyApiKey) {
       apiKey = companyApiKey;
       apiKeySource = `company.api_key (${companyEnvConfig.source})`;
@@ -189,13 +190,9 @@ export function resolvePaymentContext(params: {
   const webhookTokenSecretName = getAsaasWebhookTokenSecretName(environment);
   const envWebhookToken = Deno.env.get(webhookTokenSecretName) ?? null;
 
-  const prodToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN") ?? "";
-  const sandboxToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN_SANDBOX") ?? "";
-  const dualCandidates = [prodToken, sandboxToken].filter(Boolean);
-
-  const webhookTokenCandidates = environmentSource === "sale" || environmentSource === "host"
-    ? (envWebhookToken ? [envWebhookToken] : [])
-    : dualCandidates;
+  // Pré-Step 5: remove fallback dual-token para evitar aceitação permissiva entre ambientes.
+  // Sempre valida APENAS o token do ambiente resolvido para o contexto.
+  const webhookTokenCandidates = envWebhookToken ? [envWebhookToken] : [];
 
   const splitPolicy: PaymentContextSplitPolicy = isPlatformFeeFlow
     ? { enabled: false, type: "none" }
