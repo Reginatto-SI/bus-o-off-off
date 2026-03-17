@@ -117,7 +117,7 @@ serve(async (req) => {
     // 3. Buscar empresa
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("name, asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, asaas_wallet_id_production, asaas_api_key_production, asaas_onboarding_complete_production, asaas_wallet_id_sandbox, asaas_api_key_sandbox, asaas_onboarding_complete_sandbox, platform_fee_percent, partner_split_percent")
+      .select("name, asaas_wallet_id_production, asaas_api_key_production, asaas_onboarding_complete_production, asaas_wallet_id_sandbox, asaas_api_key_sandbox, asaas_onboarding_complete_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -132,8 +132,7 @@ serve(async (req) => {
       company,
     });
 
-    // Comentário Step 3: onboarding e wallet passam a considerar configuração por ambiente
-    // com fallback legado para manter compatibilidade do comportamento atual.
+    // Hardening Step 5: exige configuração explícita por ambiente (sem fallback legado).
     if (!paymentContext.companyWalletByEnvironment || !paymentContext.companyOnboardingCompleteByEnvironment) {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
@@ -224,7 +223,7 @@ serve(async (req) => {
     if (effectivePartnerFee > 0) {
       const { data: partnerData } = await supabaseAdmin
         .from("partners")
-        .select("asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
+        .select("asaas_wallet_id_production, asaas_wallet_id_sandbox")
         .eq("company_id", sale.company_id)
         .eq("status", "ativo")
         .limit(1)
