@@ -1,12 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  resolveEnvironmentFromHost,
-  getAsaasBaseUrl,
-  getAsaasApiKeySecretName,
-  getAsaasWalletSecretName,
-  type PaymentEnvironment,
-} from "../_shared/runtime-env.ts";
+import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,20 +73,8 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Resolver ambiente pelo host (única vez, único ponto) ──
-    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
-    const isProduction = paymentEnv === "production";
-    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
-    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
-    const walletSecretName = getAsaasWalletSecretName(paymentEnv);
-
-    const PLATFORM_API_KEY = Deno.env.get(apiKeySecretName);
-    if (!PLATFORM_API_KEY) {
-      return jsonResponse({ error: `Asaas API key not configured (env: ${paymentEnv}, secret: ${apiKeySecretName})` }, 500);
-    }
-
     const { sale_id, payment_method } = await req.json();
-    console.log("[create-asaas-payment] request received", { sale_id, payment_method, host_detected: detectedHost, environment_selected: paymentEnv });
+    console.log("[create-asaas-payment] request received", { sale_id, payment_method });
 
     if (!sale_id) {
       return jsonResponse({ error: "sale_id is required" }, 400);
@@ -134,7 +117,7 @@ serve(async (req) => {
     // 3. Buscar empresa
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("name, asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, platform_fee_percent, partner_split_percent")
+      .select("name, asaas_wallet_id, asaas_api_key, asaas_onboarding_complete, asaas_wallet_id_production, asaas_api_key_production, asaas_onboarding_complete_production, asaas_wallet_id_sandbox, asaas_api_key_sandbox, asaas_onboarding_complete_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -142,35 +125,53 @@ serve(async (req) => {
       return jsonResponse({ error: "Company not found" }, 404);
     }
 
-    if (!company.asaas_wallet_id || !company.asaas_onboarding_complete) {
+    const paymentContext = resolvePaymentContext({
+      mode: "create",
+      request: req,
+      sale,
+      company,
+    });
+
+    // Comentário Step 3: onboarding e wallet passam a considerar configuração por ambiente
+    // com fallback legado para manter compatibilidade do comportamento atual.
+    if (!paymentContext.companyWalletByEnvironment || !paymentContext.companyOnboardingCompleteByEnvironment) {
       return jsonResponse({ error: "Empresa não possui conta Asaas configurada", error_code: "no_asaas_account" }, 400);
     }
 
-    // ── 4. Selecionar chave de API ──
-    // Sandbox: usa chave da plataforma (sandbox). A empresa não tem chave sandbox.
-    // Produção: usa chave da empresa.
-    let companyApiKey: string;
-    let apiKeySource: string;
+    const paymentEnv = paymentContext.environment;
+    const asaasBaseUrl = paymentContext.baseUrl;
+    const splitEnabled = paymentContext.splitPolicy.enabled;
+    const companyApiKey = paymentContext.apiKey;
+    const apiKeySource = paymentContext.apiKeySource;
 
-    if (!isProduction) {
-      companyApiKey = PLATFORM_API_KEY;
-      apiKeySource = `platform_sandbox (${apiKeySecretName})`;
-    } else {
-      if (!company.asaas_api_key) {
-        return jsonResponse({
-          error: "Empresa sem API Key do Asaas vinculada.",
-          error_code: "missing_company_asaas_api_key",
-        }, 400);
-      }
-      companyApiKey = company.asaas_api_key;
-      apiKeySource = "company.asaas_api_key";
+    logPaymentTrace("info", "create-asaas-payment", "payment_context_resolved", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      api_key_source: paymentContext.apiKeySource,
+      asaas_base_url: paymentContext.baseUrl,
+      split_policy: paymentContext.splitPolicy.type,
+      decision_trace: paymentContext.decisionTrace,
+    });
+
+    if (!companyApiKey) {
+      return jsonResponse({
+        error: `Asaas API key not configured (${paymentContext.apiKeySource})`,
+      }, 500);
+    }
+
+    if (paymentContext.ownerType === "company" && !paymentContext.companyApiKeyByEnvironment) {
+      return jsonResponse({
+        error: "Empresa sem API Key do Asaas vinculada.",
+        error_code: "missing_company_asaas_api_key",
+      }, 400);
     }
 
     console.log("[create-asaas-payment] Ambiente configurado", {
-      host_detected: detectedHost,
-      environment_selected: paymentEnv,
-      asaas_base_url: asaasBaseUrl,
-      api_key_source: apiKeySource,
+      environment_selected: paymentContext.environment,
+      asaas_base_url: paymentContext.baseUrl,
+      api_key_source: paymentContext.apiKeySource,
       sale_id: sale.id,
       company_id: sale.company_id,
     });
@@ -216,49 +217,47 @@ serve(async (req) => {
       }
     };
 
-    // 5. Buscar sócio ativo para split (apenas produção)
-    let activePartner: { asaas_wallet_id: string } | null = null;
-    const effectivePartnerFee = isProduction && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
+    // 5. Buscar sócio ativo para split (espelhado em sandbox/produção)
+    let activePartnerWalletId: string | null = null;
+    const effectivePartnerFee = splitEnabled && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
 
     if (effectivePartnerFee > 0) {
       const { data: partnerData } = await supabaseAdmin
         .from("partners")
-        .select("asaas_wallet_id")
+        .select("asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
         .eq("company_id", sale.company_id)
         .eq("status", "ativo")
         .limit(1)
         .maybeSingle();
 
-      if (partnerData?.asaas_wallet_id) {
-        activePartner = partnerData;
-      }
+      activePartnerWalletId = resolvePartnerWalletByEnvironment(partnerData, paymentContext.environment);
     }
 
-    // 6. Montar split (somente produção)
+    // 6. Montar split (espelhado em sandbox/produção)
     const splitArray: Array<{ walletId: string; percentualValue: number }> = [];
 
-    if (isProduction) {
-      const actualPartnerFee = activePartner ? effectivePartnerFee : 0;
+    if (splitEnabled) {
+      const actualPartnerFee = activePartnerWalletId ? effectivePartnerFee : 0;
       const totalFee = platformFeePercent + actualPartnerFee;
 
       if (totalFee > 100) {
         return jsonResponse({ error: "Soma das taxas (plataforma + sócio) excede 100%", error_code: "fee_exceeds_limit" }, 400);
       }
 
-      // Em produção, a empresa é dona da cobrança. Plataforma e sócio entram no split.
+      // Em todos os ambientes do fluxo principal, a empresa é dona da cobrança. Plataforma e sócio entram no split.
       if (platformFeePercent > 0) {
-        const platformWalletId = Deno.env.get(walletSecretName);
+        const platformWalletId = Deno.env.get(paymentContext.platformWalletSecretName);
         if (!platformWalletId) {
           return jsonResponse({ error: "Wallet da plataforma não configurada", error_code: "missing_platform_wallet" }, 500);
         }
         splitArray.push({ walletId: platformWalletId, percentualValue: platformFeePercent });
       }
 
-      if (activePartner && actualPartnerFee > 0) {
-        splitArray.push({ walletId: activePartner.asaas_wallet_id, percentualValue: actualPartnerFee });
+      if (activePartnerWalletId && actualPartnerFee > 0) {
+        splitArray.push({ walletId: activePartnerWalletId, percentualValue: actualPartnerFee });
       }
     }
-    // Em sandbox: sem split (plataforma é dona da cobrança via sua própria chave)
+    // Em fluxo principal: split habilitado conforme política central de contexto.
 
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
@@ -387,13 +386,25 @@ serve(async (req) => {
     await insertIntegrationLog("success", "Cobrança criada com sucesso no Asaas", paymentPayload, paymentData, paymentData.id);
 
     // 9. Salvar ID do pagamento E o ambiente na venda (fonte de verdade para demais funções)
+    logPaymentTrace("info", "create-asaas-payment", "payment_created", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      payment_owner_type: paymentContext.ownerType,
+      asaas_payment_id: paymentData.id,
+      asaas_payment_status: paymentData.status,
+      external_reference: sale.id,
+      split_attempted: splitArray.length > 0,
+      split_recipients: splitArray.length,
+    });
+
     await supabaseAdmin
       .from("sales")
       .update({
         asaas_payment_id: paymentData.id,
         asaas_payment_status: paymentData.status,
         payment_method: normalizedPaymentMethod,
-        payment_environment: paymentEnv,
+        payment_environment: paymentContext.environment,
       })
       .eq("id", sale.id);
 
@@ -403,6 +414,9 @@ serve(async (req) => {
       status: paymentData.status,
     }, 200);
   } catch (error) {
+    logPaymentTrace("error", "create-asaas-payment", "unexpected_error", {
+      error_message: error instanceof Error ? error.message : String(error),
+    });
     console.error("Error in create-asaas-payment:", error);
     return jsonResponse({ error: error instanceof Error ? error.message : "Internal server error" }, 500);
   }

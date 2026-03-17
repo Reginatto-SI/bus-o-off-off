@@ -236,10 +236,20 @@ export type Database = {
           address: string | null
           address_number: string | null
           asaas_account_email: string | null
+          asaas_account_email_production: string | null
+          asaas_account_email_sandbox: string | null
           asaas_account_id: string | null
+          asaas_account_id_production: string | null
+          asaas_account_id_sandbox: string | null
           asaas_api_key: string | null
+          asaas_api_key_production: string | null
+          asaas_api_key_sandbox: string | null
           asaas_onboarding_complete: boolean
+          asaas_onboarding_complete_production: boolean
+          asaas_onboarding_complete_sandbox: boolean
           asaas_wallet_id: string | null
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
           background_style: string
           city: string | null
           cnpj: string | null
@@ -286,10 +296,20 @@ export type Database = {
           address?: string | null
           address_number?: string | null
           asaas_account_email?: string | null
+          asaas_account_email_production?: string | null
+          asaas_account_email_sandbox?: string | null
           asaas_account_id?: string | null
+          asaas_account_id_production?: string | null
+          asaas_account_id_sandbox?: string | null
           asaas_api_key?: string | null
+          asaas_api_key_production?: string | null
+          asaas_api_key_sandbox?: string | null
           asaas_onboarding_complete?: boolean
+          asaas_onboarding_complete_production?: boolean
+          asaas_onboarding_complete_sandbox?: boolean
           asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
           background_style?: string
           city?: string | null
           cnpj?: string | null
@@ -336,10 +356,20 @@ export type Database = {
           address?: string | null
           address_number?: string | null
           asaas_account_email?: string | null
+          asaas_account_email_production?: string | null
+          asaas_account_email_sandbox?: string | null
           asaas_account_id?: string | null
+          asaas_account_id_production?: string | null
+          asaas_account_id_sandbox?: string | null
           asaas_api_key?: string | null
+          asaas_api_key_production?: string | null
+          asaas_api_key_sandbox?: string | null
           asaas_onboarding_complete?: boolean
+          asaas_onboarding_complete_production?: boolean
+          asaas_onboarding_complete_sandbox?: boolean
           asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
           background_style?: string
           city?: string | null
           cnpj?: string | null
@@ -750,6 +780,8 @@ export type Database = {
       partners: {
         Row: {
           asaas_wallet_id: string | null
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
           created_at: string
           id: string
           name: string
@@ -762,6 +794,8 @@ export type Database = {
         }
         Insert: {
           asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
           created_at?: string
           id?: string
           name: string
@@ -774,6 +808,8 @@ export type Database = {
         }
         Update: {
           asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
           created_at?: string
           id?: string
           name?: string

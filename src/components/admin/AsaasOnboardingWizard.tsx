@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
@@ -62,6 +63,8 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showAddressModal, setShowAddressModal] = useState(false);
+  // Step 3: ambiente-alvo explícito para preparar onboarding separado por sandbox/produção.
+  const [targetEnvironment, setTargetEnvironment] = useState<'automatic' | 'sandbox' | 'production'>('automatic');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
 
   // Sync localCompanyData when companyData prop changes
@@ -106,6 +109,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
+      setTargetEnvironment('automatic');
     }
   }, [open]);
 
@@ -134,7 +138,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'create' },
+        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
@@ -179,7 +183,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim() },
+        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
       });
       if (error) {
         // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
@@ -255,6 +259,19 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
           </AlertDescription>
         </Alert>
       )}
+      <div className="space-y-2">
+        <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+          <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
+            <SelectItem value="sandbox">Sandbox</SelectItem>
+            <SelectItem value="production">Produção</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">No Step 3 este seletor prepara o cadastro por ambiente sem alterar o checkout público atual.</p>
+      </div>
+
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
         <div className="space-y-1">
           <span className="text-muted-foreground">Empresa</span>
@@ -294,7 +311,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
         <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
-        <p className="text-muted-foreground">Enquanto a operação estiver em testes, a conexão será criada no ambiente Sandbox do Asaas.</p>
+        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{targetEnvironment === 'automatic' ? 'Automático pelo host atual' : targetEnvironment === 'sandbox' ? 'Sandbox' : 'Produção'}</strong>.</p>
       </div>
     </div>
   );
@@ -305,6 +322,18 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       <p className="text-sm text-muted-foreground">
         Informe a API Key da sua conta Asaas para vincular automaticamente. Você encontra a chave no painel do Asaas em <strong>Configurações &gt; Integrações</strong>.
       </p>
+      <div className="space-y-2">
+        <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+          <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
+            <SelectItem value="sandbox">Sandbox</SelectItem>
+            <SelectItem value="production">Produção</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="asaas-api-key">API Key do Asaas</Label>
         <Input
