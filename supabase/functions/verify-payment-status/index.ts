@@ -103,21 +103,7 @@ serve(async (req) => {
       mode: "verify",
       sale,
       company,
-      allowLegacyVerifyFallback: true,
-    });
-
-    const apiKeyToUse = paymentContext.apiKey;
-
-    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
-      sale_id: sale.id,
-      company_id: sale.company_id,
-      payment_environment: paymentContext.environment,
-      payment_owner_type: paymentContext.ownerType,
-      asaas_payment_id: sale.asaas_payment_id,
-      asaas_base_url: paymentContext.baseUrl,
-      api_key_source: paymentContext.apiKeySource,
-      split_policy: paymentContext.splitPolicy.type,
-      decision_trace: paymentContext.decisionTrace,
+      allowLegacyVerifyFallback: true, // Step 4: mantém fallback legado apenas para verificação retrocompatível
     });
 
     const apiKeyToUse = paymentContext.apiKey;

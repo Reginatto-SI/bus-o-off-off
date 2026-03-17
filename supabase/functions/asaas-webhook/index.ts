@@ -105,7 +105,7 @@ serve(async (req) => {
     const isPlatformFee = rawSaleId.startsWith("platform_fee_");
     const actualSaleId = isPlatformFee ? rawSaleId.replace("platform_fee_", "") : rawSaleId;
 
-    // Buscar ambiente da venda para validar token correto
+    // Buscar ambiente da venda para validar token correto (ou cair em dual-token legado quando indeterminado)
     let saleEnv: PaymentEnvironment | undefined;
     if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);

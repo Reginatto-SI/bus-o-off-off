@@ -117,7 +117,7 @@ serve(async (req) => {
       asaas_base_url: asaasBaseUrl,
       api_key_secret_name: apiKeySecretName,
       onboarding_mode: mode ?? "create",
-      decision_origin: "resolveEnvironmentFromHost + onboarding function mode",
+      decision_origin: "resolveEnvironmentFromHost + target_environment override",
     });
 
     if (!company_id) {

@@ -140,7 +140,7 @@ serve(async (req) => {
 
     const paymentEnv = paymentContext.environment;
     const asaasBaseUrl = paymentContext.baseUrl;
-    const isProduction = paymentContext.splitPolicy.enabled;
+    const splitEnabled = paymentContext.splitPolicy.enabled;
     const companyApiKey = paymentContext.apiKey;
     const apiKeySource = paymentContext.apiKeySource;
 
@@ -217,9 +217,9 @@ serve(async (req) => {
       }
     };
 
-    // 5. Buscar sócio ativo para split (apenas produção)
+    // 5. Buscar sócio ativo para split (espelhado em sandbox/produção)
     let activePartnerWalletId: string | null = null;
-    const effectivePartnerFee = isProduction && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
+    const effectivePartnerFee = splitEnabled && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
 
     if (effectivePartnerFee > 0) {
       const { data: partnerData } = await supabaseAdmin
@@ -230,15 +230,13 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (partnerData?.asaas_wallet_id) {
-        activePartnerWalletId = resolvePartnerWalletByEnvironment(partnerData, paymentContext.environment);
-      }
+      activePartnerWalletId = resolvePartnerWalletByEnvironment(partnerData, paymentContext.environment);
     }
 
-    // 6. Montar split (somente produção)
+    // 6. Montar split (espelhado em sandbox/produção)
     const splitArray: Array<{ walletId: string; percentualValue: number }> = [];
 
-    if (isProduction) {
+    if (splitEnabled) {
       const actualPartnerFee = activePartnerWalletId ? effectivePartnerFee : 0;
       const totalFee = platformFeePercent + actualPartnerFee;
 
@@ -246,7 +244,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Soma das taxas (plataforma + sócio) excede 100%", error_code: "fee_exceeds_limit" }, 400);
       }
 
-      // Em produção, a empresa é dona da cobrança. Plataforma e sócio entram no split.
+      // Em todos os ambientes do fluxo principal, a empresa é dona da cobrança. Plataforma e sócio entram no split.
       if (platformFeePercent > 0) {
         const platformWalletId = Deno.env.get(paymentContext.platformWalletSecretName);
         if (!platformWalletId) {
@@ -259,7 +257,7 @@ serve(async (req) => {
         splitArray.push({ walletId: activePartnerWalletId, percentualValue: actualPartnerFee });
       }
     }
-    // Em sandbox: sem split (plataforma é dona da cobrança via sua própria chave)
+    // Em fluxo principal: split habilitado conforme política central de contexto.
 
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");

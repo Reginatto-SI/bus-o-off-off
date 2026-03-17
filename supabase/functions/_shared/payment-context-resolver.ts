@@ -145,7 +145,7 @@ export function resolvePaymentContext(params: {
   const isPlatformFeeFlow = params.mode === "platform_fee" || Boolean(params.isPlatformFeeFlow);
   const ownerType: PaymentOwnerType = isPlatformFeeFlow
     ? "platform"
-    : (environment === "production" ? "company" : "platform");
+    : "company";
 
   const apiKeySecretName = getAsaasApiKeySecretName(environment);
   const platformApiKey = Deno.env.get(apiKeySecretName) ?? null;
@@ -164,21 +164,16 @@ export function resolvePaymentContext(params: {
       apiKeySource = `company.api_key (${companyEnvConfig.source})`;
     }
   } else if (params.mode === "verify") {
-    if (environment === "sandbox") {
+    const allowFallback = params.allowLegacyVerifyFallback ?? true;
+    if (companyApiKey) {
+      apiKey = companyApiKey;
+      apiKeySource = `company.api_key (${companyEnvConfig.source})`;
+    } else if (allowFallback) {
       apiKey = platformApiKey;
-      apiKeySource = `platform (${apiKeySecretName})`;
+      apiKeySource = `platform_fallback (${apiKeySecretName})`;
     } else {
-      const allowFallback = params.allowLegacyVerifyFallback ?? true;
-      if (companyApiKey) {
-        apiKey = companyApiKey;
-        apiKeySource = `company.api_key (${companyEnvConfig.source})`;
-      } else if (allowFallback) {
-        apiKey = platformApiKey;
-        apiKeySource = `platform_fallback (${apiKeySecretName})`;
-      } else {
-        apiKey = null;
-        apiKeySource = "missing_company_api_key_without_fallback";
-      }
+      apiKey = null;
+      apiKeySource = "missing_company_api_key_without_fallback";
     }
   } else if (params.mode === "platform_fee") {
     apiKey = platformApiKey;
@@ -204,9 +199,7 @@ export function resolvePaymentContext(params: {
 
   const splitPolicy: PaymentContextSplitPolicy = isPlatformFeeFlow
     ? { enabled: false, type: "none" }
-    : (environment === "production"
-      ? { enabled: true, type: "platform_and_partner" }
-      : { enabled: false, type: "none" });
+    : { enabled: true, type: "platform_and_partner" };
 
   return {
     environment,
@@ -221,9 +214,11 @@ export function resolvePaymentContext(params: {
       environmentSource,
       ownerDecision: isPlatformFeeFlow
         ? "platform_fee_flow_forces_platform_owner"
-        : (environment === "production" ? "production_uses_company_owner" : "sandbox_uses_platform_owner"),
+        : "main_sale_flow_uses_company_owner_in_all_envs",
       credentialDecision: `${params.mode}_mode_${apiKeySource}`,
-      splitDecision: splitPolicy.enabled ? "split_enabled_like_current_rule" : "split_disabled_like_current_rule",
+      splitDecision: splitPolicy.enabled
+        ? "split_enabled_for_main_sale_flow_in_all_envs"
+        : "split_disabled_for_platform_fee_flow",
     },
     platformWalletSecretName: getAsaasWalletSecretName(environment),
     companyApiKeyByEnvironment: companyEnvConfig.apiKey,
