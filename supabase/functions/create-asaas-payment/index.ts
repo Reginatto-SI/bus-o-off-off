@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import { logPaymentTrace, logSaleOperationalEvent } from "../_shared/payment-observability.ts";
 import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
@@ -143,6 +143,17 @@ serve(async (req) => {
     const companyApiKey = paymentContext.apiKey;
     const apiKeySource = paymentContext.apiKeySource;
 
+    // Etapa 4: trilha operacional mínima por sale_id para criação de pagamento.
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "payment_create_started",
+      source: "create-asaas-payment",
+      result: "started",
+      paymentEnvironment: paymentEnv,
+    });
+
     logPaymentTrace("info", "create-asaas-payment", "payment_context_resolved", {
       sale_id: sale.id,
       company_id: sale.company_id,
@@ -155,6 +166,17 @@ serve(async (req) => {
     });
 
     if (!companyApiKey) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentEnv,
+        errorCode: "missing_api_key",
+        detail: paymentContext.apiKeySource,
+      });
       return jsonResponse({
         error: `Asaas API key not configured (${paymentContext.apiKeySource})`,
       }, 500);
@@ -372,6 +394,17 @@ serve(async (req) => {
 
     if (!paymentRes.ok) {
       await insertIntegrationLog("failed", "Erro ao criar cobrança no Asaas", paymentPayload, paymentData);
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentEnv,
+        errorCode: "asaas_create_payment_failed",
+        detail: String(paymentData?.errors?.[0]?.description ?? "unknown_error"),
+      });
       return jsonResponse({ error: paymentData?.errors?.[0]?.description || "Erro ao criar cobrança no Asaas" }, 400);
     }
 
@@ -406,6 +439,17 @@ serve(async (req) => {
         payment_environment: paymentContext.environment,
       })
       .eq("id", sale.id);
+
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "payment_create_completed",
+      source: "create-asaas-payment",
+      result: "success",
+      paymentEnvironment: paymentEnv,
+      detail: `payment_id=${paymentData.id}`,
+    });
 
     return jsonResponse({
       url: paymentData.invoiceUrl,

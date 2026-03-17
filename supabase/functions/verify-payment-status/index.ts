@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,7 +58,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
       .eq("id", sale_id)
       .single();
 
@@ -69,6 +70,29 @@ serve(async (req) => {
     }
 
     if (sale.status === "pago") {
+      // Etapa 2: verify também usa a rotina central de finalização para manter simetria com webhook.
+      const finalization = await finalizeConfirmedPayment({
+        supabaseAdmin,
+        sale,
+        confirmedAt: sale.payment_confirmed_at ?? sale.platform_fee_paid_at ?? new Date().toISOString(),
+        asaasStatus: sale.asaas_payment_status ?? "CONFIRMED",
+        source: "verify-payment-status",
+        paymentId: sale.asaas_payment_id,
+        allowStatusUpdate: false,
+        writeSaleLog: false,
+      });
+
+      if (!finalization.ok) {
+        return new Response(
+          JSON.stringify({
+            error: "Venda paga sem passagem gerada",
+            error_code: "paid_sale_without_tickets",
+            paymentStatus: "inconsistente_sem_passagem",
+          }),
+          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({
           paymentStatus: "pago",
@@ -158,7 +182,17 @@ serve(async (req) => {
       });
 
       if (!res.ok) {
-        console.error("Asaas payment retrieve error:", await res.text());
+        const responseText = await res.text();
+        console.error("Asaas payment retrieve error:", responseText);
+        logPaymentTrace("error", "verify-payment-status", "payment_status_fetch_failed", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          asaas_payment_id: sale.asaas_payment_id,
+          http_status: res.status,
+          result: "unexpected_error",
+          detail: responseText,
+        });
         return new Response(
           JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -168,6 +202,14 @@ serve(async (req) => {
       paymentData = await res.json();
     } catch (err) {
       console.error("Asaas API error:", err);
+      logPaymentTrace("error", "verify-payment-status", "payment_status_fetch_exception", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_payment_id: sale.asaas_payment_id,
+        result: "unexpected_error",
+        error_message: err instanceof Error ? err.message : String(err),
+      });
       return new Response(
         JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -188,30 +230,37 @@ serve(async (req) => {
         asaas_payment_id: sale.asaas_payment_id,
         asaas_status: asaasStatus,
       });
-      const { error: updateError } = await supabaseAdmin
-        .from("sales")
-        .update({
-          status: "pago",
-          asaas_payment_status: asaasStatus,
-          payment_confirmed_at: confirmedAt,
-        })
-        .eq("id", sale_id)
-        .in("status", ["pendente_pagamento", "reservado"]);
+      const finalization = await finalizeConfirmedPayment({
+        supabaseAdmin,
+        sale,
+        confirmedAt,
+        asaasStatus,
+        source: "verify-payment-status",
+        paymentId: sale.asaas_payment_id,
+        allowStatusUpdate: true,
+        writeSaleLog: false,
+      });
 
-      if (updateError) {
-        console.error("Error updating sale:", updateError);
-        const { data: freshSale } = await supabaseAdmin
-          .from("sales").select("status").eq("id", sale_id).single();
+      if (!finalization.ok) {
+        logPaymentTrace("error", "verify-payment-status", "payment_confirmed_but_ticket_missing", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          asaas_payment_id: sale.asaas_payment_id,
+          asaas_status: asaasStatus,
+          finalization_state: finalization.state,
+          ticket_status: finalization.ticketStatus,
+        });
+
         return new Response(
-          JSON.stringify({ paymentStatus: freshSale?.status || sale.status }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: "Pagamento confirmado, mas a passagem não foi gerada",
+            error_code: "ticket_generation_incomplete",
+            paymentStatus: "inconsistente_sem_passagem",
+          }),
+          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      console.log(`[verify-payment-status] Sale ${sale_id} marked as 'pago'`);
-
-      await createTicketsFromPassengers(supabaseAdmin, sale_id, sale.company_id);
-      await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale_id);
 
       logPaymentTrace("info", "verify-payment-status", "status_transition_success", {
         sale_id: sale.id,
@@ -288,6 +337,13 @@ serve(async (req) => {
     }
 
     if (asaasStatus === "OVERDUE") {
+      logPaymentTrace("info", "verify-payment-status", "payment_not_confirmed", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_status: asaasStatus,
+        result: "payment_not_confirmed",
+      });
       return new Response(
         JSON.stringify({ paymentStatus: "expirado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -295,11 +351,27 @@ serve(async (req) => {
     }
 
     if (asaasStatus === "PENDING" || asaasStatus === "AWAITING_RISK_ANALYSIS") {
+      logPaymentTrace("info", "verify-payment-status", "payment_not_confirmed", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        asaas_status: asaasStatus,
+        result: "payment_not_confirmed",
+      });
       return new Response(
         JSON.stringify({ paymentStatus: "processando" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    logPaymentTrace("info", "verify-payment-status", "payment_status_unchanged", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      asaas_status: asaasStatus,
+      result: "payment_not_confirmed",
+      current_sale_status: sale.status,
+    });
 
     return new Response(
       JSON.stringify({ paymentStatus: sale.status, asaas_status: asaasStatus }),
@@ -317,57 +389,3 @@ serve(async (req) => {
   }
 });
 
-async function createTicketsFromPassengers(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  saleId: string,
-  companyId: string
-) {
-  const { count: existingTickets } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if (existingTickets && existingTickets > 0) {
-    console.log(`Tickets already exist for sale ${saleId}, skipping`);
-    return;
-  }
-
-  const { data: passengers, error: passError } = await supabaseAdmin
-    .from("sale_passengers")
-    .select("*")
-    .eq("sale_id", saleId)
-    .order("sort_order");
-
-  if (passError) {
-    console.error("Error fetching sale_passengers:", passError);
-    return;
-  }
-
-  if (!passengers || passengers.length === 0) {
-    console.log(`No sale_passengers for sale ${saleId} (legacy/admin flow)`);
-    return;
-  }
-
-  const ticketInserts = passengers.map((p: any) => ({
-    sale_id: saleId,
-    trip_id: p.trip_id,
-    seat_id: p.seat_id,
-    seat_label: p.seat_label,
-    passenger_name: p.passenger_name,
-    passenger_cpf: p.passenger_cpf,
-    passenger_phone: p.passenger_phone,
-    company_id: companyId,
-  }));
-
-  const { error: ticketError } = await supabaseAdmin
-    .from("tickets")
-    .insert(ticketInserts);
-
-  if (ticketError) {
-    console.error("Error creating tickets:", ticketError);
-    return;
-  }
-
-  console.log(`Created ${ticketInserts.length} tickets for sale ${saleId} via verify-payment-status`);
-  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
-}
