@@ -100,7 +100,14 @@ interface SaleIntegrationLog {
   message: string;
   payload_json: Record<string, unknown> | null;
   response_json: Record<string, unknown> | null;
+  payment_environment: 'sandbox' | 'production' | null;
+  environment_decision_source: 'sale' | 'host' | null;
+  environment_host_detected: string | null;
   created_at: string;
+}
+
+function formatPaymentEnvironmentLabel(value?: string | null): string {
+  return value === 'production' ? 'Produção' : 'Sandbox';
 }
 
 // ── Flow stage computation ──
@@ -586,6 +593,7 @@ export default function SalesDiagnostic() {
                   <TableHead className="w-[140px]">Comprador</TableHead>
                   <TableHead className="w-[105px]">Valor</TableHead>
                   <TableHead className="w-[95px]">Gateway</TableHead>
+                  <TableHead className="w-[105px]">Ambiente</TableHead>
                   <TableHead className="w-[190px]">Status</TableHead>
                   <TableHead className="w-[170px]">Fluxo</TableHead>
                   <TableHead className="w-[76px]">Ações</TableHead>
@@ -624,6 +632,12 @@ export default function SalesDiagnostic() {
                       <TableCell className="py-5">
                         <Badge variant="outline" className="text-xs">
                           {gateway}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-5">
+                        {/* Suporte: mostra o ambiente persistido da venda (fonte de verdade do fluxo). */}
+                        <Badge variant="outline" className="text-xs">
+                          {formatPaymentEnvironmentLabel((sale as any).payment_environment)}
                         </Badge>
                       </TableCell>
                       <TableCell className="py-5">
@@ -874,8 +888,24 @@ export default function SalesDiagnostic() {
                                 {confirmationSource === 'none' && 'Não identificada'}
                               </p>
                             </div>
+                            <div>
+                              <span className="text-muted-foreground">Ambiente persistido da venda</span>
+                              <p className="font-medium">{formatPaymentEnvironmentLabel((detailSale as any).payment_environment)}</p>
+                            </div>
                             {webhookLog && (
                               <>
+                                <div>
+                                  <span className="text-muted-foreground">Ambiente no log técnico</span>
+                                  <p className="font-medium">{formatPaymentEnvironmentLabel(webhookLog.payment_environment)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Origem da decisão</span>
+                                  <p className="font-mono text-xs">{webhookLog.environment_decision_source ?? '-'}</p>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-muted-foreground">Host detectado na decisão</span>
+                                  <p className="font-mono text-xs break-all">{webhookLog.environment_host_detected ?? '-'}</p>
+                                </div>
                                 <div>
                                   <span className="text-muted-foreground">Data do webhook</span>
                                   <p>{format(parseISO(webhookLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>

@@ -11,7 +11,8 @@ export type PaymentContextMode = "create" | "verify" | "webhook" | "platform_fee
 export type PaymentOwnerType = "platform" | "company";
 
 export type PaymentContextDecisionTrace = {
-  environmentSource: "sale" | "host" | "fallback";
+  environmentSource: "sale" | "host";
+  hostDetected: string | null;
   ownerDecision: string;
   credentialDecision: string;
   splitDecision: string;
@@ -115,7 +116,8 @@ export function resolvePaymentContext(params: {
   const hasSaleEnvironment = saleEnvRaw === "production" || saleEnvRaw === "sandbox";
 
   let environment: PaymentEnvironment;
-  let environmentSource: "sale" | "host" | "fallback";
+  let environmentSource: "sale" | "host";
+  let hostDetected: string | null = null;
 
   if (hasSaleEnvironment) {
     environment = saleEnvRaw;
@@ -124,9 +126,14 @@ export function resolvePaymentContext(params: {
     const resolvedFromHost = resolveEnvironmentFromHost(params.request);
     environment = resolvedFromHost.env;
     environmentSource = "host";
+    hostDetected = resolvedFromHost.host;
   } else {
-    environment = "sandbox";
-    environmentSource = "fallback";
+    /**
+     * Regra de segurança do projeto:
+     * se não conseguimos decidir o ambiente por venda persistida OU host de entrada,
+     * o fluxo deve falhar de forma explícita (sem fallback silencioso para sandbox).
+     */
+    throw new Error("payment_environment_unresolved: contexto sem venda válida e sem request para decisão por host");
   }
 
   const isPlatformFeeFlow = params.mode === "platform_fee" || Boolean(params.isPlatformFeeFlow);
@@ -191,6 +198,7 @@ export function resolvePaymentContext(params: {
     splitPolicy,
     decisionTrace: {
       environmentSource,
+      hostDetected,
       ownerDecision: isPlatformFeeFlow
         ? "platform_fee_flow_forces_platform_owner"
         : "main_sale_flow_uses_company_owner_in_all_envs",
