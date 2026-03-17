@@ -31,15 +31,9 @@ serve(async (req) => {
   }
 
   try {
-    const runtimeEnv = resolvePaymentEnvironment(req);
-    if (runtimeEnv.blocked) {
-      return new Response(JSON.stringify({ error: runtimeEnv.blockReason }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const asaasBaseUrl = getAsaasBaseUrl(runtimeEnv.resolved_env);
-    const platformApiKeySecretName = getAsaasPlatformApiKeySecretName(runtimeEnv.resolved_env);
+    const { env: paymentEnv, host: detectedHost } = resolveEnvironmentFromHost(req);
+    const asaasBaseUrl = getAsaasBaseUrl(paymentEnv);
+    const apiKeySecretName = getAsaasApiKeySecretName(paymentEnv);
 
     // Authenticate admin user
     const authHeader = req.headers.get("Authorization");
