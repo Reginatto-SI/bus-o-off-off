@@ -128,7 +128,10 @@ function computePaymentStatus(sale: DiagnosticSale): { label: string; variant: '
   if (asaasStatus === 'REFUNDED' || asaasStatus === 'REFUND_REQUESTED') return { label: 'Estornado', variant: 'destructive' };
   if (asaasStatus === 'PENDING') return { label: 'Aguardando pagamento', variant: 'secondary' };
 
-  if (sale.status === 'reservado') return { label: 'Aguardando pagamento', variant: 'secondary' };
+  // O checkout público cria venda em `pendente_pagamento` antes da confirmação efetiva.
+  if (sale.status === 'reservado' || sale.status === 'pendente_pagamento') {
+    return { label: 'Aguardando pagamento', variant: 'secondary' };
+  }
   return { label: 'Desconhecido', variant: 'outline' };
 }
 
@@ -468,6 +471,7 @@ export default function SalesDiagnostic() {
       onChange: (v: string) => setFilters((f) => ({ ...f, status: v as any })),
       options: [
         { value: 'all', label: 'Todos' },
+        { value: 'pendente_pagamento', label: 'Pendente pagamento' },
         { value: 'reservado', label: 'Reservado' },
         { value: 'pago', label: 'Pago' },
         { value: 'cancelado', label: 'Cancelado' },
