@@ -120,7 +120,7 @@ serve(async (req) => {
       decision_trace: paymentContext.decisionTrace,
     });
 
-    console.log("[verify-payment-status] Consultando Asaas", {
+    logPaymentTrace("info", "verify-payment-status", "payment_context_loaded", {
       sale_id: sale.id,
       sale_environment: paymentContext.environment,
       asaas_base_url: paymentContext.baseUrl,
