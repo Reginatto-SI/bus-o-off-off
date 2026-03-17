@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getAsaasWebhookTokenSecretName, type PaymentEnvironment } from "../_shared/runtime-env.ts";
 import { logPaymentTrace } from "../_shared/payment-observability.ts";
 import { isWebhookTokenValidForContext, resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -489,55 +490,29 @@ async function processPaymentConfirmed(
   const saleId = sale.id;
   const confirmedAt = resolveAsaasConfirmedAt(payment, webhookCreatedAt);
 
-  if (sale.status !== "pago") {
-    const { data: updatedSale, error: updateError } = await supabaseAdmin
-      .from("sales")
-      .update({
-        status: "pago",
-        asaas_payment_status: payment.status,
-        payment_confirmed_at: confirmedAt,
-      })
-      .eq("id", saleId)
-      .in("status", ["pendente_pagamento", "reservado"])
-      .select("id, company_id, status")
-      .single();
+  // Etapa 2: webhook passa a delegar finalização para a rotina compartilhada.
+  // Isso remove assimetria crítica em relação ao verify-payment-status.
+  const finalization = await finalizeConfirmedPayment({
+    supabaseAdmin,
+    sale,
+    confirmedAt,
+    asaasStatus: payment.status,
+    source: "asaas-webhook",
+    paymentId: payment.id,
+    eventType,
+    allowStatusUpdate: true,
+  });
 
-    if (updateError || !updatedSale) {
-      return {
-        status: "failed",
-        httpStatus: 500,
-        message: `Falha crítica ao atualizar venda ${saleId} para pago`,
-        responseBody: { error: "Sale update failed", sale_id: saleId },
-        saleId,
-        companyId: sale.company_id,
-      };
-    }
-  } else {
-    await supabaseAdmin
-      .from("sales")
-      .update({ asaas_payment_status: payment.status })
-      .eq("id", saleId);
-  }
-
-  const ticketsResult = await createTicketsFromPassengers(supabaseAdmin, saleId, sale.company_id);
-  if (ticketsResult.status === "error") {
+  if (!finalization.ok) {
     return {
-      status: "partial_failure",
-      httpStatus: 500,
-      message: `Venda ${saleId} paga, mas falhou geração de tickets`,
-      responseBody: { error: "Ticket generation failed", sale_id: saleId },
-      saleId,
-      companyId: sale.company_id,
-    };
-  }
-
-  const { error: seatLockError } = await supabaseAdmin.from("seat_locks").delete().eq("sale_id", saleId);
-  if (seatLockError) {
-    return {
-      status: "failed",
-      httpStatus: 500,
-      message: `Falha crítica ao remover seat_locks da venda ${saleId}`,
-      responseBody: { error: "Seat lock cleanup failed", sale_id: saleId },
+      status: finalization.state === "inconsistent" ? "partial_failure" : "failed",
+      httpStatus: finalization.httpStatus,
+      message: finalization.message,
+      responseBody: {
+        error: finalization.state === "inconsistent" ? "Ticket generation incomplete" : "Payment finalization failed",
+        sale_id: saleId,
+        ticket_status: finalization.ticketStatus,
+      },
       saleId,
       companyId: sale.company_id,
     };
@@ -545,18 +520,17 @@ async function processPaymentConfirmed(
 
   await upsertFinancialSnapshot(supabaseAdmin, saleId, sale.company_id, sale, payment, sale.payment_environment === "production" ? "production" : "sandbox");
 
-  await supabaseAdmin.from("sale_logs").insert({
-    sale_id: saleId,
-    action: "payment_confirmed",
-    description: `Pagamento ${eventType} via Asaas (Payment: ${payment.id}, billingType: ${payment.billingType || "unknown"}).`,
-    company_id: sale.company_id,
-  });
-
   return {
     status: "success",
     httpStatus: 200,
-    message: ticketsResult.message,
-    responseBody: { received: true, processed: true, sale_id: saleId },
+    message: finalization.message,
+    responseBody: {
+      received: true,
+      processed: true,
+      sale_id: saleId,
+      ticket_status: finalization.ticketStatus,
+      tickets_count: finalization.ticketsCount,
+    },
     saleId,
     companyId: sale.company_id,
   };
@@ -695,73 +669,6 @@ async function processPaymentFailed(
     responseBody: { received: true, processed: true, sale_id: saleId },
     saleId,
     companyId: sale.company_id,
-  };
-}
-
-async function createTicketsFromPassengers(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  saleId: string,
-  companyId: string
-): Promise<{ status: "created" | "skipped_existing" | "skipped_no_passengers" | "error"; message: string }> {
-  const { count: existingTickets } = await supabaseAdmin
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("sale_id", saleId);
-
-  if (existingTickets && existingTickets > 0) {
-    return {
-      status: "skipped_existing",
-      message: `Idempotência aplicada: venda ${saleId} já tinha tickets`,
-    };
-  }
-
-  const { data: passengers, error: passError } = await supabaseAdmin
-    .from("sale_passengers")
-    .select("*")
-    .eq("sale_id", saleId)
-    .order("sort_order");
-
-  if (passError) {
-    return {
-      status: "error",
-      message: `Erro ao buscar sale_passengers da venda ${saleId}`,
-    };
-  }
-
-  if (!passengers || passengers.length === 0) {
-    return {
-      status: "skipped_no_passengers",
-      message: `Sem sale_passengers para a venda ${saleId} (fluxo legado/admin)`,
-    };
-  }
-
-  const ticketInserts = passengers.map((p: any) => ({
-    sale_id: saleId,
-    trip_id: p.trip_id,
-    seat_id: p.seat_id,
-    seat_label: p.seat_label,
-    passenger_name: p.passenger_name,
-    passenger_cpf: p.passenger_cpf,
-    passenger_phone: p.passenger_phone,
-    company_id: companyId,
-  }));
-
-  const { error: ticketError } = await supabaseAdmin
-    .from("tickets")
-    .insert(ticketInserts);
-
-  if (ticketError) {
-    return {
-      status: "error",
-      message: `Erro ao criar tickets da venda ${saleId}`,
-    };
-  }
-
-  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
-
-  return {
-    status: "created",
-    message: `Tickets criados com sucesso para venda ${saleId}`,
   };
 }
 
