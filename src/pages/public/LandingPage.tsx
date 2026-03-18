@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Calendar, Bus, Users, Shield, BarChart3, CreditCard, ChevronRight, Ticket, ClipboardCheck, ArrowRight, Menu, X } from 'lucide-react';
 import logo from '@/assets/logo.png';
@@ -27,41 +27,30 @@ const FEATURES = [
 ];
 
 export default function LandingPage() {
-  const [scrolled, setScrolled] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       {/* ═══════════ HEADER ═══════════ */}
-      <header
-        className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'bg-background/95 backdrop-blur-md shadow-sm border-b border-border'
-            : 'bg-transparent'
-        }`}
-      >
+      {/* O hero usa fundo escuro; por isso a marca fica clara aqui para manter contraste e consistência com o rodapé. */}
+      <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
           <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="Smartbus BR" className="h-9 object-contain" />
+            <img src={logo} alt="Smartbus BR" className="h-9 object-contain brightness-0 invert" />
           </Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/eventos" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/eventos" className="text-sm font-medium text-white/72 hover:text-white transition-colors">
               Viagens
             </Link>
-            <Link to="/consultar-passagens" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/consultar-passagens" className="text-sm font-medium text-white/72 hover:text-white transition-colors">
               Minhas Passagens
             </Link>
+            {/* CTA secundário: visual claro e discreto para não competir com a ação principal laranja. */}
             <Link
               to="/login"
-              className="text-sm font-medium border border-border rounded-lg px-4 py-2 hover:bg-muted transition-colors"
+              className="rounded-lg border border-white/20 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100"
             >
               Área Administrativa
             </Link>
@@ -75,7 +64,7 @@ export default function LandingPage() {
 
           {/* Mobile toggle */}
           <button
-            className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
+            className="md:hidden rounded-lg p-2 text-white hover:bg-white/10 transition-colors"
             onClick={() => setMobileMenu(!mobileMenu)}
             aria-label="Menu"
           >
@@ -85,14 +74,15 @@ export default function LandingPage() {
 
         {/* Mobile menu */}
         {mobileMenu && (
-          <div className="md:hidden bg-background border-b border-border px-4 pb-4 space-y-2 animate-fade-in">
-            <Link to="/eventos" className="block py-2 text-sm font-medium text-muted-foreground" onClick={() => setMobileMenu(false)}>
+          <div className="md:hidden space-y-2 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-4 text-white animate-fade-in">
+            <Link to="/eventos" className="block py-2 text-sm font-medium text-white/72" onClick={() => setMobileMenu(false)}>
               Viagens
             </Link>
-            <Link to="/consultar-passagens" className="block py-2 text-sm font-medium text-muted-foreground" onClick={() => setMobileMenu(false)}>
+            <Link to="/consultar-passagens" className="block py-2 text-sm font-medium text-white/72" onClick={() => setMobileMenu(false)}>
               Minhas Passagens
             </Link>
-            <Link to="/login" className="block py-2 text-sm font-medium text-muted-foreground" onClick={() => setMobileMenu(false)}>
+            {/* CTA secundário mobile mantém o mesmo papel visual refinado do desktop. */}
+            <Link to="/login" className="block rounded-lg border border-white/20 bg-white px-4 py-2.5 text-center text-sm font-medium text-slate-900 transition-colors duration-200 hover:bg-slate-100" onClick={() => setMobileMenu(false)}>
               Área Administrativa
             </Link>
             <Link
@@ -107,6 +97,7 @@ export default function LandingPage() {
       </header>
 
       {/* ═══════════ HERO ═══════════ */}
+      {/* Sticky removido intencionalmente apenas nesta landing para o topo subir junto com a rolagem. */}
       <section className="relative min-h-[92vh] flex items-center overflow-hidden">
         {/* Background */}
         <div className="absolute inset-0 bg-[hsl(222_47%_11%)]">
@@ -125,7 +116,7 @@ export default function LandingPage() {
           />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-24 pb-16">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-14 pb-16">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Left – content */}
             <div className="space-y-8">
