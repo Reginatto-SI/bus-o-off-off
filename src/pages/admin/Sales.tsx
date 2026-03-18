@@ -87,7 +87,7 @@ import {
 } from 'lucide-react';
 
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
 import { cn, formatBoardingLocationLabel } from '@/lib/utils';
@@ -182,6 +182,28 @@ const blockReasonLabels: Record<string, string> = {
   seguranca: 'Segurança',
   outro: 'Outro',
 };
+
+const PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES = 15;
+
+function getPendingPaymentOperationalSignal(sale: Sale): {
+  isExpired: boolean;
+  expiredMinutes: number;
+} | null {
+  if (sale.status !== 'pendente_pagamento') return null;
+
+  const createdAt = new Date(sale.created_at);
+  if (Number.isNaN(createdAt.getTime())) return null;
+
+  // Comentário de manutenção: a sinalização abaixo é apenas operacional/visual
+  // para o admin. O status oficial da venda continua vindo do banco sem alteração.
+  const elapsedMinutes = differenceInMinutes(new Date(), createdAt);
+  if (elapsedMinutes <= PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES) return null;
+
+  return {
+    isExpired: true,
+    expiredMinutes: elapsedMinutes - PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES,
+  };
+}
 
 // ── Helper to build TicketCardData ──
 function buildTicketCardData(
@@ -1321,6 +1343,7 @@ export default function Sales() {
                     const ticketNumbers = ticketNumbersMap[sale.id] ?? [];
                     const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
                     const isBlock = sale.status === 'bloqueado';
+                    const pendingPaymentSignal = getPendingPaymentOperationalSignal(sale);
                     return (
                       <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
                         <TableCell className="text-sm whitespace-nowrap">
@@ -1386,6 +1409,20 @@ export default function Sales() {
                         <TableCell>
                           <div className="flex flex-col gap-0.5">
                             <StatusBadge status={sale.status} />
+                            {pendingPaymentSignal?.isExpired && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 cursor-help">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Expirado operacionalmente
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Janela operacional de pagamento excedida há {pendingPaymentSignal.expiredMinutes} min.
+                                  O status oficial continua como aguardando pagamento até a rotina automática concluir a limpeza/cancelamento.
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
                             {(sale as any).platform_fee_status === 'pending' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
