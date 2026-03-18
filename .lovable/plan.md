@@ -1,76 +1,32 @@
 
+# Complete Payment Flow Overhaul — IMPLEMENTED
 
-# Plano: Landing Page pública Smartbus BR
+## Changes Made
 
-## Resumo
+### Database
+- Added `pendente_pagamento` to `sale_status` enum
+- Created `seat_locks` table with unique constraint `(trip_id, seat_id)` for temporary seat blocking
+- Created `sale_passengers` staging table for passenger data before payment confirmation
+- Enabled realtime on `sales` table
+- Enabled `pg_cron` and `pg_net` extensions
+- Scheduled `cleanup-expired-locks` cron job every 5 minutes
 
-Criar uma landing page isolada em `/` (substituindo o redirect atual para `/eventos`), com identidade visual própria, layout moderno tipo startup, sem reutilizar componentes existentes do sistema. A página `/eventos` continua funcionando normalmente.
+### Edge Functions
+- `create-asaas-payment`: Accepts both `reservado` and `pendente_pagamento` statuses
+- `asaas-webhook`: Creates tickets from `sale_passengers` on payment confirmation, releases seat locks, handles both status transitions
+- `cleanup-expired-locks` (NEW): Cancels expired pending sales and releases seat locks
 
----
+### Frontend
+- `Checkout.tsx`: Creates seat_locks → sale (pendente_pagamento) → sale_passengers → opens Asaas in new tab → navigates to confirmation
+- `Confirmation.tsx`: Enhanced polling for `pendente_pagamento`, shows "Aguardando pagamento" UI, handles cancelled state
+- `StatusBadge.tsx`: Added `pendente_pagamento` badge
+- `types/database.ts`: Added `pendente_pagamento` to `SaleStatus`
 
-## 1. Nova rota e página
-
-- Criar `src/pages/public/LandingPage.tsx` como página standalone
-- Alterar `App.tsx`: trocar `<Navigate to="/eventos" />` por `<LandingPage />`
-- Não usar `PublicLayout` — a landing terá seu próprio header/footer inline
-
----
-
-## 2. Estrutura da Landing (seções)
-
-### Header próprio (fixo, transparente → sólido ao scroll)
-- Logo Smartbus BR à esquerda
-- Links: "Viagens" (`/eventos`), "Minhas Passagens" (`/consultar-passagens`)
-- CTAs: "Área Administrativa" (outline), "Quero vender passagens" (primary)
-
-### Hero (split-screen)
-- Lado esquerdo: título grande, subtítulo, barra de busca estilizada (cidade/evento + data), botão "Buscar viagens"
-- Lado direito: composição visual com gradiente/formas geométricas abstratas (CSS puro, sem imagem externa)
-- CTA secundário discreto: "Quero vender minhas passagens"
-- Fundo com gradiente diagonal usando cores da marca (laranja → azul escuro)
-
-### Eventos em destaque
-- Título da seção com badge "Ao vivo"
-- Cards diferenciados dos existentes — layout horizontal com imagem, info e preço
-- Dados mockados inicialmente (preparado para query futura)
-- Scroll horizontal no mobile, grid 3 colunas desktop
-
-### Como funciona (3 passos)
-- Layout horizontal com ícones grandes e numeração estilizada
-- 1. Escolha sua viagem → 2. Reserve sua passagem → 3. Embarque com segurança
-- Fundo claro com separadores visuais
-
-### Bloco para empresas (fundo escuro contrastante)
-- Split: texto à esquerda, feature-list com ícones à direita
-- "Venda suas passagens com mais controle e mais lucro"
-- Features: controle de passageiros, gestão de embarque, vendas online, pagamento integrado
-- CTA "Começar a vender" → `/cadastro`
-
-### Diferenciais (grid 2x2)
-- Cards com ícone, título e descrição curta
-- Gestão completa, controle de embarque, relatórios, pagamento seguro
-- Background sutil com padrão geométrico CSS
-
-### CTA final (full-width, gradiente)
-- Dois botões lado a lado: "Ver viagens disponíveis" → `/eventos`, "Cadastrar minha empresa" → `/cadastro`
-
-### Footer próprio
-- Mais completo que o TrustFooter atual: logo, links, redes sociais, CNPJ
-- Reutiliza apenas dados (CNPJ), não o componente
-
----
-
-## 3. Estilo visual
-
-- Gradientes com cores da marca: laranja (`hsl(25 95% 53%)`) e azul escuro (`hsl(222 47% 11%)`)
-- Formas geométricas CSS (circles, blobs) como elementos decorativos
-- Tipografia grande no hero (text-5xl/6xl)
-- Animações sutis com Tailwind: `animate-fade-in`, transições de hover
-- Seções alternando fundo claro/escuro para ritmo visual
-- Tudo responsivo mobile-first
-
----
-
-## 4. Atualizar slug reservado
-
-- Adicionar nenhum slug novo necessário (a rota `/` já é a root)
+## Architecture
+```
+NEW FLOW:
+  Select seats → Create seat_locks (15min expiry) → Create sale (pendente_pagamento)
+  → Create sale_passengers → Open Asaas in new tab → Show waiting screen
+  → Webhook: confirm payment → Create tickets from sale_passengers → Update to pago → Release locks
+  → Frontend detects pago → Show tickets
+```

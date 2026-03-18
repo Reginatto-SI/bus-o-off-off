@@ -895,12 +895,15 @@ export type Database = {
           company_id: string | null
           created_at: string
           direction: string
+          environment_decision_source: string | null
+          environment_host_detected: string | null
           event_type: string | null
           external_reference: string | null
           http_status: number | null
           id: string
           message: string
           payload_json: Json | null
+          payment_environment: string | null
           payment_id: string | null
           processing_status: string
           provider: string
@@ -911,12 +914,15 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           direction: string
+          environment_decision_source?: string | null
+          environment_host_detected?: string | null
           event_type?: string | null
           external_reference?: string | null
           http_status?: number | null
           id?: string
           message: string
           payload_json?: Json | null
+          payment_environment?: string | null
           payment_id?: string | null
           processing_status: string
           provider: string
@@ -927,12 +933,15 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           direction?: string
+          environment_decision_source?: string | null
+          environment_host_detected?: string | null
           event_type?: string | null
           external_reference?: string | null
           http_status?: number | null
           id?: string
           message?: string
           payload_json?: Json | null
+          payment_environment?: string | null
           payment_id?: string | null
           processing_status?: string
           provider?: string

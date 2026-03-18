@@ -50,6 +50,7 @@ import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 
+import LandingPage from "./pages/public/LandingPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,7 +66,7 @@ const App = () => (
           <VersionUpdateBanner />
           <Routes>
             {/* Redirect root to public events */}
-            <Route path="/" element={<Navigate to="/eventos" replace />} />
+            <Route path="/" element={<LandingPage />} />
             
             {/* Auth */}
             <Route path="/login" element={<Login />} />
