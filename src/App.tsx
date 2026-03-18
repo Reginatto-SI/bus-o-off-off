@@ -50,6 +50,7 @@ import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 
+import LandingPage from "./pages/public/LandingPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
