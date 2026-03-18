@@ -66,7 +66,7 @@ const App = () => (
           <VersionUpdateBanner />
           <Routes>
             {/* Redirect root to public events */}
-            <Route path="/" element={<Navigate to="/eventos" replace />} />
+            <Route path="/" element={<LandingPage />} />
             
             {/* Auth */}
             <Route path="/login" element={<Login />} />
