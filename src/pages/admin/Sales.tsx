@@ -682,8 +682,11 @@ export default function Sales() {
     const paidSales = commercialSales.filter((s) => s.status === 'pago');
     const totalValue = paidSales.reduce((sum, s) => sum + (s.gross_amount ?? s.quantity * s.unit_price), 0);
     const pagas = paidSales.length;
-    // Pendente e reservado permanecem visíveis como pipeline operacional, não financeiro.
-    const reservadas = commercialSales.filter((s) => s.status === 'reservado' || s.status === 'pendente_pagamento').length;
+    // Separação explícita do pipeline operacional: "reservado" e "pendente_pagamento"
+    // continuam usando a mesma base de dados, mas agora aparecem com rótulos distintos
+    // para evitar leitura ambígua no painel de vendas.
+    const pendentesPagamento = commercialSales.filter((s) => s.status === 'pendente_pagamento').length;
+    const reservasEmAberto = commercialSales.filter((s) => s.status === 'reservado').length;
     const canceladas = commercialSales.filter((s) => s.status === 'cancelado').length;
     const bloqueadas = sales.filter((s) => s.status === 'bloqueado').length;
     const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
@@ -692,7 +695,17 @@ export default function Sales() {
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;
       return sum + (saleGross * sellerCommissionPercent) / 100;
     }, 0);
-    return { total, totalValue, pagas, reservadas, canceladas, bloqueadas, totalPlatformFee, totalSellersCommission };
+    return {
+      total,
+      totalValue,
+      pagas,
+      pendentesPagamento,
+      reservasEmAberto,
+      canceladas,
+      bloqueadas,
+      totalPlatformFee,
+      totalSellersCommission,
+    };
   }, [sales, totalSalesCount]);
 
   // ── Flat data for export ──
@@ -1148,23 +1161,40 @@ export default function Sales() {
           }
         />
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-          <StatsCard label="Total de Vendas" value={stats.total} icon={ShoppingCart} />
-          {canViewFinancials && (
-            <StatsCard label="Total Arrecadado (Pagas)" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
-          )}
-          <StatsCard label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
-          <StatsCard label="Reservadas/Pendentes" value={stats.reservadas} icon={Clock} variant="warning" />
-          <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
-        </div>
-
-        {/* KPI financeiro resumido: mantemos apenas o custo da plataforma para reduzir ruído visual. */}
-        {isGerente && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatsCard label="Custo da Plataforma" value={formatCurrencyBRL(stats.totalPlatformFee)} icon={DollarSign} />
-            <StatsCard label="Comissão dos Vendedores" value={formatCurrencyBRL(stats.totalSellersCommission)} icon={Users} />
+        {/* Agrupamento mínimo dos KPIs: operação na primeira linha e financeiro na segunda.
+            Isso reduz a competição visual entre volume/status e valores consolidados. */}
+        <section className="mb-6 space-y-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-sm font-semibold text-foreground">Operação</h2>
+            <p className="text-sm text-muted-foreground">
+              Leitura rápida do pipeline comercial e do status atual das vendas.
+            </p>
           </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+            <StatsCard label="Vendas registradas" value={stats.total} icon={ShoppingCart} />
+            <StatsCard label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" />
+            <StatsCard label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} variant="warning" />
+            <StatsCard label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} />
+            <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
+          </div>
+        </section>
+
+        {/* Financeiro consolidado fica em bloco próprio e continua restrito a gerente/developer
+            via canViewFinancials para impedir exposição de valores ao perfil operador. */}
+        {canViewFinancials && (
+          <section className="mb-6 rounded-lg border bg-card p-4 space-y-3">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-sm font-semibold text-foreground">Financeiro</h2>
+              <p className="text-sm text-muted-foreground">
+                Valores consolidados apenas de vendas pagas, separados do bloco operacional.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <StatsCard label="Total arrecadado" value={formatCurrencyBRL(stats.totalValue)} icon={DollarSign} variant="success" />
+              <StatsCard label="Custo da plataforma" value={formatCurrencyBRL(stats.totalPlatformFee)} icon={DollarSign} />
+              <StatsCard label="Comissão dos vendedores" value={formatCurrencyBRL(stats.totalSellersCommission)} icon={Users} />
+            </div>
+          </section>
         )}
 
         {/* Filters */}
