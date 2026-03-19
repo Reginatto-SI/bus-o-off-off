@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   logPaymentTrace,
+  logSaleIntegrationEvent,
   logSaleOperationalEvent,
 } from "../_shared/payment-observability.ts";
 import {
@@ -16,7 +17,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type IntegrationLogStatus = "requested" | "success" | "failed";
+type IntegrationLogStatus = "requested" | "success" | "failed" | "warning" | "rejected";
 
 const ASAAS_DESCRIPTION_MAX_LENGTH = 180;
 
@@ -82,6 +83,7 @@ serve(async (req) => {
   }
 
   try {
+    const startedAt = Date.now();
     const { sale_id, payment_method, payment_environment } = await req.json();
     console.log("[create-asaas-payment] request received", {
       sale_id,
@@ -421,36 +423,40 @@ serve(async (req) => {
       payloadJson: Record<string, unknown> | null,
       responseJson: Record<string, unknown> | null,
       paymentId?: string | null,
+      incidentCode?: string | null,
     ) => {
-      const { error: logError } = await supabaseAdmin
-        .from("sale_integration_logs")
-        .insert({
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          payment_environment: paymentEnv,
-          environment_decision_source:
-            paymentContext.decisionTrace.environmentSource,
-          environment_host_detected: paymentContext.decisionTrace.hostDetected,
-          provider: "asaas",
-          direction: "outgoing_request",
-          event_type: "create_payment",
-          payment_id: paymentId ?? null,
-          external_reference: sale.id,
-          processing_status: processingStatus,
-          message,
-          payload_json: payloadJson,
-          response_json: responseJson,
-        });
-
-      if (logError) {
-        console.error(
-          "[create-asaas-payment] failed to persist integration log",
-          {
-            sale_id: sale.id,
-            error: logError.message,
-          },
-        );
-      }
+      await logSaleIntegrationEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentEnv,
+        environmentDecisionSource:
+          paymentContext.decisionTrace.environmentSource,
+        environmentHostDetected: paymentContext.decisionTrace.hostDetected,
+        provider: "asaas",
+        direction: "outgoing_request",
+        eventType: "create_payment",
+        paymentId: paymentId ?? null,
+        externalReference: sale.id,
+        httpStatus: responseJson && typeof responseJson === "object" && "http_status" in responseJson
+          ? Number((responseJson as Record<string, unknown>).http_status ?? 0) || null
+          : null,
+        processingStatus,
+        resultCategory: processingStatus === "requested"
+          ? "started"
+          : processingStatus === "success"
+            ? "success"
+            : processingStatus === "warning"
+              ? "warning"
+              : processingStatus === "failed"
+                ? "error"
+                : "rejected",
+        incidentCode: incidentCode ?? null,
+        durationMs: Date.now() - startedAt,
+        message,
+        payloadJson,
+        responseJson,
+      });
     };
 
     // 5. Buscar sócio ativo para split (espelhado em sandbox/produção)
