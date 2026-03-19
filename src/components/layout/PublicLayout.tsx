@@ -192,6 +192,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false }: PublicLa
         {children}
       </main>
 
+      <FloatingWhatsApp />
       <TrustFooter />
     </div>
   );
