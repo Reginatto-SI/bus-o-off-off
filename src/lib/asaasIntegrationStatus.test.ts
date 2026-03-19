@@ -67,7 +67,7 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
 }
 
 describe('getAsaasIntegrationSnapshot', () => {
-  it('não marca conectado sem credenciais essenciais do ambiente atual', () => {
+  it('ignora o legado vazio/não operacional ao calcular o ambiente atual', () => {
     const company = buildCompany({
       asaas_onboarding_complete: true,
       asaas_wallet_id: 'legacy-wallet',
@@ -76,8 +76,9 @@ describe('getAsaasIntegrationSnapshot', () => {
 
     const snapshot = getAsaasIntegrationSnapshot(company, 'sandbox');
 
-    expect(snapshot.status).toBe('inconsistent');
+    expect(snapshot.status).toBe('not_configured');
     expect(snapshot.currentIsConnected).toBe(false);
+    expect(snapshot.legacyIsConnected).toBe(false);
   });
 
   it('marca parcialmente configurado quando só o outro ambiente está pronto', () => {
