@@ -68,6 +68,8 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
 
 describe('getAsaasIntegrationSnapshot', () => {
   it('ignora o legado vazio/não operacional ao calcular o ambiente atual', () => {
+    // Comentário de compatibilidade transitória: mantemos este cenário apenas para garantir
+    // que eventual dado legado remanescente não volte a influenciar o status operacional.
     const company = buildCompany({
       asaas_onboarding_complete: true,
       asaas_wallet_id: 'legacy-wallet',
