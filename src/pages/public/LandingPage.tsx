@@ -198,7 +198,7 @@ export default function LandingPage() {
   // O header da landing usa três níveis de hierarquia.
   // Aqui os links públicos ficam leves, com ícone e hover discreto, sem virar um bloco pesado.
   const desktopNavLinkClass =
-  'h-10 gap-2 rounded-md px-3.5 text-sm font-medium text-white/72 transition-all hover:bg-white/6 hover:text-white hover:-translate-y-px';
+  'h-10 gap-2 rounded-md px-3.5 text-sm font-medium text-white/90 transition-all hover:bg-white/10 hover:text-white hover:-translate-y-px';
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
