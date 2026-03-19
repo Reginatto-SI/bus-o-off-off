@@ -56,6 +56,7 @@ import { resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL } from '@/lib/currency';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { cn } from '@/lib/utils';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -203,6 +204,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const selectedEventPolicy = selectedEvent?.transport_policy ?? 'trecho_independente';
   const groupedTransportPolicy = selectedEventPolicy === 'ida_obrigatoria_volta_opcional' || selectedEventPolicy === 'ida_volta_obrigatorio';
   const mandatoryReturnPolicy = selectedEventPolicy === 'ida_volta_obrigatorio';
+  const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   const selectedTrip = trips.find((t) => t.id === selectedTripId);
   const selectedVehicle = selectedTrip?.vehicle;
   const selectedTripSoldCount = selectedTripId ? (tripSoldSeats[selectedTripId] ?? 0) : 0;
@@ -682,6 +684,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // Determinar sale_origin para rastreabilidade
       const saleOrigin = isBlock ? 'admin_block' : (isManual ? 'admin_manual' : 'admin_manual');
 
+      if (!runtimePaymentEnvironment) {
+        toast.error('Ambiente de pagamento ainda não foi resolvido. Tente novamente em alguns segundos.');
+        return;
+      }
+
       // 1. Insert sale
       // Regra crítica: toda venda criada manualmente no admin nasce como 'reservado'.
       // A transição para 'pago' acontece somente após confirmação da taxa da plataforma.
@@ -704,6 +711,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           platform_fee_amount: platformFeeAmount,
           platform_fee_status: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
           block_reason: isBlock ? blockReason : null,
+          // Etapa final Asaas: removemos a dependência do default do banco.
+          // Toda venda manual também nasce com ambiente explícito para manter coerência operacional.
+          payment_environment: runtimePaymentEnvironment,
         } as any)
         .select('id')
         .single();

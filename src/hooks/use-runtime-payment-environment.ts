@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 type PaymentEnvironment = "production" | "sandbox";
+type EnvironmentSource = "build" | "edge" | "browser_fallback";
 
 // Mantém os mesmos hosts oficiais definidos no backend (runtime-env.ts).
 const PRODUCTION_HOSTS = new Set([
@@ -17,11 +19,10 @@ export function resolveEnvironmentFromHostname(
 }
 
 /**
- * Etapa 2:
- * para o fluxo Asaas, preferimos decidir pelo origin/hostname real do app no browser
- * em vez de depender de headers encaminhados até a Edge Function.
- *
- * Se um `VITE_PAYMENT_ENVIRONMENT` explícito existir no build, ele prevalece.
+ * Etapa final de hardening:
+ * quando a configuração explícita não existe, restringimos a heurística local
+ * ao último fallback do frontend. A decisão preferencial passa a vir do edge,
+ * onde o host efetivo chega pelos headers da requisição e fica rastreável.
  */
 export function resolvePaymentEnvironmentFromAppOrigin(
   origin: string,
@@ -42,28 +43,82 @@ export function resolvePaymentEnvironmentFromAppOrigin(
 }
 
 /**
- * Expõe no frontend o mesmo ambiente operacional explícito usado pelo checkout.
+ * Expõe no frontend o ambiente operacional usado pelo checkout.
  *
- * Etapa 2:
- * - prioriza `VITE_PAYMENT_ENVIRONMENT` quando existir;
- * - caso contrário, usa a origem real carregada no browser;
- * - evita depender de headers encaminhados até o backend para fins visuais.
+ * Ordem de prioridade deliberada:
+ * 1) `VITE_PAYMENT_ENVIRONMENT` explícito do build;
+ * 2) edge function `get-runtime-payment-environment`;
+ * 3) fallback local por hostname apenas se o edge falhar.
  */
 export function useRuntimePaymentEnvironment() {
   const [environment, setEnvironment] = useState<PaymentEnvironment | null>(
     null,
   );
+  const [source, setSource] = useState<EnvironmentSource | null>(null);
 
   useEffect(() => {
-    const browserResolvedEnvironment = resolvePaymentEnvironmentFromAppOrigin(
-      window.location.origin,
-      import.meta.env.VITE_PAYMENT_ENVIRONMENT,
-    );
-    setEnvironment(browserResolvedEnvironment);
+    let cancelled = false;
+
+    const explicitEnvironment = import.meta.env.VITE_PAYMENT_ENVIRONMENT;
+    if (
+      explicitEnvironment === "production" ||
+      explicitEnvironment === "sandbox"
+    ) {
+      setEnvironment(explicitEnvironment);
+      setSource("build");
+      return;
+    }
+
+    const resolveFromEdge = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "get-runtime-payment-environment",
+        );
+
+        if (error) throw error;
+
+        if (
+          !cancelled &&
+          (data?.payment_environment === "production" ||
+            data?.payment_environment === "sandbox")
+        ) {
+          setEnvironment(data.payment_environment);
+          setSource("edge");
+          return;
+        }
+
+        throw new Error("runtime_payment_environment_missing_from_edge");
+      } catch (error) {
+        const fallbackEnvironment = resolvePaymentEnvironmentFromAppOrigin(
+          window.location.origin,
+          null,
+        );
+
+        if (!cancelled) {
+          // Comentário de suporte: mantemos fallback para não bloquear compra por oscilação do edge,
+          // mas registramos aviso explícito porque a fonte preferencial agora é configuração/edge.
+          console.warn("[payment-environment] falling back to browser hostname", {
+            error: error instanceof Error ? error.message : String(error),
+            fallback_environment: fallbackEnvironment,
+            origin: window.location.origin,
+          });
+          setEnvironment(fallbackEnvironment);
+          setSource("browser_fallback");
+        }
+      }
+    };
+
+    resolveFromEdge();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return {
     environment,
+    source,
     isSandbox: environment === "sandbox",
+    isReady: environment !== null,
   };
 }

@@ -38,12 +38,12 @@ import {
 import { toast } from "sonner";
 import { formatCurrencyBRL } from "@/lib/currency";
 import { formatPhoneBR } from "@/lib/phone";
+import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {
   CHECKOUT_RESPONSIBILITY_HELPER_TEXT,
   CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE,
   getCheckoutResponsibilityAcceptanceLabel,
 } from "@/lib/intermediationPolicy";
-import { resolvePaymentEnvironmentFromAppOrigin } from "@/hooks/use-runtime-payment-environment";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -137,14 +137,10 @@ export default function Checkout() {
   const [intermediationAccepted, setIntermediationAccepted] = useState(false);
   const mandatoryRoundTrip =
     event?.transport_policy === "ida_volta_obrigatorio";
-  const runtimePaymentEnvironment = useMemo(
-    () =>
-      resolvePaymentEnvironmentFromAppOrigin(
-        window.location.origin,
-        import.meta.env.VITE_PAYMENT_ENVIRONMENT,
-      ),
-    [],
-  );
+  const {
+    environment: runtimePaymentEnvironment,
+    source: runtimePaymentEnvironmentSource,
+  } = useRuntimePaymentEnvironment();
 
   // Helper: get price for a seat based on category pricing
   const getSeatPrice = (seatId: string): number => {
