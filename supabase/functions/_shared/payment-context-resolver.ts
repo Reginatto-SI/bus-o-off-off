@@ -7,11 +7,15 @@ import {
   type PaymentEnvironment,
 } from "./runtime-env.ts";
 
-export type PaymentContextMode = "create" | "verify" | "webhook" | "platform_fee";
+export type PaymentContextMode =
+  | "create"
+  | "verify"
+  | "webhook"
+  | "platform_fee";
 export type PaymentOwnerType = "platform" | "company";
 
 export type PaymentContextDecisionTrace = {
-  environmentSource: "sale" | "host";
+  environmentSource: "sale" | "request" | "host";
   hostDetected: string | null;
   ownerDecision: string;
   credentialDecision: string;
@@ -63,7 +67,10 @@ type MinimalPartner = {
   asaas_wallet_id_sandbox?: string | null;
 };
 
-function readEnvironmentCompanyConfig(company: MinimalCompany | null | undefined, environment: PaymentEnvironment) {
+function readEnvironmentCompanyConfig(
+  company: MinimalCompany | null | undefined,
+  environment: PaymentEnvironment,
+) {
   if (!company) {
     return {
       apiKey: null,
@@ -81,8 +88,12 @@ function readEnvironmentCompanyConfig(company: MinimalCompany | null | undefined
       walletId: company.asaas_wallet_id_production ?? null,
       accountId: company.asaas_account_id_production ?? null,
       accountEmail: company.asaas_account_email_production ?? null,
-      onboardingComplete: Boolean(company.asaas_onboarding_complete_production ?? false),
-      source: company.asaas_api_key_production ? "production_field" : "missing_production_field",
+      onboardingComplete: Boolean(
+        company.asaas_onboarding_complete_production ?? false,
+      ),
+      source: company.asaas_api_key_production
+        ? "production_field"
+        : "missing_production_field",
     };
   }
 
@@ -91,12 +102,19 @@ function readEnvironmentCompanyConfig(company: MinimalCompany | null | undefined
     walletId: company.asaas_wallet_id_sandbox ?? null,
     accountId: company.asaas_account_id_sandbox ?? null,
     accountEmail: company.asaas_account_email_sandbox ?? null,
-    onboardingComplete: Boolean(company.asaas_onboarding_complete_sandbox ?? false),
-    source: company.asaas_api_key_sandbox ? "sandbox_field" : "missing_sandbox_field",
+    onboardingComplete: Boolean(
+      company.asaas_onboarding_complete_sandbox ?? false,
+    ),
+    source: company.asaas_api_key_sandbox
+      ? "sandbox_field"
+      : "missing_sandbox_field",
   };
 }
 
-export function resolvePartnerWalletByEnvironment(partner: MinimalPartner | null | undefined, environment: PaymentEnvironment): string | null {
+export function resolvePartnerWalletByEnvironment(
+  partner: MinimalPartner | null | undefined,
+  environment: PaymentEnvironment,
+): string | null {
   if (!partner) return null;
   if (environment === "production") {
     return partner.asaas_wallet_id_production ?? null;
@@ -107,22 +125,37 @@ export function resolvePartnerWalletByEnvironment(partner: MinimalPartner | null
 export function resolvePaymentContext(params: {
   mode: PaymentContextMode;
   sale?: MinimalSale | null;
+  requestedEnvironment?: PaymentEnvironment | null;
   company?: MinimalCompany | null;
   partner?: MinimalPartner | null;
   request?: Request;
   isPlatformFeeFlow?: boolean;
+  allowHostFallback?: boolean;
 }): ResolvedPaymentContext {
   const saleEnvRaw = params.sale?.payment_environment;
-  const hasSaleEnvironment = saleEnvRaw === "production" || saleEnvRaw === "sandbox";
+  const hasSaleEnvironment =
+    saleEnvRaw === "production" || saleEnvRaw === "sandbox";
+  const requestedEnvironment = params.requestedEnvironment;
 
   let environment: PaymentEnvironment;
-  let environmentSource: "sale" | "host";
+  let environmentSource: "sale" | "request" | "host";
   let hostDetected: string | null = null;
 
   if (hasSaleEnvironment) {
     environment = saleEnvRaw;
     environmentSource = "sale";
-  } else if (params.request) {
+  } else if (
+    requestedEnvironment === "production" ||
+    requestedEnvironment === "sandbox"
+  ) {
+    /**
+     * Etapa 2:
+     * o create-asaas-payment deixa de depender primariamente de host encaminhado.
+     * A primeira decisão passa a vir de um ambiente explícito do próprio fluxo.
+     */
+    environment = requestedEnvironment;
+    environmentSource = "request";
+  } else if (params.request && params.allowHostFallback) {
     const resolvedFromHost = resolveEnvironmentFromHost(params.request);
     environment = resolvedFromHost.env;
     environmentSource = "host";
@@ -130,20 +163,26 @@ export function resolvePaymentContext(params: {
   } else {
     /**
      * Regra de segurança do projeto:
-     * se não conseguimos decidir o ambiente por venda persistida OU host de entrada,
+     * se não conseguimos decidir o ambiente por venda persistida OU request explícito,
      * o fluxo deve falhar de forma explícita (sem fallback silencioso para sandbox).
      */
-    throw new Error("payment_environment_unresolved: contexto sem venda válida e sem request para decisão por host");
+    throw new Error(
+      "payment_environment_unresolved: contexto sem venda válida e sem ambiente explícito",
+    );
   }
 
-  const isPlatformFeeFlow = params.mode === "platform_fee" || Boolean(params.isPlatformFeeFlow);
+  const isPlatformFeeFlow =
+    params.mode === "platform_fee" || Boolean(params.isPlatformFeeFlow);
   const ownerType: PaymentOwnerType = isPlatformFeeFlow
     ? "platform"
     : "company";
 
   const apiKeySecretName = getAsaasApiKeySecretName(environment);
   const platformApiKey = Deno.env.get(apiKeySecretName) ?? null;
-  const companyEnvConfig = readEnvironmentCompanyConfig(params.company, environment);
+  const companyEnvConfig = readEnvironmentCompanyConfig(
+    params.company,
+    environment,
+  );
   const companyApiKey = companyEnvConfig.apiKey;
 
   let apiKey: string | null = null;
@@ -171,9 +210,10 @@ export function resolvePaymentContext(params: {
   } else {
     // Comentário Step 2: webhook não consulta API Asaas hoje, então credencial fica apenas descritiva.
     apiKey = ownerType === "company" ? companyApiKey : platformApiKey;
-    apiKeySource = ownerType === "company"
-      ? `company.api_key (${companyEnvConfig.source}) (descritivo_webhook)`
-      : `platform (${apiKeySecretName}) (descritivo_webhook)`;
+    apiKeySource =
+      ownerType === "company"
+        ? `company.api_key (${companyEnvConfig.source}) (descritivo_webhook)`
+        : `platform (${apiKeySecretName}) (descritivo_webhook)`;
   }
 
   const webhookTokenSecretName = getAsaasWebhookTokenSecretName(environment);
@@ -216,8 +256,13 @@ export function resolvePaymentContext(params: {
   };
 }
 
-export function isWebhookTokenValidForContext(req: Request, context: ResolvedPaymentContext): boolean {
-  const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-webhook-token");
+export function isWebhookTokenValidForContext(
+  req: Request,
+  context: ResolvedPaymentContext,
+): boolean {
+  const receivedToken =
+    req.headers.get("asaas-access-token") ||
+    req.headers.get("x-asaas-webhook-token");
   if (!receivedToken) return false;
   if (context.webhookTokenCandidates.length === 0) return false;
   return context.webhookTokenCandidates.includes(receivedToken);
