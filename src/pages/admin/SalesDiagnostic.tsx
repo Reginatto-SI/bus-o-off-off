@@ -114,12 +114,12 @@ interface SaleIntegrationLog {
   payment_id: string | null;
   external_reference: string | null;
   http_status: number | null;
-  processing_status: 'received' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized';
+  processing_status: 'received' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized' | 'warning' | 'rejected' | 'duplicate';
   message: string;
   payload_json: Record<string, unknown> | null;
   response_json: Record<string, unknown> | null;
   payment_environment: 'sandbox' | 'production' | null;
-  environment_decision_source: 'sale' | 'host' | null;
+  environment_decision_source: 'sale' | 'request' | 'host' | null;
   environment_host_detected: string | null;
   created_at: string;
 }
