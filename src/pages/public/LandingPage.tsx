@@ -172,22 +172,22 @@ const BUSINESS_BENEFITS = [
 }];
 
 
-const JOURNEY_OPTIONS = [
+const FINAL_ACTIONS = [
 {
   icon: Ticket,
   title: 'Quero viajar',
   desc: 'Veja as próximas viagens, compare preços e reserve sua vaga agora.',
   cta: 'Ver viagens disponíveis',
   to: '/eventos',
-  style: 'bg-background border-border hover:border-primary/30'
+  style: 'bg-primary text-primary-foreground hover:bg-primary/90'
 },
 {
   icon: Building2,
   title: 'Quero vender passagens',
   desc: 'Cadastre sua empresa e comece a vender com controle, automação e escala.',
-  cta: 'Quero vender passagens',
+  cta: 'Cadastrar minha empresa',
   to: '/cadastro',
-  style: 'bg-primary/5 border-primary/20 hover:border-primary/40'
+  style: 'border border-border text-foreground hover:bg-muted'
 }];
 
 
@@ -202,25 +202,35 @@ export default function LandingPage() {
             <img src={logo} alt="Smartbus BR" className="h-9 object-contain brightness-0 invert" />
           </Link>
 
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link to="/eventos" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
-              Viagens
-            </Link>
-            <Link to="/consultar-passagens" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
-              Minhas Passagens
-            </Link>
+          <nav className="hidden flex-1 items-center justify-between gap-6 md:flex md:pl-8">
+            <div className="flex items-center gap-6">
+              <Link to="/eventos" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
+                Viagens
+              </Link>
+              <Link to="/consultar-passagens" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
+                Minhas Passagens
+              </Link>
+            </div>
+
+            {/* CTA do cliente fica centralizado no header para evitar ambiguidade de navegação na primeira dobra. */}
             <Link
-              to="/login"
-              className="rounded-lg border border-white/20 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100">
-              
-              Área Administrativa
+              to="/eventos"
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90">
+              Ver viagens
             </Link>
-            <Link
-              to="/cadastro"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
-              
-              Quero vender passagens
-            </Link>
+
+            <div className="flex items-center gap-3">
+              <Link
+                to="/login"
+                className="rounded-lg border border-white/20 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100">
+                Área Administrativa
+              </Link>
+              <Link
+                to="/cadastro"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+                Quero vender passagens
+              </Link>
+            </div>
           </nav>
 
           <button
@@ -239,6 +249,13 @@ export default function LandingPage() {
             </Link>
             <Link to="/consultar-passagens" className="block py-2 text-sm font-medium text-white/72" onClick={() => setMobileMenu(false)}>
               Minhas Passagens
+            </Link>
+            <Link
+            to="/eventos"
+            className="block rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-primary-foreground"
+            onClick={() => setMobileMenu(false)}>
+            
+              Ver viagens
             </Link>
             <Link
             to="/login"
@@ -282,11 +299,13 @@ export default function LandingPage() {
 
                 <div className="space-y-4">
                   <h1 className="max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                    Compre sua passagem em minutos ou
-                    <span className="text-primary"> comece a vender com mais lucro.</span>
+                    Passagens para eventos sem complicação.
                   </h1>
                   <p className="max-w-2xl text-lg text-white/70 sm:text-xl">
-                    A Smartbus BR conecta passageiros a viagens confirmadas e ajuda empresas a vender online com embarque por QR Code.
+                    Escolha seu embarque, garanta sua vaga e embarque com QR Code.
+                  </p>
+                  <p className="max-w-2xl text-base font-medium text-primary sm:text-lg">
+                    Ou venda passagens com controle total e mais lucro.
                   </p>
                 </div>
 
@@ -403,7 +422,7 @@ export default function LandingPage() {
                 Para empresas parceiras
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Venda suas passagens com mais controle e mais lucro
+                Venda passagens online sem depender de planilha ou controle manual.
               </h2>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
                 Centralize vendas online, passageiros e embarque em uma operação mais simples. Ideal para empresas que precisam vender rápido e operar melhor.
@@ -591,13 +610,13 @@ export default function LandingPage() {
       <section className="bg-muted/40 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Escolha seu caminho</h2>
-            <p className="mt-2 text-muted-foreground">A landing deixa claro em segundos se você quer comprar ou vender.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Você quer viajar ou vender passagens?</h2>
+            <p className="mt-2 text-muted-foreground">Escolha o próximo passo com um CTA direto para cliente ou empresa.</p>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2">
-            {JOURNEY_OPTIONS.map((option) =>
-            <div key={option.title} className={`rounded-3xl border p-6 shadow-sm transition-all duration-300 ${option.style}`}>
+            {FINAL_ACTIONS.map((option) =>
+            <div key={option.title} className="rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-md">
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <option.icon className="h-6 w-6" />
                 </div>
@@ -605,7 +624,7 @@ export default function LandingPage() {
                 <p className="mt-3 max-w-xl text-muted-foreground">{option.desc}</p>
                 <Link
                 to={option.to}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
+                className={`mt-6 inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-colors ${option.style}`}>
                 
                   {option.cta}
                   <ArrowRight className="h-4 w-4" />
@@ -622,22 +641,20 @@ export default function LandingPage() {
 
         <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-[2rem] border border-primary/15 bg-card p-8 text-center shadow-xl sm:p-10">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Decida agora o próximo passo</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Você quer viajar ou vender passagens?</h2>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground sm:text-lg">
-              Simples para comprar, seguro para pagar e fácil para operar. A landing termina com dois caminhos claros para conversão.
+              Escolha agora o caminho certo para comprar sua passagem ou cadastrar sua empresa sem perder tempo.
             </p>
             <div className="mt-8 flex flex-col items-stretch justify-center gap-4 sm:flex-row">
               <Link
                 to="/eventos"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
-                
                 Ver viagens disponíveis
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 to="/cadastro"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-8 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted">
-                
                 Cadastrar minha empresa
               </Link>
             </div>
