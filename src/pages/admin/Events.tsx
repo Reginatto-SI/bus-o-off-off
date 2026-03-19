@@ -443,7 +443,9 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_account_email, asaas_onboarding_complete, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox')
+      // Comentário de manutenção: a tela deve decidir conexão apenas pelo contrato por ambiente.
+      // O legado em companies permanece no schema só por compatibilidade transitória.
+      .select('asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox')
       .eq('id', activeCompanyId)
       .single();
 

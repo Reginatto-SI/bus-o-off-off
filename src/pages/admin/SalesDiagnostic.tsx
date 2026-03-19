@@ -440,9 +440,6 @@ export default function SalesDiagnostic() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailCompany, setDetailCompany] = useState<{
     name: string;
-    asaas_account_email: string | null;
-    asaas_wallet_id: string | null;
-    asaas_account_id: string | null;
     asaas_account_email_production: string | null;
     asaas_wallet_id_production: string | null;
     asaas_account_id_production: string | null;
@@ -456,17 +453,14 @@ export default function SalesDiagnostic() {
 
     const environment = detailSale?.payment_environment === 'production' ? 'production' : 'sandbox';
 
-    // Comentário de suporte: o diagnóstico passa a priorizar os campos efetivos do ambiente da venda,
-    // preservando os legados apenas para comparação/histórico quando necessário.
+    // Comentário de suporte: o diagnóstico usa apenas os campos do ambiente da venda.
+    // O legado não deve mais influenciar leitura administrativa nem decisão operacional.
     if (environment === 'production') {
       return {
         environment,
         accountEmail: detailCompany.asaas_account_email_production,
         walletId: detailCompany.asaas_wallet_id_production,
         accountId: detailCompany.asaas_account_id_production,
-        legacyAccountEmail: detailCompany.asaas_account_email,
-        legacyWalletId: detailCompany.asaas_wallet_id,
-        legacyAccountId: detailCompany.asaas_account_id,
       };
     }
 
@@ -475,9 +469,6 @@ export default function SalesDiagnostic() {
       accountEmail: detailCompany.asaas_account_email_sandbox,
       walletId: detailCompany.asaas_wallet_id_sandbox,
       accountId: detailCompany.asaas_account_id_sandbox,
-      legacyAccountEmail: detailCompany.asaas_account_email,
-      legacyWalletId: detailCompany.asaas_wallet_id,
-      legacyAccountId: detailCompany.asaas_account_id,
     };
   }, [detailCompany, detailSale?.payment_environment]);
 
@@ -679,7 +670,8 @@ export default function SalesDiagnostic() {
         .limit(30),
       supabase
         .from('companies')
-        .select('name, asaas_account_email, asaas_wallet_id, asaas_account_id, asaas_account_email_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox')
+        // Comentário de manutenção: detalhe da venda deve refletir apenas a conta operacional por ambiente.
+        .select('name, asaas_account_email_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox')
         .eq('id', sale.company_id)
         .single(),
     ]);
@@ -1099,26 +1091,6 @@ export default function SalesDiagnostic() {
                           <div>
                             <span className="text-muted-foreground">Status Asaas bruto</span>
                             <p className="font-mono text-xs">{detailSale.asaas_payment_status}</p>
-                          </div>
-                        )}
-                        {(detailCompanyOperationalAsaas?.legacyAccountEmail ||
-                          detailCompanyOperationalAsaas?.legacyWalletId ||
-                          detailCompanyOperationalAsaas?.legacyAccountId) && (
-                          <div className="col-span-2 rounded-md border border-dashed p-3">
-                            <span className="text-muted-foreground">
-                              Espelho legado (somente auditoria, não operacional)
-                            </span>
-                            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-                              <p className="font-mono text-xs">
-                                Email: {detailCompanyOperationalAsaas.legacyAccountEmail ?? 'N/A'}
-                              </p>
-                              <p className="font-mono text-xs">
-                                Wallet: {detailCompanyOperationalAsaas.legacyWalletId ?? 'N/A'}
-                              </p>
-                              <p className="font-mono text-xs">
-                                Conta: {detailCompanyOperationalAsaas.legacyAccountId ?? 'N/A'}
-                              </p>
-                            </div>
                           </div>
                         )}
                         <div>
