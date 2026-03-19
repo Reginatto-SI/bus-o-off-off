@@ -1,18 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logPaymentTrace, logSaleOperationalEvent } from "./payment-observability.ts";
+import {
+  logPaymentTrace,
+  logSaleOperationalEvent,
+} from "./payment-observability.ts";
 
-export type TicketCreationStatus = "created" | "skipped_existing" | "skipped_no_passengers" | "error";
+export type TicketCreationStatus =
+  | "created"
+  | "skipped_existing"
+  | "skipped_no_passengers"
+  | "error";
 
 export type PaymentFinalizationResult = {
   ok: boolean;
   httpStatus: number;
-  state: "finalized" | "already_finalized" | "inconsistent" | "error";
+  state:
+    | "finalized"
+    | "already_finalized"
+    | "inconsistent"
+    | "warning"
+    | "error";
   message: string;
   ticketStatus: TicketCreationStatus;
   ticketsCount: number;
 };
 
-export type SaleConsistencyState = "healthy" | "inconsistent_paid_without_ticket" | "not_paid" | "not_found";
+export type SaleConsistencyState =
+  | "healthy"
+  | "inconsistent_paid_without_ticket"
+  | "not_paid"
+  | "not_found";
 
 export type SaleConsistencyInspection = {
   state: SaleConsistencyState;
@@ -36,7 +52,9 @@ export async function inspectSaleConsistency(
 ): Promise<SaleConsistencyInspection> {
   const { data: sale, error: saleError } = await supabaseAdmin
     .from("sales")
-    .select("id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at, payment_environment")
+    .select(
+      "id, company_id, status, asaas_payment_status, asaas_payment_id, payment_confirmed_at, platform_fee_paid_at, payment_environment",
+    )
     .eq("id", saleId)
     .maybeSingle();
 
@@ -87,7 +105,7 @@ export async function inspectSaleConsistency(
 export async function createTicketsFromPassengersShared(
   supabaseAdmin: ReturnType<typeof createClient>,
   saleId: string,
-  companyId: string
+  companyId: string,
 ): Promise<{ status: TicketCreationStatus; message: string }> {
   const { count: existingTickets } = await supabaseAdmin
     .from("tickets")
@@ -239,7 +257,11 @@ export async function finalizeConfirmedPayment(params: {
 
   // Centralização Etapa 2/3: qualquer reconciliação passa por esta mesma rotina,
   // evitando fluxo paralelo que poderia divergir de webhook/verify.
-  const ticketResult = await createTicketsFromPassengersShared(supabaseAdmin, sale.id, sale.company_id);
+  const ticketResult = await createTicketsFromPassengersShared(
+    supabaseAdmin,
+    sale.id,
+    sale.company_id,
+  );
 
   const { count: ticketsCount } = await supabaseAdmin
     .from("tickets")
@@ -279,7 +301,10 @@ export async function finalizeConfirmedPayment(params: {
     };
   }
 
-  const { error: seatLockError } = await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale.id);
+  const { error: seatLockError } = await supabaseAdmin
+    .from("seat_locks")
+    .delete()
+    .eq("sale_id", sale.id);
 
   if (seatLockError) {
     await logSaleOperationalEvent({
@@ -293,11 +318,18 @@ export async function finalizeConfirmedPayment(params: {
       errorCode: "seat_lock_cleanup_failed",
       detail: seatLockError.message,
     });
+
+    /**
+     * Blindagem Etapa 1:
+     * seat_locks é cleanup acessório. Se a venda já foi confirmada e os tickets existem,
+     * não derrubamos o fluxo principal nem devolvemos erro ao provedor.
+     * Os locks restantes expiram automaticamente e o suporte ganha trilha explícita.
+     */
     return {
-      ok: false,
-      httpStatus: 500,
-      state: "error",
-      message: `Falha ao limpar seat_locks da venda ${sale.id}`,
+      ok: true,
+      httpStatus: 200,
+      state: "warning",
+      message: `Venda ${sale.id} confirmada, mas falhou limpeza de seat_locks`,
       ticketStatus: ticketResult.status,
       ticketsCount: ticketsCount ?? 0,
     };
@@ -305,7 +337,10 @@ export async function finalizeConfirmedPayment(params: {
 
   // Comentário operacional: logamos apenas quando houve transição real ou reconciliação.
   // Isso preserva idempotência e evita ruído em chamadas repetidas (webhook duplicado/polling/reprocessamento).
-  if (writeSaleLog && (transitionedToPaid || ticketResult.status === "created")) {
+  if (
+    writeSaleLog &&
+    (transitionedToPaid || ticketResult.status === "created")
+  ) {
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: sale.id,
       action: "payment_confirmed",
