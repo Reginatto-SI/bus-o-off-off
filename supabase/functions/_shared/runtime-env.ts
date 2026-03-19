@@ -1,21 +1,21 @@
 /**
  * Contrato operacional vigente (Step 1):
- * 1) create-asaas-payment resolve por host
- * 2) persiste em sales.payment_environment
+ * 1) o checkout público decide explicitamente o ambiente e envia ao backend
+ * 2) create-asaas-payment persiste/consome sales.payment_environment
  * 3) verify/webhook/platform-fee leem da venda (não recalculam host)
  *
- * Zona cinzenta mapeada: host ainda é o gatilho inicial da decisão.
- * Candidato de centralização para Step 2 (resolvedor único de contexto).
+ * Step 2:
+ * - host deixa de ser fonte primária para o fluxo de pagamento Asaas;
+ * - este arquivo permanece apenas com utilidades legadas/de suporte operacional.
  */
 /**
- * Resolução de ambiente de pagamento Asaas — baseada exclusivamente no host.
+ * Resolução legada de ambiente de pagamento Asaas por host.
  *
- * Regra única:
+ * Regra mantida apenas para suporte visual/compatibilidade:
  * - smartbusbr.com.br / www.smartbusbr.com.br → production
  * - Qualquer outro host → sandbox
  *
- * O ambiente é decidido UMA VEZ no create-asaas-payment e salvo em
- * sales.payment_environment. Todas as outras funções leem da venda.
+ * O fluxo de cobrança não deve depender primariamente desta heurística.
  */
 
 export type PaymentEnvironment = "production" | "sandbox";
@@ -57,7 +57,8 @@ function extractRequestHost(req: Request): string {
   for (const candidate of headerCandidates) {
     if (!candidate) continue;
     const normalized = normalizeHost(candidate);
-    if (normalized && normalized !== "edge-runtime.supabase.com") return normalized;
+    if (normalized && normalized !== "edge-runtime.supabase.com")
+      return normalized;
   }
 
   return "unknown";
@@ -65,11 +66,16 @@ function extractRequestHost(req: Request): string {
 
 /**
  * Resolve o ambiente de pagamento com base no host da requisição.
- * Usada APENAS em create-asaas-payment (ponto único de decisão).
+ * Mantida apenas para fallback controlado/compatibilidade fora do caminho principal.
  */
-export function resolveEnvironmentFromHost(req: Request): { env: PaymentEnvironment; host: string } {
+export function resolveEnvironmentFromHost(req: Request): {
+  env: PaymentEnvironment;
+  host: string;
+} {
   const host = extractRequestHost(req);
-  const env: PaymentEnvironment = PRODUCTION_HOSTS.has(host) ? "production" : "sandbox";
+  const env: PaymentEnvironment = PRODUCTION_HOSTS.has(host)
+    ? "production"
+    : "sandbox";
 
   console.log("[runtime-env] Ambiente resolvido por host", {
     host_detected: host,
@@ -93,6 +99,10 @@ export function getAsaasWalletSecretName(env: PaymentEnvironment): string {
   return env === "production" ? "ASAAS_WALLET_ID" : "ASAAS_WALLET_ID_SANDBOX";
 }
 
-export function getAsaasWebhookTokenSecretName(env: PaymentEnvironment): string {
-  return env === "production" ? "ASAAS_WEBHOOK_TOKEN" : "ASAAS_WEBHOOK_TOKEN_SANDBOX";
+export function getAsaasWebhookTokenSecretName(
+  env: PaymentEnvironment,
+): string {
+  return env === "production"
+    ? "ASAAS_WEBHOOK_TOKEN"
+    : "ASAAS_WEBHOOK_TOKEN_SANDBOX";
 }

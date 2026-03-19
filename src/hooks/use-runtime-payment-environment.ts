@@ -1,66 +1,69 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from "react";
 
-type PaymentEnvironment = 'production' | 'sandbox';
-
-type RuntimePaymentEnvironmentResponse = {
-  payment_environment?: PaymentEnvironment;
-};
+type PaymentEnvironment = "production" | "sandbox";
 
 // Mantém os mesmos hosts oficiais definidos no backend (runtime-env.ts).
-const PRODUCTION_HOSTS = new Set(['smartbusbr.com.br', 'www.smartbusbr.com.br']);
+const PRODUCTION_HOSTS = new Set([
+  "smartbusbr.com.br",
+  "www.smartbusbr.com.br",
+]);
 
-function resolveEnvironmentFromHostname(hostname: string): PaymentEnvironment {
-  return PRODUCTION_HOSTS.has(hostname.toLowerCase()) ? 'production' : 'sandbox';
+export function resolveEnvironmentFromHostname(
+  hostname: string,
+): PaymentEnvironment {
+  return PRODUCTION_HOSTS.has(hostname.toLowerCase())
+    ? "production"
+    : "sandbox";
 }
 
 /**
- * Lê o ambiente operacional real do backend (mesma regra oficial do fluxo Asaas).
+ * Etapa 2:
+ * para o fluxo Asaas, preferimos decidir pelo origin/hostname real do app no browser
+ * em vez de depender de headers encaminhados até a Edge Function.
  *
- * Importante para suporte:
- * - Caminho principal: Edge Function `get-runtime-payment-environment`.
- * - Fallback: mesma regra por host no browser, útil quando a function ainda não foi publicada
- *   no projeto remoto (ex.: preview Lovable apontando para Supabase sem deploy recente).
+ * Se um `VITE_PAYMENT_ENVIRONMENT` explícito existir no build, ele prevalece.
+ */
+export function resolvePaymentEnvironmentFromAppOrigin(
+  origin: string,
+  explicitEnvironment?: string | null,
+): PaymentEnvironment {
+  if (
+    explicitEnvironment === "production" ||
+    explicitEnvironment === "sandbox"
+  ) {
+    return explicitEnvironment;
+  }
+
+  try {
+    return resolveEnvironmentFromHostname(new URL(origin).hostname);
+  } catch {
+    return "sandbox";
+  }
+}
+
+/**
+ * Expõe no frontend o mesmo ambiente operacional explícito usado pelo checkout.
+ *
+ * Etapa 2:
+ * - prioriza `VITE_PAYMENT_ENVIRONMENT` quando existir;
+ * - caso contrário, usa a origem real carregada no browser;
+ * - evita depender de headers encaminhados até o backend para fins visuais.
  */
 export function useRuntimePaymentEnvironment() {
-  const [environment, setEnvironment] = useState<PaymentEnvironment | null>(null);
+  const [environment, setEnvironment] = useState<PaymentEnvironment | null>(
+    null,
+  );
 
   useEffect(() => {
-    let isMounted = true;
-
-    const browserResolvedEnvironment = resolveEnvironmentFromHostname(window.location.hostname);
-
-    const loadEnvironment = async () => {
-      const { data, error } = await supabase.functions.invoke<RuntimePaymentEnvironmentResponse>(
-        'get-runtime-payment-environment',
-      );
-
-      if (error) {
-        console.debug(
-          '[useRuntimePaymentEnvironment] usando fallback por host local (function indisponível)',
-          error,
-        );
-        if (isMounted) setEnvironment(browserResolvedEnvironment);
-        return;
-      }
-
-      const resolvedEnvironment =
-        data?.payment_environment === 'sandbox' || data?.payment_environment === 'production'
-          ? data.payment_environment
-          : browserResolvedEnvironment;
-
-      if (isMounted) setEnvironment(resolvedEnvironment);
-    };
-
-    void loadEnvironment();
-
-    return () => {
-      isMounted = false;
-    };
+    const browserResolvedEnvironment = resolvePaymentEnvironmentFromAppOrigin(
+      window.location.origin,
+      import.meta.env.VITE_PAYMENT_ENVIRONMENT,
+    );
+    setEnvironment(browserResolvedEnvironment);
   }, []);
 
   return {
     environment,
-    isSandbox: environment === 'sandbox',
+    isSandbox: environment === "sandbox",
   };
 }
