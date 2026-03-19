@@ -395,7 +395,14 @@ export default function CompanyPage() {
       }
 
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: editingId, mode: 'link_existing', api_key: asaasApiKeyInput.trim() },
+        body: {
+          company_id: editingId,
+          mode: 'link_existing',
+          api_key: asaasApiKeyInput.trim(),
+          // Comentário de suporte: mantemos o mesmo contrato explícito de ambiente
+          // usado na revalidação para evitar validação/vínculo no endpoint errado.
+          target_environment: runtimePaymentEnvironment,
+        },
       });
       if (error) {
         // Comentário de suporte: prioriza mensagem retornada pelo Asaas para dar autonomia
