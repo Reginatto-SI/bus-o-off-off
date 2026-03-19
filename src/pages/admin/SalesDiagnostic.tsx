@@ -1097,6 +1097,9 @@ export default function SalesDiagnostic() {
                         partial_failure: 'Parcial',
                         failed: 'Falha',
                         unauthorized: 'Não autorizado',
+                        duplicate: 'Duplicado',
+                        rejected: 'Rejeitado',
+                        warning: 'Aviso',
                       };
 
                       return (
