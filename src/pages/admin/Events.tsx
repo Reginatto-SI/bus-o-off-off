@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee, TransportPolicy } from '@/types/database';
+import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee, TransportPolicy, Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -104,6 +104,7 @@ import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyVa
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 // Types
 interface EventFilters {
   search: string;
@@ -233,6 +234,7 @@ const seatCategoryLabels: Record<string, string> = {
 export default function Events() {
   const location = useLocation();
   const { activeCompanyId, user } = useAuth();
+  const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -459,7 +461,7 @@ export default function Events() {
       return false;
     }
 
-    return getAsaasIntegrationSnapshot(data, runtimePaymentEnvironment).currentIsConnected;
+    return getAsaasIntegrationSnapshot(data as unknown as Company, runtimePaymentEnvironment).currentIsConnected;
   };
 
   const fetchAsaasWizardCompanyData = async (): Promise<AsaasOnboardingCompanyData | null> => {

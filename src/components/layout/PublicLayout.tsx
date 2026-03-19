@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Building2, LogOut, Menu, Search, Settings, Ticket, User } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
+import { FloatingWhatsApp } from '@/components/public/FloatingWhatsApp';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import {
@@ -191,6 +192,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false }: PublicLa
         {children}
       </main>
 
+      <FloatingWhatsApp />
       <TrustFooter />
     </div>
   );

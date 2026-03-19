@@ -397,6 +397,11 @@ export interface Sale {
   partner_fee_amount: number | null;
   platform_net_amount: number | null;
   stripe_transfer_id: string | null;
+  payment_environment: string;
+  platform_fee_status: string;
+  platform_fee_amount: number | null;
+  platform_fee_payment_id: string | null;
+  block_reason: string | null;
   created_at: string;
   updated_at: string;
   event?: Event;
