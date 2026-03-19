@@ -104,6 +104,7 @@ import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyVa
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 // Types
 interface EventFilters {
   search: string;
