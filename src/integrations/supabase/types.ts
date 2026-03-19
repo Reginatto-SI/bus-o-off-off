@@ -73,6 +73,69 @@ export type Database = {
           },
         ]
       }
+      asaas_webhook_event_dedup: {
+        Row: {
+          asaas_event_id: string
+          duplicate_count: number
+          event_type: string | null
+          external_reference: string | null
+          first_received_at: string
+          last_payload_json: Json | null
+          last_payment_environment: string | null
+          last_sale_id: string | null
+          last_seen_at: string
+          payload_json: Json | null
+          payment_environment: string | null
+          payment_id: string | null
+          sale_id: string | null
+        }
+        Insert: {
+          asaas_event_id: string
+          duplicate_count?: number
+          event_type?: string | null
+          external_reference?: string | null
+          first_received_at?: string
+          last_payload_json?: Json | null
+          last_payment_environment?: string | null
+          last_sale_id?: string | null
+          last_seen_at?: string
+          payload_json?: Json | null
+          payment_environment?: string | null
+          payment_id?: string | null
+          sale_id?: string | null
+        }
+        Update: {
+          asaas_event_id?: string
+          duplicate_count?: number
+          event_type?: string | null
+          external_reference?: string | null
+          first_received_at?: string
+          last_payload_json?: Json | null
+          last_payment_environment?: string | null
+          last_sale_id?: string | null
+          last_seen_at?: string
+          payload_json?: Json | null
+          payment_environment?: string | null
+          payment_id?: string | null
+          sale_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asaas_webhook_event_dedup_last_sale_id_fkey"
+            columns: ["last_sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asaas_webhook_event_dedup_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boarding_locations: {
         Row: {
           address: string
@@ -892,61 +955,76 @@ export type Database = {
       }
       sale_integration_logs: {
         Row: {
+          asaas_event_id: string | null
           company_id: string | null
           created_at: string
           direction: string
+          duration_ms: number | null
           environment_decision_source: string | null
           environment_host_detected: string | null
           event_type: string | null
           external_reference: string | null
           http_status: number | null
           id: string
-          message: string
+          incident_code: string | null
+          message: string | null
           payload_json: Json | null
           payment_environment: string | null
           payment_id: string | null
           processing_status: string
           provider: string
           response_json: Json | null
+          result_category: string | null
           sale_id: string | null
+          warning_code: string | null
         }
         Insert: {
+          asaas_event_id?: string | null
           company_id?: string | null
           created_at?: string
           direction: string
+          duration_ms?: number | null
           environment_decision_source?: string | null
           environment_host_detected?: string | null
           event_type?: string | null
           external_reference?: string | null
           http_status?: number | null
           id?: string
-          message: string
+          incident_code?: string | null
+          message?: string | null
           payload_json?: Json | null
           payment_environment?: string | null
           payment_id?: string | null
           processing_status: string
           provider: string
           response_json?: Json | null
+          result_category?: string | null
           sale_id?: string | null
+          warning_code?: string | null
         }
         Update: {
+          asaas_event_id?: string | null
           company_id?: string | null
           created_at?: string
           direction?: string
+          duration_ms?: number | null
           environment_decision_source?: string | null
           environment_host_detected?: string | null
           event_type?: string | null
           external_reference?: string | null
           http_status?: number | null
           id?: string
-          message?: string
+          incident_code?: string | null
+          message?: string | null
           payload_json?: Json | null
           payment_environment?: string | null
           payment_id?: string | null
           processing_status?: string
           provider?: string
           response_json?: Json | null
+          result_category?: string | null
           sale_id?: string | null
+          warning_code?: string | null
         }
         Relationships: [
           {
@@ -1142,7 +1220,7 @@ export type Database = {
           intermediation_responsibility_accepted_at?: string | null
           partner_fee_amount?: number | null
           payment_confirmed_at?: string | null
-          payment_environment?: string
+          payment_environment: string
           payment_method?: string | null
           platform_fee_amount?: number | null
           platform_fee_paid_at?: string | null
@@ -2162,6 +2240,15 @@ export type Database = {
       is_event_public_ticket_lookup_eligible: {
         Args: { event_row: Database["public"]["Tables"]["events"]["Row"] }
         Returns: boolean
+      }
+      mark_asaas_webhook_event_duplicate: {
+        Args: {
+          p_asaas_event_id: string
+          p_payload_json?: Json
+          p_payment_environment?: string
+          p_sale_id?: string
+        }
+        Returns: undefined
       }
       normalize_city_name: { Args: { input: string }; Returns: string }
       normalize_public_slug: { Args: { input_slug: string }; Returns: string }
