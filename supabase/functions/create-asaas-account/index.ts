@@ -173,14 +173,21 @@ serve(async (req) => {
       console.log("[ASAAS][VERIFY] Starting verification", {
         company_id,
         payment_environment: paymentEnv,
-        has_api_key: Boolean(companyConfig[envFields.apiKey] || company.asaas_api_key),
-        has_wallet_id: Boolean(companyConfig[envFields.walletId] || company.asaas_wallet_id),
-        has_account_id: Boolean(companyConfig[envFields.accountId] || company.asaas_account_id),
-        onboarding_complete: Boolean(companyConfig[envFields.onboardingComplete] || company.asaas_onboarding_complete),
+        has_api_key: Boolean(companyConfig[envFields.apiKey]),
+        has_wallet_id: Boolean(companyConfig[envFields.walletId]),
+        has_account_id: Boolean(companyConfig[envFields.accountId]),
+        onboarding_complete: Boolean(companyConfig[envFields.onboardingComplete]),
       });
 
-      const environmentApiKey = companyConfig[envFields.apiKey] || company.asaas_api_key || null;
-      const environmentAccountId = companyConfig[envFields.accountId] || company.asaas_account_id || null;
+      /**
+       * Hardening operacional:
+       * a revalidação manual deve usar a MESMA origem de credenciais do checkout/verify,
+       * isto é, apenas os campos específicos do ambiente resolvido.
+       * Evitamos fallback para os campos legados/genéricos para não misturar
+       * API key de produção com endpoint sandbox (ou vice-versa).
+       */
+      const environmentApiKey = companyConfig[envFields.apiKey] || null;
+      const environmentAccountId = companyConfig[envFields.accountId] || null;
       const isApiKeyMode = Boolean(environmentApiKey);
       const verificationEndpoint = isApiKeyMode
         ? `${asaasBaseUrl}/myAccount`
@@ -205,8 +212,8 @@ serve(async (req) => {
         company_id,
         mode: isApiKeyMode ? "api_key_my_account" : "platform_account_lookup",
         endpoint: verificationEndpoint,
-        wallet_id_preview: maskSensitiveValue(String(companyConfig[envFields.walletId] || company.asaas_wallet_id || "")),
-        account_id_preview: maskSensitiveValue(String(companyConfig[envFields.accountId] || company.asaas_account_id || "")),
+        wallet_id_preview: maskSensitiveValue(String(companyConfig[envFields.walletId] || "")),
+        account_id_preview: maskSensitiveValue(String(companyConfig[envFields.accountId] || "")),
         token_preview: maskSensitiveValue(verificationToken),
       });
 
@@ -251,7 +258,7 @@ serve(async (req) => {
 
         const accountData = await myAccountRes.json();
         const walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? null;
-        const walletId = walletIdFromResponse ?? company.asaas_wallet_id ?? null;
+        const walletId = walletIdFromResponse ?? companyConfig[envFields.walletId] ?? null;
 
         if (!walletId) {
           console.error("[ASAAS][VERIFY] Validation failed reason", {

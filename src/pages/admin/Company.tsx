@@ -27,6 +27,7 @@ import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -127,6 +128,7 @@ const getCompanyDisplayNameForPersistence = ({
 
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
+  const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -434,8 +436,14 @@ export default function CompanyPage() {
     try {
       // Comentário de suporte: reutiliza a mesma edge function para validar novamente
       // os dados da conta conectada sem alterar o layout atual do card.
+      // Enviamos o ambiente operacional explícito para impedir que preview/produção
+      // recalculados por host acabem validando a credencial errada.
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: editingId, mode: 'revalidate' },
+        body: {
+          company_id: editingId,
+          mode: 'revalidate',
+          target_environment: runtimePaymentEnvironment,
+        },
       });
 
       if (error) {
@@ -1682,6 +1690,11 @@ export default function CompanyPage() {
                                   ainda não foi retornado/salvo na vinculação da conta Asaas. */}
                               Conta Asaas conectada: {company.asaas_account_email || 'Não identificado'}
                             </p>
+                            {runtimePaymentEnvironment && (
+                              <p className="text-xs text-green-700">
+                                Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong>
+                              </p>
+                            )}
                             {company.asaas_wallet_id && (
                               <p className="text-xs text-green-600 font-mono">
                                 Wallet: {company.asaas_wallet_id}
