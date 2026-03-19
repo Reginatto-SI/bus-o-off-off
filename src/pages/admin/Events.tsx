@@ -459,7 +459,7 @@ export default function Events() {
       return false;
     }
 
-    return getAsaasIntegrationSnapshot(data, runtimePaymentEnvironment).currentIsConnected;
+    return getAsaasIntegrationSnapshot(data as unknown as Company, runtimePaymentEnvironment).currentIsConnected;
   };
 
   const fetchAsaasWizardCompanyData = async (): Promise<AsaasOnboardingCompanyData | null> => {
