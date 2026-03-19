@@ -60,58 +60,16 @@ function hasEssentialEnvironmentConnection(companyConfig: Record<string, unknown
   );
 }
 
-function buildLegacyAsaasMirrorUpdate(companyConfig: Record<string, unknown>) {
-  const productionConnected = hasEssentialEnvironmentConnection(
-    companyConfig,
-    getEnvironmentCompanyFields("production"),
-  );
-  const sandboxConnected = hasEssentialEnvironmentConnection(
-    companyConfig,
-    getEnvironmentCompanyFields("sandbox"),
-  );
-
-  const sourceFields = productionConnected
-    ? getEnvironmentCompanyFields("production")
-    : sandboxConnected
-      ? getEnvironmentCompanyFields("sandbox")
-      : null;
-
-  if (!sourceFields) {
-    return {
-      asaas_api_key: null,
-      asaas_wallet_id: null,
-      asaas_account_id: null,
-      asaas_account_email: null,
-      asaas_onboarding_complete: false,
-    };
-  }
-
-  return {
-    asaas_api_key: normalizeCompanyField(companyConfig[sourceFields.apiKey]),
-    asaas_wallet_id: normalizeCompanyField(companyConfig[sourceFields.walletId]),
-    asaas_account_id: normalizeCompanyField(companyConfig[sourceFields.accountId]),
-    asaas_account_email: normalizeCompanyField(companyConfig[sourceFields.accountEmail]),
-    asaas_onboarding_complete: true,
-  };
-}
-
 function buildCompanyConfigWithEnvironmentUpdate(
-  companyConfig: Record<string, unknown>,
-  envFields: ReturnType<typeof getEnvironmentCompanyFields>,
   updates: Record<string, unknown>,
 ) {
   return {
-    ...companyConfig,
     ...updates,
     /**
      * Comentário de manutenção:
-     * os campos legados deixam de ser fonte de verdade e passam a ser apenas espelho
-     * derivado do conjunto por ambiente que realmente dirige checkout/verify/webhook.
+     * após a remoção do legado do schema, onboarding/revalidate/disconnect
+     * devem persistir exclusivamente os campos por ambiente.
      */
-    ...buildLegacyAsaasMirrorUpdate({
-      ...companyConfig,
-      ...updates,
-    }),
   };
 }
 
@@ -207,7 +165,8 @@ serve(async (req) => {
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_account_email, asaas_onboarding_complete, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox")
+      // Comentário de manutenção: onboarding/revalidate/disconnect só devem ler o contrato por ambiente.
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox")
       .eq("id", company_id)
       .single();
 
@@ -345,7 +304,7 @@ serve(async (req) => {
         await supabaseAdmin
           .from("companies")
           .update(
-            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            buildCompanyConfigWithEnvironmentUpdate({
               [envFields.walletId]: walletId,
               [envFields.accountId]: accountData.id || environmentAccountId || null,
               [envFields.accountEmail]: accountData.email || null,
@@ -376,7 +335,7 @@ serve(async (req) => {
       await supabaseAdmin
         .from("companies")
         .update(
-          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+          buildCompanyConfigWithEnvironmentUpdate({
             [envFields.apiKey]: null,
             [envFields.walletId]: null,
             [envFields.accountId]: null,
@@ -424,7 +383,7 @@ serve(async (req) => {
         await supabaseAdmin
           .from("companies")
           .update(
-            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            buildCompanyConfigWithEnvironmentUpdate({
               [envFields.walletId]: walletId,
               [envFields.apiKey]: api_key,
               [envFields.accountId]: accountData.id || null,
@@ -589,7 +548,7 @@ serve(async (req) => {
       await supabaseAdmin
         .from("companies")
         .update(
-          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+          buildCompanyConfigWithEnvironmentUpdate({
             [envFields.walletId]: walletId,
             [envFields.accountId]: accountId,
             // No fluxo de criação de subconta, o e-mail efetivo continua vindo do cadastro da empresa.
