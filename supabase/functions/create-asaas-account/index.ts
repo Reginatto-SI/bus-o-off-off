@@ -48,6 +48,53 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
   } as const;
 }
 
+function normalizeCompanyField(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function hasEssentialEnvironmentConnection(companyConfig: Record<string, unknown>, envFields: ReturnType<typeof getEnvironmentCompanyFields>) {
+  return Boolean(
+    normalizeCompanyField(companyConfig[envFields.apiKey]) &&
+    normalizeCompanyField(companyConfig[envFields.walletId]) &&
+    companyConfig[envFields.onboardingComplete] === true,
+  );
+}
+
+function buildLegacyAsaasMirrorUpdate(companyConfig: Record<string, unknown>) {
+  const productionConnected = hasEssentialEnvironmentConnection(
+    companyConfig,
+    getEnvironmentCompanyFields("production"),
+  );
+  const sandboxConnected = hasEssentialEnvironmentConnection(
+    companyConfig,
+    getEnvironmentCompanyFields("sandbox"),
+  );
+
+  const sourceFields = productionConnected
+    ? getEnvironmentCompanyFields("production")
+    : sandboxConnected
+      ? getEnvironmentCompanyFields("sandbox")
+      : null;
+
+  if (!sourceFields) {
+    return {
+      asaas_api_key: null,
+      asaas_wallet_id: null,
+      asaas_account_id: null,
+      asaas_account_email: null,
+      asaas_onboarding_complete: false,
+    };
+  }
+
+  return {
+    asaas_api_key: normalizeCompanyField(companyConfig[sourceFields.apiKey]),
+    asaas_wallet_id: normalizeCompanyField(companyConfig[sourceFields.walletId]),
+    asaas_account_id: normalizeCompanyField(companyConfig[sourceFields.accountId]),
+    asaas_account_email: normalizeCompanyField(companyConfig[sourceFields.accountEmail]),
+    asaas_onboarding_complete: true,
+  };
+}
+
 /**
  * Edge function para onboarding de conta Asaas.
  * 
@@ -307,6 +354,37 @@ serve(async (req) => {
       }
     }
 
+    if (mode === "disconnect") {
+      const nextCompanyConfig = {
+        ...companyConfig,
+        [envFields.apiKey]: null,
+        [envFields.walletId]: null,
+        [envFields.accountId]: null,
+        [envFields.accountEmail]: null,
+        [envFields.onboardingComplete]: false,
+      };
+
+      await supabaseAdmin
+        .from("companies")
+        .update({
+          [envFields.apiKey]: null,
+          [envFields.walletId]: null,
+          [envFields.accountId]: null,
+          [envFields.accountEmail]: null,
+          [envFields.onboardingComplete]: false,
+          ...buildLegacyAsaasMirrorUpdate(nextCompanyConfig),
+        })
+        .eq("id", company_id);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          disconnected_environment: paymentEnv,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ====== MODE: Link existing account ======
     if (mode === "link_existing" && api_key) {
       try {
@@ -369,11 +447,11 @@ serve(async (req) => {
 
     // ====== MODE: Create subaccount (default) ======
     // If already onboarded, return status
-    if ((companyConfig[envFields.walletId] || company.asaas_wallet_id) && ((companyConfig[envFields.onboardingComplete] ?? false) || company.asaas_onboarding_complete)) {
+    if (hasEssentialEnvironmentConnection(companyConfig, envFields)) {
       return new Response(
         JSON.stringify({
           already_complete: true,
-          wallet_id: companyConfig[envFields.walletId] || company.asaas_wallet_id,
+          wallet_id: normalizeCompanyField(companyConfig[envFields.walletId]),
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
