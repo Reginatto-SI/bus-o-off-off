@@ -25,6 +25,7 @@ import {
   Star } from
 'lucide-react';
 import logo from '@/assets/logo.png';
+import { Button } from '@/components/ui/button';
 
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 const FEATURED_TRIPS = [
@@ -193,6 +194,11 @@ const JOURNEY_OPTIONS = [
 
 export default function LandingPage() {
   const [mobileMenu, setMobileMenu] = useState(false);
+  // O header da landing usa três níveis de hierarquia.
+  // Mantemos tudo no mesmo "sistema" visual para evitar a sensação de links soltos
+  // e garantir altura/alinhamento consistentes entre navegação, ação secundária e CTA.
+  const desktopNavLinkClass =
+    'inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-medium text-white/72 transition-colors hover:bg-white/6 hover:text-white';
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -202,25 +208,30 @@ export default function LandingPage() {
             <img src={logo} alt="Smartbus BR" className="h-9 object-contain brightness-0 invert" />
           </Link>
 
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link to="/eventos" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
-              Viagens
-            </Link>
-            <Link to="/consultar-passagens" className="text-sm font-medium text-white/72 transition-colors hover:text-white">
-              Minhas Passagens
-            </Link>
-            <Link
-              to="/login"
-              className="rounded-lg border border-white/20 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100">
-              
-              Área Administrativa
-            </Link>
-            <Link
-              to="/cadastro"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
-              
-              Quero vender passagens
-            </Link>
+          <nav className="hidden items-center gap-3 md:flex">
+            {/* Agrupamos os links públicos em pills sutis para dar acabamento e evitar o aspecto improvisado. */}
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">
+              <Link to="/eventos" className={desktopNavLinkClass}>
+                Viagens
+              </Link>
+              <Link to="/consultar-passagens" className={desktopNavLinkClass}>
+                Minhas Passagens
+              </Link>
+            </div>
+            <Button
+              asChild
+              variant="outline"
+              className="h-10 border-white/20 bg-white text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <Link to="/login">
+                Área Administrativa
+              </Link>
+            </Button>
+            <Button asChild className="h-10 px-5">
+              <Link to="/cadastro">
+                Quero vender passagens
+              </Link>
+            </Button>
           </nav>
 
           <button
