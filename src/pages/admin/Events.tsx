@@ -234,6 +234,7 @@ const seatCategoryLabels: Record<string, string> = {
 export default function Events() {
   const location = useLocation();
   const { activeCompanyId, user } = useAuth();
+  const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
