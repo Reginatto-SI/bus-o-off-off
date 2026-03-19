@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FloatingWhatsApp } from '@/components/public/FloatingWhatsApp';
 import { Link } from 'react-router-dom';
 import {
   Search,
@@ -714,6 +715,7 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      <FloatingWhatsApp />
     </div>);
 
 }
