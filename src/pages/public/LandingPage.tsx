@@ -198,7 +198,7 @@ export default function LandingPage() {
   // O header da landing usa três níveis de hierarquia.
   // Aqui os links públicos ficam leves, com ícone e hover discreto, sem virar um bloco pesado.
   const desktopNavLinkClass =
-    'h-10 gap-2 rounded-md px-3.5 text-sm font-medium text-white/72 transition-all hover:bg-white/6 hover:text-white hover:-translate-y-px';
+  'h-10 gap-2 rounded-md px-3.5 text-sm font-medium text-white/72 transition-all hover:bg-white/6 hover:text-white hover:-translate-y-px';
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -227,8 +227,8 @@ export default function LandingPage() {
             <Button
               asChild
               variant="outline"
-              className="h-10 gap-2 border-white/20 bg-white text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
-            >
+              className="h-10 gap-2 border-white/20 bg-white text-slate-900 shadow-sm transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900">
+              
               <Link to="/login">
                 <Settings className="h-4 w-4" aria-hidden="true" />
                 <span>Área Administrativa</span>
@@ -356,13 +356,13 @@ export default function LandingPage() {
                     <Search className="h-4 w-4" />
                     Ver viagens disponíveis
                   </Link>
-                  <Link
-                    to="/cadastro"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/12">
-                    
-                    Quero vender passagens
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  
+
+
+
+
+
+                  
                 </div>
               </div>
             </div>
