@@ -252,27 +252,31 @@ export default function LandingPage() {
         </div>
 
         {mobileMenu &&
-        <div className="space-y-2 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-4 text-white animate-fade-in md:hidden">
-            <Link to="/eventos" className="block py-2 text-sm font-medium text-white/72" onClick={() => setMobileMenu(false)}>
+        <div className="space-y-1 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-4 text-white animate-fade-in md:hidden">
+            <Link to="/eventos" className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-white/90 hover:bg-white/10 transition-colors" onClick={() => setMobileMenu(false)}>
+              <MapPin className="h-4 w-4 shrink-0 text-primary" />
               Viagens
             </Link>
-            <Link to="/consultar-passagens" className="block py-2 text-sm font-medium text-white/72" onClick={() => setMobileMenu(false)}>
+            <Link to="/consultar-passagens" className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-white/90 hover:bg-white/10 transition-colors" onClick={() => setMobileMenu(false)}>
+              <Ticket className="h-4 w-4 shrink-0 text-primary" />
               Minhas Passagens
             </Link>
-            <Link
-            to="/login"
-            className="block rounded-lg border border-white/20 bg-white px-4 py-2.5 text-center text-sm font-medium text-slate-900 transition-colors duration-200 hover:bg-slate-100"
-            onClick={() => setMobileMenu(false)}>
-            
-              Área Administrativa
-            </Link>
-            <Link
-            to="/cadastro"
-            className="block rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-medium text-primary-foreground"
-            onClick={() => setMobileMenu(false)}>
-            
-              Quero vender passagens
-            </Link>
+            <div className="mt-2 space-y-2">
+              <Link
+              to="/login"
+              className="flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white px-4 py-2.5 text-center text-sm font-medium text-slate-900 transition-colors duration-200 hover:bg-slate-100"
+              onClick={() => setMobileMenu(false)}>
+                <Settings className="h-4 w-4 shrink-0" />
+                Área Administrativa
+              </Link>
+              <Link
+              to="/cadastro"
+              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-medium text-primary-foreground"
+              onClick={() => setMobileMenu(false)}>
+                <Building2 className="h-4 w-4 shrink-0" />
+                Quero vender passagens
+              </Link>
+            </div>
           </div>
         }
       </header>
