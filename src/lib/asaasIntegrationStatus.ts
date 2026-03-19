@@ -54,16 +54,6 @@ function readEnvironmentConfig(
   };
 }
 
-function readLegacyConfig(company: Company | null | undefined): EnvironmentAsaasConfig {
-  return {
-    apiKey: normalizeText(company?.asaas_api_key),
-    walletId: normalizeText(company?.asaas_wallet_id),
-    accountId: normalizeText(company?.asaas_account_id),
-    accountEmail: normalizeText(company?.asaas_account_email),
-    onboardingComplete: Boolean(company?.asaas_onboarding_complete),
-  };
-}
-
 function hasAnyConfig(config: EnvironmentAsaasConfig) {
   return Boolean(
     config.apiKey ||
@@ -88,14 +78,11 @@ export function getAsaasIntegrationSnapshot(
   const oppositeEnvironment: PaymentEnvironment =
     environment === 'production' ? 'sandbox' : 'production';
   const opposite = readEnvironmentConfig(company, oppositeEnvironment);
-  const legacy = readLegacyConfig(company);
 
   const currentHasAny = hasAnyConfig(current);
   const oppositeHasAny = hasAnyConfig(opposite);
-  const legacyHasAny = hasAnyConfig(legacy);
   const currentIsConnected = hasOperationalConnection(current);
   const oppositeIsConnected = hasOperationalConnection(opposite);
-  const legacyIsConnected = hasOperationalConnection(legacy);
 
   let status: AsaasIntegrationStatus = 'not_configured';
   const reasons: string[] = [];
@@ -103,12 +90,10 @@ export function getAsaasIntegrationSnapshot(
   if (currentIsConnected) {
     status = 'connected';
   } else if (
-    (current.onboardingComplete && (!current.apiKey || !current.walletId)) ||
-    (!currentHasAny && legacyIsConnected) ||
-    (legacy.onboardingComplete && (!legacy.apiKey || !legacy.walletId))
+    current.onboardingComplete && (!current.apiKey || !current.walletId)
   ) {
     status = 'inconsistent';
-  } else if (currentHasAny || oppositeHasAny || legacyHasAny) {
+  } else if (currentHasAny || oppositeHasAny) {
     status = 'partially_configured';
   }
 
@@ -124,9 +109,6 @@ export function getAsaasIntegrationSnapshot(
   if (!currentHasAny && oppositeIsConnected) {
     reasons.push(`conta conectada apenas no ambiente ${oppositeEnvironment === 'production' ? 'de produção' : 'sandbox'}`);
   }
-  if (!currentHasAny && legacyIsConnected) {
-    reasons.push('campos legados indicam conexão, mas o ambiente operacional está vazio');
-  }
   if (currentHasAny && !currentIsConnected) {
     reasons.push('configuração do ambiente operacional está incompleta');
   }
@@ -136,11 +118,19 @@ export function getAsaasIntegrationSnapshot(
     environment,
     current,
     opposite,
-    legacy,
     currentIsConnected,
     oppositeIsConnected,
-    legacyIsConnected,
-    hasAnyConfiguration: currentHasAny || oppositeHasAny || legacyHasAny,
+    // Comentário de suporte: o legado em companies foi esvaziado de propósito.
+    // O contrato operacional do status passa a olhar somente sandbox/production.
+    legacy: {
+      apiKey: null,
+      walletId: null,
+      accountId: null,
+      accountEmail: null,
+      onboardingComplete: false,
+    },
+    legacyIsConnected: false,
+    hasAnyConfiguration: currentHasAny || oppositeHasAny,
     reasons,
   };
 }
