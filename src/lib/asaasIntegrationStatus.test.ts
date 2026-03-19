@@ -31,11 +31,6 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
     notes: null,
     stripe_account_id: null,
     stripe_onboarding_complete: false,
-    asaas_account_id: null,
-    asaas_account_email: null,
-    asaas_wallet_id: null,
-    asaas_api_key: null,
-    asaas_onboarding_complete: false,
     asaas_account_id_production: null,
     asaas_account_email_production: null,
     asaas_wallet_id_production: null,
@@ -67,14 +62,8 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
 }
 
 describe('getAsaasIntegrationSnapshot', () => {
-  it('ignora o legado vazio/não operacional ao calcular o ambiente atual', () => {
-    // Comentário de compatibilidade transitória: mantemos este cenário apenas para garantir
-    // que eventual dado legado remanescente não volte a influenciar o status operacional.
-    const company = buildCompany({
-      asaas_onboarding_complete: true,
-      asaas_wallet_id: 'legacy-wallet',
-      asaas_account_email: 'legacy@example.com',
-    });
+  it('mantém not_configured quando o ambiente atual está vazio', () => {
+    const company = buildCompany();
 
     const snapshot = getAsaasIntegrationSnapshot(company, 'sandbox');
 

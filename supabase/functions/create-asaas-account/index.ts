@@ -60,16 +60,6 @@ function hasEssentialEnvironmentConnection(companyConfig: Record<string, unknown
   );
 }
 
-function buildLegacyAsaasCleanupUpdate() {
-  return {
-    asaas_api_key: null,
-    asaas_wallet_id: null,
-    asaas_account_id: null,
-    asaas_account_email: null,
-    asaas_onboarding_complete: false,
-  };
-}
-
 function buildCompanyConfigWithEnvironmentUpdate(
   updates: Record<string, unknown>,
 ) {
@@ -77,11 +67,9 @@ function buildCompanyConfigWithEnvironmentUpdate(
     ...updates,
     /**
      * Comentário de manutenção:
-     * os campos legados deixam de ser fonte de verdade e ficam logicamente limpos.
-     * O contrato operacional passa a ser EXCLUSIVAMENTE os campos por ambiente,
-     * usados por checkout/verify/webhook/onboarding.
+     * após a remoção do legado do schema, onboarding/revalidate/disconnect
+     * devem persistir exclusivamente os campos por ambiente.
      */
-    ...buildLegacyAsaasCleanupUpdate(),
   };
 }
 

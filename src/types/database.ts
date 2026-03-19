@@ -46,13 +46,7 @@ export interface Company {
   // Stripe Connect (legacy)
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
-  // Asaas
-  asaas_account_id: string | null;
-  asaas_account_email: string | null;
-  asaas_wallet_id: string | null;
-  asaas_api_key: string | null;
-  asaas_onboarding_complete: boolean;
-  // Step 3: configuração explícita por ambiente (mantendo campos legados acima)
+  // Asaas: contrato oficial e único por ambiente.
   asaas_account_id_production?: string | null;
   asaas_account_email_production?: string | null;
   asaas_wallet_id_production?: string | null;
