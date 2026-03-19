@@ -522,11 +522,16 @@ serve(async (req) => {
       const saleNotFoundResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
-        status: "rejected",
-        resultCategory: "rejected",
-        httpStatus: 404,
-        message: `Venda não localizada para externalReference=${saleId}`,
-        responseBody: { error: "Sale not found", sale_id: saleId },
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message: `Venda não localizada para externalReference=${saleId}; retry do Asaas não trará novo contexto`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason: "sale_not_found",
+          sale_id: saleId,
+        },
         saleId,
         eventType,
         paymentId,
@@ -638,11 +643,17 @@ async function processPlatformFeeWebhook(
 
   if (saleError || !sale) {
     return {
-      status: "failed",
-      resultCategory: "error",
-      httpStatus: 404,
-      message: `Venda não localizada para taxa da plataforma: ${saleId}`,
-      responseBody: { error: "Sale not found", sale_id: saleId },
+      status: "ignored",
+      resultCategory: "ignored",
+      httpStatus: 200,
+      message: `Venda da taxa da plataforma não localizada: ${saleId}; retry não mudará o resultado`,
+      responseBody: {
+        received: true,
+        ignored: true,
+        reason: "sale_not_found",
+        sale_id: saleId,
+        flow: "platform_fee",
+      },
       saleId,
     };
   }
@@ -731,8 +742,10 @@ async function processPlatformFeeWebhook(
   });
 
   return {
-    status: "success",
-    resultCategory: "success",
+    // Comentário de auditoria: evento de falha processado com sucesso técnico,
+    // mas a categoria operacional precisa continuar visível como warning.
+    status: "warning",
+    resultCategory: "warning",
     httpStatus: 200,
     message: `Falha da taxa registrada para venda ${saleId}`,
     responseBody: {

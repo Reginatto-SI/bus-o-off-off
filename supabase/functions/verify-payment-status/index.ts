@@ -100,7 +100,7 @@ serve(async (req) => {
 
     const persistVerifyLog = async (params: {
       processingStatus: "success" | "ignored" | "partial_failure" | "failed" | "warning" | "rejected";
-      resultCategory: "success" | "ignored" | "partial_failure" | "warning" | "rejected" | "error" | "healthy" | "payment_confirmed";
+      resultCategory: "success" | "ignored" | "partial_failure" | "warning" | "rejected" | "error";
       message: string;
       incidentCode?: string | null;
       warningCode?: string | null;
@@ -165,7 +165,7 @@ serve(async (req) => {
 
       await persistVerifyLog({
         processingStatus: "success",
-        resultCategory: "healthy",
+        resultCategory: "success",
         message: "Verify confirmou venda já saudável e paga",
         httpStatus: 200,
         responseJson: {
@@ -474,7 +474,9 @@ serve(async (req) => {
 
       await persistVerifyLog({
         processingStatus: finalization.state === "already_finalized" ? "ignored" : "success",
-        resultCategory: finalization.state === "already_finalized" ? "healthy" : "payment_confirmed",
+        // Normalização final: verify usa `success` para confirmação saudável
+        // e reserva categorias especiais apenas para warnings/partial failures.
+        resultCategory: "success",
         message: "Verify confirmou pagamento e consolidou rastros operacionais",
         httpStatus: 200,
         responseJson: { paymentStatus: "pago", paymentConfirmedAt: confirmedAt, asaas_status: asaasStatus },
@@ -549,6 +551,32 @@ serve(async (req) => {
       sale_id: saleIdFromRequest,
       error_message: error instanceof Error ? error.message : String(error),
     });
+
+    if (saleIdFromRequest) {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      );
+
+      await logSaleIntegrationEvent({
+        supabaseAdmin,
+        saleId: saleIdFromRequest,
+        companyId: null,
+        provider: "asaas",
+        direction: "manual_sync",
+        eventType: "verify_payment_status",
+        externalReference: saleIdFromRequest,
+        httpStatus: 500,
+        processingStatus: "failed",
+        resultCategory: "error",
+        incidentCode: "unexpected_error",
+        durationMs: Date.now() - startedAt,
+        message: "Erro inesperado no verify-payment-status",
+        payloadJson: { sale_id: saleIdFromRequest },
+        responseJson: { error: "Internal server error" },
+      });
+    }
+
     console.error("[verify-payment-status] Error:", error);
     return jsonResponse({ error: "Internal server error" }, 500);
   }
