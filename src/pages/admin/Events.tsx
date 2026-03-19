@@ -103,6 +103,7 @@ import { CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
+import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
 // Types
 interface EventFilters {
   search: string;
@@ -442,7 +443,7 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('asaas_wallet_id, asaas_onboarding_complete')
+      .select('asaas_api_key, asaas_wallet_id, asaas_account_id, asaas_account_email, asaas_onboarding_complete, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox')
       .eq('id', activeCompanyId)
       .single();
 
@@ -451,7 +452,12 @@ export default function Events() {
       return false;
     }
 
-    return Boolean(data?.asaas_wallet_id && data?.asaas_onboarding_complete);
+    if (!runtimePaymentEnvironment) {
+      toast.error('Ambiente operacional de pagamentos ainda não foi identificado');
+      return false;
+    }
+
+    return getAsaasIntegrationSnapshot(data, runtimePaymentEnvironment).currentIsConnected;
   };
 
   const fetchAsaasWizardCompanyData = async (): Promise<AsaasOnboardingCompanyData | null> => {

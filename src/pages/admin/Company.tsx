@@ -28,6 +28,20 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import {
+  getAsaasIntegrationSnapshot,
+  type AsaasIntegrationStatus,
+} from '@/lib/asaasIntegrationStatus';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
@@ -356,6 +370,8 @@ export default function CompanyPage() {
 
   const [asaasConnecting, setAsaasConnecting] = useState(false);
   const [asaasRevalidating, setAsaasRevalidating] = useState(false);
+  const [asaasDisconnecting, setAsaasDisconnecting] = useState(false);
+  const [disconnectAsaasDialogOpen, setDisconnectAsaasDialogOpen] = useState(false);
   const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
@@ -477,6 +493,46 @@ export default function CompanyPage() {
     }
   };
 
+  const handleDisconnectAsaasIntegration = async () => {
+    if (!editingId || !runtimePaymentEnvironment) {
+      toast.error('Empresa ou ambiente operacional não identificado para desvincular');
+      return;
+    }
+
+    setAsaasDisconnecting(true);
+    try {
+      // Comentário de suporte: reutilizamos a mesma edge function para centralizar
+      // a limpeza segura dos campos do ambiente operacional e manter rastreabilidade.
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
+        body: {
+          company_id: editingId,
+          mode: 'disconnect',
+          target_environment: runtimePaymentEnvironment,
+        },
+      });
+
+      if (error) {
+        const { message, statusCode } = await extractAsaasErrorMessage({
+          data,
+          error,
+          fallbackMessage: 'Não foi possível desvincular a conta Asaas. Tente novamente.',
+        });
+        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+        throw new Error(`${message}${statusSuffix}`);
+      }
+
+      await fetchCompany();
+      setDisconnectAsaasDialogOpen(false);
+      setAsaasOnboardingMode(null);
+      setAsaasApiKeyInput('');
+      toast.success('Conta Asaas desvinculada do ambiente operacional atual');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível desvincular a conta Asaas. Tente novamente.');
+    } finally {
+      setAsaasDisconnecting(false);
+    }
+  };
+
 
   const resetForm = () => {
     // Comentário: volta ao estado atual da empresa quando disponível.
@@ -518,6 +574,17 @@ export default function CompanyPage() {
       partner_split_percent: '3',
     });
   };
+
+  const asaasSnapshot = runtimePaymentEnvironment
+    ? getAsaasIntegrationSnapshot(company, runtimePaymentEnvironment)
+    : null;
+  const asaasStatus: AsaasIntegrationStatus = asaasSnapshot?.status ?? 'not_configured';
+  const asaasStatusBadge = {
+    connected: { label: 'Conectado', className: 'bg-green-100 text-green-700 border-green-200' },
+    partially_configured: { label: 'Parcial', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+    inconsistent: { label: 'Inconsistente', className: 'bg-destructive/10 text-destructive border-destructive/20' },
+    not_configured: { label: 'Não conectado', className: '' },
+  }[asaasStatus];
 
   const normalizePercentInput = (value: string) => value.replace(',', '.').trim();
 
@@ -1638,17 +1705,20 @@ export default function CompanyPage() {
                             Conecte sua conta Asaas para receber pagamentos online via Pix e Cartão.
                           </p>
                         </div>
-                        {company?.asaas_onboarding_complete ? (
-                          <Badge className="bg-green-100 text-green-700 border-green-200">
+                        {asaasStatus === 'connected' ? (
+                          <Badge className={asaasStatusBadge.className}>
                             <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Conectado
+                            {asaasStatusBadge.label}
                           </Badge>
                         ) : (
-                          <Badge variant="secondary">Não conectado</Badge>
+                          <Badge variant={asaasStatus === 'not_configured' ? 'secondary' : 'outline'} className={asaasStatusBadge.className}>
+                            {asaasStatus !== 'not_configured' && <AlertCircle className="h-3 w-3 mr-1" />}
+                            {asaasStatusBadge.label}
+                          </Badge>
                         )}
                       </div>
 
-                      {company?.asaas_onboarding_complete ? (
+                      {asaasStatus === 'connected' ? (
                         <div className="space-y-3">
                           <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-2">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1695,18 +1765,30 @@ export default function CompanyPage() {
                             <p className="text-xs text-green-700">
                               {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
                                   ainda não foi retornado/salvo na vinculação da conta Asaas. */}
-                              Conta Asaas conectada: {company.asaas_account_email || 'Não identificado'}
+                              Conta Asaas conectada: {asaasSnapshot?.current.accountEmail || 'Não identificado'}
                             </p>
                             {runtimePaymentEnvironment && (
                               <p className="text-xs text-green-700">
                                 Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong>
                               </p>
                             )}
-                            {company.asaas_wallet_id && (
+                            {asaasSnapshot?.current.walletId && (
                               <p className="text-xs text-green-600 font-mono">
-                                Wallet: {company.asaas_wallet_id}
+                                Wallet: {asaasSnapshot.current.walletId}
                               </p>
                             )}
+                            <div className="pt-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDisconnectAsaasDialogOpen(true)}
+                                disabled={asaasDisconnecting}
+                              >
+                                {asaasDisconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Desvincular conta Asaas
+                              </Button>
+                            </div>
                           </div>
                           <p className="text-xs text-muted-foreground">
                             Repasse via Pix: D+1 após confirmação do pagamento.
@@ -1714,6 +1796,28 @@ export default function CompanyPage() {
                         </div>
                       ) : (
                         <div className="space-y-4">
+                          {asaasSnapshot && asaasStatus !== 'not_configured' && (
+                            <Alert variant={asaasStatus === 'inconsistent' ? 'destructive' : 'default'}>
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription className="space-y-2">
+                                <p>
+                                  {asaasStatus === 'inconsistent'
+                                    ? 'A configuração do Asaas está inconsistente para o ambiente operacional atual.'
+                                    : 'A configuração do Asaas ainda não está completa para o ambiente operacional atual.'}
+                                </p>
+                                <div className="text-xs">
+                                  <p>Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong></p>
+                                  {asaasSnapshot.reasons.length > 0 && (
+                                    <ul className="mt-1 list-disc pl-5">
+                                      {asaasSnapshot.reasons.map((reason) => (
+                                        <li key={reason}>{reason}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </AlertDescription>
+                            </Alert>
+                          )}
                           {!asaasOnboardingMode ? (
                             <div className="grid gap-3 sm:grid-cols-2">
                               <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => setAsaasOnboardingMode('create')}>
@@ -1811,6 +1915,31 @@ export default function CompanyPage() {
                         await fetchCompany();
                       }}
                     />
+
+                    <AlertDialog open={disconnectAsaasDialogOpen} onOpenChange={setDisconnectAsaasDialogOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Desvincular conta Asaas?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Essa ação remove apenas as credenciais e vínculos do ambiente operacional atual ({runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}).
+                            O histórico de vendas e relatórios permanece preservado.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={asaasDisconnecting}>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void handleDisconnectAsaasIntegration();
+                            }}
+                            disabled={asaasDisconnecting}
+                          >
+                            {asaasDisconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Confirmar desvinculação
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
 
                   {/* Vitrine Pública (Fase 1): seção visível somente para gerente/developer.
                       Campos controlam a personalização da vitrine /empresa/:slug. */}
