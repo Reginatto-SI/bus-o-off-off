@@ -1,7 +1,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logPaymentTrace } from "../_shared/payment-observability.ts";
-import { resolvePartnerWalletByEnvironment, resolvePaymentContext } from "../_shared/payment-context-resolver.ts";
+import {
+  logPaymentTrace,
+  logSaleIntegrationEvent,
+  logSaleOperationalEvent,
+} from "../_shared/payment-observability.ts";
+import {
+  resolvePartnerWalletByEnvironment,
+  resolvePaymentContext,
+} from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
 const corsHeaders = {
@@ -36,41 +43,94 @@ function resolveAsaasConfirmedAtFromPayment(paymentData: any): string {
   return new Date().toISOString();
 }
 
+function jsonResponse(body: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startedAt = Date.now();
+  let saleIdFromRequest: string | null = null;
+
   try {
     const { sale_id } = await req.json();
+    saleIdFromRequest = typeof sale_id === "string" ? sale_id : null;
 
-    if (!sale_id || typeof sale_id !== "string") {
-      return new Response(
-        JSON.stringify({ error: "sale_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!saleIdFromRequest) {
+      return jsonResponse({ error: "sale_id is required" }, 400);
     }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment")
-      .eq("id", sale_id)
+      .eq("id", saleIdFromRequest)
       .single();
 
     if (saleError || !sale) {
-      return new Response(
-        JSON.stringify({ error: "Sale not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await logSaleIntegrationEvent({
+        supabaseAdmin,
+        saleId: saleIdFromRequest,
+        companyId: null,
+        provider: "asaas",
+        direction: "manual_sync",
+        eventType: "verify_payment_status",
+        externalReference: saleIdFromRequest,
+        httpStatus: 404,
+        processingStatus: "rejected",
+        resultCategory: "rejected",
+        incidentCode: "sale_not_found",
+        durationMs: Date.now() - startedAt,
+        message: "Venda não encontrada para verify-payment-status",
+        payloadJson: { sale_id: saleIdFromRequest },
+        responseJson: { error: "Sale not found" },
+      });
+      return jsonResponse({ error: "Sale not found" }, 404);
     }
 
+    const persistVerifyLog = async (params: {
+      processingStatus: "success" | "ignored" | "partial_failure" | "failed" | "warning" | "rejected";
+      resultCategory: "success" | "ignored" | "partial_failure" | "warning" | "rejected" | "error" | "healthy" | "payment_confirmed";
+      message: string;
+      incidentCode?: string | null;
+      warningCode?: string | null;
+      httpStatus?: number | null;
+      responseJson?: Record<string, unknown> | null;
+      payloadJson?: Record<string, unknown> | null;
+    }) => {
+      await logSaleIntegrationEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: sale.payment_environment ?? null,
+        provider: "asaas",
+        direction: "manual_sync",
+        eventType: "verify_payment_status",
+        paymentId: sale.asaas_payment_id,
+        externalReference: sale.id,
+        httpStatus: params.httpStatus ?? null,
+        processingStatus: params.processingStatus,
+        resultCategory: params.resultCategory,
+        incidentCode: params.incidentCode ?? null,
+        warningCode: params.warningCode ?? null,
+        durationMs: Date.now() - startedAt,
+        message: params.message,
+        payloadJson: params.payloadJson ?? { sale_id: sale.id },
+        responseJson: params.responseJson ?? null,
+      });
+    };
+
     if (sale.status === "pago") {
-      // Etapa 2: verify também usa a rotina central de finalização para manter simetria com webhook.
       const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
         sale,
@@ -83,51 +143,73 @@ serve(async (req) => {
       });
 
       if (!finalization.ok) {
-        return new Response(
-          JSON.stringify({
+        await persistVerifyLog({
+          processingStatus: "partial_failure",
+          resultCategory: "partial_failure",
+          message: "Venda paga sem passagem gerada durante verify-payment-status",
+          incidentCode: "ticket_generation_incomplete",
+          httpStatus: finalization.httpStatus,
+          responseJson: {
             error: "Venda paga sem passagem gerada",
             error_code: "paid_sale_without_tickets",
             paymentStatus: "inconsistente_sem_passagem",
-          }),
-          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          },
+        });
+
+        return jsonResponse({
+          error: "Venda paga sem passagem gerada",
+          error_code: "paid_sale_without_tickets",
+          paymentStatus: "inconsistente_sem_passagem",
+        }, finalization.httpStatus);
       }
 
-      return new Response(
-        JSON.stringify({
+      await persistVerifyLog({
+        processingStatus: "success",
+        resultCategory: "healthy",
+        message: "Verify confirmou venda já saudável e paga",
+        httpStatus: 200,
+        responseJson: {
           paymentStatus: "pago",
           paymentConfirmedAt: sale.payment_confirmed_at ?? ((!sale.asaas_payment_id) ? sale.platform_fee_paid_at : null),
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        },
+      });
+
+      return jsonResponse({
+        paymentStatus: "pago",
+        paymentConfirmedAt: sale.payment_confirmed_at ?? ((!sale.asaas_payment_id) ? sale.platform_fee_paid_at : null),
+      }, 200);
     }
 
     if (sale.status === "cancelado") {
-      return new Response(
-        JSON.stringify({ paymentStatus: "cancelado" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await persistVerifyLog({
+        processingStatus: "ignored",
+        resultCategory: "ignored",
+        message: "Verify ignorado porque a venda já está cancelada",
+        warningCode: "sale_already_cancelled",
+        httpStatus: 200,
+        responseJson: { paymentStatus: "cancelado" },
+      });
+      return jsonResponse({ paymentStatus: "cancelado" }, 200);
     }
 
     if (!sale.asaas_payment_id) {
-      return new Response(
-        JSON.stringify({ paymentStatus: sale.status }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await persistVerifyLog({
+        processingStatus: "ignored",
+        resultCategory: "ignored",
+        message: "Verify sem cobrança Asaas vinculada; sem consulta externa",
+        warningCode: "missing_asaas_payment_id",
+        httpStatus: 200,
+        responseJson: { paymentStatus: sale.status },
+      });
+      return jsonResponse({ paymentStatus: sale.status }, 200);
     }
 
-    // Buscar empresa
     const { data: company } = await supabaseAdmin
       .from("companies")
       .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
       .eq("id", sale.company_id)
       .single();
 
-    /**
-     * Regra operacional:
-     * após o nascimento da venda, verify deve obedecer APENAS o ambiente persistido nela.
-     * Se a venda estiver sem ambiente válido, o fluxo falha explicitamente para suporte.
-     */
     let paymentContext;
     try {
       paymentContext = resolvePaymentContext({
@@ -142,14 +224,24 @@ serve(async (req) => {
         failure_reason: contextError instanceof Error ? contextError.message : String(contextError),
       });
 
-      return new Response(
-        JSON.stringify({
+      await persistVerifyLog({
+        processingStatus: "rejected",
+        resultCategory: "rejected",
+        message: "Ambiente da venda inválido ou ausente no verify-payment-status",
+        incidentCode: "payment_environment_unresolved",
+        httpStatus: 409,
+        responseJson: {
           error: "Ambiente da venda inválido ou ausente",
           error_code: "payment_environment_unresolved",
           paymentStatus: sale.status,
-        }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        },
+      });
+
+      return jsonResponse({
+        error: "Ambiente da venda inválido ou ausente",
+        error_code: "payment_environment_unresolved",
+        paymentStatus: sale.status,
+      }, 409);
     }
 
     const apiKeyToUse = paymentContext.apiKey;
@@ -175,17 +267,26 @@ serve(async (req) => {
         failure_reason: "company_missing_api_key_for_sale_environment",
       });
 
-      return new Response(
-        JSON.stringify({
+      await persistVerifyLog({
+        processingStatus: "rejected",
+        resultCategory: "rejected",
+        message: "Empresa sem API key Asaas para o ambiente da venda",
+        incidentCode: "missing_company_asaas_api_key",
+        httpStatus: 409,
+        responseJson: {
           error: "Empresa sem API key Asaas para o ambiente da venda",
           error_code: "missing_company_asaas_api_key",
           paymentStatus: sale.status,
-        }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        },
+      });
+
+      return jsonResponse({
+        error: "Empresa sem API key Asaas para o ambiente da venda",
+        error_code: "missing_company_asaas_api_key",
+        paymentStatus: sale.status,
+      }, 409);
     }
 
-    // Query Asaas for payment status
     let paymentData: any;
     try {
       const res = await fetch(`${paymentContext.baseUrl}/payments/${sale.asaas_payment_id}`, {
@@ -204,10 +305,18 @@ serve(async (req) => {
           result: "unexpected_error",
           detail: responseText,
         });
-        return new Response(
-          JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+        await persistVerifyLog({
+          processingStatus: "warning",
+          resultCategory: "warning",
+          message: "Falha ao consultar status no Asaas; retorno preservado para UX",
+          warningCode: "payment_status_fetch_failed",
+          httpStatus: res.status,
+          responseJson: { paymentStatus: sale.status, detail: "Could not verify with Asaas" },
+          payloadJson: { sale_id: sale.id, asaas_payment_id: sale.asaas_payment_id },
+        });
+
+        return jsonResponse({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }, 200);
       }
 
       paymentData = await res.json();
@@ -221,10 +330,18 @@ serve(async (req) => {
         result: "unexpected_error",
         error_message: err instanceof Error ? err.message : String(err),
       });
-      return new Response(
-        JSON.stringify({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      await persistVerifyLog({
+        processingStatus: "warning",
+        resultCategory: "warning",
+        message: "Exceção ao consultar status no Asaas; retorno degradado sem quebrar UX",
+        warningCode: "payment_status_fetch_exception",
+        httpStatus: 200,
+        responseJson: { paymentStatus: sale.status, detail: "Could not verify with Asaas" },
+        payloadJson: { sale_id: sale.id, asaas_payment_id: sale.asaas_payment_id },
+      });
+
+      return jsonResponse({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }, 200);
     }
 
     const asaasStatus = paymentData.status;
@@ -241,6 +358,7 @@ serve(async (req) => {
         asaas_payment_id: sale.asaas_payment_id,
         asaas_status: asaasStatus,
       });
+
       const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
         sale,
@@ -263,14 +381,24 @@ serve(async (req) => {
           ticket_status: finalization.ticketStatus,
         });
 
-        return new Response(
-          JSON.stringify({
+        await persistVerifyLog({
+          processingStatus: "partial_failure",
+          resultCategory: "partial_failure",
+          message: "Pagamento confirmado, mas a passagem não foi gerada durante verify-payment-status",
+          incidentCode: "ticket_generation_incomplete",
+          httpStatus: finalization.httpStatus,
+          responseJson: {
             error: "Pagamento confirmado, mas a passagem não foi gerada",
             error_code: "ticket_generation_incomplete",
             paymentStatus: "inconsistente_sem_passagem",
-          }),
-          { status: finalization.httpStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          },
+        });
+
+        return jsonResponse({
+          error: "Pagamento confirmado, mas a passagem não foi gerada",
+          error_code: "ticket_generation_incomplete",
+          paymentStatus: "inconsistente_sem_passagem",
+        }, finalization.httpStatus);
       }
 
       logPaymentTrace("info", "verify-payment-status", "status_transition_success", {
@@ -295,7 +423,6 @@ serve(async (req) => {
         const { data: partner } = await supabaseAdmin
           .from("partners")
           .select("id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
-          // Hardening Step 5: escopo multi-tenant obrigatório para não cruzar sócios entre empresas.
           .eq("company_id", sale.company_id)
           .eq("status", "ativo")
           .limit(1)
@@ -331,20 +458,29 @@ serve(async (req) => {
             partner_fee_amount: partnerFeeAmount,
             platform_net_amount: platformNetAmount,
           })
-          .eq("id", sale_id);
+          .eq("id", saleIdFromRequest);
 
-        await supabaseAdmin.from("sale_logs").insert({
-          sale_id,
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: saleIdFromRequest,
+          companyId: sale.company_id,
           action: "payment_confirmed",
-          description: `Pagamento confirmado via verify-payment-status (Asaas on-demand). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%).`,
-          company_id: sale.company_id,
+          source: "verify-payment-status",
+          result: "payment_confirmed",
+          paymentEnvironment: paymentContext.environment,
+          detail: `platform_fee_total=${platformFeeTotal.toFixed(2)}`,
         });
       }
 
-      return new Response(
-        JSON.stringify({ paymentStatus: "pago", paymentConfirmedAt: confirmedAt }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      await persistVerifyLog({
+        processingStatus: finalization.state === "already_finalized" ? "ignored" : "success",
+        resultCategory: finalization.state === "already_finalized" ? "healthy" : "payment_confirmed",
+        message: "Verify confirmou pagamento e consolidou rastros operacionais",
+        httpStatus: 200,
+        responseJson: { paymentStatus: "pago", paymentConfirmedAt: confirmedAt, asaas_status: asaasStatus },
+      });
+
+      return jsonResponse({ paymentStatus: "pago", paymentConfirmedAt: confirmedAt }, 200);
     }
 
     if (asaasStatus === "OVERDUE") {
@@ -355,10 +491,17 @@ serve(async (req) => {
         asaas_status: asaasStatus,
         result: "payment_not_confirmed",
       });
-      return new Response(
-        JSON.stringify({ paymentStatus: "expirado" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      await persistVerifyLog({
+        processingStatus: "ignored",
+        resultCategory: "ignored",
+        message: "Verify retornou cobrança vencida sem alteração de venda",
+        warningCode: "payment_overdue",
+        httpStatus: 200,
+        responseJson: { paymentStatus: "expirado" },
+      });
+
+      return jsonResponse({ paymentStatus: "expirado" }, 200);
     }
 
     if (asaasStatus === "PENDING" || asaasStatus === "AWAITING_RISK_ANALYSIS") {
@@ -369,10 +512,17 @@ serve(async (req) => {
         asaas_status: asaasStatus,
         result: "payment_not_confirmed",
       });
-      return new Response(
-        JSON.stringify({ paymentStatus: "processando" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      await persistVerifyLog({
+        processingStatus: "ignored",
+        resultCategory: "ignored",
+        message: "Verify consultou cobrança ainda pendente",
+        warningCode: "payment_pending",
+        httpStatus: 200,
+        responseJson: { paymentStatus: "processando" },
+      });
+
+      return jsonResponse({ paymentStatus: "processando" }, 200);
     }
 
     logPaymentTrace("info", "verify-payment-status", "payment_status_unchanged", {
@@ -384,18 +534,22 @@ serve(async (req) => {
       current_sale_status: sale.status,
     });
 
-    return new Response(
-      JSON.stringify({ paymentStatus: sale.status, asaas_status: asaasStatus }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    await persistVerifyLog({
+      processingStatus: "ignored",
+      resultCategory: "ignored",
+      message: "Verify consultou status sem transição operacional",
+      warningCode: "payment_status_unchanged",
+      httpStatus: 200,
+      responseJson: { paymentStatus: sale.status, asaas_status: asaasStatus },
+    });
+
+    return jsonResponse({ paymentStatus: sale.status, asaas_status: asaasStatus }, 200);
   } catch (error) {
     logPaymentTrace("error", "verify-payment-status", "unexpected_error", {
+      sale_id: saleIdFromRequest,
       error_message: error instanceof Error ? error.message : String(error),
     });
     console.error("[verify-payment-status] Error:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Internal server error" }, 500);
   }
 });

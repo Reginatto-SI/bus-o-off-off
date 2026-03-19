@@ -4,7 +4,11 @@ import {
   getAsaasWebhookTokenSecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
-import { logPaymentTrace } from "../_shared/payment-observability.ts";
+import {
+  logPaymentTrace,
+  logSaleIntegrationEvent,
+  logSaleOperationalEvent,
+} from "../_shared/payment-observability.ts";
 import {
   isWebhookTokenValidForContext,
   resolvePartnerWalletByEnvironment,
@@ -24,9 +28,21 @@ type ProcessingStatus =
   | "success"
   | "partial_failure"
   | "failed"
-  | "unauthorized";
+  | "unauthorized"
+  | "rejected"
+  | "duplicate"
+  | "warning";
+type ResultCategory =
+  | "success"
+  | "ignored"
+  | "partial_failure"
+  | "rejected"
+  | "duplicate"
+  | "warning"
+  | "error";
 type ProcessingResult = {
   status: ProcessingStatus;
+  resultCategory: ResultCategory;
   httpStatus: number;
   message: string;
   responseBody: Record<string, unknown>;
@@ -38,6 +54,10 @@ type ProcessingResult = {
   paymentEnvironment?: PaymentEnvironment | null;
   environmentDecisionSource?: "sale" | "host" | null;
   environmentHostDetected?: string | null;
+  asaasEventId?: string | null;
+  incidentCode?: string | null;
+  warningCode?: string | null;
+  durationMs?: number | null;
 };
 
 function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
@@ -92,6 +112,52 @@ async function getSaleEnvironment(
   return null;
 }
 
+
+async function registerWebhookEvent(params: {
+  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  asaasEventId?: string | null;
+  eventType?: string | null;
+  paymentId?: string | null;
+  externalReference?: string | null;
+  saleId?: string | null;
+  paymentEnvironment?: PaymentEnvironment | null;
+  payload: unknown;
+}) {
+  if (!params.asaasEventId) {
+    return { isDuplicate: false };
+  }
+
+  const payloadRecord = params.payload && typeof params.payload === "object"
+    ? params.payload as Record<string, unknown>
+    : null;
+
+  const { error } = await params.supabaseAdmin
+    .from("asaas_webhook_event_dedup")
+    .insert({
+      asaas_event_id: params.asaasEventId,
+      event_type: params.eventType ?? null,
+      payment_id: params.paymentId ?? null,
+      external_reference: params.externalReference ?? null,
+      sale_id: params.saleId ?? null,
+      payment_environment: params.paymentEnvironment ?? null,
+      payload_json: payloadRecord,
+    });
+
+  if (!error) return { isDuplicate: false };
+
+  if (error.code === "23505") {
+    await params.supabaseAdmin.rpc("mark_asaas_webhook_event_duplicate", {
+      p_asaas_event_id: params.asaasEventId,
+      p_sale_id: params.saleId ?? null,
+      p_payment_environment: params.paymentEnvironment ?? null,
+      p_payload_json: payloadRecord,
+    });
+    return { isDuplicate: true };
+  }
+
+  throw new Error(`asaas_webhook_event_dedup_insert_failed: ${error.message}`);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -109,7 +175,9 @@ serve(async (req) => {
     requestPayload = null;
   }
 
+  const startedAt = Date.now();
   const eventType = requestPayload?.event ?? null;
+  const asaasEventId = requestPayload?.id ?? requestPayload?.eventId ?? null;
   const payment = requestPayload?.payment ?? null;
   const paymentId = payment?.id ?? null;
   const externalReference = payment?.externalReference ?? null;
@@ -123,6 +191,7 @@ serve(async (req) => {
       paymentStatus: payment?.status ?? null,
       billingType: payment?.billingType ?? null,
       externalReference,
+      asaasEventId,
     }),
   );
 
@@ -142,7 +211,10 @@ serve(async (req) => {
 
     if (!saleEnv) {
       const unresolvedContextResult: ProcessingResult = {
-        status: "failed",
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
+        status: "rejected",
+        resultCategory: "rejected",
         httpStatus: 400,
         message: "Ambiente da venda não determinado; webhook rejeitado",
         responseBody: {
@@ -196,7 +268,10 @@ serve(async (req) => {
 
     if (!hasExpectedToken) {
       const missingSecretResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
         status: "failed",
+        resultCategory: "error",
         httpStatus: 500,
         message: `Secret de webhook ausente para ambiente ${paymentContext.environment}`,
         responseBody: {
@@ -226,7 +301,10 @@ serve(async (req) => {
 
     if (!tokenValid) {
       const unauthorizedResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
         status: "unauthorized",
+        resultCategory: "rejected",
         httpStatus: 401,
         message: "Token de webhook inválido",
         responseBody: { error: "Invalid token" },
@@ -262,7 +340,10 @@ serve(async (req) => {
 
     if (!eventType || !payment) {
       const invalidPayloadResult: ProcessingResult = {
-        status: "failed",
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
+        status: "rejected",
+        resultCategory: "rejected",
         httpStatus: 400,
         message: "Payload inválido: event/payment ausente",
         responseBody: { error: "Invalid payload" },
@@ -293,7 +374,10 @@ serve(async (req) => {
 
     if (!supportedEvents.includes(eventType)) {
       const ignoredEventResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
         status: "ignored",
+        resultCategory: "ignored",
         httpStatus: 200,
         message: `Evento ignorado: ${eventType}`,
         responseBody: {
@@ -317,9 +401,61 @@ serve(async (req) => {
       );
     }
 
+    // Etapa 3: deduplicação formal por event.id do Asaas com tabela mínima e auditável.
+    const dedupRegistration = await registerWebhookEvent({
+      supabaseAdmin,
+      asaasEventId,
+      eventType,
+      paymentId,
+      externalReference,
+      saleId: actualSaleId || null,
+      paymentEnvironment: paymentContext.environment,
+      payload: requestPayload,
+    });
+
+    if (dedupRegistration.isDuplicate) {
+      const duplicateResult: ProcessingResult = {
+        status: "duplicate",
+        resultCategory: "duplicate",
+        httpStatus: 200,
+        message: `Evento Asaas duplicado ignorado: ${asaasEventId}`,
+        responseBody: {
+          received: true,
+          duplicate: true,
+          ignored: true,
+          reason: "duplicate_event_id",
+          asaas_event_id: asaasEventId,
+        },
+        saleId: actualSaleId || null,
+        eventType,
+        paymentId,
+        externalReference,
+        paymentEnvironment: paymentContext.environment,
+        environmentDecisionSource:
+          paymentContext.decisionTrace.environmentSource,
+        environmentHostDetected: paymentContext.decisionTrace.hostDetected,
+        asaasEventId,
+        warningCode: "duplicate_event_id",
+        durationMs: Date.now() - startedAt,
+      };
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...duplicateResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(
+        duplicateResult.httpStatus,
+        duplicateResult.responseBody,
+      );
+    }
+
     if (!saleId) {
       const missingReferenceResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
         status: "ignored",
+        resultCategory: "ignored",
         httpStatus: 200,
         message: "externalReference ausente; webhook sem vínculo de venda",
         responseBody: {
@@ -356,6 +492,13 @@ serve(async (req) => {
       platformFeeResult.paymentId = paymentId;
       platformFeeResult.externalReference = externalReference;
 
+      platformFeeResult.resultCategory ??= platformFeeResult.status === "partial_failure" ? "partial_failure" : platformFeeResult.status === "ignored" ? "ignored" : platformFeeResult.status === "failed" ? "error" : "success";
+      platformFeeResult.asaasEventId = asaasEventId;
+      platformFeeResult.paymentEnvironment = paymentContext.environment;
+      platformFeeResult.environmentDecisionSource = paymentContext.decisionTrace.environmentSource;
+      platformFeeResult.environmentHostDetected = paymentContext.decisionTrace.hostDetected;
+      platformFeeResult.durationMs = Date.now() - startedAt;
+
       await persistIntegrationLog(supabaseAdmin, {
         ...platformFeeResult,
         payload: requestPayload,
@@ -377,7 +520,10 @@ serve(async (req) => {
 
     if (saleError || !sale) {
       const saleNotFoundResult: ProcessingResult = {
-        status: "failed",
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
+        status: "rejected",
+        resultCategory: "rejected",
         httpStatus: 404,
         message: `Venda não localizada para externalReference=${saleId}`,
         responseBody: { error: "Sale not found", sale_id: saleId },
@@ -424,6 +570,8 @@ serve(async (req) => {
     result.environmentDecisionSource =
       paymentContext.decisionTrace.environmentSource;
     result.environmentHostDetected = paymentContext.decisionTrace.hostDetected;
+    result.asaasEventId = asaasEventId;
+    result.durationMs = Date.now() - startedAt;
 
     await persistIntegrationLog(supabaseAdmin, {
       ...result,
@@ -451,7 +599,10 @@ serve(async (req) => {
       error_message: error instanceof Error ? error.message : String(error),
     });
     const fallbackResult: ProcessingResult = {
+      asaasEventId,
+      durationMs: Date.now() - startedAt,
       status: "failed",
+      resultCategory: "error",
       httpStatus: 500,
       message: `Erro inesperado: ${error instanceof Error ? error.message : "unknown_error"}`,
       responseBody: { error: "Webhook processing failed" },
@@ -488,6 +639,7 @@ async function processPlatformFeeWebhook(
   if (saleError || !sale) {
     return {
       status: "failed",
+      resultCategory: "error",
       httpStatus: 404,
       message: `Venda não localizada para taxa da plataforma: ${saleId}`,
       responseBody: { error: "Sale not found", sale_id: saleId },
@@ -521,15 +673,19 @@ async function processPlatformFeeWebhook(
       };
     }
 
-    await supabaseAdmin.from("sale_logs").insert({
-      sale_id: saleId,
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId: sale.company_id,
       action: "platform_fee_paid",
-      description: `Taxa da plataforma confirmada via Asaas (${eventType}, payment ${payment.id}).`,
-      company_id: sale.company_id,
+      source: "asaas-webhook",
+      result: "success",
+      detail: `${eventType}|payment=${payment.id}`,
     });
 
     return {
       status: "success",
+      resultCategory: "success",
       httpStatus: 200,
       message: `Taxa da plataforma confirmada para venda ${saleId}`,
       responseBody: {
@@ -552,6 +708,7 @@ async function processPlatformFeeWebhook(
   if (failUpdateError) {
     return {
       status: "failed",
+      resultCategory: "error",
       httpStatus: 500,
       message: `Falha ao registrar falha da taxa da plataforma da venda ${saleId}`,
       responseBody: {
@@ -563,15 +720,19 @@ async function processPlatformFeeWebhook(
     };
   }
 
-  await supabaseAdmin.from("sale_logs").insert({
-    sale_id: saleId,
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId,
+    companyId: sale.company_id,
     action: "platform_fee_failed",
-    description: `Falha/cancelamento da taxa da plataforma via Asaas (${eventType}, payment ${payment.id}).`,
-    company_id: sale.company_id,
+    source: "asaas-webhook",
+    result: "warning",
+    detail: `${eventType}|payment=${payment.id}`,
   });
 
   return {
     status: "success",
+    resultCategory: "success",
     httpStatus: 200,
     message: `Falha da taxa registrada para venda ${saleId}`,
     responseBody: {
@@ -618,6 +779,8 @@ async function processPaymentConfirmed(
        */
       status:
         finalization.state === "inconsistent" ? "partial_failure" : "failed",
+      resultCategory:
+        finalization.state === "inconsistent" ? "partial_failure" : "error",
       httpStatus:
         finalization.state === "inconsistent" ? 200 : finalization.httpStatus,
       message: finalization.message,
@@ -651,6 +814,7 @@ async function processPaymentConfirmed(
 
   return {
     status: "success",
+    resultCategory: "success",
     httpStatus: 200,
     message: finalization.message,
     responseBody: {
@@ -680,11 +844,14 @@ async function upsertFinancialSnapshot(
     .single();
 
   if (company?.platform_fee_percent == null) {
-    await supabaseAdmin.from("sale_logs").insert({
-      sale_id: saleId,
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId,
       action: "payment_confirmed",
-      description: `Pagamento confirmado sem cálculo financeiro: empresa ${companyId} sem platform_fee_percent (payment ${payment.id}).`,
-      company_id: companyId,
+      source: "asaas-webhook",
+      result: "warning",
+      detail: `platform_fee_percent_missing|payment=${payment.id}`,
     });
     return;
   }
@@ -775,6 +942,7 @@ async function processPaymentFailed(
   if (updateError) {
     return {
       status: "failed",
+      resultCategory: "error",
       httpStatus: 500,
       message: `Falha crítica ao cancelar venda ${saleId}`,
       responseBody: { error: "Sale cancellation failed", sale_id: saleId },
@@ -794,15 +962,19 @@ async function processPaymentFailed(
       .update({ asaas_payment_status: payment.status })
       .eq("id", saleId);
 
-    await supabaseAdmin.from("sale_logs").insert({
-      sale_id: saleId,
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId: sale.company_id,
       action: "payment_failed_ignored",
-      description: `Evento ${eventType} via Asaas ignorado por estar fora de ordem/fora do estado cancelável (payment ${payment.id}).`,
-      company_id: sale.company_id,
+      source: "asaas-webhook",
+      result: "ignored",
+      detail: `${eventType}|payment=${payment.id}`,
     });
 
     return {
       status: "ignored",
+      resultCategory: "ignored",
       httpStatus: 200,
       message: `Evento ${eventType} ignorado para venda ${saleId} fora do estado cancelável`,
       responseBody: {
@@ -825,6 +997,7 @@ async function processPaymentFailed(
   if (seatLockError) {
     return {
       status: "partial_failure",
+      resultCategory: "partial_failure",
       httpStatus: 200,
       message: `Venda ${saleId} cancelada, mas falhou remoção de seat_locks`,
       responseBody: {
@@ -841,15 +1014,19 @@ async function processPaymentFailed(
 
   await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
 
-  await supabaseAdmin.from("sale_logs").insert({
-    sale_id: saleId,
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId,
+    companyId: sale.company_id,
     action: "payment_failed",
-    description: `Pagamento ${eventType} via Asaas (Payment: ${payment.id}). Venda cancelada e assentos liberados.`,
-    company_id: sale.company_id,
+    source: "asaas-webhook",
+    result: "success",
+    detail: `${eventType}|payment=${payment.id}`,
   });
 
   return {
     status: "success",
+    resultCategory: "success",
     httpStatus: 200,
     message: `Venda ${saleId} cancelada com sucesso`,
     responseBody: { received: true, processed: true, sale_id: saleId },
@@ -862,30 +1039,29 @@ async function persistIntegrationLog(
   supabaseAdmin: ReturnType<typeof createClient<any>>,
   params: ProcessingResult & { payload: unknown },
 ) {
-  try {
-    await supabaseAdmin.from("sale_integration_logs").insert({
-      sale_id: params.saleId ?? null,
-      company_id: params.companyId ?? null,
-      payment_environment: params.paymentEnvironment ?? null,
-      environment_decision_source: params.environmentDecisionSource ?? null,
-      environment_host_detected: params.environmentHostDetected ?? null,
-      provider: "asaas",
-      direction: "incoming_webhook",
-      event_type: params.eventType ?? null,
-      payment_id: params.paymentId ?? null,
-      external_reference: params.externalReference ?? null,
-      http_status: params.httpStatus,
-      processing_status: params.status,
-      message: params.message,
-      payload_json: params.payload,
-      response_json: params.responseBody,
-    });
-  } catch (logError) {
-    console.error(
-      "[asaas-webhook] failed to persist integration log",
-      logError,
-    );
-  }
+  await logSaleIntegrationEvent({
+    supabaseAdmin,
+    saleId: params.saleId ?? null,
+    companyId: params.companyId ?? null,
+    paymentEnvironment: params.paymentEnvironment ?? null,
+    environmentDecisionSource: params.environmentDecisionSource ?? null,
+    environmentHostDetected: params.environmentHostDetected ?? null,
+    provider: "asaas",
+    direction: "incoming_webhook",
+    eventType: params.eventType ?? null,
+    paymentId: params.paymentId ?? null,
+    externalReference: params.externalReference ?? null,
+    asaasEventId: params.asaasEventId ?? null,
+    httpStatus: params.httpStatus,
+    processingStatus: params.status,
+    resultCategory: params.resultCategory,
+    incidentCode: params.incidentCode ?? null,
+    warningCode: params.warningCode ?? null,
+    durationMs: params.durationMs ?? null,
+    message: params.message,
+    payloadJson: params.payload,
+    responseJson: params.responseBody,
+  });
 }
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
