@@ -95,6 +95,26 @@ function buildLegacyAsaasMirrorUpdate(companyConfig: Record<string, unknown>) {
   };
 }
 
+function buildCompanyConfigWithEnvironmentUpdate(
+  companyConfig: Record<string, unknown>,
+  envFields: ReturnType<typeof getEnvironmentCompanyFields>,
+  updates: Record<string, unknown>,
+) {
+  return {
+    ...companyConfig,
+    ...updates,
+    /**
+     * Comentário de manutenção:
+     * os campos legados deixam de ser fonte de verdade e passam a ser apenas espelho
+     * derivado do conjunto por ambiente que realmente dirige checkout/verify/webhook.
+     */
+    ...buildLegacyAsaasMirrorUpdate({
+      ...companyConfig,
+      ...updates,
+    }),
+  };
+}
+
 /**
  * Edge function para onboarding de conta Asaas.
  * 
@@ -324,16 +344,14 @@ serve(async (req) => {
         // e reafirmamos o status de integração para manter o UI sincronizado com o Asaas.
         await supabaseAdmin
           .from("companies")
-          .update({
-            asaas_wallet_id: walletId,
-            asaas_account_id: accountData.id || company.asaas_account_id || null,
-            asaas_account_email: accountData.email || null,
-            asaas_onboarding_complete: true,
-            [envFields.walletId]: walletId,
-            [envFields.accountId]: accountData.id || environmentAccountId || null,
-            [envFields.accountEmail]: accountData.email || null,
-            [envFields.onboardingComplete]: true,
-          })
+          .update(
+            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+              [envFields.walletId]: walletId,
+              [envFields.accountId]: accountData.id || environmentAccountId || null,
+              [envFields.accountEmail]: accountData.email || null,
+              [envFields.onboardingComplete]: true,
+            }),
+          )
           .eq("id", company_id);
 
         return new Response(
@@ -355,25 +373,17 @@ serve(async (req) => {
     }
 
     if (mode === "disconnect") {
-      const nextCompanyConfig = {
-        ...companyConfig,
-        [envFields.apiKey]: null,
-        [envFields.walletId]: null,
-        [envFields.accountId]: null,
-        [envFields.accountEmail]: null,
-        [envFields.onboardingComplete]: false,
-      };
-
       await supabaseAdmin
         .from("companies")
-        .update({
-          [envFields.apiKey]: null,
-          [envFields.walletId]: null,
-          [envFields.accountId]: null,
-          [envFields.accountEmail]: null,
-          [envFields.onboardingComplete]: false,
-          ...buildLegacyAsaasMirrorUpdate(nextCompanyConfig),
-        })
+        .update(
+          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            [envFields.apiKey]: null,
+            [envFields.walletId]: null,
+            [envFields.accountId]: null,
+            [envFields.accountEmail]: null,
+            [envFields.onboardingComplete]: false,
+          }),
+        )
         .eq("id", company_id);
 
       return new Response(
@@ -413,19 +423,15 @@ serve(async (req) => {
 
         await supabaseAdmin
           .from("companies")
-          .update({
-            asaas_wallet_id: walletId,
-            asaas_api_key: api_key,
-            asaas_account_id: accountData.id || null,
-            // Mantém o e-mail efetivo da conta vinculada para exibição em /admin/empresa.
-            asaas_account_email: accountData.email || null,
-            asaas_onboarding_complete: true,
-            [envFields.walletId]: walletId,
-            [envFields.apiKey]: api_key,
-            [envFields.accountId]: accountData.id || null,
-            [envFields.accountEmail]: accountData.email || null,
-            [envFields.onboardingComplete]: true,
-          })
+          .update(
+            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+              [envFields.walletId]: walletId,
+              [envFields.apiKey]: api_key,
+              [envFields.accountId]: accountData.id || null,
+              [envFields.accountEmail]: accountData.email || null,
+              [envFields.onboardingComplete]: true,
+            }),
+          )
           .eq("id", company_id);
 
         return new Response(
@@ -582,19 +588,16 @@ serve(async (req) => {
       // Save to database
       await supabaseAdmin
         .from("companies")
-        .update({
-          asaas_wallet_id: walletId,
-          asaas_account_id: accountId,
-          // No fluxo de criação de subconta, o e-mail da conta Asaas é o e-mail cadastrado da empresa.
-          asaas_account_email: company.email,
-          asaas_api_key: createData.apiKey || null,
-          asaas_onboarding_complete: true,
-          [envFields.walletId]: walletId,
-          [envFields.accountId]: accountId,
-          [envFields.accountEmail]: company.email,
-          [envFields.apiKey]: createData.apiKey || null,
-          [envFields.onboardingComplete]: true,
-        })
+        .update(
+          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            [envFields.walletId]: walletId,
+            [envFields.accountId]: accountId,
+            // No fluxo de criação de subconta, o e-mail efetivo continua vindo do cadastro da empresa.
+            [envFields.accountEmail]: company.email,
+            [envFields.apiKey]: createData.apiKey || null,
+            [envFields.onboardingComplete]: true,
+          }),
+        )
         .eq("id", company_id);
 
       return new Response(
