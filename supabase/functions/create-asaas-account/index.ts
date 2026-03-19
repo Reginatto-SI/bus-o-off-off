@@ -60,58 +60,28 @@ function hasEssentialEnvironmentConnection(companyConfig: Record<string, unknown
   );
 }
 
-function buildLegacyAsaasMirrorUpdate(companyConfig: Record<string, unknown>) {
-  const productionConnected = hasEssentialEnvironmentConnection(
-    companyConfig,
-    getEnvironmentCompanyFields("production"),
-  );
-  const sandboxConnected = hasEssentialEnvironmentConnection(
-    companyConfig,
-    getEnvironmentCompanyFields("sandbox"),
-  );
-
-  const sourceFields = productionConnected
-    ? getEnvironmentCompanyFields("production")
-    : sandboxConnected
-      ? getEnvironmentCompanyFields("sandbox")
-      : null;
-
-  if (!sourceFields) {
-    return {
-      asaas_api_key: null,
-      asaas_wallet_id: null,
-      asaas_account_id: null,
-      asaas_account_email: null,
-      asaas_onboarding_complete: false,
-    };
-  }
-
+function buildLegacyAsaasCleanupUpdate() {
   return {
-    asaas_api_key: normalizeCompanyField(companyConfig[sourceFields.apiKey]),
-    asaas_wallet_id: normalizeCompanyField(companyConfig[sourceFields.walletId]),
-    asaas_account_id: normalizeCompanyField(companyConfig[sourceFields.accountId]),
-    asaas_account_email: normalizeCompanyField(companyConfig[sourceFields.accountEmail]),
-    asaas_onboarding_complete: true,
+    asaas_api_key: null,
+    asaas_wallet_id: null,
+    asaas_account_id: null,
+    asaas_account_email: null,
+    asaas_onboarding_complete: false,
   };
 }
 
 function buildCompanyConfigWithEnvironmentUpdate(
-  companyConfig: Record<string, unknown>,
-  envFields: ReturnType<typeof getEnvironmentCompanyFields>,
   updates: Record<string, unknown>,
 ) {
   return {
-    ...companyConfig,
     ...updates,
     /**
      * Comentário de manutenção:
-     * os campos legados deixam de ser fonte de verdade e passam a ser apenas espelho
-     * derivado do conjunto por ambiente que realmente dirige checkout/verify/webhook.
+     * os campos legados deixam de ser fonte de verdade e ficam logicamente limpos.
+     * O contrato operacional passa a ser EXCLUSIVAMENTE os campos por ambiente,
+     * usados por checkout/verify/webhook/onboarding.
      */
-    ...buildLegacyAsaasMirrorUpdate({
-      ...companyConfig,
-      ...updates,
-    }),
+    ...buildLegacyAsaasCleanupUpdate(),
   };
 }
 
@@ -345,7 +315,7 @@ serve(async (req) => {
         await supabaseAdmin
           .from("companies")
           .update(
-            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            buildCompanyConfigWithEnvironmentUpdate({
               [envFields.walletId]: walletId,
               [envFields.accountId]: accountData.id || environmentAccountId || null,
               [envFields.accountEmail]: accountData.email || null,
@@ -376,7 +346,7 @@ serve(async (req) => {
       await supabaseAdmin
         .from("companies")
         .update(
-          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+          buildCompanyConfigWithEnvironmentUpdate({
             [envFields.apiKey]: null,
             [envFields.walletId]: null,
             [envFields.accountId]: null,
@@ -424,7 +394,7 @@ serve(async (req) => {
         await supabaseAdmin
           .from("companies")
           .update(
-            buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+            buildCompanyConfigWithEnvironmentUpdate({
               [envFields.walletId]: walletId,
               [envFields.apiKey]: api_key,
               [envFields.accountId]: accountData.id || null,
@@ -589,7 +559,7 @@ serve(async (req) => {
       await supabaseAdmin
         .from("companies")
         .update(
-          buildCompanyConfigWithEnvironmentUpdate(companyConfig, envFields, {
+          buildCompanyConfigWithEnvironmentUpdate({
             [envFields.walletId]: walletId,
             [envFields.accountId]: accountId,
             // No fluxo de criação de subconta, o e-mail efetivo continua vindo do cadastro da empresa.
