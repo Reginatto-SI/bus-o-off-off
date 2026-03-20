@@ -24,7 +24,7 @@ export type PaymentContextDecisionTrace = {
 
 export type PaymentContextSplitPolicy = {
   enabled: boolean;
-  type: "none" | "platform_only" | "platform_and_partner";
+  type: "none" | "platform_only" | "platform_and_socio";
 };
 
 export type ResolvedPaymentContext = {
@@ -62,7 +62,7 @@ type MinimalCompany = {
   asaas_onboarding_complete_sandbox?: boolean | null;
 };
 
-type MinimalPartner = {
+type MinimalSocio = {
   id?: string | null;
   name?: string | null;
   status?: string | null;
@@ -116,77 +116,77 @@ function readEnvironmentCompanyConfig(
   };
 }
 
-export function resolvePartnerWalletByEnvironment(
-  partner: MinimalPartner | null | undefined,
+export function resolveSocioWalletByEnvironment(
+  socio: MinimalSocio | null | undefined,
   environment: PaymentEnvironment,
 ): string | null {
-  if (!partner) return null;
+  if (!socio) return null;
   if (environment === "production") {
-    return partner.asaas_wallet_id_production ?? partner.asaas_wallet_id ?? null;
+    return socio.asaas_wallet_id_production ?? socio.asaas_wallet_id ?? null;
   }
-  return partner.asaas_wallet_id_sandbox ?? partner.asaas_wallet_id ?? null;
+  return socio.asaas_wallet_id_sandbox ?? socio.asaas_wallet_id ?? null;
 }
 
-export type FinancialPartnerValidationProvider = "asaas" | "stripe";
+export type FinancialSocioValidationProvider = "asaas" | "stripe";
 
-export type FinancialPartnerValidationResult =
+export type FinancialSocioValidationResult =
   | {
       ok: true;
       code: null;
       message: null;
-      partner: MinimalPartner;
+      socio: MinimalSocio;
       walletId: string | null;
     }
   | {
       ok: false;
       code:
-        | "split_partner_missing_active"
-        | "split_partner_multiple_active"
-        | "split_partner_wallet_missing"
-        | "split_partner_destination_missing";
+        | "split_socio_missing_active"
+        | "split_socio_multiple_active"
+        | "split_socio_wallet_missing"
+        | "split_socio_destination_missing";
       message: string;
-      partner: MinimalPartner | null;
+      socio: MinimalSocio | null;
       walletId: null;
     };
 
-export function validateFinancialPartnerForSplit(params: {
-  partners: MinimalPartner[] | null | undefined;
-  provider: FinancialPartnerValidationProvider;
+export function validateFinancialSocioForSplit(params: {
+  socios: MinimalSocio[] | null | undefined;
+  provider: FinancialSocioValidationProvider;
   environment: PaymentEnvironment;
-}): FinancialPartnerValidationResult {
-  const activePartners = (params.partners ?? []).filter(
-    (partner) => partner?.status === "ativo",
+}): FinancialSocioValidationResult {
+  const activeSocios = (params.socios ?? []).filter(
+    (socio) => socio?.status === "ativo",
   );
 
-  if (activePartners.length === 0) {
+  if (activeSocios.length === 0) {
     return {
       ok: false,
-      code: "split_partner_missing_active",
+      code: "split_socio_missing_active",
       message: "Split configurado, mas nenhum sócio ativo encontrado",
-      partner: null,
+      socio: null,
       walletId: null,
     };
   }
 
-  if (activePartners.length > 1) {
+  if (activeSocios.length > 1) {
     return {
       ok: false,
-      code: "split_partner_multiple_active",
+      code: "split_socio_multiple_active",
       message: "Split inválido: mais de um sócio ativo",
-      partner: null,
+      socio: null,
       walletId: null,
     };
   }
 
-  const partner = activePartners[0];
+  const socio = activeSocios[0];
 
   if (params.provider === "stripe") {
-    if (!partner?.stripe_account_id) {
+    if (!socio?.stripe_account_id) {
       return {
         ok: false,
-        code: "split_partner_destination_missing",
+        code: "split_socio_destination_missing",
         message: "Split inválido: sócio sem conta Stripe configurada",
-        partner,
+        socio,
         walletId: null,
       };
     }
@@ -195,19 +195,19 @@ export function validateFinancialPartnerForSplit(params: {
       ok: true,
       code: null,
       message: null,
-      partner,
-      walletId: partner.stripe_account_id,
+      socio,
+      walletId: socio.stripe_account_id,
     };
   }
 
-  const walletId = resolvePartnerWalletByEnvironment(partner, params.environment);
+  const walletId = resolveSocioWalletByEnvironment(socio, params.environment);
 
   if (!walletId) {
     return {
       ok: false,
-      code: "split_partner_wallet_missing",
+      code: "split_socio_wallet_missing",
       message: "Split inválido: sócio sem wallet configurada",
-      partner,
+      socio,
       walletId: null,
     };
   }
@@ -216,7 +216,7 @@ export function validateFinancialPartnerForSplit(params: {
     ok: true,
     code: null,
     message: null,
-    partner,
+    socio,
     walletId,
   };
 }
@@ -226,7 +226,7 @@ export function resolvePaymentContext(params: {
   sale?: MinimalSale | null;
   requestedEnvironment?: PaymentEnvironment | null;
   company?: MinimalCompany | null;
-  partner?: MinimalPartner | null;
+  socio?: MinimalSocio | null;
   request?: Request;
   isPlatformFeeFlow?: boolean;
   allowHostFallback?: boolean;
@@ -324,7 +324,7 @@ export function resolvePaymentContext(params: {
 
   const splitPolicy: PaymentContextSplitPolicy = isPlatformFeeFlow
     ? { enabled: false, type: "none" }
-    : { enabled: true, type: "platform_and_partner" };
+    : { enabled: true, type: "platform_and_socio" };
 
   return {
     environment,
