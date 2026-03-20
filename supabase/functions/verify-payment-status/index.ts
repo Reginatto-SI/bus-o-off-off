@@ -7,7 +7,7 @@ import {
 } from "../_shared/payment-observability.ts";
 import {
   resolvePaymentContext,
-  validateFinancialPartnerForSplit,
+  validateFinancialSocioForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
@@ -206,7 +206,7 @@ serve(async (req) => {
 
     const { data: company } = await supabaseAdmin
       .from("companies")
-      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, partner_split_percent")
+      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, socio_split_percent")
       .eq("id", sale.company_id)
       .single();
 
@@ -419,104 +419,104 @@ serve(async (req) => {
         const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
         const platformFeeTotal = platformFeeCents / 100;
 
-        const partnerSplitPercent = company?.partner_split_percent ?? 50;
-        let partner: any = null;
-        let partnerWalletId: string | null = null;
+        const socioSplitPercent = company?.socio_split_percent ?? 50;
+        let socio: any = null;
+        let socioWalletId: string | null = null;
 
-        if (partnerSplitPercent > 0) {
-          const { data: partnerRows, error: partnerError } = await supabaseAdmin
-            .from("partners")
+        if (socioSplitPercent > 0) {
+          const { data: socioRows, error: socioSplitError } = await supabaseAdmin
+            .from("socios_split")
             .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
             .eq("company_id", sale.company_id)
             .eq("status", "ativo")
             .limit(2);
 
-          if (partnerError) {
-            logPaymentTrace("error", "verify-payment-status", "split_partner_query_failed", {
+          if (socioSplitError) {
+            logPaymentTrace("error", "verify-payment-status", "split_socio_query_failed", {
               sale_id: sale.id,
               company_id: sale.company_id,
               payment_environment: paymentContext.environment,
-              error_message: partnerError.message,
+              error_message: socioSplitError.message,
             });
 
             await persistVerifyLog({
               processingStatus: "warning",
               resultCategory: "warning",
               message: "Falha ao validar sócio do split no verify-payment-status",
-              incidentCode: "split_partner_query_failed",
+              incidentCode: "split_socio_query_failed",
               httpStatus: 409,
               responseJson: {
                 paymentStatus: sale.status,
                 split_error: "Falha ao validar o sócio do split",
-                split_error_code: "split_partner_query_failed",
+                split_error_code: "split_socio_query_failed",
               },
             });
 
             return jsonResponse({
               paymentStatus: sale.status,
               split_error: "Falha ao validar o sócio do split",
-              split_error_code: "split_partner_query_failed",
+              split_error_code: "split_socio_query_failed",
             }, 409);
           }
 
-          const partnerValidation = validateFinancialPartnerForSplit({
-            partners: partnerRows ?? [],
+          const socioSplitValidation = validateFinancialSocioForSplit({
+            socios: socioRows ?? [],
             provider: "asaas",
             environment: paymentContext.environment,
           });
 
-          if (!partnerValidation.ok) {
-            logPaymentTrace("error", "verify-payment-status", "split_partner_validation_failed", {
+          if (!socioSplitValidation.ok) {
+            logPaymentTrace("error", "verify-payment-status", "split_socio_validation_failed", {
               sale_id: sale.id,
               company_id: sale.company_id,
               payment_environment: paymentContext.environment,
-              validation_code: partnerValidation.code,
-              validation_message: partnerValidation.message,
-              active_partner_rows: (partnerRows ?? []).length,
+              validation_code: socioSplitValidation.code,
+              validation_message: socioSplitValidation.message,
+              active_socio_rows: (socioRows ?? []).length,
             });
 
             await persistVerifyLog({
               processingStatus: "warning",
               resultCategory: "warning",
-              message: partnerValidation.message,
-              incidentCode: partnerValidation.code,
+              message: socioSplitValidation.message,
+              incidentCode: socioSplitValidation.code,
               httpStatus: 409,
               responseJson: {
                 paymentStatus: sale.status,
-                split_error: partnerValidation.message,
-                split_error_code: partnerValidation.code,
+                split_error: socioSplitValidation.message,
+                split_error_code: socioSplitValidation.code,
               },
             });
 
             return jsonResponse({
               paymentStatus: sale.status,
-              split_error: partnerValidation.message,
-              split_error_code: partnerValidation.code,
+              split_error: socioSplitValidation.message,
+              split_error_code: socioSplitValidation.code,
             }, 409);
           }
 
-          partner = partnerValidation.partner;
-          partnerWalletId = partnerValidation.walletId;
+          socio = socioSplitValidation.socio;
+          socioWalletId = socioSplitValidation.walletId;
         }
 
-        let partnerFeeAmount = 0;
+        let socioFeeAmount = 0;
         let platformNetAmount = platformFeeTotal;
 
-        logPaymentTrace("info", "verify-payment-status", "financial_partner_selected", {
+        logPaymentTrace("info", "verify-payment-status", "financial_socio_selected", {
           sale_id: sale.id,
           company_id: sale.company_id,
           payment_environment: paymentContext.environment,
-          partner_id: partner?.id ?? null,
-          partner_wallet_selected: partnerWalletId,
-          partner_wallet_source: paymentContext.environment === "production"
-            ? (partner?.asaas_wallet_id_production ? "partner.production" : "none")
-            : (partner?.asaas_wallet_id_sandbox ? "partner.sandbox" : "none"),
+          socio_id: socio?.id ?? null,
+          socio_wallet_selected: socioWalletId,
+          socio_wallet_source: paymentContext.environment === "production"
+            ? (socio?.asaas_wallet_id_production ? "socio.production" : "none")
+            : (socio?.asaas_wallet_id_sandbox ? "socio.sandbox" : "none"),
         });
 
-        if (partnerWalletId && partner?.status === "ativo") {
-          const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
-          partnerFeeAmount = partnerFeeCents / 100;
-          platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
+        if (socioWalletId && socio?.status === "ativo") {
+          const socioFeeCents = Math.round(platformFeeCents * (socioSplitPercent / 100));
+          socioFeeAmount = socioFeeCents / 100;
+          platformNetAmount = (platformFeeCents - socioFeeCents) / 100;
         }
 
         await supabaseAdmin
@@ -524,7 +524,7 @@ serve(async (req) => {
           .update({
             gross_amount: grossAmount,
             platform_fee_total: platformFeeTotal,
-            partner_fee_amount: partnerFeeAmount,
+            socio_fee_amount: socioFeeAmount,
             platform_net_amount: platformNetAmount,
           })
           .eq("id", saleIdFromRequest);

@@ -22,7 +22,7 @@ import UsersPage from "./pages/admin/Users";
 import CompanyPage from "./pages/admin/Company";
 import MyAccount from "./pages/admin/MyAccount";
 import Sponsors from "./pages/admin/Sponsors";
-import Partners from "./pages/admin/Partners";
+import SociosSplit from "./pages/admin/SociosSplit";
 import SalesReport from "./pages/admin/SalesReport";
 import SellersCommissionReport from "./pages/admin/SellersCommissionReport";
 import TemplatesLayout from "./pages/admin/TemplatesLayout";
@@ -110,7 +110,7 @@ const App = () => (
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
-            <Route path="/admin/socios" element={<Partners />} />
+            <Route path="/admin/socios" element={<SociosSplit />} />
             <Route path="/admin/parceiros" element={<CommercialPartners />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/eventos" element={<EventReport />} />
