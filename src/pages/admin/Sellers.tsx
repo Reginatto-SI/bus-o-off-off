@@ -6,7 +6,7 @@
  *   - Controle de comissão manual (apurada e paga pelo gerente via Pix ou outro meio próprio)
  *   - Rastreamento de vendas via link de referência (?ref=vendedorId)
  *
- * O Stripe lida apenas com o pagamento do cliente final e repasse ao parceiro (partners).
+ * O Stripe lida apenas com o pagamento do cliente final e eventual repasse ao sócio financeiro.
  * Vendedores não participam desse fluxo.
  */
 import { useState, useEffect, useMemo } from 'react';
