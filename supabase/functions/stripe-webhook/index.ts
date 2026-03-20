@@ -83,6 +83,9 @@ async function processPaymentConfirmed(
   const { data: partner } = await supabaseAdmin
     .from("partners")
     .select("id, stripe_account_id, status")
+    // Fase 1: `partners` segue como nome legado, mas o beneficiário financeiro
+    // precisa respeitar o escopo da empresa dona da venda.
+    .eq("company_id", sale.company_id)
     .eq("status", "ativo")
     .limit(1)
     .maybeSingle();
