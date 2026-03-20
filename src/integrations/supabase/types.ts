@@ -324,7 +324,7 @@ export type Database = {
           logo_url: string | null
           name: string
           notes: string | null
-          partner_split_percent: number
+          socio_split_percent: number
           phone: string | null
           platform_fee_percent: number
           postal_code: string | null
@@ -379,7 +379,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           notes?: string | null
-          partner_split_percent?: number
+          socio_split_percent?: number
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -434,7 +434,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           notes?: string | null
-          partner_split_percent?: number
+          socio_split_percent?: number
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -825,7 +825,7 @@ export type Database = {
           },
         ]
       }
-      partners: {
+      socios_split: {
         Row: {
           asaas_wallet_id: string | null
           asaas_wallet_id_production: string | null
@@ -835,7 +835,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
-          split_percent: number
+          commission_percent: number
           status: string
           stripe_account_id: string | null
           stripe_onboarding_complete: boolean
@@ -850,7 +850,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
-          split_percent?: number
+          commission_percent?: number
           status?: string
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -865,7 +865,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
-          split_percent?: number
+          commission_percent?: number
           status?: string
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -873,7 +873,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "partners_company_id_fkey"
+            foreignKeyName: "socios_split_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
@@ -1174,7 +1174,7 @@ export type Database = {
           id: string
           intermediation_responsibility_accepted: boolean
           intermediation_responsibility_accepted_at: string | null
-          partner_fee_amount: number | null
+          socio_fee_amount: number | null
           payment_confirmed_at: string | null
           payment_environment: string
           payment_method: string | null
@@ -1214,7 +1214,7 @@ export type Database = {
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
-          partner_fee_amount?: number | null
+          socio_fee_amount?: number | null
           payment_confirmed_at?: string | null
           payment_environment: string
           payment_method?: string | null
@@ -1254,7 +1254,7 @@ export type Database = {
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
-          partner_fee_amount?: number | null
+          socio_fee_amount?: number | null
           payment_confirmed_at?: string | null
           payment_environment?: string
           payment_method?: string | null
