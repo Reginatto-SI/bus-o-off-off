@@ -28,7 +28,7 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
-import { getFinancialPartnerConfigStatus } from '@/lib/financialPartnerConfig';
+import { getFinancialSocioConfigStatus } from '@/lib/financialSocioSplitConfig';
 import {
   getAsaasIntegrationSnapshot,
   type AsaasIntegrationStatus,
@@ -146,7 +146,7 @@ export default function CompanyPage() {
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
-  const [financialPartners, setFinancialPartners] = useState<Array<{
+  const [financialSocios, setFinancialSocios] = useState<Array<{
     status: string | null;
     asaas_wallet_id: string | null;
     asaas_wallet_id_production: string | null;
@@ -193,7 +193,7 @@ export default function CompanyPage() {
     social_website: '',
     // Padrão para novas empresas: comissão inicial de 3% + 3%.
     platform_fee_percent: '3',
-    partner_split_percent: '3',
+    socio_split_percent: '3',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -300,7 +300,7 @@ export default function CompanyPage() {
       // Comentário: taxas ficam no estado local do formulário para evitar autosave no onChange
       // e impedir perda de foco durante a digitação de decimais.
       platform_fee_percent: String(data?.platform_fee_percent ?? 3),
-      partner_split_percent: String(data?.partner_split_percent ?? 3),
+      socio_split_percent: String(data?.socio_split_percent ?? 3),
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -338,14 +338,14 @@ export default function CompanyPage() {
     setLoading(false);
   };
 
-  const fetchFinancialPartners = async () => {
+  const fetchFinancialSocios = async () => {
     if (!activeCompanyId) {
-      setFinancialPartners([]);
+      setFinancialSocios([]);
       return;
     }
 
     const { data, error } = await supabase
-      .from('partners')
+      .from('socios_split')
       .select('status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox')
       .eq('company_id', activeCompanyId);
 
@@ -356,16 +356,16 @@ export default function CompanyPage() {
         details: error.details,
         hint: error.hint,
       });
-      setFinancialPartners([]);
+      setFinancialSocios([]);
       return;
     }
 
-    setFinancialPartners((data ?? []) as typeof financialPartners);
+    setFinancialSocios((data ?? []) as typeof financialSocios);
   };
 
   useEffect(() => {
     fetchCompany();
-    fetchFinancialPartners();
+    fetchFinancialSocios();
   }, [activeCompanyId]);
 
   // Slug availability check with debounce
@@ -605,7 +605,7 @@ export default function CompanyPage() {
       social_twitter: '',
       social_website: '',
       platform_fee_percent: '3',
-      partner_split_percent: '3',
+      socio_split_percent: '3',
     });
   };
 
@@ -709,10 +709,10 @@ export default function CompanyPage() {
     }
 
     const platformFeePercent = parsePercentInput(form.platform_fee_percent);
-    const partnerSplitPercent = parsePercentInput(form.partner_split_percent);
-    const splitConfigStatus = getFinancialPartnerConfigStatus({
-      partnerSplitPercent: partnerSplitPercent ?? 0,
-      partners: financialPartners,
+    const socioSplitPercent = parsePercentInput(form.socio_split_percent);
+    const splitConfigStatus = getFinancialSocioConfigStatus({
+      socioSplitPercent: socioSplitPercent ?? 0,
+      socios: financialSocios,
     });
 
     if (platformFeePercent === null || Number.isNaN(platformFeePercent) || platformFeePercent < 0 || platformFeePercent > 100) {
@@ -721,7 +721,7 @@ export default function CompanyPage() {
       return;
     }
 
-    if (partnerSplitPercent === null || Number.isNaN(partnerSplitPercent) || partnerSplitPercent < 0 || partnerSplitPercent > 100) {
+    if (socioSplitPercent === null || Number.isNaN(socioSplitPercent) || socioSplitPercent < 0 || socioSplitPercent > 100) {
       toast.error('Taxa do Sócio deve estar entre 0 e 100');
       setSaving(false);
       return;
@@ -790,7 +790,7 @@ export default function CompanyPage() {
       // Comentário: persistência das taxas acontece somente no submit (Salvar Empresa)
       // para evitar re-render prematuro e perda de foco nos campos de comissão.
       platform_fee_percent: platformFeePercent,
-      partner_split_percent: partnerSplitPercent,
+      socio_split_percent: socioSplitPercent,
     };
 
     let error;
@@ -1645,13 +1645,13 @@ export default function CompanyPage() {
                         // (incluindo decimais com ponto/vírgula) sem disparar salvamento automático.
                         // A persistência ocorre somente no botão "Salvar Empresa" (handleSubmit).
                         const platformFee = parsePercentInput(form.platform_fee_percent) ?? 0;
-                        const partnerFee = parsePercentInput(form.partner_split_percent) ?? 0;
-                        const totalFee = platformFee + partnerFee;
+                        const socioSplitFee = parsePercentInput(form.socio_split_percent) ?? 0;
+                        const totalFee = platformFee + socioSplitFee;
                         const companyShare = 100 - totalFee;
                         const sumExceeds100 = totalFee > 100;
-                        const splitConfigStatus = getFinancialPartnerConfigStatus({
-                          partnerSplitPercent: partnerFee,
-                          partners: financialPartners,
+                        const splitConfigStatus = getFinancialSocioConfigStatus({
+                          socioSplitPercent: socioSplitFee,
+                          socios: financialSocios,
                         });
 
                         return (
@@ -1700,22 +1700,22 @@ export default function CompanyPage() {
                               </p>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="partner_split_percent">Taxa do Sócio (%)</Label>
+                              <Label htmlFor="socio_split_percent">Taxa do Sócio (%)</Label>
                               <Input
-                                id="partner_split_percent"
+                                id="socio_split_percent"
                                 type="text"
                                 inputMode="decimal"
                                 min="0"
                                 max="100"
                                 step="any"
-                                value={form.partner_split_percent}
+                                value={form.socio_split_percent}
                                 onChange={(e) => {
                                   const rawValue = e.target.value;
                                   const normalizedValue = rawValue.replace(',', '.');
 
                                   // Mantém edição local para evitar perda de foco causada por autosave.
                                   if (/^\d*(\.\d*)?$/.test(normalizedValue)) {
-                                    setForm((prev) => ({ ...prev, partner_split_percent: normalizedValue }));
+                                    setForm((prev) => ({ ...prev, socio_split_percent: normalizedValue }));
                                   }
                                 }}
                               />
@@ -1816,7 +1816,7 @@ export default function CompanyPage() {
                               Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
                               {/* Comentário de regra de negócio: o desconto total exibido ao usuário
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
-                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3) + (company?.partner_split_percent ?? 3)).toFixed(1)}%</strong> de comissão sobre cada venda online.
+                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3) + (company?.socio_split_percent ?? 3)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
                             <p className="text-xs text-green-700">
                               {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
