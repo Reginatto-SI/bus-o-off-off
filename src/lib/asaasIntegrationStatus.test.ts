@@ -42,7 +42,7 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
     asaas_api_key_sandbox: null,
     asaas_onboarding_complete_sandbox: false,
     platform_fee_percent: 3,
-    partner_split_percent: 3,
+    socio_split_percent: 3,
     cover_image_url: null,
     use_default_cover: false,
     intro_text: null,
