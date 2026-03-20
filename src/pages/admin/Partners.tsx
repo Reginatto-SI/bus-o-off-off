@@ -38,9 +38,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getFinancialPartnerConfigStatus } from '@/lib/financialPartnerConfig';
 
 export default function Partners() {
-  const { isDeveloper, activeCompanyId } = useAuth();
+  const { isDeveloper, activeCompanyId, activeCompany } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -51,6 +52,11 @@ export default function Partners() {
     asaas_wallet_id: '',
     status: 'ativo' as PartnerStatus,
     notes: '',
+  });
+
+  const splitConfigStatus = getFinancialPartnerConfigStatus({
+    partnerSplitPercent: Number(activeCompany?.partner_split_percent ?? 0),
+    partners,
   });
 
   const fetchPartners = async () => {
@@ -186,6 +192,15 @@ export default function Partners() {
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               Selecione uma empresa ativa para visualizar ou cadastrar o sócio financeiro responsável pelo split.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {activeCompanyId && splitConfigStatus.state !== 'valid' && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {splitConfigStatus.message} O backend também bloqueia a criação do split enquanto essa condição não for corrigida.
             </AlertDescription>
           </Alert>
         )}

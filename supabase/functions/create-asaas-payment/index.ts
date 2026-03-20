@@ -6,8 +6,8 @@ import {
   logSaleOperationalEvent,
 } from "../_shared/payment-observability.ts";
 import {
-  resolvePartnerWalletByEnvironment,
   resolvePaymentContext,
+  validateFinancialPartnerForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import type { PaymentEnvironment } from "../_shared/runtime-env.ts";
 
@@ -465,18 +465,73 @@ serve(async (req) => {
       splitEnabled && partnerSplitPercent > 0 ? partnerSplitPercent : 0;
 
     if (effectivePartnerFee > 0) {
-      const { data: partnerData } = await supabaseAdmin
+      const { data: partnerRows, error: partnerError } = await supabaseAdmin
         .from("partners")
-        .select("asaas_wallet_id_production, asaas_wallet_id_sandbox")
+        .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
         .eq("company_id", sale.company_id)
         .eq("status", "ativo")
-        .limit(1)
-        .maybeSingle();
+        .limit(2);
 
-      activePartnerWalletId = resolvePartnerWalletByEnvironment(
-        partnerData,
-        paymentContext.environment,
-      );
+      if (partnerError) {
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: sale.id,
+          companyId: sale.company_id,
+          action: "payment_create_failed",
+          source: "create-asaas-payment",
+          result: "error",
+          paymentEnvironment: paymentContext.environment,
+          errorCode: "split_partner_query_failed",
+          detail: partnerError.message,
+        });
+
+        return jsonResponse(
+          {
+            error: "Falha ao validar o sócio do split",
+            error_code: "split_partner_query_failed",
+          },
+          500,
+        );
+      }
+
+      const partnerValidation = validateFinancialPartnerForSplit({
+        partners: partnerRows ?? [],
+        provider: "asaas",
+        environment: paymentContext.environment,
+      });
+
+      if (!partnerValidation.ok) {
+        logPaymentTrace("error", "create-asaas-payment", "split_partner_validation_failed", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          validation_code: partnerValidation.code,
+          validation_message: partnerValidation.message,
+          active_partner_rows: (partnerRows ?? []).length,
+        });
+
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: sale.id,
+          companyId: sale.company_id,
+          action: "payment_create_failed",
+          source: "create-asaas-payment",
+          result: "error",
+          paymentEnvironment: paymentContext.environment,
+          errorCode: partnerValidation.code,
+          detail: partnerValidation.message,
+        });
+
+        return jsonResponse(
+          {
+            error: partnerValidation.message,
+            error_code: partnerValidation.code,
+          },
+          409,
+        );
+      }
+
+      activePartnerWalletId = partnerValidation.walletId;
     }
 
     // 6. Montar split (espelhado em sandbox/produção)
