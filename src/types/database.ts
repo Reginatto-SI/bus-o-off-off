@@ -424,6 +424,8 @@ export interface SaleLog {
 
 export interface Partner {
   id: string;
+  /** Multi-tenant: sócio financeiro sempre pertence a uma empresa específica. */
+  company_id: string;
   name: string;
   /** Identificador legado da carteira Asaas para split direto no pagamento. */
   asaas_wallet_id: string | null;
