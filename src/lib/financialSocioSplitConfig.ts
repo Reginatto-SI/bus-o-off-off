@@ -1,17 +1,17 @@
-type FinancialPartnerLike = {
+type FinancialSocioLike = {
   status?: string | null;
   asaas_wallet_id?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
 };
 
-export type FinancialPartnerConfigStatus =
+export type FinancialSocioConfigStatus =
   | {
       state: 'valid';
       message: null;
     }
   | {
-      state: 'missing_active_partner' | 'multiple_active_partners' | 'missing_wallet';
+      state: 'missing_active_socio' | 'multiple_active_socios' | 'missing_wallet';
       message: string;
     };
 
@@ -21,35 +21,35 @@ export type FinancialPartnerConfigStatus =
  * - percentual > 0 exige exatamente 1 sócio ativo com ao menos uma wallet legada/por ambiente.
  * O backend continua sendo a fonte de verdade e faz a validação final por ambiente.
  */
-export function getFinancialPartnerConfigStatus(params: {
-  partnerSplitPercent: number;
-  partners: FinancialPartnerLike[];
-}): FinancialPartnerConfigStatus {
-  if (params.partnerSplitPercent <= 0) {
+export function getFinancialSocioConfigStatus(params: {
+  socioSplitPercent: number;
+  socios: FinancialSocioLike[];
+}): FinancialSocioConfigStatus {
+  if (params.socioSplitPercent <= 0) {
     return { state: 'valid', message: null };
   }
 
-  const activePartners = params.partners.filter((partner) => partner.status === 'ativo');
+  const activeSocios = params.socios.filter((socio) => socio.status === 'ativo');
 
-  if (activePartners.length === 0) {
+  if (activeSocios.length === 0) {
     return {
-      state: 'missing_active_partner',
+      state: 'missing_active_socio',
       message: 'Você configurou split, mas não possui sócio ativo válido.',
     };
   }
 
-  if (activePartners.length > 1) {
+  if (activeSocios.length > 1) {
     return {
-      state: 'multiple_active_partners',
+      state: 'multiple_active_socios',
       message: 'Split inválido: existe mais de um sócio ativo para esta empresa.',
     };
   }
 
-  const partner = activePartners[0];
+  const socio = activeSocios[0];
   const hasWallet = Boolean(
-    partner.asaas_wallet_id ||
-      partner.asaas_wallet_id_production ||
-      partner.asaas_wallet_id_sandbox,
+    socio.asaas_wallet_id ||
+      socio.asaas_wallet_id_production ||
+      socio.asaas_wallet_id_sandbox,
   );
 
   if (!hasWallet) {
