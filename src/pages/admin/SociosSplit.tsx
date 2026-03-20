@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Partner, PartnerStatus } from '@/types/database';
+import { SocioSplit, SocioSplitStatus } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -38,11 +38,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { getFinancialPartnerConfigStatus } from '@/lib/financialPartnerConfig';
+import { getFinancialSocioConfigStatus } from '@/lib/financialSocioSplitConfig';
 
-export default function Partners() {
+export default function SociosSplit() {
   const { isDeveloper, activeCompanyId, activeCompany } = useAuth();
-  const [partners, setPartners] = useState<Partner[]>([]);
+  const [socios, setSocios] = useState<SocioSplit[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,40 +50,40 @@ export default function Partners() {
   const [form, setForm] = useState({
     name: '',
     asaas_wallet_id: '',
-    status: 'ativo' as PartnerStatus,
+    status: 'ativo' as SocioSplitStatus,
     notes: '',
   });
 
-  const splitConfigStatus = getFinancialPartnerConfigStatus({
-    partnerSplitPercent: Number(activeCompany?.partner_split_percent ?? 0),
-    partners,
+  const splitConfigStatus = getFinancialSocioConfigStatus({
+    socioSplitPercent: Number(activeCompany?.socio_split_percent ?? 0),
+    socios,
   });
 
-  const fetchPartners = async () => {
+  const fetchSocios = async () => {
     if (!activeCompanyId) {
-      setPartners([]);
+      setSocios([]);
       setLoading(false);
       return;
     }
 
     const { data, error } = await supabase
-      .from('partners')
+      .from('socios_split')
       .select('*')
-      // Fase 1 do saneamento: `partners` continua legado no nome,
-      // mas agora precisa respeitar escopo multiempresa por company_id.
+      // Fase 4: `socios_split` passa a ser a fonte oficial do beneficiário financeiro
+      // e continua respeitando escopo multiempresa por company_id.
       .eq('company_id', activeCompanyId)
       .order('created_at', { ascending: false });
 
     if (error) {
       toast.error('Erro ao carregar sócios');
     } else {
-      setPartners((data ?? []) as Partner[]);
+      setSocios((data ?? []) as SocioSplit[]);
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchPartners();
+    fetchSocios();
   }, [activeCompanyId]);
 
   const openNew = () => {
@@ -92,12 +92,12 @@ export default function Partners() {
     setModalOpen(true);
   };
 
-  const openEdit = (p: Partner) => {
+  const openEdit = (p: SocioSplit) => {
     setEditingId(p.id);
     setForm({
       name: p.name,
       asaas_wallet_id: p.asaas_wallet_id ?? '',
-      status: p.status as PartnerStatus,
+      status: p.status as SocioSplitStatus,
       notes: p.notes ?? '',
     });
     setModalOpen(true);
@@ -116,7 +116,7 @@ export default function Partners() {
 
     // Regra: no máximo 1 sócio ativo. Se tentando salvar como ativo, verificar conflito.
     if (form.status === 'ativo') {
-      const existingActive = partners.find(
+      const existingActive = socios.find(
         (p) => p.status === 'ativo' && p.id !== editingId
       );
       if (existingActive) {
@@ -139,12 +139,12 @@ export default function Partners() {
     let error;
     if (editingId) {
       ({ error } = await supabase
-        .from('partners')
+        .from('socios_split')
         .update(payload)
         .eq('id', editingId)
         .eq('company_id', activeCompanyId));
     } else {
-      ({ error } = await supabase.from('partners').insert([payload]));
+      ({ error } = await supabase.from('socios_split').insert([payload]));
     }
 
     if (error) {
@@ -152,7 +152,7 @@ export default function Partners() {
     } else {
       toast.success(editingId ? 'Sócio atualizado' : 'Sócio cadastrado');
       setModalOpen(false);
-      fetchPartners();
+      fetchSocios();
     }
     setSaving(false);
   };
@@ -209,7 +209,7 @@ export default function Partners() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : partners.length === 0 ? (
+        ) : socios.length === 0 ? (
           <EmptyState
             icon={<Handshake className="h-8 w-8 text-muted-foreground" />}
             title="Nenhum sócio cadastrado"
@@ -234,7 +234,7 @@ export default function Partners() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {partners.map((p) => (
+                  {socios.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground font-mono">
@@ -285,7 +285,7 @@ export default function Partners() {
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as PartnerStatus })}>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as SocioSplitStatus })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ativo">Ativo</SelectItem>
@@ -295,7 +295,7 @@ export default function Partners() {
               </div>
 
               {/* Alerta: validação de 1 sócio ativo */}
-              {form.status === 'ativo' && partners.some((p) => p.status === 'ativo' && p.id !== editingId) && (
+              {form.status === 'ativo' && socios.some((p) => p.status === 'ativo' && p.id !== editingId) && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
