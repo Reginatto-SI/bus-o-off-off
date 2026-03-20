@@ -153,7 +153,7 @@ serve(async (req) => {
         // Padrão de comissão aplicado já na criação para evitar configuração manual.
         // Regra de negócio (2026-07): novas empresas devem iniciar com 3% / 3%.
         platform_fee_percent: 3,
-        partner_split_percent: 3,
+        socio_split_percent: 3,
       })
       .select("id")
       .single();
