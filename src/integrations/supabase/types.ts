@@ -830,6 +830,7 @@ export type Database = {
           asaas_wallet_id: string | null
           asaas_wallet_id_production: string | null
           asaas_wallet_id_sandbox: string | null
+          company_id: string
           created_at: string
           id: string
           name: string
@@ -844,6 +845,7 @@ export type Database = {
           asaas_wallet_id?: string | null
           asaas_wallet_id_production?: string | null
           asaas_wallet_id_sandbox?: string | null
+          company_id: string
           created_at?: string
           id?: string
           name: string
@@ -858,6 +860,7 @@ export type Database = {
           asaas_wallet_id?: string | null
           asaas_wallet_id_production?: string | null
           asaas_wallet_id_sandbox?: string | null
+          company_id?: string
           created_at?: string
           id?: string
           name?: string
@@ -868,7 +871,15 @@ export type Database = {
           stripe_onboarding_complete?: boolean
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partners_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
