@@ -12,7 +12,7 @@ import {
 import {
   isWebhookTokenValidForContext,
   resolvePaymentContext,
-  validateFinancialPartnerForSplit,
+  validateFinancialSocioForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
@@ -852,7 +852,7 @@ async function upsertFinancialSnapshot(
 ) {
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("platform_fee_percent, partner_split_percent")
+    .select("platform_fee_percent, socio_split_percent")
     .eq("id", companyId)
     .single();
 
@@ -877,25 +877,25 @@ async function upsertFinancialSnapshot(
   );
   const platformFeeTotal = platformFeeCents / 100;
 
-  const partnerSplitPercent = company?.partner_split_percent ?? 50;
-  let partner: any = null;
-  let partnerWalletId: string | null = null;
+  const socioSplitPercent = company?.socio_split_percent ?? 50;
+  let socio: any = null;
+  let socioWalletId: string | null = null;
 
-  if (partnerSplitPercent > 0) {
-    const { data: partnerRows, error: partnerError } = await supabaseAdmin
-      .from("partners")
+  if (socioSplitPercent > 0) {
+    const { data: socioRows, error: socioSplitError } = await supabaseAdmin
+      .from("socios_split")
       .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
       // Hardening Step 5: escopo multi-tenant obrigatório para evitar parceiro de outra empresa.
       .eq("company_id", companyId)
       .eq("status", "ativo")
       .limit(2);
 
-    if (partnerError) {
-      logPaymentTrace("error", "asaas-webhook", "split_partner_query_failed", {
+    if (socioSplitError) {
+      logPaymentTrace("error", "asaas-webhook", "split_socio_query_failed", {
         sale_id: saleId,
         company_id: companyId,
         payment_environment: paymentEnvironment,
-        error_message: partnerError.message,
+        error_message: socioSplitError.message,
       });
 
       await logSaleOperationalEvent({
@@ -906,26 +906,26 @@ async function upsertFinancialSnapshot(
         source: "asaas-webhook",
         result: "error",
         paymentEnvironment,
-        errorCode: "split_partner_query_failed",
-        detail: partnerError.message,
+        errorCode: "split_socio_query_failed",
+        detail: socioSplitError.message,
       });
       return;
     }
 
-    const partnerValidation = validateFinancialPartnerForSplit({
-      partners: partnerRows ?? [],
+    const socioSplitValidation = validateFinancialSocioForSplit({
+      socios: socioRows ?? [],
       provider: "asaas",
       environment: paymentEnvironment,
     });
 
-    if (!partnerValidation.ok) {
-      logPaymentTrace("error", "asaas-webhook", "split_partner_validation_failed", {
+    if (!socioSplitValidation.ok) {
+      logPaymentTrace("error", "asaas-webhook", "split_socio_validation_failed", {
         sale_id: saleId,
         company_id: companyId,
         payment_environment: paymentEnvironment,
-        validation_code: partnerValidation.code,
-        validation_message: partnerValidation.message,
-        active_partner_rows: (partnerRows ?? []).length,
+        validation_code: socioSplitValidation.code,
+        validation_message: socioSplitValidation.message,
+        active_socio_rows: (socioRows ?? []).length,
       });
 
       await logSaleOperationalEvent({
@@ -936,41 +936,41 @@ async function upsertFinancialSnapshot(
         source: "asaas-webhook",
         result: "error",
         paymentEnvironment,
-        errorCode: partnerValidation.code,
-        detail: partnerValidation.message,
+        errorCode: socioSplitValidation.code,
+        detail: socioSplitValidation.message,
       });
       return;
     }
 
-    partner = partnerValidation.partner;
-    partnerWalletId = partnerValidation.walletId;
+    socio = socioSplitValidation.socio;
+    socioWalletId = socioSplitValidation.walletId;
   }
 
-  let partnerFeeAmount = 0;
+  let socioFeeAmount = 0;
   let platformNetAmount = platformFeeTotal;
 
-  logPaymentTrace("info", "asaas-webhook", "financial_partner_selected", {
+  logPaymentTrace("info", "asaas-webhook", "financial_socio_selected", {
     sale_id: saleId,
     company_id: companyId,
     payment_environment: paymentEnvironment,
-    partner_id: partner?.id ?? null,
-    partner_wallet_selected: partnerWalletId,
-    partner_wallet_source:
+    socio_id: socio?.id ?? null,
+    socio_wallet_selected: socioWalletId,
+    socio_wallet_source:
       paymentEnvironment === "production"
-        ? partner?.asaas_wallet_id_production
-          ? "partner.production"
+        ? socio?.asaas_wallet_id_production
+          ? "socio.production"
           : "none"
-        : partner?.asaas_wallet_id_sandbox
-          ? "partner.sandbox"
+        : socio?.asaas_wallet_id_sandbox
+          ? "socio.sandbox"
           : "none",
   });
 
-  if (partnerWalletId && partner?.status === "ativo") {
-    const partnerFeeCents = Math.round(
-      platformFeeCents * (partnerSplitPercent / 100),
+  if (socioWalletId && socio?.status === "ativo") {
+    const socioFeeCents = Math.round(
+      platformFeeCents * (socioSplitPercent / 100),
     );
-    partnerFeeAmount = partnerFeeCents / 100;
-    platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
+    socioFeeAmount = socioFeeCents / 100;
+    platformNetAmount = (platformFeeCents - socioFeeCents) / 100;
   }
 
   await supabaseAdmin
@@ -978,7 +978,7 @@ async function upsertFinancialSnapshot(
     .update({
       gross_amount: grossAmount,
       platform_fee_total: platformFeeTotal,
-      partner_fee_amount: partnerFeeAmount,
+      socio_fee_amount: socioFeeAmount,
       platform_net_amount: platformNetAmount,
       asaas_payment_status: payment.status,
     })
