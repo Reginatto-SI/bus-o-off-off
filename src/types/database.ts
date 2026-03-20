@@ -10,7 +10,7 @@ export type ProfileStatus = 'ativo' | 'inativo';
 export type TripType = 'ida' | 'volta';
 export type SponsorStatus = 'ativo' | 'inativo';
 export type SponsorLinkType = 'site' | 'whatsapp';
-export type PartnerStatus = 'ativo' | 'inativo';
+export type SocioSplitStatus = 'ativo' | 'inativo';
 
 export type CommercialPartnerStatus = 'ativo' | 'inativo';
 export type CommercialPartnerTier = 'basico' | 'destaque' | 'premium';
@@ -59,7 +59,7 @@ export interface Company {
   asaas_onboarding_complete_sandbox?: boolean;
   // Comissionamento variável
   platform_fee_percent: number;
-  partner_split_percent: number;
+  socio_split_percent: number;
   // Vitrine pública (Fase 1)
   cover_image_url: string | null;
   use_default_cover: boolean;
@@ -394,7 +394,7 @@ export interface Sale {
   // Dados financeiros de comissão (preenchidos após pagamento)
   gross_amount: number | null;
   platform_fee_total: number | null;
-  partner_fee_amount: number | null;
+  socio_fee_amount: number | null;
   platform_net_amount: number | null;
   stripe_transfer_id: string | null;
   payment_environment: string;
@@ -422,7 +422,7 @@ export interface SaleLog {
   created_at: string;
 }
 
-export interface Partner {
+export interface SocioSplit {
   id: string;
   /** Multi-tenant: sócio financeiro sempre pertence a uma empresa específica. */
   company_id: string;
@@ -436,8 +436,8 @@ export interface Partner {
   // Campos legados do Stripe — mantidos para histórico, não usados no fluxo atual.
   stripe_account_id: string | null;
   stripe_onboarding_complete: boolean;
-  split_percent: number;
-  status: PartnerStatus;
+  commission_percent: number;
+  status: SocioSplitStatus;
   notes: string | null;
   created_at: string;
   updated_at: string;
