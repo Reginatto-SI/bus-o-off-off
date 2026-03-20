@@ -1103,10 +1103,10 @@ export default function SalesDiagnostic() {
                             <p>{formatCurrencyBRL(detailSale.platform_fee_total)}</p>
                           </div>
                         )}
-                        {detailSale.partner_fee_amount != null && (
+                        {detailSale.socio_fee_amount != null && (
                           <div>
                             <span className="text-muted-foreground">Comissão sócio</span>
-                            <p>{formatCurrencyBRL(detailSale.partner_fee_amount)}</p>
+                            <p>{formatCurrencyBRL(detailSale.socio_fee_amount)}</p>
                           </div>
                         )}
                       </div>
