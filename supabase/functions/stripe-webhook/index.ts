@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateFinancialPartnerForSplit } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,12 +81,34 @@ async function processPaymentConfirmed(
   const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
   const platformFeeTotal = platformFeeCents / 100;
 
-  const { data: partner } = await supabaseAdmin
+  const { data: partnerRows, error: partnerError } = await supabaseAdmin
     .from("partners")
-    .select("id, stripe_account_id, status")
+    .select("id, name, status, stripe_account_id")
+    // Fase 1: `partners` segue como nome legado, mas o beneficiário financeiro
+    // precisa respeitar o escopo da empresa dona da venda.
+    .eq("company_id", sale.company_id)
     .eq("status", "ativo")
-    .limit(1)
-    .maybeSingle();
+    .limit(2);
+
+  if (partnerError) {
+    console.error(`Split partner query failed for company ${sale.company_id}: ${partnerError.message}`);
+    return;
+  }
+
+  const partnerValidation = partnerSplitPercent > 0
+    ? validateFinancialPartnerForSplit({
+        partners: partnerRows ?? [],
+        provider: "stripe",
+        environment: "production",
+      })
+    : null;
+
+  if (partnerValidation && !partnerValidation.ok) {
+    console.error(`${partnerValidation.code}: ${partnerValidation.message}`);
+    return;
+  }
+
+  const partner = partnerValidation?.ok ? partnerValidation.partner : null;
 
   let partnerFeeAmount = 0;
   let platformNetAmount = platformFeeTotal;

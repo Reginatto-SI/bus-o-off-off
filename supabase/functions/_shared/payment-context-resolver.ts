@@ -63,8 +63,13 @@ type MinimalCompany = {
 };
 
 type MinimalPartner = {
+  id?: string | null;
+  name?: string | null;
+  status?: string | null;
+  asaas_wallet_id?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
+  stripe_account_id?: string | null;
 };
 
 function readEnvironmentCompanyConfig(
@@ -117,9 +122,103 @@ export function resolvePartnerWalletByEnvironment(
 ): string | null {
   if (!partner) return null;
   if (environment === "production") {
-    return partner.asaas_wallet_id_production ?? null;
+    return partner.asaas_wallet_id_production ?? partner.asaas_wallet_id ?? null;
   }
-  return partner.asaas_wallet_id_sandbox ?? null;
+  return partner.asaas_wallet_id_sandbox ?? partner.asaas_wallet_id ?? null;
+}
+
+export type FinancialPartnerValidationProvider = "asaas" | "stripe";
+
+export type FinancialPartnerValidationResult =
+  | {
+      ok: true;
+      code: null;
+      message: null;
+      partner: MinimalPartner;
+      walletId: string | null;
+    }
+  | {
+      ok: false;
+      code:
+        | "split_partner_missing_active"
+        | "split_partner_multiple_active"
+        | "split_partner_wallet_missing"
+        | "split_partner_destination_missing";
+      message: string;
+      partner: MinimalPartner | null;
+      walletId: null;
+    };
+
+export function validateFinancialPartnerForSplit(params: {
+  partners: MinimalPartner[] | null | undefined;
+  provider: FinancialPartnerValidationProvider;
+  environment: PaymentEnvironment;
+}): FinancialPartnerValidationResult {
+  const activePartners = (params.partners ?? []).filter(
+    (partner) => partner?.status === "ativo",
+  );
+
+  if (activePartners.length === 0) {
+    return {
+      ok: false,
+      code: "split_partner_missing_active",
+      message: "Split configurado, mas nenhum sócio ativo encontrado",
+      partner: null,
+      walletId: null,
+    };
+  }
+
+  if (activePartners.length > 1) {
+    return {
+      ok: false,
+      code: "split_partner_multiple_active",
+      message: "Split inválido: mais de um sócio ativo",
+      partner: null,
+      walletId: null,
+    };
+  }
+
+  const partner = activePartners[0];
+
+  if (params.provider === "stripe") {
+    if (!partner?.stripe_account_id) {
+      return {
+        ok: false,
+        code: "split_partner_destination_missing",
+        message: "Split inválido: sócio sem conta Stripe configurada",
+        partner,
+        walletId: null,
+      };
+    }
+
+    return {
+      ok: true,
+      code: null,
+      message: null,
+      partner,
+      walletId: partner.stripe_account_id,
+    };
+  }
+
+  const walletId = resolvePartnerWalletByEnvironment(partner, params.environment);
+
+  if (!walletId) {
+    return {
+      ok: false,
+      code: "split_partner_wallet_missing",
+      message: "Split inválido: sócio sem wallet configurada",
+      partner,
+      walletId: null,
+    };
+  }
+
+  return {
+    ok: true,
+    code: null,
+    message: null,
+    partner,
+    walletId,
+  };
 }
 
 export function resolvePaymentContext(params: {

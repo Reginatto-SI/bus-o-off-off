@@ -6,8 +6,8 @@ import {
   logSaleOperationalEvent,
 } from "../_shared/payment-observability.ts";
 import {
-  resolvePartnerWalletByEnvironment,
   resolvePaymentContext,
+  validateFinancialPartnerForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
@@ -420,18 +420,87 @@ serve(async (req) => {
         const platformFeeTotal = platformFeeCents / 100;
 
         const partnerSplitPercent = company?.partner_split_percent ?? 50;
-        const { data: partner } = await supabaseAdmin
-          .from("partners")
-          .select("id, asaas_wallet_id_production, asaas_wallet_id_sandbox, status")
-          .eq("company_id", sale.company_id)
-          .eq("status", "ativo")
-          .limit(1)
-          .maybeSingle();
+        let partner: any = null;
+        let partnerWalletId: string | null = null;
+
+        if (partnerSplitPercent > 0) {
+          const { data: partnerRows, error: partnerError } = await supabaseAdmin
+            .from("partners")
+            .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
+            .eq("company_id", sale.company_id)
+            .eq("status", "ativo")
+            .limit(2);
+
+          if (partnerError) {
+            logPaymentTrace("error", "verify-payment-status", "split_partner_query_failed", {
+              sale_id: sale.id,
+              company_id: sale.company_id,
+              payment_environment: paymentContext.environment,
+              error_message: partnerError.message,
+            });
+
+            await persistVerifyLog({
+              processingStatus: "warning",
+              resultCategory: "warning",
+              message: "Falha ao validar sócio do split no verify-payment-status",
+              incidentCode: "split_partner_query_failed",
+              httpStatus: 409,
+              responseJson: {
+                paymentStatus: sale.status,
+                split_error: "Falha ao validar o sócio do split",
+                split_error_code: "split_partner_query_failed",
+              },
+            });
+
+            return jsonResponse({
+              paymentStatus: sale.status,
+              split_error: "Falha ao validar o sócio do split",
+              split_error_code: "split_partner_query_failed",
+            }, 409);
+          }
+
+          const partnerValidation = validateFinancialPartnerForSplit({
+            partners: partnerRows ?? [],
+            provider: "asaas",
+            environment: paymentContext.environment,
+          });
+
+          if (!partnerValidation.ok) {
+            logPaymentTrace("error", "verify-payment-status", "split_partner_validation_failed", {
+              sale_id: sale.id,
+              company_id: sale.company_id,
+              payment_environment: paymentContext.environment,
+              validation_code: partnerValidation.code,
+              validation_message: partnerValidation.message,
+              active_partner_rows: (partnerRows ?? []).length,
+            });
+
+            await persistVerifyLog({
+              processingStatus: "warning",
+              resultCategory: "warning",
+              message: partnerValidation.message,
+              incidentCode: partnerValidation.code,
+              httpStatus: 409,
+              responseJson: {
+                paymentStatus: sale.status,
+                split_error: partnerValidation.message,
+                split_error_code: partnerValidation.code,
+              },
+            });
+
+            return jsonResponse({
+              paymentStatus: sale.status,
+              split_error: partnerValidation.message,
+              split_error_code: partnerValidation.code,
+            }, 409);
+          }
+
+          partner = partnerValidation.partner;
+          partnerWalletId = partnerValidation.walletId;
+        }
 
         let partnerFeeAmount = 0;
         let platformNetAmount = platformFeeTotal;
-
-        const partnerWalletId = resolvePartnerWalletByEnvironment(partner, paymentContext.environment);
 
         logPaymentTrace("info", "verify-payment-status", "financial_partner_selected", {
           sale_id: sale.id,

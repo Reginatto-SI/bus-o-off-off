@@ -28,6 +28,7 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { getFinancialPartnerConfigStatus } from '@/lib/financialPartnerConfig';
 import {
   getAsaasIntegrationSnapshot,
   type AsaasIntegrationStatus,
@@ -145,6 +146,12 @@ export default function CompanyPage() {
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
+  const [financialPartners, setFinancialPartners] = useState<Array<{
+    status: string | null;
+    asaas_wallet_id: string | null;
+    asaas_wallet_id_production: string | null;
+    asaas_wallet_id_sandbox: string | null;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -330,8 +337,35 @@ export default function CompanyPage() {
     }
     setLoading(false);
   };
+
+  const fetchFinancialPartners = async () => {
+    if (!activeCompanyId) {
+      setFinancialPartners([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('partners')
+      .select('status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox')
+      .eq('company_id', activeCompanyId);
+
+    if (error) {
+      console.error('[Company] Erro ao carregar sócios financeiros para validação de split', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      setFinancialPartners([]);
+      return;
+    }
+
+    setFinancialPartners((data ?? []) as typeof financialPartners);
+  };
+
   useEffect(() => {
     fetchCompany();
+    fetchFinancialPartners();
   }, [activeCompanyId]);
 
   // Slug availability check with debounce
@@ -676,6 +710,10 @@ export default function CompanyPage() {
 
     const platformFeePercent = parsePercentInput(form.platform_fee_percent);
     const partnerSplitPercent = parsePercentInput(form.partner_split_percent);
+    const splitConfigStatus = getFinancialPartnerConfigStatus({
+      partnerSplitPercent: partnerSplitPercent ?? 0,
+      partners: financialPartners,
+    });
 
     if (platformFeePercent === null || Number.isNaN(platformFeePercent) || platformFeePercent < 0 || platformFeePercent > 100) {
       toast.error('Taxa da Plataforma deve estar entre 0 e 100');
@@ -685,6 +723,12 @@ export default function CompanyPage() {
 
     if (partnerSplitPercent === null || Number.isNaN(partnerSplitPercent) || partnerSplitPercent < 0 || partnerSplitPercent > 100) {
       toast.error('Taxa do Sócio deve estar entre 0 e 100');
+      setSaving(false);
+      return;
+    }
+
+    if (splitConfigStatus.state !== 'valid') {
+      toast.error(splitConfigStatus.message);
       setSaving(false);
       return;
     }
@@ -1605,6 +1649,10 @@ export default function CompanyPage() {
                         const totalFee = platformFee + partnerFee;
                         const companyShare = 100 - totalFee;
                         const sumExceeds100 = totalFee > 100;
+                        const splitConfigStatus = getFinancialPartnerConfigStatus({
+                          partnerSplitPercent: partnerFee,
+                          partners: financialPartners,
+                        });
 
                         return (
                         <div className="rounded-lg border p-4 space-y-4">
@@ -1618,6 +1666,14 @@ export default function CompanyPage() {
                           <p className="text-sm text-muted-foreground">
                             Configure a taxa da plataforma e a taxa do sócio para esta empresa. A empresa recebe o restante via split direto no Asaas.
                           </p>
+                          {splitConfigStatus.state !== 'valid' && (
+                            <Alert variant="destructive">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertDescription>
+                                {splitConfigStatus.message} Ajuste o cadastro em <strong>/admin/socios</strong> antes de salvar split acima de zero.
+                              </AlertDescription>
+                            </Alert>
+                          )}
                           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                             <div className="space-y-2">
                               <Label htmlFor="platform_fee_percent">Taxa da Plataforma (%)</Label>

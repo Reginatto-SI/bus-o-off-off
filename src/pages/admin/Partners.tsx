@@ -38,9 +38,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getFinancialPartnerConfigStatus } from '@/lib/financialPartnerConfig';
 
 export default function Partners() {
-  const { isDeveloper } = useAuth();
+  const { isDeveloper, activeCompanyId, activeCompany } = useAuth();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -53,10 +54,24 @@ export default function Partners() {
     notes: '',
   });
 
+  const splitConfigStatus = getFinancialPartnerConfigStatus({
+    partnerSplitPercent: Number(activeCompany?.partner_split_percent ?? 0),
+    partners,
+  });
+
   const fetchPartners = async () => {
+    if (!activeCompanyId) {
+      setPartners([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('partners')
       .select('*')
+      // Fase 1 do saneamento: `partners` continua legado no nome,
+      // mas agora precisa respeitar escopo multiempresa por company_id.
+      .eq('company_id', activeCompanyId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -69,7 +84,7 @@ export default function Partners() {
 
   useEffect(() => {
     fetchPartners();
-  }, []);
+  }, [activeCompanyId]);
 
   const openNew = () => {
     setEditingId(null);
@@ -94,6 +109,11 @@ export default function Partners() {
       return;
     }
 
+    if (!activeCompanyId) {
+      toast.error('Selecione uma empresa ativa antes de gerenciar sócios');
+      return;
+    }
+
     // Regra: no máximo 1 sócio ativo. Se tentando salvar como ativo, verificar conflito.
     if (form.status === 'ativo') {
       const existingActive = partners.find(
@@ -109,6 +129,7 @@ export default function Partners() {
 
     setSaving(true);
     const payload = {
+      company_id: activeCompanyId,
       name: form.name.trim(),
       asaas_wallet_id: form.asaas_wallet_id.trim() || null,
       status: form.status,
@@ -117,7 +138,11 @@ export default function Partners() {
 
     let error;
     if (editingId) {
-      ({ error } = await supabase.from('partners').update(payload).eq('id', editingId));
+      ({ error } = await supabase
+        .from('partners')
+        .update(payload)
+        .eq('id', editingId)
+        .eq('company_id', activeCompanyId));
     } else {
       ({ error } = await supabase.from('partners').insert([payload]));
     }
@@ -161,6 +186,24 @@ export default function Partners() {
             </Button>
           }
         />
+
+        {!activeCompanyId && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Selecione uma empresa ativa para visualizar ou cadastrar o sócio financeiro responsável pelo split.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {activeCompanyId && splitConfigStatus.state !== 'valid' && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {splitConfigStatus.message} O backend também bloqueia a criação do split enquanto essa condição não for corrigida.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
