@@ -204,7 +204,7 @@ serve(async (req) => {
       : rawSaleId;
 
     // Pré-Step 5: webhook só segue quando o ambiente da venda foi determinado de forma explícita.
-    let saleEnv: PaymentEnvironment | undefined;
+    let saleEnv: PaymentEnvironment | null = null;
     if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
