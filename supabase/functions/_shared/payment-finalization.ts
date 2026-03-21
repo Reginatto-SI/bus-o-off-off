@@ -105,7 +105,7 @@ export async function inspectSaleConsistency(
 }
 
 export async function createTicketsFromPassengersShared(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseAdmin,
   saleId: string,
   companyId: string,
 ): Promise<{ status: TicketCreationStatus; message: string }> {
