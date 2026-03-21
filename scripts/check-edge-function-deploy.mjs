@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
  * Checklist operacional de edge functions.
  *
  * Objetivo:
- * - detectar divergência entre funções existentes no código local e funções publicadas no ambiente;
+ * - detectar divergência entre funções existentes no código local e funções acessíveis no ambiente publicado configurado no projeto;
  * - validar apenas presença/sanidade inicial das rotas, sem acionar fluxos destrutivos;
  * - produzir um resumo fácil de auditar em terminal e, opcionalmente, em Markdown.
  *
@@ -270,12 +270,12 @@ function buildMarkdown({ generatedAt, baseUrl, rows, localFunctions }) {
     '# Checklist automático de deploy e verificação de ambiente para edge functions',
     '',
     '## Objetivo',
-    'Fornecer uma checagem simples, auditável e segura para comparar edge functions existentes no código local com o ambiente publicado, reduzindo o risco de frontend depender de funções ainda não publicadas.',
+    'Fornecer uma checagem simples, auditável e segura para comparar edge functions existentes no código local com o ambiente publicado, reduzindo o risco de frontend depender de funções ainda não refletidas no ambiente publicado do projeto.',
     '',
     '## Problema que motivou esta implementação',
-    '- Houve divergência entre o código local e o ambiente publicado do Supabase.',
+    '- Houve divergência entre o código local e o ambiente publicado consumido pela aplicação (incluindo cenários gerenciados pelo Lovable Cloud).',
     '- O frontend passou a depender de funções como `check-asaas-integration` e `get-runtime-payment-environment`, mas o ambiente validado retornou `404 Requested function was not found`.',
-    '- Faltava uma verificação rápida e repetível antes de validar produção.',
+    '- Faltava uma verificação rápida e repetível antes de validar o ambiente publicado.',
     '',
     '## Estratégia adotada',
     '- Criar um script único em `scripts/check-edge-function-deploy.mjs`.',
@@ -302,7 +302,7 @@ function buildMarkdown({ generatedAt, baseUrl, rows, localFunctions }) {
     '',
     '## O que ele valida',
     '- existência da função no código local (`supabase/functions/<nome>`);',
-    '- acessibilidade/publicação da rota no ambiente consultado;',
+    '- acessibilidade/publicação da rota no ambiente publicado consultado;',
     '- resposta inicial coerente (`ok`, `auth_error`, `request_error`, `missing_deploy`, `needs_review`, `unknown`);',
     '- dependência textual do frontend/código em relação à função.',
     '',
@@ -341,15 +341,15 @@ function buildMarkdown({ generatedAt, baseUrl, rows, localFunctions }) {
     '## Riscos e limitações',
     '- Um `auth_error` ou `request_error` confirma presença/deploy, mas não prova corretude da lógica interna.',
     '- Algumas funções sensíveis são testadas apenas com payload vazio para evitar efeito colateral.',
-    '- O checklist depende do `.env` local para descobrir URL e chave publicável do projeto.',
+    '- O checklist depende do `.env` local para descobrir a URL publicada e a chave publicável usadas pelo projeto no ambiente atual.',
     '',
     '## Próximos usos recomendados',
-    '- executar antes de validar produção;',
+    '- executar antes de validar o ambiente publicado;',
     '- executar após publicar novas edge functions;',
     '- anexar o relatório em auditorias rápidas de ambiente.',
     '',
     '## Conclusão',
-    'O checklist fornece uma camada prática e previsível para detectar divergência entre código local e ambiente publicado antes que isso apareça para o usuário final.',
+    'O checklist fornece uma camada prática e previsível para detectar divergência entre código local e ambiente publicado efetivamente consumido pela aplicação antes que isso apareça para o usuário final.',
     '',
     '## Checklist final',
     '- [x] foi criada uma forma automatizada de verificar deploy/disponibilidade de edge functions',
