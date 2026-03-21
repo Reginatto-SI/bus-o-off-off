@@ -64,7 +64,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showAddressModal, setShowAddressModal] = useState(false);
   // Step 3: ambiente-alvo explícito para preparar onboarding separado por sandbox/produção.
-  const [targetEnvironment, setTargetEnvironment] = useState<'automatic' | 'sandbox' | 'production'>('automatic');
+  const [targetEnvironment, setTargetEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
 
   // Sync localCompanyData when companyData prop changes
