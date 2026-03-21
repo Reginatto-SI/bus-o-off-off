@@ -87,8 +87,13 @@ export function getAsaasIntegrationSnapshot(
   let status: AsaasIntegrationStatus = 'not_configured';
   const reasons: string[] = [];
 
-  if (currentIsConnected) {
+  if (currentIsConnected && current.accountId) {
     status = 'connected';
+  } else if (currentIsConnected && !current.accountId) {
+    // Comentário de manutenção: o card não deve marcar "Conectado" quando o ambiente
+    // ainda não tem `account_id` persistido. O checkout pode até operar com API key + wallet,
+    // mas a verificação manual e a auditoria da conta exigem esse identificador.
+    status = 'partially_configured';
   } else if (
     current.onboardingComplete && (!current.apiKey || !current.walletId)
   ) {
@@ -105,6 +110,9 @@ export function getAsaasIntegrationSnapshot(
   }
   if (current.onboardingComplete && !current.walletId) {
     reasons.push('onboarding marcado sem wallet no ambiente operacional');
+  }
+  if (currentIsConnected && !current.accountId) {
+    reasons.push('conta operacional sem account_id salvo no ambiente operacional');
   }
   if (!currentHasAny && oppositeIsConnected) {
     reasons.push(`conta conectada apenas no ambiente ${oppositeEnvironment === 'production' ? 'de produção' : 'sandbox'}`);
