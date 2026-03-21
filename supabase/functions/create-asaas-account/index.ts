@@ -20,6 +20,105 @@ function maskSensitiveValue(value?: string | null) {
   return `${value.slice(0, 4)}***${value.slice(-4)}`;
 }
 
+function listObjectKeys(value: unknown) {
+  return value && typeof value === "object"
+    ? Object.keys(value as Record<string, unknown>).sort()
+    : [];
+}
+
+function summarizeAsaasPayload(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return { kind: typeof value, keys: [] as string[] };
+  }
+
+  const record = value as Record<string, unknown>;
+  const dataValue = record.data;
+  const itemsValue = Array.isArray(record.items)
+    ? record.items[0]
+    : Array.isArray(dataValue)
+      ? dataValue[0]
+      : null;
+
+  return {
+    kind: Array.isArray(value) ? "array" : "object",
+    keys: listObjectKeys(record),
+    data_keys: listObjectKeys(dataValue),
+    first_item_keys: listObjectKeys(itemsValue),
+    has_embedded_wallet: Boolean(
+      record.wallet ||
+      (dataValue && typeof dataValue === "object" && !Array.isArray(dataValue) && (dataValue as Record<string, unknown>).wallet) ||
+      (itemsValue && typeof itemsValue === "object" && (itemsValue as Record<string, unknown>).wallet)
+    ),
+  };
+}
+
+function extractWalletIdFromAsaasPayload(payload: unknown): string | null {
+  /**
+   * Comentário de manutenção:
+   * o Asaas já foi consumido aqui em formatos diferentes (`walletId`, `wallet.id`, `id`).
+   * Mantemos a ordem conservadora e ampliamos apenas alguns caminhos adjacentes de payload
+   * para melhorar a resiliência sem transformar esse fluxo em parser genérico.
+   */
+  const visited = new Set<unknown>();
+
+  const read = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") return null;
+    if (visited.has(value)) return null;
+    visited.add(value);
+
+    const record = value as Record<string, unknown>;
+    const directCandidates = [
+      record.walletId,
+      record.wallet_id,
+      record.id,
+    ];
+
+    for (const candidate of directCandidates) {
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+
+    if (record.wallet && typeof record.wallet === "object") {
+      const walletRecord = record.wallet as Record<string, unknown>;
+      const nestedWalletId = walletRecord.id ?? walletRecord.walletId ?? walletRecord.wallet_id;
+      if (typeof nestedWalletId === "string" && nestedWalletId.trim().length > 0) {
+        return nestedWalletId.trim();
+      }
+    }
+
+    const nestedCandidates = [
+      record.data,
+      record.account,
+      record.owner,
+      Array.isArray(record.items) ? record.items[0] : null,
+      Array.isArray(record.data) ? record.data[0] : null,
+    ];
+
+    for (const candidate of nestedCandidates) {
+      const nestedWalletId = read(candidate);
+      if (nestedWalletId) return nestedWalletId;
+    }
+
+    return null;
+  };
+
+  return read(payload);
+}
+
+function buildWalletDiagnosticMessage(params: {
+  environment: PaymentEnvironment;
+  walletLookupAttempted: boolean;
+  walletLookupStatus?: number | null;
+}) {
+  const environmentLabel = params.environment === "production" ? "produção" : "sandbox";
+  const walletLookupSuffix = params.walletLookupAttempted
+    ? ` Tentativa complementar em /wallets${params.walletLookupStatus ? ` retornou HTTP ${params.walletLookupStatus}` : " não trouxe wallet utilizável"}.`
+    : "";
+
+  return `A conta Asaas respondeu no ambiente ${environmentLabel}, mas não foi possível identificar um walletId utilizável. Verifique se a API Key pertence a esse mesmo ambiente ou se a conta retornou um formato inesperado.${walletLookupSuffix}`;
+}
+
 
 function resolveTargetEnvironment(params: { requestedEnv?: string | null; hostEnv: PaymentEnvironment }): PaymentEnvironment {
   if (params.requestedEnv === "production" || params.requestedEnv === "sandbox") {
@@ -331,17 +430,21 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        let walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+        let walletIdFromResponse = extractWalletIdFromAsaasPayload(accountData);
+        let walletLookupStatus: number | null = null;
+        let walletLookupSummary: ReturnType<typeof summarizeAsaasPayload> | null = null;
 
         if (!walletIdFromResponse) {
           try {
             const walletRes = await fetch(`${asaasBaseUrl}/wallets`, {
               headers: { "access_token": verificationToken },
             });
+            walletLookupStatus = walletRes.status;
 
             if (walletRes.ok) {
               const walletData = await walletRes.json();
-              walletIdFromResponse = walletData?.id ?? walletData?.wallet?.id ?? null;
+              walletLookupSummary = summarizeAsaasPayload(walletData);
+              walletIdFromResponse = extractWalletIdFromAsaasPayload(walletData);
             } else {
               const walletError = await walletRes.text();
               console.warn("[ASAAS][VERIFY] wallet lookup failed", {
@@ -367,40 +470,95 @@ serve(async (req) => {
             reason: "wallet_id_missing_in_response",
             endpoint: verificationEndpoint,
             response_keys: Object.keys(accountData || {}),
+            my_account_summary: summarizeAsaasPayload(accountData),
+            wallets_lookup_status: walletLookupStatus,
+            wallets_lookup_summary: walletLookupSummary,
           });
           return new Response(
-            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
+            JSON.stringify({
+              error: buildWalletDiagnosticMessage({
+                environment: paymentEnv,
+                walletLookupAttempted: walletLookupStatus !== null,
+                walletLookupStatus,
+              }),
+            }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 ...
     if (mode === "link_existing" && api_key) {
       try {
+        // Comentário de manutenção:
+        // o vínculo por API Key agora é disparado apenas pelo wizard reutilizável no frontend.
+        // Os logs abaixo existem para diferenciar ambiente incorreto, autenticação inválida
+        // e resposta do Asaas sem wallet compatível, sem expor a API Key original.
+        console.log("[create-asaas-account] link_existing started", {
+          company_id,
+          environment: paymentEnv,
+          asaas_base_url: asaasBaseUrl,
+          api_key_preview: maskSensitiveValue(api_key),
+        });
+
         const myAccountRes = await fetch(`${asaasBaseUrl}/myAccount`, {
           headers: { "access_token": api_key },
+        });
+        console.log("[create-asaas-account] link_existing myAccount response", {
+          company_id,
+          environment: paymentEnv,
+          asaas_base_url: asaasBaseUrl,
+          status: myAccountRes.status,
+          ok: myAccountRes.ok,
         });
 
         if (!myAccountRes.ok) {
           const errBody = await myAccountRes.text();
-          console.error("Asaas myAccount validation failed:", errBody);
+          console.error("[create-asaas-account] link_existing myAccount failed", {
+            company_id,
+            environment: paymentEnv,
+            asaas_base_url: asaasBaseUrl,
+            status: myAccountRes.status,
+            response_preview: errBody.slice(0, 500),
+          });
+          const authError = myAccountRes.status === 401 || myAccountRes.status === 403;
+          const environmentHint = paymentEnv === "production" ? "produção" : "sandbox";
           return new Response(
-            JSON.stringify({ error: "API Key inválida ou conta não encontrada. Verifique a chave e tente novamente." }),
+            JSON.stringify({
+              error: authError
+                ? `Não foi possível autenticar sua conta Asaas no ambiente ${environmentHint}. Verifique se a API Key pertence a esse ambiente e tente novamente.`
+                : `Não foi possível validar sua conta Asaas no ambiente ${environmentHint}. Confira se o ambiente selecionado corresponde à API Key informada.`,
+            }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
         const accountData = await myAccountRes.json();
-        let walletId = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+        console.log("[create-asaas-account] link_existing myAccount payload summary", {
+          company_id,
+          environment: paymentEnv,
+          summary: summarizeAsaasPayload(accountData),
+        });
+
+        let walletId = extractWalletIdFromAsaasPayload(accountData);
+        let walletLookupStatus: number | null = null;
+        let walletLookupSummary: ReturnType<typeof summarizeAsaasPayload> | null = null;
 
         if (!walletId) {
           try {
             const walletRes = await fetch(`${asaasBaseUrl}/wallets`, {
               headers: { "access_token": api_key },
             });
+            walletLookupStatus = walletRes.status;
 
             if (walletRes.ok) {
               const walletData = await walletRes.json();
-              walletId = walletData?.id ?? walletData?.wallet?.id ?? null;
+              walletLookupSummary = summarizeAsaasPayload(walletData);
+              walletId = extractWalletIdFromAsaasPayload(walletData);
+              console.log("[create-asaas-account] link_existing wallets payload summary", {
+                company_id,
+                environment: paymentEnv,
+                status: walletRes.status,
+                summary: walletLookupSummary,
+              });
             } else {
               const walletError = await walletRes.text();
               console.warn("[create-asaas-account] wallet lookup failed", {
@@ -408,6 +566,7 @@ serve(async (req) => {
                 status: walletRes.status,
                 response: walletError,
                 environment: paymentEnv,
+                asaas_base_url: asaasBaseUrl,
               });
             }
           } catch (walletLookupError) {
@@ -422,11 +581,22 @@ serve(async (req) => {
         if (!walletId) {
           console.error("[create-asaas-account] walletId missing from /myAccount response", {
             company_id,
-            response_keys: Object.keys(accountData || {}),
             environment: paymentEnv,
+            asaas_base_url: asaasBaseUrl,
+            my_account_status: myAccountRes.status,
+            response_keys: Object.keys(accountData || {}),
+            my_account_summary: summarizeAsaasPayload(accountData),
+            wallets_lookup_status: walletLookupStatus,
+            wallets_lookup_summary: walletLookupSummary,
           });
           return new Response(
-            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
+            JSON.stringify({
+              error: buildWalletDiagnosticMessage({
+                environment: paymentEnv,
+                walletLookupAttempted: walletLookupStatus !== null,
+                walletLookupStatus,
+              }),
+            }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
