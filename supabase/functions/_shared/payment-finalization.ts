@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// deno-lint-ignore no-explicit-any
+type SupabaseAdmin = ReturnType<typeof createClient<any>>;
 import {
   logPaymentTrace,
   logSaleOperationalEvent,

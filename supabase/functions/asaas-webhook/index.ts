@@ -676,6 +676,7 @@ async function processPlatformFeeWebhook(
     if (updateError) {
       return {
         status: "failed",
+        resultCategory: "error" as ResultCategory,
         httpStatus: 500,
         message: `Falha ao confirmar taxa da plataforma da venda ${saleId}`,
         responseBody: { error: "Platform fee update failed", sale_id: saleId },

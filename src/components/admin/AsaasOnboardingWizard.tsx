@@ -323,12 +323,11 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       </p>
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'sandbox' | 'production')}>
           <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
+            <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+            <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
           </SelectContent>
         </Select>
       </div>

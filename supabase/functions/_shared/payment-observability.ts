@@ -111,7 +111,7 @@ export async function logSaleOperationalEvent(params: {
 }
 
 export async function logSaleIntegrationEvent(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: ReturnType<typeof createClient<any>>;
   saleId?: string | null;
   companyId?: string | null;
   paymentEnvironment?: string | null;

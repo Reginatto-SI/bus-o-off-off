@@ -937,7 +937,7 @@ export default function SalesDiagnostic() {
       return;
     }
 
-    const rawSales = (data ?? []) as DiagnosticSale[];
+    const rawSales = (data ?? []) as unknown as DiagnosticSale[];
 
     // Fetch ticket counts and current seat locks for these sales.
     // Comentário de manutenção: usamos seat_locks para diagnosticar lock ativo/ausente/expirado
