@@ -91,19 +91,6 @@ interface DiagnosticSale extends Sale {
 
 type OperationalCategory = 'saudavel' | 'atencao' | 'problema' | 'pago' | 'cancelado';
 
-interface DiagnosticOperationalView {
-  category: OperationalCategory;
-  categoryLabel: string;
-  categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
-  categoryClassName?: string;
-  priority: number;
-  createdAgoLabel: string;
-  expirationLabel: string | null;
-  lockLabel: string;
-  lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
-  hasGatewayDivergence: boolean;
-}
-
 interface SaleIntegrationLog {
   id: string;
   sale_id: string | null;
@@ -128,153 +115,417 @@ function formatPaymentEnvironmentLabel(value?: string | null): string {
   return value === 'production' ? 'Produção' : 'Sandbox';
 }
 
-function formatElapsedMinutesLabel(createdAt: string): string {
-  const elapsedMs = Date.now() - new Date(createdAt).getTime();
-  const elapsedMinutes = Math.max(Math.floor(elapsedMs / 60000), 0);
-  if (elapsedMinutes < 1) return 'Criado há menos de 1 min';
-  return `Criado há ${elapsedMinutes} min`;
+function formatCompactDurationFromNow(targetDate: string): string {
+  const diffMs = new Date(targetDate).getTime() - Date.now();
+  const absMs = Math.abs(diffMs);
+  const absMinutes = Math.max(Math.round(absMs / 60000), 0);
+
+  let value = absMinutes;
+  let unit = 'min';
+
+  if (absMinutes >= 60 * 24) {
+    value = Math.round(absMinutes / (60 * 24));
+    unit = value === 1 ? 'dia' : 'dias';
+  } else if (absMinutes >= 60) {
+    value = Math.round(absMinutes / 60);
+    unit = 'h';
+  }
+
+  if (value <= 0) return 'agora';
+  return diffMs >= 0 ? `em ${value} ${unit}` : `há ${value} ${unit}`;
 }
 
-function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView {
-  const createdAgoLabel = formatElapsedMinutesLabel(sale.created_at);
-  const pendingStatuses: SaleStatus[] = ['pendente_pagamento', 'reservado'];
-  const isPending = pendingStatuses.includes(sale.status);
-  const lockExpiresAt = sale.latest_lock_expires_at ? new Date(sale.latest_lock_expires_at).getTime() : null;
-  const hasActiveLock = (sale.active_lock_count ?? 0) > 0 && lockExpiresAt !== null && lockExpiresAt > Date.now();
-  const hasExpiredLock = (sale.active_lock_count ?? 0) <= 0 && lockExpiresAt !== null && lockExpiresAt <= Date.now();
-  const hasMissingLock = (sale.active_lock_count ?? 0) <= 0;
-  const hasPartialLock = (sale.active_lock_count ?? 0) > 0 && (sale.active_lock_count ?? 0) < Math.max(sale.quantity, 1);
+function formatCreatedAtLabel(createdAt: string): string {
+  return `Criada ${formatCompactDurationFromNow(createdAt)}`;
+}
 
-  const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
-  const hasGatewayDivergence = (isPending && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
+interface PaymentStatusView {
+  label: string;
+  detail?: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline';
+}
 
-  let lockLabel = '⚠️ Lock ausente';
-  let lockVariant: DiagnosticOperationalView['lockVariant'] = 'destructive';
-  if (hasActiveLock) {
-    lockLabel = '✔️ Lock ativo';
-    lockVariant = 'default';
-  } else if (hasExpiredLock) {
-    lockLabel = '❌ Lock expirado';
-    lockVariant = 'destructive';
-  }
+interface LockStatusView {
+  label: string;
+  detail?: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline';
+  isActive: boolean;
+  isExpired: boolean;
+  isMissing: boolean;
+  isPartial: boolean;
+  expiresAt: string | null;
+}
 
-  if (sale.status === 'pago') {
+interface DiagnosticOperationalView {
+  category: OperationalCategory;
+  categoryLabel: string;
+  categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  categoryClassName?: string;
+  priority: number;
+  createdAgoLabel: string;
+  expirationLabel: string | null;
+  lockLabel: string;
+  lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
+  hasGatewayDivergence: boolean;
+  summaryLabel: string;
+  causeLabel: string;
+  actionLabel: string;
+}
+
+function computeGateway(sale: DiagnosticSale): string {
+  if (sale.asaas_payment_id) return 'Asaas';
+  if (sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) return 'Stripe';
+  if (sale.sale_origin === 'admin_manual' || sale.sale_origin === 'seller_manual') return 'Manual';
+  return 'Manual';
+}
+
+function computeLockStatus(sale: DiagnosticSale): LockStatusView {
+  const gateway = computeGateway(sale);
+  const expiresAt = sale.latest_lock_expires_at ?? null;
+  const activeLockCount = sale.active_lock_count ?? 0;
+  const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : null;
+  const isExpired = expiresAtMs !== null && expiresAtMs <= Date.now();
+  const isActive = activeLockCount > 0 && expiresAtMs !== null && expiresAtMs > Date.now();
+  const isPartial = activeLockCount > 0 && activeLockCount < Math.max(sale.quantity, 1);
+  const isMissing = activeLockCount <= 0 && !isExpired;
+
+  // Comentário de suporte: vendas manuais reservadas não nascem obrigatoriamente do fluxo de seat_locks.
+  // Por isso a UI deixa explícito quando o bloqueio temporário não se aplica ao caso manual.
+  if (gateway === 'Manual' && sale.status === 'reservado' && !expiresAt) {
     return {
-      category: 'pago',
-      categoryLabel: '🔵 Pago',
-      categoryVariant: 'default',
-      priority: 4,
-      createdAgoLabel,
-      expirationLabel: null,
-      lockLabel,
-      lockVariant,
-      hasGatewayDivergence,
+      label: 'Não se aplica à venda manual',
+      detail: 'Venda manual sem bloqueio temporário vinculado.',
+      variant: 'outline',
+      isActive: false,
+      isExpired: false,
+      isMissing: false,
+      isPartial: false,
+      expiresAt,
     };
   }
 
-  if (sale.status === 'cancelado') {
+  if (isActive) {
     return {
-      category: 'cancelado',
-      categoryLabel: '⚫ Cancelado',
-      categoryVariant: 'outline',
-      categoryClassName: 'border-zinc-400 text-zinc-700',
-      priority: 5,
-      createdAgoLabel,
-      expirationLabel: null,
-      lockLabel,
-      lockVariant,
-      hasGatewayDivergence,
+      label: isPartial ? 'Bloqueio parcial ativo' : 'Bloqueio ativo',
+      detail: `Bloqueio ${formatCompactDurationFromNow(expiresAt!)}`,
+      variant: isPartial ? 'secondary' : 'default',
+      isActive: true,
+      isExpired: false,
+      isMissing: false,
+      isPartial,
+      expiresAt,
     };
   }
 
-  if (!isPending) {
+  if (isExpired) {
     return {
-      category: 'atencao',
-      categoryLabel: '🟡 Atenção',
-      categoryVariant: 'secondary',
-      priority: 3,
-      createdAgoLabel,
-      expirationLabel: null,
-      lockLabel,
-      lockVariant,
-      hasGatewayDivergence,
-    };
-  }
-
-  // Regra operacional Step 3:
-  // - até 10min com lock ativo: saudável
-  // - entre 10 e 15min, ou lock parcial: atenção
-  // - >15min, lock ausente/expirado ou divergência gateway: problema
-  const elapsedMinutes = Math.max(Math.floor((Date.now() - new Date(sale.created_at).getTime()) / 60000), 0);
-  const remaining = 15 - elapsedMinutes;
-  const expirationLabel = remaining >= 0 ? `Expira em ${remaining} min` : `Expirado há ${Math.abs(remaining)} min`;
-
-  const isProblem = elapsedMinutes > 15 || hasMissingLock || hasExpiredLock || hasGatewayDivergence;
-  if (isProblem) {
-    return {
-      category: 'problema',
-      categoryLabel: '🔴 Problema',
-      categoryVariant: 'destructive',
-      priority: 1,
-      createdAgoLabel,
-      expirationLabel,
-      lockLabel,
-      lockVariant,
-      hasGatewayDivergence,
-    };
-  }
-
-  const isAttention = elapsedMinutes > 10 || hasPartialLock;
-  if (isAttention) {
-    return {
-      category: 'atencao',
-      categoryLabel: '🟡 Atenção',
-      categoryVariant: 'secondary',
-      priority: 2,
-      createdAgoLabel,
-      expirationLabel,
-      lockLabel,
-      lockVariant,
-      hasGatewayDivergence,
+      label: 'Bloqueio expirado',
+      detail: `Expirou ${formatCompactDurationFromNow(expiresAt!)}`,
+      variant: 'destructive',
+      isActive: false,
+      isExpired: true,
+      isMissing: false,
+      isPartial: false,
+      expiresAt,
     };
   }
 
   return {
-    category: 'saudavel',
-    categoryLabel: '🟢 Saudável',
-    categoryVariant: 'default',
-    priority: 3,
-    createdAgoLabel,
-    expirationLabel,
-    lockLabel,
-    lockVariant,
-    hasGatewayDivergence,
+    label: 'Sem bloqueio temporário',
+    detail: 'Nenhum bloqueio ativo foi encontrado para a venda.',
+    variant: 'outline',
+    isActive: false,
+    isExpired: false,
+    isMissing: true,
+    isPartial: false,
+    expiresAt,
   };
 }
 
-// ── Flow stage computation ──
-function computeGateway(sale: DiagnosticSale): string {
-  if (sale.asaas_payment_id) return 'Asaas';
-  if (sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) return 'Stripe';
-  if ((sale as any).sale_origin === 'admin_manual' || (sale as any).sale_origin === 'seller_manual') return 'Manual';
-  return 'Manual';
+function computePaymentStatus(sale: DiagnosticSale): PaymentStatusView {
+  const gateway = computeGateway(sale);
+  const asaasStatus = sale.asaas_payment_status;
+
+  // Comentário de manutenção: o status de pagamento fica separado do status comercial da venda.
+  // Aqui priorizamos o retorno do gateway quando existe cobrança vinculada.
+  if (asaasStatus === 'RECEIVED' || asaasStatus === 'CONFIRMED') {
+    return { label: 'Pago no gateway', detail: `Asaas ${asaasStatus}`, variant: 'default' };
+  }
+  if (asaasStatus === 'PENDING') {
+    return { label: 'Aguardando pagamento', detail: 'Cobrança criada no gateway.', variant: 'secondary' };
+  }
+  if (asaasStatus === 'OVERDUE' || asaasStatus === 'EXPIRED') {
+    return { label: 'Cobrança expirada', detail: `Asaas ${asaasStatus}`, variant: 'destructive' };
+  }
+  if (asaasStatus === 'REFUNDED' || asaasStatus === 'REFUND_REQUESTED') {
+    return { label: 'Cobrança estornada', detail: `Asaas ${asaasStatus}`, variant: 'destructive' };
+  }
+  if (asaasStatus === 'CANCELLED') {
+    return { label: 'Cobrança cancelada', detail: 'Cancelada no gateway.', variant: 'destructive' };
+  }
+
+  if (gateway === 'Manual') {
+    if (sale.status === 'pago') return { label: 'Pago manualmente', detail: 'Sem cobrança em gateway.', variant: 'default' };
+    if (sale.status === 'cancelado') return { label: 'Não pago', detail: 'Venda manual cancelada.', variant: 'outline' };
+    if (sale.status === 'reservado') return { label: 'Sem confirmação manual', detail: 'Aguardando baixa manual.', variant: 'secondary' };
+  }
+
+  if (sale.asaas_payment_id || sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) {
+    return { label: 'Aguardando retorno do gateway', detail: 'Cobrança enviada sem status final.', variant: 'secondary' };
+  }
+
+  if (sale.status === 'pago') return { label: 'Pago', variant: 'default' };
+  if (sale.status === 'cancelado') return { label: 'Cancelado', variant: 'outline' };
+  return { label: 'Sem cobrança vinculada', detail: 'Não há gateway associado.', variant: 'outline' };
 }
 
-function computePaymentStatus(sale: DiagnosticSale): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } {
-  if (sale.status === 'cancelado') return { label: 'Cancelado', variant: 'destructive' };
-  if (sale.status === 'pago') return { label: 'Pago', variant: 'default' };
+function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView {
+  const createdAgoLabel = formatCreatedAtLabel(sale.created_at);
+  const gateway = computeGateway(sale);
+  const paymentStatus = computePaymentStatus(sale);
+  const lockStatus = computeLockStatus(sale);
+  const isManual = gateway === 'Manual';
+  const isPendingCheckout = sale.status === 'pendente_pagamento';
+  const isReserved = sale.status === 'reservado';
+  const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
+  const hasGatewayDivergence = ((isPendingCheckout || isReserved) && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
 
-  const asaasStatus = sale.asaas_payment_status;
-  if (asaasStatus === 'RECEIVED' || asaasStatus === 'CONFIRMED') return { label: 'Pago', variant: 'default' };
-  if (asaasStatus === 'OVERDUE') return { label: 'Expirado', variant: 'destructive' };
-  if (asaasStatus === 'REFUNDED' || asaasStatus === 'REFUND_REQUESTED') return { label: 'Estornado', variant: 'destructive' };
-  if (asaasStatus === 'PENDING') return { label: 'Aguardando pagamento', variant: 'secondary' };
+  // Comentário de suporte: quando existe `seat_locks.expires_at`, ele vira a fonte principal de leitura
+  // para expiração do bloqueio temporário. `created_at` fica apenas como contexto da venda.
+  const expirationLabel = lockStatus.expiresAt
+    ? lockStatus.isExpired
+      ? `Bloqueio expirou ${formatCompactDurationFromNow(lockStatus.expiresAt)}`
+      : `Bloqueio expira ${formatCompactDurationFromNow(lockStatus.expiresAt)}`
+    : null;
 
-  // O checkout público cria venda em `pendente_pagamento` antes da confirmação efetiva.
-  if (sale.status === 'reservado' || sale.status === 'pendente_pagamento') {
-    return { label: 'Aguardando pagamento', variant: 'secondary' };
+  if (sale.status === 'pago') {
+    return {
+      category: 'pago',
+      categoryLabel: 'Pago',
+      categoryVariant: 'default',
+      priority: 4,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence,
+      summaryLabel: 'Venda paga e conciliada',
+      causeLabel: 'Status da venda já está pago.',
+      actionLabel: 'Nenhuma ação imediata.',
+    };
   }
-  return { label: 'Desconhecido', variant: 'outline' };
+
+  if (sale.status === 'cancelado') {
+    const cancelledByExpiry = (sale.cancel_reason ?? '').toLowerCase().includes('expir');
+    return {
+      category: 'cancelado',
+      categoryLabel: 'Cancelado',
+      categoryVariant: 'outline',
+      categoryClassName: 'border-zinc-400 text-zinc-700',
+      priority: hasGatewayDivergence ? 1 : 5,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence,
+      summaryLabel: hasGatewayDivergence
+        ? 'Venda cancelada com pagamento confirmado no gateway'
+        : cancelledByExpiry
+          ? 'Venda cancelada corretamente após expiração'
+          : 'Venda cancelada',
+      causeLabel: hasGatewayDivergence
+        ? 'Divergência entre banco e gateway.'
+        : cancelledByExpiry
+          ? 'Expiração processada pelo backend.'
+          : (sale.cancel_reason ?? 'Cancelamento registrado no sistema.'),
+      actionLabel: hasGatewayDivergence ? 'Conferir conciliação do pagamento.' : 'Sem ação imediata.',
+    };
+  }
+
+  if (hasGatewayDivergence) {
+    return {
+      category: 'problema',
+      categoryLabel: 'Problema',
+      categoryVariant: 'destructive',
+      priority: 1,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence: true,
+      summaryLabel: 'Pagamento confirmado no gateway, mas venda ainda não conciliada',
+      causeLabel: 'Gateway marcou como pago e o status da venda ainda não mudou.',
+      actionLabel: 'Validar webhook e trilha de conciliação.',
+    };
+  }
+
+  if (paymentStatus.label === 'Cobrança expirada' || paymentStatus.label === 'Cobrança cancelada') {
+    return {
+      category: 'problema',
+      categoryLabel: 'Problema',
+      categoryVariant: 'destructive',
+      priority: 1,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence: false,
+      summaryLabel: 'Cobrança expirada ou cancelada no gateway',
+      causeLabel: paymentStatus.detail ?? 'Gateway retornou falha final.',
+      actionLabel: 'Confirmar se a venda já foi cancelada no sistema.',
+    };
+  }
+
+  if (isPendingCheckout) {
+    if (lockStatus.isExpired) {
+      return {
+        category: 'problema',
+        categoryLabel: 'Problema',
+        categoryVariant: 'destructive',
+        priority: 1,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Bloqueio temporário expirado, aguardando limpeza',
+        causeLabel: 'A venda segue pendente mesmo com bloqueio expirado.',
+        actionLabel: 'Validar execução do cleanup automático.',
+      };
+    }
+
+    if (lockStatus.isMissing) {
+      return {
+        category: 'problema',
+        categoryLabel: 'Problema',
+        categoryVariant: 'destructive',
+        priority: 1,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Venda pendente sem bloqueio temporário',
+        causeLabel: 'Sem bloqueio temporário vinculado para a reserva online.',
+        actionLabel: 'Conferir integridade do checkout e do cleanup.',
+      };
+    }
+
+    if (lockStatus.isPartial) {
+      return {
+        category: 'atencao',
+        categoryLabel: 'Atenção',
+        categoryVariant: 'secondary',
+        priority: 2,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Bloqueio temporário parcial para venda pendente',
+        causeLabel: 'Nem todos os assentos esperados aparecem com bloqueio ativo.',
+        actionLabel: 'Revisar quantidade e seat_locks vinculados.',
+      };
+    }
+
+    return {
+      category: 'saudavel',
+      categoryLabel: 'Saudável',
+      categoryVariant: 'default',
+      priority: 3,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence: false,
+      summaryLabel: 'Aguardando pagamento dentro do prazo',
+      causeLabel: 'Checkout pendente com bloqueio temporário ativo.',
+      actionLabel: 'Acompanhar retorno normal do pagamento.',
+    };
+  }
+
+  if (isReserved) {
+    if (isManual) {
+      return {
+        category: 'atencao',
+        categoryLabel: 'Atenção',
+        categoryVariant: 'secondary',
+        priority: 2,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Venda manual reservada sem confirmação de pagamento',
+        causeLabel: 'Status reservado manual exige leitura própria e não usa cleanup automático.',
+        actionLabel: 'Confirmar pagamento ou cancelar manualmente, se necessário.',
+      };
+    }
+
+    if (lockStatus.isExpired) {
+      return {
+        category: 'problema',
+        categoryLabel: 'Problema',
+        categoryVariant: 'destructive',
+        priority: 1,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Venda reservada com bloqueio expirado',
+        causeLabel: 'Bloqueio temporário venceu, mas a venda continua em reservado.',
+        actionLabel: 'Conferir a origem da reserva e tratar manualmente.',
+      };
+    }
+
+    if (lockStatus.isMissing) {
+      return {
+        category: 'atencao',
+        categoryLabel: 'Atenção',
+        categoryVariant: 'secondary',
+        priority: 2,
+        createdAgoLabel,
+        expirationLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+        summaryLabel: 'Venda reservada sem bloqueio temporário ativo',
+        causeLabel: 'Reserva sem evidência de bloqueio ativo na tela.',
+        actionLabel: 'Validar se a reserva é manual ou legado operacional.',
+      };
+    }
+
+    return {
+      category: 'atencao',
+      categoryLabel: 'Atenção',
+      categoryVariant: 'secondary',
+      priority: 2,
+      createdAgoLabel,
+      expirationLabel,
+      lockLabel: lockStatus.label,
+      lockVariant: lockStatus.variant,
+      hasGatewayDivergence: false,
+      summaryLabel: 'Venda reservada com bloqueio temporário ativo',
+      causeLabel: 'Reserva ativa sem confirmação final de pagamento.',
+      actionLabel: 'Acompanhar confirmação ou tratar manualmente.',
+    };
+  }
+
+  return {
+    category: 'atencao',
+    categoryLabel: 'Atenção',
+    categoryVariant: 'secondary',
+    priority: 3,
+    createdAgoLabel,
+    expirationLabel,
+    lockLabel: lockStatus.label,
+    lockVariant: lockStatus.variant,
+    hasGatewayDivergence: false,
+    summaryLabel: 'Situação operacional sem regra específica',
+    causeLabel: 'Combinação fora das regras principais da tela.',
+    actionLabel: 'Abrir detalhes da venda para investigação.',
+  };
 }
 
 function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof CheckCircle; color: string } {
@@ -294,7 +545,6 @@ function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof C
     return { label: 'Venda manual criada', icon: Clock, color: 'text-amber-600' };
   }
 
-  // Online flow
   if (sale.status === 'pago' && (sale.ticket_count ?? 0) > 0) {
     return { label: 'Passagem gerada', icon: Ticket, color: 'text-emerald-600' };
   }
@@ -311,7 +561,6 @@ function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof C
 }
 
 function computeCompactFlowLabel(fullLabel: string): string {
-  // Mantém a leitura rápida da tabela sem perder o contexto técnico do fluxo.
   const compactLabels: Record<string, string> = {
     'Cobrança enviada ao gateway': 'Cobrança enviada',
     'Pagamento confirmado': 'Pagamento confirmado',
@@ -325,7 +574,6 @@ function computeCompactFlowLabel(fullLabel: string): string {
 
   return compactLabels[fullLabel] ?? fullLabel;
 }
-
 // ── Timeline builder ──
 interface TimelineEntry {
   time: string;
@@ -556,7 +804,7 @@ export default function SalesDiagnostic() {
       return;
     }
 
-    const rawSales = (data ?? []) as any[];
+    const rawSales = (data ?? []) as DiagnosticSale[];
 
     // Fetch ticket counts and current seat locks for these sales.
     // Comentário de manutenção: usamos seat_locks para diagnosticar lock ativo/ausente/expirado
@@ -580,11 +828,11 @@ export default function SalesDiagnostic() {
       const tickets = ticketsRes.data ?? [];
       const seatLocks = locksRes.data ?? [];
 
-      (tickets ?? []).forEach((t: any) => {
+      tickets.forEach((t) => {
         ticketCounts[t.sale_id] = (ticketCounts[t.sale_id] ?? 0) + 1;
       });
 
-      seatLocks.forEach((lock: any) => {
+      seatLocks.forEach((lock) => {
         const saleId = lock.sale_id as string | null;
         if (!saleId) return;
 
@@ -622,9 +870,9 @@ export default function SalesDiagnostic() {
     if (filters.paymentStatus !== 'all') {
       filtered = filtered.filter((s) => {
         const ps = computePaymentStatus(s);
-        if (filters.paymentStatus === 'aguardando') return ps.label === 'Aguardando pagamento';
-        if (filters.paymentStatus === 'pago') return ps.label === 'Pago';
-        if (filters.paymentStatus === 'falhou') return ps.label === 'Expirado' || ps.label === 'Estornado';
+        if (filters.paymentStatus === 'aguardando') return ['Aguardando pagamento', 'Aguardando retorno do gateway', 'Sem confirmação manual'].includes(ps.label);
+        if (filters.paymentStatus === 'pago') return ['Pago no gateway', 'Pago manualmente', 'Pago'].includes(ps.label);
+        if (filters.paymentStatus === 'falhou') return ['Cobrança expirada', 'Cobrança estornada', 'Cobrança cancelada'].includes(ps.label);
         return true;
       });
     }
@@ -678,7 +926,7 @@ export default function SalesDiagnostic() {
 
     setDetailLogs((logsRes.data ?? []) as SaleLog[]);
     setDetailIntegrationLogs((integrationLogsRes.data ?? []) as SaleIntegrationLog[]);
-    setDetailCompany(companyRes.data as any ?? null);
+    setDetailCompany((companyRes.data ?? null) as typeof detailCompany);
     setDetailLoading(false);
   };
 
@@ -691,7 +939,7 @@ export default function SalesDiagnostic() {
       label: 'Status da Venda',
       placeholder: 'Todos',
       value: filters.status,
-      onChange: (v: string) => setFilters((f) => ({ ...f, status: v as any })),
+      onChange: (v: string) => setFilters((f) => ({ ...f, status: v as DiagnosticFilters['status'] })),
       options: [
         { value: 'all', label: 'Todos' },
         { value: 'pendente_pagamento', label: 'Pendente pagamento' },
@@ -832,10 +1080,12 @@ export default function SalesDiagnostic() {
                   <TableHead className="w-[105px]">Valor</TableHead>
                   <TableHead className="w-[95px]">Gateway</TableHead>
                   <TableHead className="w-[105px]">Ambiente</TableHead>
-                  <TableHead className="w-[140px]">Diagnóstico</TableHead>
+                  <TableHead className="w-[220px]">Diagnóstico</TableHead>
+                  <TableHead className="w-[190px]">Causa</TableHead>
                   <TableHead className="w-[170px]">Tempo</TableHead>
-                  <TableHead className="w-[140px]">Lock</TableHead>
-                  <TableHead className="w-[190px]">Status</TableHead>
+                  <TableHead className="w-[170px]">Bloqueio temporário</TableHead>
+                  <TableHead className="w-[150px]">Status da venda</TableHead>
+                  <TableHead className="w-[170px]">Status do pagamento</TableHead>
                   <TableHead className="w-[170px]">Fluxo</TableHead>
                   <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
@@ -844,6 +1094,7 @@ export default function SalesDiagnostic() {
                 {salesWithOperationalView.map(({ sale, operational }) => {
                   const gateway = computeGateway(sale);
                   const paymentStatus = computePaymentStatus(sale);
+                  const lockStatus = computeLockStatus(sale);
                   const flowStage = computeFlowStage(sale);
                   const FlowIcon = flowStage.icon;
                   const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
@@ -878,34 +1129,52 @@ export default function SalesDiagnostic() {
                       <TableCell className="py-5">
                         {/* Suporte: mostra o ambiente persistido da venda (fonte de verdade do fluxo). */}
                         <Badge variant="outline" className="text-xs">
-                          {(sale as any).payment_environment === 'production' ? '🌐 Produção' : '🧪 Sandbox'}
+                          {sale.payment_environment === 'production' ? '🌐 Produção' : '🧪 Sandbox'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-5">
-                        <Badge variant={operational.categoryVariant} className={`text-xs whitespace-nowrap ${operational.categoryClassName ?? ''}`}>
-                          {operational.categoryLabel}
-                        </Badge>
-                        {operational.hasGatewayDivergence && (
-                          <Badge variant="destructive" className="text-xs mt-1">Divergência gateway</Badge>
-                        )}
+                      <TableCell className="py-5 align-top">
+                        <div className="space-y-1.5">
+                          <Badge variant={operational.categoryVariant} className={`text-xs whitespace-nowrap ${operational.categoryClassName ?? ''}`}>
+                            {operational.categoryLabel}
+                          </Badge>
+                          <p className="text-sm font-medium leading-tight">{operational.summaryLabel}</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{operational.actionLabel}</p>
+                          {operational.hasGatewayDivergence && (
+                            <Badge variant="destructive" className="text-xs mt-1">Divergência gateway</Badge>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="py-5">
+                      <TableCell className="py-5 align-top">
+                        {/* Comentário de suporte: esta coluna torna explícita a causa operacional resumida,
+                            evitando o antigo badge genérico sem contexto acionável. */}
+                        <p className="text-sm leading-relaxed">{operational.causeLabel}</p>
+                      </TableCell>
+                      <TableCell className="py-5 align-top">
                         <div className="space-y-1 text-xs">
                           <p>{operational.createdAgoLabel}</p>
                           {operational.expirationLabel && <p className="text-muted-foreground">{operational.expirationLabel}</p>}
                         </div>
                       </TableCell>
-                      <TableCell className="py-5">
-                        <Badge variant={operational.lockVariant} className="text-xs whitespace-nowrap">
-                          {operational.lockLabel}
-                        </Badge>
+                      <TableCell className="py-5 align-top">
+                        {/* Comentário de manutenção: a antiga coluna técnica de lock foi traduzida para leitura operacional. */}
+                        <div className="space-y-1">
+                          <Badge variant={operational.lockVariant} className="text-xs whitespace-nowrap">
+                            {operational.lockLabel}
+                          </Badge>
+                          {lockStatus.detail && (
+                            <p className="text-xs text-muted-foreground">{lockStatus.detail}</p>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="py-5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusBadge status={sale.status} />
+                      <TableCell className="py-5 align-top">
+                        <StatusBadge status={sale.status} />
+                      </TableCell>
+                      <TableCell className="py-5 align-top">
+                        <div className="space-y-1">
                           <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
                             {paymentStatus.label}
                           </Badge>
+                          {paymentStatus.detail && <p className="text-xs text-muted-foreground">{paymentStatus.detail}</p>}
                         </div>
                       </TableCell>
                       <TableCell className="py-5">
@@ -1001,7 +1270,7 @@ export default function SalesDiagnostic() {
                         </div>
                         <div>
                           <span className="text-muted-foreground">Origem da venda</span>
-                          <p>{(detailSale as any).sale_origin ?? '-'}</p>
+                          <p>{detailSale.sale_origin ?? '-'}</p>
                         </div>
                       </div>
                     </div>
@@ -1095,7 +1364,7 @@ export default function SalesDiagnostic() {
                         )}
                         <div>
                           <span className="text-muted-foreground">Status taxa plataforma</span>
-                          <p className="font-mono text-xs">{(detailSale as any).platform_fee_status ?? '-'}</p>
+                          <p className="font-mono text-xs">{detailSale.platform_fee_status ?? '-'}</p>
                         </div>
                         {detailSale.platform_fee_total != null && (
                           <div>
@@ -1159,7 +1428,7 @@ export default function SalesDiagnostic() {
                             </div>
                             <div>
                               <span className="text-muted-foreground">Ambiente persistido da venda</span>
-                              <p className="font-medium">{formatPaymentEnvironmentLabel((detailSale as any).payment_environment)}</p>
+                              <p className="font-medium">{formatPaymentEnvironmentLabel(detailSale.payment_environment)}</p>
                             </div>
                             {webhookLog && (
                               <>
@@ -1185,7 +1454,7 @@ export default function SalesDiagnostic() {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Status bruto do Asaas</span>
-                                  <p className="font-mono text-xs">{String((webhookLog.payload_json as any)?.payment?.status ?? '-')}</p>
+                                  <p className="font-mono text-xs">{String((webhookLog.payload_json as { payment?: { status?: string } } | null)?.payment?.status ?? '-')}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Status do processamento</span>
