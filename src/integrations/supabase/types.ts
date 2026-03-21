@@ -324,7 +324,6 @@ export type Database = {
           logo_url: string | null
           name: string
           notes: string | null
-          socio_split_percent: number
           phone: string | null
           platform_fee_percent: number
           postal_code: string | null
@@ -339,6 +338,7 @@ export type Database = {
           social_twitter: string | null
           social_website: string | null
           social_youtube: string | null
+          socio_split_percent: number
           state: string | null
           stripe_account_id: string | null
           stripe_onboarding_complete: boolean
@@ -379,7 +379,6 @@ export type Database = {
           logo_url?: string | null
           name: string
           notes?: string | null
-          socio_split_percent?: number
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -394,6 +393,7 @@ export type Database = {
           social_twitter?: string | null
           social_website?: string | null
           social_youtube?: string | null
+          socio_split_percent?: number
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -434,7 +434,6 @@ export type Database = {
           logo_url?: string | null
           name?: string
           notes?: string | null
-          socio_split_percent?: number
           phone?: string | null
           platform_fee_percent?: number
           postal_code?: string | null
@@ -449,6 +448,7 @@ export type Database = {
           social_twitter?: string | null
           social_website?: string | null
           social_youtube?: string | null
+          socio_split_percent?: number
           state?: string | null
           stripe_account_id?: string | null
           stripe_onboarding_complete?: boolean
@@ -825,62 +825,6 @@ export type Database = {
           },
         ]
       }
-      socios_split: {
-        Row: {
-          asaas_wallet_id: string | null
-          asaas_wallet_id_production: string | null
-          asaas_wallet_id_sandbox: string | null
-          company_id: string
-          created_at: string
-          id: string
-          name: string
-          notes: string | null
-          commission_percent: number
-          status: string
-          stripe_account_id: string | null
-          stripe_onboarding_complete: boolean
-          updated_at: string
-        }
-        Insert: {
-          asaas_wallet_id?: string | null
-          asaas_wallet_id_production?: string | null
-          asaas_wallet_id_sandbox?: string | null
-          company_id: string
-          created_at?: string
-          id?: string
-          name: string
-          notes?: string | null
-          commission_percent?: number
-          status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
-          updated_at?: string
-        }
-        Update: {
-          asaas_wallet_id?: string | null
-          asaas_wallet_id_production?: string | null
-          asaas_wallet_id_sandbox?: string | null
-          company_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          notes?: string | null
-          commission_percent?: number
-          status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "socios_split_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           cep: string | null
@@ -1174,7 +1118,6 @@ export type Database = {
           id: string
           intermediation_responsibility_accepted: boolean
           intermediation_responsibility_accepted_at: string | null
-          socio_fee_amount: number | null
           payment_confirmed_at: string | null
           payment_environment: string
           payment_method: string | null
@@ -1188,6 +1131,7 @@ export type Database = {
           reservation_expires_at: string | null
           sale_origin: string
           seller_id: string | null
+          socio_fee_amount: number | null
           status: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
@@ -1215,7 +1159,6 @@ export type Database = {
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
-          socio_fee_amount?: number | null
           payment_confirmed_at?: string | null
           payment_environment: string
           payment_method?: string | null
@@ -1229,6 +1172,7 @@ export type Database = {
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
+          socio_fee_amount?: number | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -1256,7 +1200,6 @@ export type Database = {
           id?: string
           intermediation_responsibility_accepted?: boolean
           intermediation_responsibility_accepted_at?: string | null
-          socio_fee_amount?: number | null
           payment_confirmed_at?: string | null
           payment_environment?: string
           payment_method?: string | null
@@ -1270,6 +1213,7 @@ export type Database = {
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
+          socio_fee_amount?: number | null
           status?: Database["public"]["Enums"]["sale_status"]
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -1478,6 +1422,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sellers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      socios_split: {
+        Row: {
+          asaas_wallet_id: string | null
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          commission_percent: number
+          company_id: string
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          status: string
+          stripe_account_id: string | null
+          stripe_onboarding_complete: boolean
+          updated_at: string
+        }
+        Insert: {
+          asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          company_id: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          status?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          updated_at?: string
+        }
+        Update: {
+          asaas_wallet_id?: string | null
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          company_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          status?: string
+          stripe_account_id?: string | null
+          stripe_onboarding_complete?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "socios_split_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
