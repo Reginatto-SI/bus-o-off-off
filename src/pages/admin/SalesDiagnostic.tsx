@@ -52,7 +52,7 @@ import {
   FileJson,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
+import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { useAuth } from '@/contexts/AuthContext';
@@ -89,7 +89,7 @@ interface DiagnosticSale extends Sale {
   latest_lock_expires_at?: string | null;
 }
 
-type OperationalCategory = 'saudavel' | 'atencao' | 'problema' | 'pago' | 'cancelado';
+type OperationalCategory = 'saudavel' | 'atencao' | 'divergencia' | 'pago' | 'cancelado';
 
 interface SaleIntegrationLog {
   id: string;
@@ -139,6 +139,63 @@ function formatCreatedAtLabel(createdAt: string): string {
   return `Criada ${formatCompactDurationFromNow(createdAt)}`;
 }
 
+function formatHumanRelativeWithDirection(targetDate: string): string {
+  const target = new Date(targetDate);
+  const now = new Date();
+  const isFuture = target.getTime() > now.getTime();
+  const distance = formatDistanceToNowStrict(target, { locale: ptBR, addSuffix: false });
+  return isFuture ? `vence em ${distance}` : `venceu há ${distance}`;
+}
+
+function getSaleStatusLabel(status: SaleStatus): string {
+  const labels: Record<SaleStatus, string> = {
+    pendente_pagamento: 'Pendente de pagamento',
+    reservado: 'Reservado',
+    pago: 'Pago',
+    cancelado: 'Cancelado',
+    bloqueado: 'Bloqueado',
+  };
+  return labels[status] ?? status;
+}
+
+function isManualReservationFlow(sale: DiagnosticSale): boolean {
+  // Reservas em `reservado` só são tratadas como fluxo administrativo legítimo quando a venda
+  // carrega a validade própria (`reservation_expires_at`) e não depende do lock curto do checkout.
+  // Isso evita que a UI chame de erro um caso saudável do administrativo.
+  return sale.status === 'reservado' && !!sale.reservation_expires_at;
+}
+
+function buildOperationalTimeView(sale: DiagnosticSale, lockStatus: LockStatusView): {
+  label: string;
+  detail: string;
+  sourceLabel: string;
+} {
+  // A tela usa a fonte de verdade real de cada fluxo: checkout público lê `seat_locks.expires_at`;
+  // reserva manual lê `reservation_expires_at`. Nunca inferimos vencimento por `created_at`,
+  // porque isso mentiria para o operador e reintroduziria a ambiguidade que o backend já corrigiu.
+  if (sale.status === 'pendente_pagamento' && lockStatus.expiresAt) {
+    return {
+      label: formatHumanRelativeWithDirection(lockStatus.expiresAt),
+      detail: `Bloqueio temporário do checkout público · ${format(parseISO(lockStatus.expiresAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+      sourceLabel: 'Fonte: bloqueio temporário do checkout',
+    };
+  }
+
+  if (isManualReservationFlow(sale) && sale.reservation_expires_at) {
+    return {
+      label: formatHumanRelativeWithDirection(sale.reservation_expires_at),
+      detail: `Validade da reserva manual · ${format(parseISO(sale.reservation_expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+      sourceLabel: 'Fonte: validade própria da reserva manual',
+    };
+  }
+
+  return {
+    label: formatCreatedAtLabel(sale.created_at),
+    detail: `Criada em ${format(parseISO(sale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+    sourceLabel: 'Fonte: data de criação da venda',
+  };
+}
+
 interface PaymentStatusView {
   label: string;
   detail?: string;
@@ -162,14 +219,18 @@ interface DiagnosticOperationalView {
   categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   categoryClassName?: string;
   priority: number;
-  createdAgoLabel: string;
-  expirationLabel: string | null;
+  saleStatusLabel: string;
+  paymentStatusLabel: string;
+  operationalLabel: string;
+  operationalDetail: string;
+  causeLabel: string;
+  actionLabel: string;
+  timeLabel: string;
+  timeDetail: string;
+  timeSourceLabel: string;
   lockLabel: string;
   lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   hasGatewayDivergence: boolean;
-  summaryLabel: string;
-  causeLabel: string;
-  actionLabel: string;
 }
 
 function computeGateway(sale: DiagnosticSale): string {
@@ -189,12 +250,12 @@ function computeLockStatus(sale: DiagnosticSale): LockStatusView {
   const isPartial = activeLockCount > 0 && activeLockCount < Math.max(sale.quantity, 1);
   const isMissing = activeLockCount <= 0 && !isExpired;
 
-  // Comentário de suporte: vendas manuais reservadas não nascem obrigatoriamente do fluxo de seat_locks.
-  // Por isso a UI deixa explícito quando o bloqueio temporário não se aplica ao caso manual.
-  if (gateway === 'Manual' && sale.status === 'reservado' && !expiresAt) {
+  // Traduzimos a linguagem técnica de lock para linguagem operacional. O operador não precisa ler
+  // “lock ausente”; ele precisa entender se existe ou não um bloqueio temporário relevante para o checkout.
+  if (gateway === 'Manual' && isManualReservationFlow(sale) && !expiresAt) {
     return {
-      label: 'Não se aplica à venda manual',
-      detail: 'Venda manual sem bloqueio temporário vinculado.',
+      label: 'Sem bloqueio temporário',
+      detail: 'Reserva manual legítima: o bloqueio curto do checkout não se aplica a este caso.',
       variant: 'outline',
       isActive: false,
       isExpired: false,
@@ -206,8 +267,8 @@ function computeLockStatus(sale: DiagnosticSale): LockStatusView {
 
   if (isActive) {
     return {
-      label: isPartial ? 'Bloqueio parcial ativo' : 'Bloqueio ativo',
-      detail: `Bloqueio ${formatCompactDurationFromNow(expiresAt!)}`,
+      label: isPartial ? 'Bloqueio temporário parcial' : 'Bloqueio temporário ativo',
+      detail: `Expira ${formatHumanRelativeWithDirection(expiresAt!)}`,
       variant: isPartial ? 'secondary' : 'default',
       isActive: true,
       isExpired: false,
@@ -219,8 +280,8 @@ function computeLockStatus(sale: DiagnosticSale): LockStatusView {
 
   if (isExpired) {
     return {
-      label: 'Bloqueio expirado',
-      detail: `Expirou ${formatCompactDurationFromNow(expiresAt!)}`,
+      label: 'Bloqueio temporário expirado',
+      detail: formatHumanRelativeWithDirection(expiresAt!),
       variant: 'destructive',
       isActive: false,
       isExpired: true,
@@ -232,7 +293,7 @@ function computeLockStatus(sale: DiagnosticSale): LockStatusView {
 
   return {
     label: 'Sem bloqueio temporário',
-    detail: 'Nenhum bloqueio ativo foi encontrado para a venda.',
+    detail: 'Nenhum bloqueio temporário ativo foi encontrado para esta venda.',
     variant: 'outline',
     isActive: false,
     isExpired: false,
@@ -246,72 +307,72 @@ function computePaymentStatus(sale: DiagnosticSale): PaymentStatusView {
   const gateway = computeGateway(sale);
   const asaasStatus = sale.asaas_payment_status;
 
-  // Comentário de manutenção: o status de pagamento fica separado do status comercial da venda.
-  // Aqui priorizamos o retorno do gateway quando existe cobrança vinculada.
+  // A tela separa status da venda e status do pagamento porque o operador precisa distinguir
+  // pendência comercial legítima de divergência técnica com o gateway. Misturar os dois conceitos
+  // faria `reservado` parecer erro mesmo quando a operação manual ainda está saudável.
   if (asaasStatus === 'RECEIVED' || asaasStatus === 'CONFIRMED') {
-    return { label: 'Pago no gateway', detail: `Asaas ${asaasStatus}`, variant: 'default' };
+    return { label: 'Pagamento confirmado', detail: `Retorno do Asaas: ${asaasStatus}`, variant: 'default' };
   }
   if (asaasStatus === 'PENDING') {
-    return { label: 'Aguardando pagamento', detail: 'Cobrança criada no gateway.', variant: 'secondary' };
+    return { label: 'Pagamento aguardando confirmação', detail: 'Cobrança criada no gateway e ainda em aberto.', variant: 'secondary' };
   }
   if (asaasStatus === 'OVERDUE' || asaasStatus === 'EXPIRED') {
-    return { label: 'Cobrança expirada', detail: `Asaas ${asaasStatus}`, variant: 'destructive' };
+    return { label: 'Pagamento expirado', detail: `Retorno do Asaas: ${asaasStatus}`, variant: 'destructive' };
   }
   if (asaasStatus === 'REFUNDED' || asaasStatus === 'REFUND_REQUESTED') {
-    return { label: 'Cobrança estornada', detail: `Asaas ${asaasStatus}`, variant: 'destructive' };
+    return { label: 'Pagamento estornado', detail: `Retorno do Asaas: ${asaasStatus}`, variant: 'destructive' };
   }
   if (asaasStatus === 'CANCELLED') {
-    return { label: 'Cobrança cancelada', detail: 'Cancelada no gateway.', variant: 'destructive' };
+    return { label: 'Pagamento cancelado', detail: 'Cobrança cancelada no gateway.', variant: 'destructive' };
   }
 
   if (gateway === 'Manual') {
-    if (sale.status === 'pago') return { label: 'Pago manualmente', detail: 'Sem cobrança em gateway.', variant: 'default' };
-    if (sale.status === 'cancelado') return { label: 'Não pago', detail: 'Venda manual cancelada.', variant: 'outline' };
-    if (sale.status === 'reservado') return { label: 'Sem confirmação manual', detail: 'Aguardando baixa manual.', variant: 'secondary' };
+    if (sale.status === 'pago') return { label: 'Pagamento confirmado manualmente', detail: 'Venda manual sem cobrança em gateway.', variant: 'default' };
+    if (sale.status === 'cancelado') return { label: 'Sem pagamento ativo', detail: 'Venda manual cancelada.', variant: 'outline' };
+    if (sale.status === 'reservado') return { label: 'Pagamento aguardando confirmação manual', detail: 'Reserva administrativa aguardando baixa manual.', variant: 'secondary' };
   }
 
   if (sale.asaas_payment_id || sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) {
-    return { label: 'Aguardando retorno do gateway', detail: 'Cobrança enviada sem status final.', variant: 'secondary' };
+    return { label: 'Pagamento em processamento', detail: 'Cobrança enviada ao gateway sem retorno final.', variant: 'secondary' };
   }
 
-  if (sale.status === 'pago') return { label: 'Pago', variant: 'default' };
-  if (sale.status === 'cancelado') return { label: 'Cancelado', variant: 'outline' };
-  return { label: 'Sem cobrança vinculada', detail: 'Não há gateway associado.', variant: 'outline' };
+  if (sale.status === 'pago') return { label: 'Pagamento confirmado', variant: 'default' };
+  if (sale.status === 'cancelado') return { label: 'Sem pagamento ativo', variant: 'outline' };
+  return { label: 'Sem dados suficientes de pagamento', detail: 'Não há gateway nem confirmação manual registrada.', variant: 'outline' };
 }
 
 function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView {
-  const createdAgoLabel = formatCreatedAtLabel(sale.created_at);
   const gateway = computeGateway(sale);
   const paymentStatus = computePaymentStatus(sale);
   const lockStatus = computeLockStatus(sale);
-  const isManual = gateway === 'Manual';
+  const timeView = buildOperationalTimeView(sale, lockStatus);
   const isPendingCheckout = sale.status === 'pendente_pagamento';
   const isReserved = sale.status === 'reservado';
+  const isManualReservation = isManualReservationFlow(sale);
+  const manualReservationExpired = isManualReservation && !!sale.reservation_expires_at && new Date(sale.reservation_expires_at).getTime() <= Date.now();
   const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
   const hasGatewayDivergence = ((isPendingCheckout || isReserved) && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
 
-  // Comentário de suporte: quando existe `seat_locks.expires_at`, ele vira a fonte principal de leitura
-  // para expiração do bloqueio temporário. `created_at` fica apenas como contexto da venda.
-  const expirationLabel = lockStatus.expiresAt
-    ? lockStatus.isExpired
-      ? `Bloqueio expirou ${formatCompactDurationFromNow(lockStatus.expiresAt)}`
-      : `Bloqueio expira ${formatCompactDurationFromNow(lockStatus.expiresAt)}`
-    : null;
-
+  // A causa principal é mutuamente exclusiva: a função retorna no primeiro cenário dominante.
+  // Isso evita que a linha traga duas narrativas conflitantes e preserva uma leitura operacional confiável.
   if (sale.status === 'pago') {
     return {
       category: 'pago',
       categoryLabel: 'Pago',
       categoryVariant: 'default',
       priority: 4,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: 'Venda concluída',
+      operationalDetail: 'Venda paga e sem alerta operacional prioritário.',
+      causeLabel: 'Pagamento confirmado e venda já regularizada no sistema.',
+      actionLabel: 'Sem ação.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence,
-      summaryLabel: 'Venda paga e conciliada',
-      causeLabel: 'Status da venda já está pago.',
-      actionLabel: 'Nenhuma ação imediata.',
     };
   }
 
@@ -323,91 +384,109 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       categoryVariant: 'outline',
       categoryClassName: 'border-zinc-400 text-zinc-700',
       priority: hasGatewayDivergence ? 1 : 5,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: hasGatewayDivergence ? 'Cancelamento com divergência' : 'Venda encerrada',
+      operationalDetail: hasGatewayDivergence
+        ? 'O gateway indica pagamento, mas a venda foi cancelada no banco.'
+        : 'Cancelamento registrado e fluxo encerrado.',
+      causeLabel: hasGatewayDivergence
+        ? 'Divergência entre gateway e banco.'
+        : cancelledByExpiry
+          ? 'Venda cancelada corretamente após expiração automática.'
+          : (sale.cancel_reason ?? 'Cancelamento registrado no sistema.'),
+      actionLabel: hasGatewayDivergence ? 'Investigar conciliação.' : 'Sem ação.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence,
-      summaryLabel: hasGatewayDivergence
-        ? 'Venda cancelada com pagamento confirmado no gateway'
-        : cancelledByExpiry
-          ? 'Venda cancelada corretamente após expiração'
-          : 'Venda cancelada',
-      causeLabel: hasGatewayDivergence
-        ? 'Divergência entre banco e gateway.'
-        : cancelledByExpiry
-          ? 'Expiração processada pelo backend.'
-          : (sale.cancel_reason ?? 'Cancelamento registrado no sistema.'),
-      actionLabel: hasGatewayDivergence ? 'Conferir conciliação do pagamento.' : 'Sem ação imediata.',
     };
   }
 
   if (hasGatewayDivergence) {
     return {
-      category: 'problema',
-      categoryLabel: 'Problema',
+      category: 'divergencia',
+      categoryLabel: 'Divergência',
       categoryVariant: 'destructive',
       priority: 1,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: 'Pagamento confirmado, venda pendente',
+      operationalDetail: 'O gateway já confirmou o pagamento, mas o banco ainda não refletiu a conciliação final.',
+      causeLabel: 'Pagamento confirmado, venda pendente de conciliação.',
+      actionLabel: 'Investigar conciliação.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: true,
-      summaryLabel: 'Pagamento confirmado no gateway, mas venda ainda não conciliada',
-      causeLabel: 'Gateway marcou como pago e o status da venda ainda não mudou.',
-      actionLabel: 'Validar webhook e trilha de conciliação.',
     };
   }
 
-  if (paymentStatus.label === 'Cobrança expirada' || paymentStatus.label === 'Cobrança cancelada') {
+  if (paymentStatus.label === 'Pagamento expirado' || paymentStatus.label === 'Pagamento cancelado' || paymentStatus.label === 'Pagamento estornado') {
     return {
-      category: 'problema',
-      categoryLabel: 'Problema',
+      category: 'divergencia',
+      categoryLabel: 'Divergência',
       categoryVariant: 'destructive',
       priority: 1,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: 'Pagamento com retorno final incompatível',
+      operationalDetail: 'O gateway já encerrou a cobrança, mas a venda ainda precisa ser revisada no banco.',
+      causeLabel: paymentStatus.detail ?? 'Retorno final do gateway exige revisão operacional.',
+      actionLabel: 'Revisar manualmente.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-      summaryLabel: 'Cobrança expirada ou cancelada no gateway',
-      causeLabel: paymentStatus.detail ?? 'Gateway retornou falha final.',
-      actionLabel: 'Confirmar se a venda já foi cancelada no sistema.',
     };
   }
 
   if (isPendingCheckout) {
     if (lockStatus.isExpired) {
       return {
-        category: 'problema',
-        categoryLabel: 'Problema',
+        category: 'divergencia',
+        categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
         priority: 1,
-        createdAgoLabel,
-        expirationLabel,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Checkout aguardando limpeza',
+        operationalDetail: 'O bloqueio temporário já expirou, mas a venda ainda não foi encerrada pelo cleanup.',
+        causeLabel: 'Checkout expirado e aguardando limpeza.',
+        actionLabel: 'Acompanhar cleanup automático.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Bloqueio temporário expirado, aguardando limpeza',
-        causeLabel: 'A venda segue pendente mesmo com bloqueio expirado.',
-        actionLabel: 'Validar execução do cleanup automático.',
       };
     }
 
     if (lockStatus.isMissing) {
       return {
-        category: 'problema',
-        categoryLabel: 'Problema',
+        category: 'divergencia',
+        categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
         priority: 1,
-        createdAgoLabel,
-        expirationLabel,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Checkout sem bloqueio temporário',
+        operationalDetail: 'Venda do checkout público sem a proteção operacional esperada de seat_locks.',
+        causeLabel: 'Sem dados suficientes do bloqueio temporário do checkout.',
+        actionLabel: 'Revisar manualmente.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Venda pendente sem bloqueio temporário',
-        causeLabel: 'Sem bloqueio temporário vinculado para a reserva online.',
-        actionLabel: 'Conferir integridade do checkout e do cleanup.',
       };
     }
 
@@ -417,14 +496,18 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         categoryLabel: 'Atenção',
         categoryVariant: 'secondary',
         priority: 2,
-        createdAgoLabel,
-        expirationLabel,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Checkout em acompanhamento',
+        operationalDetail: 'Há bloqueio temporário ativo, mas nem todos os assentos esperados aparecem protegidos.',
+        causeLabel: 'Checkout aguardando pagamento com bloqueio temporário parcial.',
+        actionLabel: 'Acompanhar.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Bloqueio temporário parcial para venda pendente',
-        causeLabel: 'Nem todos os assentos esperados aparecem com bloqueio ativo.',
-        actionLabel: 'Revisar quantidade e seat_locks vinculados.',
       };
     }
 
@@ -433,49 +516,85 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       categoryLabel: 'Saudável',
       categoryVariant: 'default',
       priority: 3,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: 'Checkout dentro do prazo',
+      operationalDetail: 'Fluxo público aguardando pagamento com bloqueio temporário ativo.',
+      causeLabel: 'Checkout aguardando pagamento dentro do prazo.',
+      actionLabel: 'Sem ação.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-      summaryLabel: 'Aguardando pagamento dentro do prazo',
-      causeLabel: 'Checkout pendente com bloqueio temporário ativo.',
-      actionLabel: 'Acompanhar retorno normal do pagamento.',
     };
   }
 
   if (isReserved) {
-    if (isManual) {
+    // Reservas manuais em `reservado` não devem aparecer como falha por padrão.
+    // Aqui só elevamos o caso para atenção ou divergência quando a validade própria venceu
+    // ou quando surgem sinais concretos de inconsistência entre pagamento e banco.
+    if (isManualReservation) {
+      if (manualReservationExpired) {
+        return {
+          category: 'divergencia',
+          categoryLabel: 'Divergência',
+          categoryVariant: 'destructive',
+          priority: 1,
+          saleStatusLabel: getSaleStatusLabel(sale.status),
+          paymentStatusLabel: paymentStatus.label,
+          operationalLabel: 'Reserva manual vencida',
+          operationalDetail: 'A reserva administrativa ultrapassou a validade própria configurada.',
+          causeLabel: 'Reserva manual vencida.',
+          actionLabel: 'Reserva vencida, validar liberação.',
+          timeLabel: timeView.label,
+          timeDetail: timeView.detail,
+          timeSourceLabel: timeView.sourceLabel,
+          lockLabel: lockStatus.label,
+          lockVariant: lockStatus.variant,
+          hasGatewayDivergence: false,
+        };
+      }
+
       return {
-        category: 'atencao',
-        categoryLabel: 'Atenção',
-        categoryVariant: 'secondary',
-        priority: 2,
-        createdAgoLabel,
-        expirationLabel,
+        category: 'saudavel',
+        categoryLabel: 'Saudável',
+        categoryVariant: 'default',
+        priority: 3,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Reserva manual válida',
+        operationalDetail: 'Reserva administrativa legítima, ainda dentro do prazo e sem indício de falha automática.',
+        causeLabel: 'Reserva manual válida.',
+        actionLabel: 'Acompanhar.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Venda manual reservada sem confirmação de pagamento',
-        causeLabel: 'Status reservado manual exige leitura própria e não usa cleanup automático.',
-        actionLabel: 'Confirmar pagamento ou cancelar manualmente, se necessário.',
       };
     }
 
     if (lockStatus.isExpired) {
       return {
-        category: 'problema',
-        categoryLabel: 'Problema',
+        category: 'divergencia',
+        categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
         priority: 1,
-        createdAgoLabel,
-        expirationLabel,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Reserva com bloqueio expirado',
+        operationalDetail: 'A venda segue reservada, mas o bloqueio temporário do checkout já expirou.',
+        causeLabel: 'Checkout expirado e aguardando limpeza.',
+        actionLabel: 'Revisar manualmente.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Venda reservada com bloqueio expirado',
-        causeLabel: 'Bloqueio temporário venceu, mas a venda continua em reservado.',
-        actionLabel: 'Conferir a origem da reserva e tratar manualmente.',
       };
     }
 
@@ -485,14 +604,18 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         categoryLabel: 'Atenção',
         categoryVariant: 'secondary',
         priority: 2,
-        createdAgoLabel,
-        expirationLabel,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Reserva sem evidência operacional suficiente',
+        operationalDetail: 'A venda está reservada, mas falta o dado que sustentaria a leitura automática do checkout.',
+        causeLabel: 'Sem dados suficientes para diagnóstico.',
+        actionLabel: 'Revisar manualmente.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-        summaryLabel: 'Venda reservada sem bloqueio temporário ativo',
-        causeLabel: 'Reserva sem evidência de bloqueio ativo na tela.',
-        actionLabel: 'Validar se a reserva é manual ou legado operacional.',
       };
     }
 
@@ -501,14 +624,18 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       categoryLabel: 'Atenção',
       categoryVariant: 'secondary',
       priority: 2,
-      createdAgoLabel,
-      expirationLabel,
+      saleStatusLabel: getSaleStatusLabel(sale.status),
+      paymentStatusLabel: paymentStatus.label,
+      operationalLabel: 'Reserva em acompanhamento',
+      operationalDetail: 'Há reserva ativa sem confirmação final de pagamento.',
+      causeLabel: 'Pagamento aguardando confirmação.',
+      actionLabel: 'Acompanhar.',
+      timeLabel: timeView.label,
+      timeDetail: timeView.detail,
+      timeSourceLabel: timeView.sourceLabel,
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-      summaryLabel: 'Venda reservada com bloqueio temporário ativo',
-      causeLabel: 'Reserva ativa sem confirmação final de pagamento.',
-      actionLabel: 'Acompanhar confirmação ou tratar manualmente.',
     };
   }
 
@@ -517,14 +644,18 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
     categoryLabel: 'Atenção',
     categoryVariant: 'secondary',
     priority: 3,
-    createdAgoLabel,
-    expirationLabel,
+    saleStatusLabel: getSaleStatusLabel(sale.status),
+    paymentStatusLabel: paymentStatus.label,
+    operationalLabel: 'Leitura operacional complementar necessária',
+    operationalDetail: 'A combinação atual não entra nas regras principais do painel.',
+    causeLabel: 'Sem dados suficientes para diagnóstico.',
+    actionLabel: 'Revisar manualmente.',
+    timeLabel: timeView.label,
+    timeDetail: timeView.detail,
+    timeSourceLabel: timeView.sourceLabel,
     lockLabel: lockStatus.label,
     lockVariant: lockStatus.variant,
     hasGatewayDivergence: false,
-    summaryLabel: 'Situação operacional sem regra específica',
-    causeLabel: 'Combinação fora das regras principais da tela.',
-    actionLabel: 'Abrir detalhes da venda para investigação.',
   };
 }
 
@@ -747,7 +878,7 @@ export default function SalesDiagnostic() {
       acc.total += 1;
       if (entry.operational.category === 'saudavel') acc.saudavel += 1;
       if (entry.operational.category === 'atencao') acc.atencao += 1;
-      if (entry.operational.category === 'problema') acc.problema += 1;
+      if (entry.operational.category === 'divergencia') acc.problema += 1;
       if (entry.operational.category === 'pago') acc.pago += 1;
       if (entry.operational.category === 'cancelado') acc.cancelado += 1;
       return acc;
@@ -870,9 +1001,9 @@ export default function SalesDiagnostic() {
     if (filters.paymentStatus !== 'all') {
       filtered = filtered.filter((s) => {
         const ps = computePaymentStatus(s);
-        if (filters.paymentStatus === 'aguardando') return ['Aguardando pagamento', 'Aguardando retorno do gateway', 'Sem confirmação manual'].includes(ps.label);
-        if (filters.paymentStatus === 'pago') return ['Pago no gateway', 'Pago manualmente', 'Pago'].includes(ps.label);
-        if (filters.paymentStatus === 'falhou') return ['Cobrança expirada', 'Cobrança estornada', 'Cobrança cancelada'].includes(ps.label);
+        if (filters.paymentStatus === 'aguardando') return ['Pagamento aguardando confirmação', 'Pagamento aguardando confirmação manual', 'Pagamento em processamento'].includes(ps.label);
+        if (filters.paymentStatus === 'pago') return ['Pagamento confirmado', 'Pagamento confirmado manualmente'].includes(ps.label);
+        if (filters.paymentStatus === 'falhou') return ['Pagamento expirado', 'Pagamento estornado', 'Pagamento cancelado'].includes(ps.label);
         return true;
       });
     }
@@ -1052,7 +1183,7 @@ export default function SalesDiagnostic() {
             <StatsCard label="Total" value={operationalSummary.total} icon={Activity} />
             <StatsCard label="Pendentes saudáveis" value={operationalSummary.saudavel} icon={CheckCircle} variant="success" />
             <StatsCard label="Pendentes atenção" value={operationalSummary.atencao} icon={AlertTriangle} variant="warning" />
-            <StatsCard label="Pendentes problema" value={operationalSummary.problema} icon={XCircle} variant="destructive" />
+            <StatsCard label="Com divergência" value={operationalSummary.problema} icon={XCircle} variant="destructive" />
             <StatsCard label="Pagas" value={operationalSummary.pago} icon={Ticket} variant="success" />
             <StatsCard label="Canceladas" value={operationalSummary.cancelado} icon={Clock} />
           </div>
@@ -1080,12 +1211,13 @@ export default function SalesDiagnostic() {
                   <TableHead className="w-[105px]">Valor</TableHead>
                   <TableHead className="w-[95px]">Gateway</TableHead>
                   <TableHead className="w-[105px]">Ambiente</TableHead>
-                  <TableHead className="w-[220px]">Diagnóstico</TableHead>
-                  <TableHead className="w-[190px]">Causa</TableHead>
-                  <TableHead className="w-[170px]">Tempo</TableHead>
-                  <TableHead className="w-[170px]">Bloqueio temporário</TableHead>
                   <TableHead className="w-[150px]">Status da venda</TableHead>
-                  <TableHead className="w-[170px]">Status do pagamento</TableHead>
+                  <TableHead className="w-[190px]">Status do pagamento</TableHead>
+                  <TableHead className="w-[240px]">Situação operacional</TableHead>
+                  <TableHead className="w-[210px]">Causa principal</TableHead>
+                  <TableHead className="w-[220px]">Tempo / validade</TableHead>
+                  <TableHead className="w-[210px]">Ação sugerida</TableHead>
+                  <TableHead className="w-[170px]">Bloqueio temporário</TableHead>
                   <TableHead className="w-[170px]">Fluxo</TableHead>
                   <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
@@ -1108,7 +1240,7 @@ export default function SalesDiagnostic() {
                   ];
 
                   return (
-                    <TableRow key={sale.id} className={operational.category === 'problema' ? 'bg-destructive/5' : ''}>
+                    <TableRow key={sale.id} className={operational.category === 'divergencia' ? 'bg-destructive/5' : ''}>
                       <TableCell className="whitespace-nowrap py-5 text-sm">
                         {format(parseISO(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                       </TableCell>
@@ -1133,27 +1265,46 @@ export default function SalesDiagnostic() {
                         </Badge>
                       </TableCell>
                       <TableCell className="py-5 align-top">
+                        <StatusBadge status={sale.status} />
+                        <p className="mt-1 text-xs text-muted-foreground">{operational.saleStatusLabel}</p>
+                      </TableCell>
+                      <TableCell className="py-5 align-top">
+                        {/* A separação explícita entre venda e pagamento evita que a UI trate pendência operacional
+                            como erro financeiro ou vice-versa. */}
+                        <div className="space-y-1">
+                          <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
+                            {operational.paymentStatusLabel}
+                          </Badge>
+                          {paymentStatus.detail && <p className="text-xs text-muted-foreground">{paymentStatus.detail}</p>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-5 align-top">
                         <div className="space-y-1.5">
                           <Badge variant={operational.categoryVariant} className={`text-xs whitespace-nowrap ${operational.categoryClassName ?? ''}`}>
                             {operational.categoryLabel}
                           </Badge>
-                          <p className="text-sm font-medium leading-tight">{operational.summaryLabel}</p>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{operational.actionLabel}</p>
+                          <p className="text-sm font-medium leading-tight">{operational.operationalLabel}</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{operational.operationalDetail}</p>
                           {operational.hasGatewayDivergence && (
                             <Badge variant="destructive" className="text-xs mt-1">Divergência gateway</Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="py-5 align-top">
-                        {/* Comentário de suporte: esta coluna torna explícita a causa operacional resumida,
-                            evitando o antigo badge genérico sem contexto acionável. */}
+                        {/* Esta coluna calcula a causa principal única da linha para evitar diagnóstico ambíguo. */}
                         <p className="text-sm leading-relaxed">{operational.causeLabel}</p>
                       </TableCell>
                       <TableCell className="py-5 align-top">
                         <div className="space-y-1 text-xs">
-                          <p>{operational.createdAgoLabel}</p>
-                          {operational.expirationLabel && <p className="text-muted-foreground">{operational.expirationLabel}</p>}
+                          <p className="font-medium text-foreground">{operational.timeLabel}</p>
+                          <p className="text-muted-foreground">{operational.timeDetail}</p>
+                          <p className="text-muted-foreground/80">{operational.timeSourceLabel}</p>
                         </div>
+                      </TableCell>
+                      <TableCell className="py-5 align-top">
+                        {/* A ação sugerida é textual de propósito: orienta o operador sem criar automação nova
+                            fora do escopo permitido desta etapa. */}
+                        <p className="text-sm leading-relaxed">{operational.actionLabel}</p>
                       </TableCell>
                       <TableCell className="py-5 align-top">
                         {/* Comentário de manutenção: a antiga coluna técnica de lock foi traduzida para leitura operacional. */}
@@ -1164,17 +1315,6 @@ export default function SalesDiagnostic() {
                           {lockStatus.detail && (
                             <p className="text-xs text-muted-foreground">{lockStatus.detail}</p>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        <StatusBadge status={sale.status} />
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        <div className="space-y-1">
-                          <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
-                            {paymentStatus.label}
-                          </Badge>
-                          {paymentStatus.detail && <p className="text-xs text-muted-foreground">{paymentStatus.detail}</p>}
                         </div>
                       </TableCell>
                       <TableCell className="py-5">
