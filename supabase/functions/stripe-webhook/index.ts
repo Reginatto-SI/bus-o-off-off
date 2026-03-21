@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { validateFinancialPartnerForSplit } from "../_shared/payment-context-resolver.ts";
+import { validateFinancialSocioForSplit } from "../_shared/payment-context-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +13,7 @@ const corsHeaders = {
  * IMPORTANTE: seller_id NÃO participa do fluxo Stripe/pagamento.
  * Vendedores são 100% gerenciais — controle interno de comissão manual e rastreamento via link de referência.
  * A comissão do vendedor é apurada e paga manualmente pelo gerente (Pix ou outro meio próprio).
- * O Stripe lida apenas com pagamento do cliente final e repasse ao parceiro (partners).
+ * O Stripe lida apenas com pagamento do cliente final e eventual repasse ao sócio financeiro.
  */
 
 /** Processa pagamento confirmado: marca venda como pago, calcula comissão da plataforma e faz transfer ao parceiro */
@@ -58,7 +58,7 @@ async function processPaymentConfirmed(
 
   const { data: company } = await supabaseAdmin
     .from("companies")
-    .select("platform_fee_percent, partner_split_percent")
+    .select("platform_fee_percent, socio_split_percent")
     .eq("id", sale.company_id)
     .single();
 
@@ -73,7 +73,7 @@ async function processPaymentConfirmed(
     return;
   }
 
-  const partnerSplitPercent = company?.partner_split_percent ?? 50;
+  const socioSplitPercent = company?.socio_split_percent ?? 50;
 
   // gross_amount já inclui taxas adicionais do evento (calculadas pelo frontend no momento da venda)
   const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
@@ -81,58 +81,58 @@ async function processPaymentConfirmed(
   const platformFeeCents = Math.round(grossAmountCents * (platformFeePercent / 100));
   const platformFeeTotal = platformFeeCents / 100;
 
-  const { data: partnerRows, error: partnerError } = await supabaseAdmin
-    .from("partners")
+  const { data: socioRows, error: socioSplitError } = await supabaseAdmin
+    .from("socios_split")
     .select("id, name, status, stripe_account_id")
-    // Fase 1: `partners` segue como nome legado, mas o beneficiário financeiro
+    // Fase 4: `socios_split` é a fonte oficial do beneficiário financeiro e
     // precisa respeitar o escopo da empresa dona da venda.
     .eq("company_id", sale.company_id)
     .eq("status", "ativo")
     .limit(2);
 
-  if (partnerError) {
-    console.error(`Split partner query failed for company ${sale.company_id}: ${partnerError.message}`);
+  if (socioSplitError) {
+    console.error(`Split socioSplit query failed for company ${sale.company_id}: ${socioSplitError.message}`);
     return;
   }
 
-  const partnerValidation = partnerSplitPercent > 0
-    ? validateFinancialPartnerForSplit({
-        partners: partnerRows ?? [],
+  const socioSplitValidation = socioSplitPercent > 0
+    ? validateFinancialSocioForSplit({
+        socios: socioRows ?? [],
         provider: "stripe",
         environment: "production",
       })
     : null;
 
-  if (partnerValidation && !partnerValidation.ok) {
-    console.error(`${partnerValidation.code}: ${partnerValidation.message}`);
+  if (socioSplitValidation && !socioSplitValidation.ok) {
+    console.error(`${socioSplitValidation.code}: ${socioSplitValidation.message}`);
     return;
   }
 
-  const partner = partnerValidation?.ok ? partnerValidation.partner : null;
+  const socio = socioSplitValidation?.ok ? socioSplitValidation.socio : null;
 
-  let partnerFeeAmount = 0;
+  let socioFeeAmount = 0;
   let platformNetAmount = platformFeeTotal;
   let stripeTransferId: string | null = null;
 
-  if (partner?.stripe_account_id && partner.status === "ativo") {
-    const partnerFeeCents = Math.round(platformFeeCents * (partnerSplitPercent / 100));
-    partnerFeeAmount = partnerFeeCents / 100;
-    platformNetAmount = (platformFeeCents - partnerFeeCents) / 100;
+  if (socio?.stripe_account_id && socio.status === "ativo") {
+    const socioFeeCents = Math.round(platformFeeCents * (socioSplitPercent / 100));
+    socioFeeAmount = socioFeeCents / 100;
+    platformNetAmount = (platformFeeCents - socioFeeCents) / 100;
 
-    if (partnerFeeCents > 0) {
+    if (socioFeeCents > 0) {
       try {
         const transfer = await stripe.transfers.create({
-          amount: partnerFeeCents,
+          amount: socioFeeCents,
           currency: "brl",
-          destination: partner.stripe_account_id,
-          description: `Comissão parceiro — Venda ${saleId}`,
+          destination: socio.stripe_account_id,
+          description: `Comissão sócio — Venda ${saleId}`,
           metadata: { sale_id: saleId },
         });
         stripeTransferId = transfer.id;
-        console.log(`Transfer ${transfer.id} created for partner (R$ ${partnerFeeAmount.toFixed(2)})`);
+        console.log(`Transfer ${transfer.id} created for socio (R$ ${socioFeeAmount.toFixed(2)})`);
       } catch (transferError) {
-        console.error("Error creating partner transfer:", transferError);
-        partnerFeeAmount = 0;
+        console.error("Error creating socio transfer:", transferError);
+        socioFeeAmount = 0;
         platformNetAmount = platformFeeTotal;
       }
     }
@@ -143,7 +143,7 @@ async function processPaymentConfirmed(
     .update({
       gross_amount: grossAmount,
       platform_fee_total: platformFeeTotal,
-      partner_fee_amount: partnerFeeAmount,
+      socio_fee_amount: socioFeeAmount,
       platform_net_amount: platformNetAmount,
       stripe_transfer_id: stripeTransferId,
     })
@@ -152,7 +152,7 @@ async function processPaymentConfirmed(
   await supabaseAdmin.from("sale_logs").insert({
     sale_id: saleId,
     action: "payment_confirmed",
-    description: `Pagamento confirmado via Stripe Direct Charge (account: ${connectedAccountId || 'unknown'}, PI: ${session.payment_intent || 'pix'}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Parceiro: R$ ${partnerFeeAmount.toFixed(2)}.`,
+    description: `Pagamento confirmado via Stripe Direct Charge (account: ${connectedAccountId || 'unknown'}, PI: ${session.payment_intent || 'pix'}). Comissão: R$ ${platformFeeTotal.toFixed(2)} (${platformFeePercent}%). Sócio: R$ ${socioFeeAmount.toFixed(2)}.`,
     company_id: sale.company_id,
   });
 }

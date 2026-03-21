@@ -348,7 +348,7 @@ export default function Events() {
   const [paymentsGatePendingAction, setPaymentsGatePendingAction] = useState<'create_event' | 'publish_from_form' | null>(null);
   // Fonte de verdade das taxas: na venda online a comissão exibida considera o total configurado da empresa.
   const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState<number | null>(null);
-  const [companyPartnerSplitPercent, setCompanyPartnerSplitPercent] = useState<number>(0);
+  const [companySocioSplitPercent, setCompanySocioSplitPercent] = useState<number>(0);
 
   // Main form
   const [form, setForm] = useState({
@@ -412,7 +412,7 @@ export default function Events() {
 
   const hasValidCompanyPlatformFee = companyPlatformFeePercent !== null && Number.isFinite(companyPlatformFeePercent);
   // Regra financeira oficial: tudo que a tela chama de "Taxa da Plataforma" precisa refletir o split real.
-  const companyTotalPlatformFeePercent = (companyPlatformFeePercent ?? 0) + companyPartnerSplitPercent;
+  const companyTotalPlatformFeePercent = (companyPlatformFeePercent ?? 0) + companySocioSplitPercent;
 
   const fetchCompanyPlatformFee = async () => {
     if (!activeCompanyId) {
@@ -422,19 +422,19 @@ export default function Events() {
 
     const { data, error } = await supabase
       .from('companies')
-      .select('platform_fee_percent, partner_split_percent')
+      .select('platform_fee_percent, socio_split_percent')
       .eq('id', activeCompanyId)
       .single();
 
     if (error || data?.platform_fee_percent == null) {
       // Comentário de suporte: bloqueamos operações financeiras sem taxa válida para evitar cobrança incorreta.
       setCompanyPlatformFeePercent(null);
-      setCompanyPartnerSplitPercent(0);
+      setCompanySocioSplitPercent(0);
       return;
     }
 
     setCompanyPlatformFeePercent(Number(data.platform_fee_percent));
-    setCompanyPartnerSplitPercent(Number(data.partner_split_percent ?? 0));
+    setCompanySocioSplitPercent(Number(data.socio_split_percent ?? 0));
   };
 
   const checkAsaasConnection = async () => {
