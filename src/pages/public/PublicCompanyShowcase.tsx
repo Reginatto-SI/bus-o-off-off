@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { EventCard, EventCardSkeletonGrid, EventsCarousel } from '@/components/public';
 import { normalizePublicSlug } from '@/lib/publicSlug';
-import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
+import { buildWhatsappWaMeLink, normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 import { useAuth } from '@/contexts/AuthContext';
 import { EditHeroModal } from '@/components/public/showcase/EditHeroModal';
 import { EditIntroModal } from '@/components/public/showcase/EditIntroModal';
@@ -34,7 +34,7 @@ interface PublicSponsor {
 // Tipo estrito para dados públicos da empresa (sem select('*'))
 type PublicCompanyData = Pick<
   Company,
-  'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style'
+  'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style' | 'whatsapp'
   | 'social_instagram' | 'social_facebook' | 'social_tiktok' | 'social_youtube' | 'social_telegram' | 'social_twitter' | 'social_website'
 >;
 
@@ -69,7 +69,7 @@ export default function PublicCompanyShowcase() {
       // Query estrita: somente campos necessários para a vitrine (sem select('*'))
       const { data: companyData } = await supabase
         .from('companies')
-        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website')
+        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style, whatsapp, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website')
         .eq('public_slug', normalizedNick)
         .maybeSingle();
 
@@ -135,6 +135,12 @@ export default function PublicCompanyShowcase() {
   // Prioridade do hero: capa personalizada > capa padrão do sistema > gradiente puro (quando removida manualmente)
   const resolvedCoverUrl = company?.cover_image_url || (company?.use_default_cover ? DEFAULT_SHOWCASE_COVER_URL : null);
   const hasCover = !!resolvedCoverUrl;
+  // Comentário de suporte: a vitrine sempre usa o WhatsApp institucional da empresa atual,
+  // sem fallback para o contato global da landing. Quando não houver cadastro, os CTAs somem com segurança.
+  const companyWhatsappLink = buildWhatsappWaMeLink({
+    phone: company?.whatsapp ?? null,
+    message: `Olá! Vim pela vitrine da ${companyDisplayName || 'empresa'} e quero mais informações.`,
+  });
 
   if (nick !== normalizedNick && normalizedNick) {
     return <Navigate to={`/empresa/${normalizedNick}`} replace />;
@@ -248,7 +254,7 @@ export default function PublicCompanyShowcase() {
   };
 
   return (
-    <PublicLayout hideMyTicketsButton={showEditUI}>
+    <PublicLayout hideMyTicketsButton={showEditUI} floatingWhatsappHref={companyWhatsappLink}>
       <div className="space-y-0">
         {!loading && !company ? (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -392,9 +398,8 @@ export default function PublicCompanyShowcase() {
                       <ChevronDown className="h-4 w-4" />
                       Ver eventos disponíveis
                     </Button>
-                    {(() => {
-                      const whatsapp = events[0]?.company?.whatsapp;
-                      const normalized = normalizeWhatsappForWaMe(whatsapp);
+                    {companyWhatsappLink && (() => {
+                      const normalized = normalizeWhatsappForWaMe(company?.whatsapp);
                       if (!normalized) return null;
                       return (
                         <Button
@@ -402,7 +407,7 @@ export default function PublicCompanyShowcase() {
                           className="bg-[#25D366] text-white hover:bg-[#1DA851] shadow-md hover:shadow-lg transition-all animate-subtle-pulse w-full sm:w-auto"
                           asChild
                         >
-                          <a href={`https://wa.me/${normalized}`} target="_blank" rel="noopener noreferrer">
+                          <a href={companyWhatsappLink} target="_blank" rel="noopener noreferrer">
                             <WhatsAppIcon size={18} />
                             Falar no WhatsApp
                           </a>
@@ -625,7 +630,7 @@ export default function PublicCompanyShowcase() {
                        { icon: UserCheck, label: 'Motoristas experientes' },
                        { icon: ClipboardCheck, label: 'Embarque organizado por lista' },
                        { icon: ShieldCheck, label: 'Compra segura pelo sistema' },
-                       ...(events[0]?.company?.whatsapp
+                       ...(company?.whatsapp
                          ? [{ icon: HeadsetIcon, label: 'Suporte rápido via WhatsApp' }]
                          : []),
                        { icon: MapPin, label: 'Informações claras do embarque' },
