@@ -36,6 +36,7 @@ interface AsaasOnboardingWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   companyData: AsaasOnboardingCompanyData | null;
+  initialMode?: AsaasWizardMode | null;
   onSuccess?: () => Promise<void> | void;
 }
 
@@ -59,7 +60,13 @@ const maskCnpj = (value: string) => {
   return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 };
 
-export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSuccess }: AsaasOnboardingWizardProps) {
+export function AsaasOnboardingWizard({
+  open,
+  onOpenChange,
+  companyData,
+  initialMode = null,
+  onSuccess,
+}: AsaasOnboardingWizardProps) {
   const { isDeveloper } = useAuth();
   const [step, setStep] = useState<AsaasWizardStep>(1);
   const [mode, setMode] = useState<AsaasWizardMode | null>(null);
@@ -126,6 +133,31 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setTargetEnvironment('auto');
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    /**
+     * Comentário de manutenção:
+     * Company e Events agora compartilham o mesmo wizard para `create` e `link`.
+     * Este efeito garante que a tela chamadora apenas informe a intenção inicial,
+     * enquanto a decisão final de ambiente e o submit continuam centralizados aqui.
+     */
+    if (initialMode === 'link') {
+      setMode('link');
+      setStep(2);
+      return;
+    }
+
+    if (initialMode === 'create') {
+      setMode('create');
+      setStep(1);
+      return;
+    }
+
+    setMode(null);
+    setStep(1);
+  }, [initialMode, open]);
 
   const missingFields = useMemo(() => {
     if (!localCompanyData) return ['dados da empresa'];
@@ -205,7 +237,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         const { message, statusCode } = await extractAsaasErrorMessage({
           data,
           error,
-          fallbackMessage: 'Erro ao vincular conta Asaas.',
+          fallbackMessage: 'Não foi possível concluir o vínculo da conta Asaas no ambiente selecionado.',
         });
         const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
         throw new Error(`${message}${statusSuffix}`);
@@ -215,7 +247,9 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       await onSuccess?.();
       setStep(4);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao vincular conta Asaas.';
+      const message = err instanceof Error
+        ? err.message
+        : 'Não foi possível concluir o vínculo da conta Asaas no ambiente selecionado.';
       toast.error(message);
     } finally {
       setSubmitting(false);

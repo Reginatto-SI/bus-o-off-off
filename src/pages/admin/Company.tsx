@@ -435,11 +435,9 @@ export default function CompanyPage() {
   }, [normalizedPublicSlug, editingId, isReservedSlug]);
 
 
-  const [asaasConnecting, setAsaasConnecting] = useState(false);
   const [asaasRevalidating, setAsaasRevalidating] = useState(false);
   const [asaasDisconnecting, setAsaasDisconnecting] = useState(false);
   const [disconnectAsaasDialogOpen, setDisconnectAsaasDialogOpen] = useState(false);
-  const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
   const [asaasWizardOpen, setAsaasWizardOpen] = useState(false);
@@ -461,59 +459,6 @@ export default function CompanyPage() {
       city: form.city.trim(),
       state: (form.state || '').trim(),
     };
-  };
-
-  const handleConnectAsaasLink = async () => {
-    if (!editingId) {
-      toast.error('Salve a empresa antes de conectar o Asaas');
-      return;
-    }
-
-    setAsaasConnecting(true);
-    try {
-      if (!asaasApiKeyInput.trim()) {
-        toast.error('Informe sua API Key do Asaas');
-        setAsaasConnecting(false);
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: {
-          company_id: editingId,
-          mode: 'link_existing',
-          api_key: asaasApiKeyInput.trim(),
-          // Comentário de suporte: mantemos o mesmo contrato explícito de ambiente
-          // usado na revalidação para evitar validação/vínculo no endpoint errado.
-          target_environment: runtimePaymentEnvironment,
-        },
-      });
-      if (error) {
-        // Comentário de suporte: prioriza mensagem retornada pelo Asaas para dar autonomia
-        // no autoatendimento, mas filtra mensagens técnicas internas para fallback seguro.
-        const { message, statusCode } = await extractAsaasErrorMessage({
-          data,
-          error,
-          fallbackMessage: 'Erro ao conectar Asaas. Tente novamente.',
-        });
-        const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
-        throw new Error(`${message}${statusSuffix}`);
-      }
-
-      if (data?.already_complete) {
-        toast.success('Conta Asaas já conectada!');
-      } else {
-        toast.success('Conta Asaas vinculada com sucesso!');
-      }
-
-      setAsaasOnboardingMode(null);
-      setAsaasApiKeyInput('');
-      fetchCompany();
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar Asaas. Tente novamente.';
-      toast.error(errorMessage);
-    } finally {
-      setAsaasConnecting(false);
-    }
   };
 
   const handleRevalidateAsaasIntegration = async () => {
@@ -626,7 +571,6 @@ export default function CompanyPage() {
       await fetchCompany();
       setDisconnectAsaasDialogOpen(false);
       setAsaasOnboardingMode(null);
-      setAsaasApiKeyInput('');
       toast.success('Conta Asaas desvinculada do ambiente operacional atual');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível desvincular a conta Asaas. Tente novamente.');
@@ -1967,57 +1911,34 @@ export default function CompanyPage() {
                                 </CardContent>
                               </Card>
                             </div>
-                          ) : asaasOnboardingMode === 'create' ? (
+                          ) : (
                             <div className="rounded-lg border p-4 space-y-4">
-                              <h4 className="font-medium">Criar subconta Asaas</h4>
+                              <h4 className="font-medium">
+                                {asaasOnboardingMode === 'create' ? 'Criar subconta Asaas' : 'Vincular conta Asaas existente'}
+                              </h4>
                               <p className="text-sm text-muted-foreground">
-                                Vamos criar uma conta Asaas automaticamente usando os dados cadastrados da sua empresa
-                                ({form.legal_type === 'PF' ? 'CPF' : 'CNPJ'}, e-mail e nome).
+                                {asaasOnboardingMode === 'create'
+                                  ? (
+                                    <>
+                                      Vamos criar uma conta Asaas automaticamente usando os dados cadastrados da sua empresa
+                                      ({form.legal_type === 'PF' ? 'CPF' : 'CNPJ'}, e-mail e nome).
+                                    </>
+                                  )
+                                  : 'Vamos abrir o mesmo wizard usado em /admin/eventos para vincular sua conta existente por API Key com a mesma regra de ambiente e tratamento de erros.'}
                               </p>
                               <div className="flex gap-2">
                                 <Button
                                   type="button"
                                   onClick={() => setAsaasWizardOpen(true)}
                                 >
-                                  <CreditCard className="h-4 w-4 mr-2" />
-                                  Iniciar conexão guiada
-                                </Button>
-                                <Button type="button" variant="ghost" onClick={() => setAsaasOnboardingMode(null)}>
-                                  Voltar
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="rounded-lg border p-4 space-y-4">
-                              <h4 className="font-medium">Vincular conta Asaas existente</h4>
-                              <p className="text-sm text-muted-foreground">
-                                Informe sua API Key do Asaas para vincular sua conta. Encontre sua API Key em: 
-                                Asaas → Integrações → API.
-                              </p>
-                              <div className="space-y-2">
-                                <Label htmlFor="asaas_api_key">API Key do Asaas</Label>
-                                <Input
-                                  id="asaas_api_key"
-                                  type="password"
-                                  value={asaasApiKeyInput}
-                                  onChange={(e) => setAsaasApiKeyInput(e.target.value)}
-                                  placeholder="$aact_..."
-                                />
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  type="button"
-                                  onClick={handleConnectAsaasLink}
-                                  disabled={asaasConnecting || !asaasApiKeyInput.trim()}
-                                >
-                                  {asaasConnecting ? (
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  {asaasOnboardingMode === 'create' ? (
+                                    <CreditCard className="h-4 w-4 mr-2" />
                                   ) : (
                                     <Link2 className="h-4 w-4 mr-2" />
                                   )}
-                                  Vincular conta
+                                  {asaasOnboardingMode === 'create' ? 'Iniciar conexão guiada' : 'Abrir wizard de vínculo'}
                                 </Button>
-                                <Button type="button" variant="ghost" onClick={() => { setAsaasOnboardingMode(null); setAsaasApiKeyInput(''); }}>
+                                <Button type="button" variant="ghost" onClick={() => setAsaasOnboardingMode(null)}>
                                   Voltar
                                 </Button>
                               </div>
@@ -2029,11 +1950,15 @@ export default function CompanyPage() {
                   </TabsContent>
 
 
-                    {/* Comentário de manutenção: wizard reutilizável para evitar criação automática sem confirmação explícita. */}
+                    {/* Comentário de manutenção:
+                        removemos o fluxo inline de `link_existing` para que /admin/empresa
+                        e /admin/eventos compartilhem o mesmo wizard como fonte única de verdade
+                        da jornada e da decisão de ambiente no frontend. */}
                     <AsaasOnboardingWizard
                       open={asaasWizardOpen}
                       onOpenChange={setAsaasWizardOpen}
                       companyData={getAsaasWizardCompanyData()}
+                      initialMode={asaasOnboardingMode}
                       onSuccess={async () => {
                         setAsaasOnboardingMode(null);
                         await fetchCompany();
