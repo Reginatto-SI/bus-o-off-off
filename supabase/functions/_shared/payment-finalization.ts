@@ -172,7 +172,7 @@ export async function createTicketsFromPassengersShared(
 }
 
 export async function finalizeConfirmedPayment(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: SupabaseAdmin;
   sale: {
     id: string;
     company_id: string;
