@@ -543,8 +543,14 @@ export default function CompanyPage() {
           error,
           fallbackMessage: 'Não foi possível verificar a integração com o Asaas. Tente novamente.',
         });
+        // Comentário de suporte: na validação operacional real foi identificado que, se a edge
+        // function dedicada ainda não estiver publicada no ambiente, o Supabase devolve
+        // `Requested function was not found`. Traduzimos isso para uma ação objetiva de deploy.
+        const normalizedMessage = message === 'Requested function was not found'
+          ? 'O endpoint de verificação da integração Asaas não está publicado neste ambiente. Faça o deploy da edge function check-asaas-integration e tente novamente.'
+          : message;
         const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
-        throw new Error(`${message}${statusSuffix}`);
+        throw new Error(`${normalizedMessage}${statusSuffix}`);
       }
 
       const response = data as AsaasIntegrationCheckResponse | null;
