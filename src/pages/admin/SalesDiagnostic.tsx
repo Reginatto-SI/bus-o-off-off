@@ -79,11 +79,13 @@ const initialFilters: DiagnosticFilters = {
   dateTo: '',
 };
 
-interface DiagnosticSale extends Sale {
+interface DiagnosticSale extends Omit<Sale, 'event'> {
   company_id: string;
+  company?: { name: string } | null;
+  event?: { name: string; date: string } | null;
   company_name?: string;
   event_name?: string;
-  event_date?: string;
+  event_date?: string | null;
   ticket_count?: number;
   active_lock_count?: number;
   latest_lock_expires_at?: string | null;
