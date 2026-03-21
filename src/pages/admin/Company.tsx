@@ -517,8 +517,17 @@ export default function CompanyPage() {
   };
 
   const handleRevalidateAsaasIntegration = async () => {
-    if (!editingId || !runtimePaymentEnvironment) {
-      toast.error('Empresa ou ambiente operacional não identificado para validar integração');
+    if (!editingId) {
+      // Comentário de suporte: a validação só pode seguir com a empresa efetivamente
+      // hidratada na tela; sem `editingId`, não existe contexto multiempresa seguro.
+      toast.error('Empresa atual não localizada para validar a integração.');
+      return;
+    }
+
+    if (!runtimePaymentEnvironment) {
+      // Comentário de suporte: não permitimos heurística local aqui porque a verificação
+      // manual precisa receber um ambiente explícito e válido para não misturar colunas.
+      toast.error('O ambiente operacional informado não é válido para esta verificação.');
       return;
     }
 

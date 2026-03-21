@@ -157,6 +157,9 @@ serve(async (req) => {
         : null;
 
     if (!companyId || !requestedEnvironment) {
+      const invalidInputMessage = !companyId
+        ? "Empresa atual não localizada para validar a integração."
+        : "O ambiente operacional informado não é válido para esta verificação.";
       const invalidResponse: CheckResponse = {
         status: "error",
         integration_status: "incomplete",
@@ -173,9 +176,9 @@ serve(async (req) => {
           account_id_matches: false,
           wallet_id_matches: false,
           onboarding_complete: false,
-          error_type: "invalid_input",
+          error_type: !companyId ? "company_context_missing" : "invalid_target_environment",
         },
-        message: "Informe company_id e target_environment para verificar a integração Asaas.",
+        message: invalidInputMessage,
       };
 
       logCheck("warn", "[check-asaas-integration] invalid input", {
@@ -291,7 +294,7 @@ serve(async (req) => {
           onboarding_complete: false,
           error_type: "company_not_found",
         },
-        message: "Empresa não encontrada para verificar a integração Asaas.",
+          message: "Empresa atual não localizada para validar a integração.",
       };
 
       logCheck("warn", "[check-asaas-integration] company not found before Asaas call", {
@@ -433,7 +436,7 @@ serve(async (req) => {
             wallet_id_matches: walletIdMatches,
             error_type: "missing_local_account_id",
           },
-          message: "Conta Asaas validada no gateway, mas falta salvar o account_id deste ambiente no cadastro da empresa.",
+          message: "Conta Asaas validada no gateway, mas falta salvar o identificador da conta deste ambiente no cadastro da empresa.",
         };
 
         logCheck("warn", "[check-asaas-integration] gateway validated account but local account_id is missing", {
