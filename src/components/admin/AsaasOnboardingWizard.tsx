@@ -109,7 +109,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
-      setTargetEnvironment('automatic');
+      setTargetEnvironment('sandbox');
     }
   }, [open]);
 
