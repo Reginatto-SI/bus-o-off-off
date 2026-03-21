@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:edge-deploy": "node scripts/check-edge-function-deploy.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
