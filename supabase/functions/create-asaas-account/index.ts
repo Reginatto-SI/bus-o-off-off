@@ -331,7 +331,7 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? null;
+        const walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
         const walletId = walletIdFromResponse ?? companyConfig[envFields.walletId] ?? null;
 
         if (!walletId) {
