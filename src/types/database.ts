@@ -401,6 +401,7 @@ export interface Sale {
   platform_fee_status: string;
   platform_fee_amount: number | null;
   platform_fee_payment_id: string | null;
+  reservation_expires_at: string | null;
   block_reason: string | null;
   created_at: string;
   updated_at: string;

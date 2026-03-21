@@ -184,6 +184,7 @@ const blockReasonLabels: Record<string, string> = {
 };
 
 const PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES = 15;
+const MANUAL_RESERVATION_TTL_HOURS = 72;
 
 function getPendingPaymentOperationalSignal(sale: Sale): {
   isExpired: boolean;
@@ -844,6 +845,7 @@ export default function Sales() {
         cancel_reason: cancelReason.trim(),
         cancelled_at: new Date().toISOString(),
         cancelled_by: user.id,
+        reservation_expires_at: null,
       })
       .eq('id', cancelSale.id);
 
@@ -892,9 +894,25 @@ export default function Sales() {
       }
     }
 
+    const reservationExpiresAt = newStatus === 'reservado'
+      ? new Date(Date.now() + MANUAL_RESERVATION_TTL_HOURS * 60 * 60 * 1000).toISOString()
+      : null;
+
+    // Comentário de suporte: ao reabrir uma venda administrativa como `reservado`,
+    // renovamos explicitamente a validade operacional. Isso evita ressuscitar uma
+    // reserva já vencida ou deixar a venda sem prazo, mantendo separação total do
+    // fluxo público `pendente_pagamento`, que continua dependente de seat_locks.
+    const updatePayload: Record<string, any> = { status: newStatus as any };
+    if (newStatus === 'reservado') {
+      updatePayload.reservation_expires_at = reservationExpiresAt;
+    }
+    if (newStatus === 'pago') {
+      updatePayload.reservation_expires_at = null;
+    }
+
     const { error } = await supabase
       .from('sales')
-      .update({ status: newStatus as any })
+      .update(updatePayload)
       .eq('id', sale.id);
 
     if (error) {
@@ -910,7 +928,9 @@ export default function Sales() {
     await supabase.from('sale_logs').insert({
       sale_id: sale.id,
       action: newStatus === 'pago' ? 'marked_as_paid' : 'status_alterado',
-      description: `Status alterado: ${statusLabels[sale.status]} → ${statusLabels[newStatus]}`,
+      description: newStatus === 'reservado' && reservationExpiresAt
+        ? `Status alterado: ${statusLabels[sale.status]} → ${statusLabels[newStatus]}. Nova validade da reserva manual: ${new Date(reservationExpiresAt).toLocaleString('pt-BR')}`
+        : `Status alterado: ${statusLabels[sale.status]} → ${statusLabels[newStatus]}`,
       old_value: sale.status,
       new_value: newStatus,
       performed_by: user.id,
