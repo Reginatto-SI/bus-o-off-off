@@ -602,7 +602,7 @@ serve(async (req) => {
         );
       }
 
-      const walletId = createData.walletId;
+      const walletId = createData.walletId ?? createData.wallet?.id ?? createData.id ?? null;
       const accountId = createData.id;
 
       // Save to database
