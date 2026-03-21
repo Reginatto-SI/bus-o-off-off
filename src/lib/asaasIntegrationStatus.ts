@@ -16,6 +16,16 @@ type EnvironmentAsaasConfig = {
   onboardingComplete: boolean;
 };
 
+function createEmptyEnvironmentConfig(): EnvironmentAsaasConfig {
+  return {
+    apiKey: null,
+    walletId: null,
+    accountId: null,
+    accountEmail: null,
+    onboardingComplete: false,
+  };
+}
+
 function normalizeText(value?: string | null) {
   const normalized = value?.trim() ?? '';
   return normalized.length > 0 ? normalized : null;
@@ -26,13 +36,7 @@ function readEnvironmentConfig(
   environment: PaymentEnvironment,
 ): EnvironmentAsaasConfig {
   if (!company) {
-    return {
-      apiKey: null,
-      walletId: null,
-      accountId: null,
-      accountEmail: null,
-      onboardingComplete: false,
-    };
+    return createEmptyEnvironmentConfig();
   }
 
   if (environment === 'production') {
@@ -74,26 +78,30 @@ export function getAsaasIntegrationSnapshot(
   company: Company | null | undefined,
   environment: PaymentEnvironment,
 ) {
+  // Comentário de manutenção:
+  // o card administrativo precisa ser determinístico pelo ambiente operacional ativo.
+  // Portanto, o snapshot visual não deve ler sandbox para complementar produção
+  // nem produção para complementar sandbox; o outro ambiente não participa do status.
   const current = readEnvironmentConfig(company, environment);
-  const oppositeEnvironment: PaymentEnvironment =
-    environment === 'production' ? 'sandbox' : 'production';
-  const opposite = readEnvironmentConfig(company, oppositeEnvironment);
-
   const currentHasAny = hasAnyConfig(current);
-  const oppositeHasAny = hasAnyConfig(opposite);
   const currentIsConnected = hasOperationalConnection(current);
-  const oppositeIsConnected = hasOperationalConnection(opposite);
+  const opposite = createEmptyEnvironmentConfig();
 
   let status: AsaasIntegrationStatus = 'not_configured';
   const reasons: string[] = [];
 
-  if (currentIsConnected) {
+  if (currentIsConnected && current.accountId) {
     status = 'connected';
+  } else if (currentIsConnected && !current.accountId) {
+    // Comentário de manutenção: o card não deve marcar "Conectado" quando o ambiente
+    // ainda não tem `account_id` persistido. O checkout pode até operar com API key + wallet,
+    // mas a verificação manual e a auditoria da conta exigem esse identificador.
+    status = 'partially_configured';
   } else if (
     current.onboardingComplete && (!current.apiKey || !current.walletId)
   ) {
     status = 'inconsistent';
-  } else if (currentHasAny || oppositeHasAny) {
+  } else if (currentHasAny) {
     status = 'partially_configured';
   }
 
@@ -106,8 +114,8 @@ export function getAsaasIntegrationSnapshot(
   if (current.onboardingComplete && !current.walletId) {
     reasons.push('onboarding marcado sem wallet no ambiente operacional');
   }
-  if (!currentHasAny && oppositeIsConnected) {
-    reasons.push(`conta conectada apenas no ambiente ${oppositeEnvironment === 'production' ? 'de produção' : 'sandbox'}`);
+  if (currentIsConnected && !current.accountId) {
+    reasons.push('conta operacional sem account_id salvo no ambiente operacional');
   }
   if (currentHasAny && !currentIsConnected) {
     reasons.push('configuração do ambiente operacional está incompleta');
@@ -119,7 +127,7 @@ export function getAsaasIntegrationSnapshot(
     current,
     opposite,
     currentIsConnected,
-    oppositeIsConnected,
+    oppositeIsConnected: false,
     // Comentário de suporte: o legado em companies foi esvaziado de propósito.
     // O contrato operacional do status passa a olhar somente sandbox/production.
     legacy: {
@@ -130,7 +138,7 @@ export function getAsaasIntegrationSnapshot(
       onboardingComplete: false,
     },
     legacyIsConnected: false,
-    hasAnyConfiguration: currentHasAny || oppositeHasAny,
+    hasAnyConfiguration: currentHasAny,
     reasons,
   };
 }

@@ -72,7 +72,7 @@ describe('getAsaasIntegrationSnapshot', () => {
     expect(snapshot.legacyIsConnected).toBe(false);
   });
 
-  it('marca parcialmente configurado quando só o outro ambiente está pronto', () => {
+  it('mantém not_configured quando só o outro ambiente está pronto, sem misturar ambientes no card', () => {
     const company = buildCompany({
       asaas_api_key_production: 'prod-key',
       asaas_wallet_id_production: 'prod-wallet',
@@ -81,15 +81,16 @@ describe('getAsaasIntegrationSnapshot', () => {
 
     const snapshot = getAsaasIntegrationSnapshot(company, 'sandbox');
 
-    expect(snapshot.status).toBe('partially_configured');
+    expect(snapshot.status).toBe('not_configured');
     expect(snapshot.currentIsConnected).toBe(false);
-    expect(snapshot.oppositeIsConnected).toBe(true);
+    expect(snapshot.oppositeIsConnected).toBe(false);
   });
 
-  it('marca conectado apenas quando api key, wallet e onboarding do ambiente atual existem', () => {
+  it('marca conectado apenas quando api key, wallet, account_id e onboarding do ambiente atual existem', () => {
     const company = buildCompany({
       asaas_api_key_sandbox: 'sandbox-key',
       asaas_wallet_id_sandbox: 'sandbox-wallet',
+      asaas_account_id_sandbox: 'sandbox-account',
       asaas_onboarding_complete_sandbox: true,
       asaas_account_email_sandbox: 'sandbox@example.com',
     });
@@ -98,5 +99,18 @@ describe('getAsaasIntegrationSnapshot', () => {
 
     expect(snapshot.status).toBe('connected');
     expect(snapshot.current.accountEmail).toBe('sandbox@example.com');
+  });
+
+  it('marca parcialmente configurado quando o ambiente atual está operacional, mas sem account_id local', () => {
+    const company = buildCompany({
+      asaas_api_key_sandbox: 'sandbox-key',
+      asaas_wallet_id_sandbox: 'sandbox-wallet',
+      asaas_onboarding_complete_sandbox: true,
+    });
+
+    const snapshot = getAsaasIntegrationSnapshot(company, 'sandbox');
+
+    expect(snapshot.status).toBe('partially_configured');
+    expect(snapshot.reasons).toContain('conta operacional sem account_id salvo no ambiente operacional');
   });
 });
