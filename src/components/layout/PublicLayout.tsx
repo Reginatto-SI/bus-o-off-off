@@ -18,9 +18,10 @@ import { useAuth } from '@/contexts/AuthContext';
 interface PublicLayoutProps {
   children: ReactNode;
   hideMyTicketsButton?: boolean;
+  floatingWhatsappHref?: string | null;
 }
 
-export function PublicLayout({ children, hideMyTicketsButton = false }: PublicLayoutProps) {
+export function PublicLayout({ children, hideMyTicketsButton = false, floatingWhatsappHref }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -192,7 +193,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false }: PublicLa
         {children}
       </main>
 
-      <FloatingWhatsApp />
+      <FloatingWhatsApp href={floatingWhatsappHref} />
       <TrustFooter />
     </div>
   );

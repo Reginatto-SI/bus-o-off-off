@@ -1,19 +1,26 @@
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 
-const WHATSAPP_PHONE = '(31) 99207-4309';
-const WHATSAPP_MESSAGE = 'Quero começar a vender passagens com o Smartbus BR';
-// Atualização obrigatória do contato comercial: centralizamos telefone e mensagem para evitar resquícios do número antigo.
-const WHATSAPP_URL =
+const LANDING_WHATSAPP_PHONE = '(31) 99207-4309';
+const LANDING_WHATSAPP_MESSAGE = 'Quero começar a vender passagens com o Smartbus BR';
+// Comentário de suporte: a landing institucional continua com contato comercial próprio,
+// mas a vitrine pública deve injetar o WhatsApp da empresa explicitamente para não misturar contextos.
+const DEFAULT_WHATSAPP_URL =
   buildWhatsappWaMeLink({
-    phone: WHATSAPP_PHONE,
-    message: WHATSAPP_MESSAGE,
+    phone: LANDING_WHATSAPP_PHONE,
+    message: LANDING_WHATSAPP_MESSAGE,
   }) ?? 'https://wa.me/5531992074309?text=Quero%20come%C3%A7ar%20a%20vender%20passagens%20com%20o%20Smartbus%20BR';
 
-export function FloatingWhatsApp() {
+interface FloatingWhatsAppProps {
+  href?: string | null;
+}
+
+export function FloatingWhatsApp({ href = DEFAULT_WHATSAPP_URL }: FloatingWhatsAppProps) {
+  if (!href) return null;
+
   return (
     <a
-      href={WHATSAPP_URL}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Falar pelo WhatsApp"
