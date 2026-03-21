@@ -49,7 +49,7 @@ export type SaleConsistencyInspection = {
 };
 
 export async function inspectSaleConsistency(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseAdmin,
   saleId: string,
 ): Promise<SaleConsistencyInspection> {
   const { data: sale, error: saleError } = await supabaseAdmin
