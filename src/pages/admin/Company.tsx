@@ -524,6 +524,10 @@ export default function CompanyPage() {
 
     setAsaasRevalidating(true);
     try {
+      // Comentário de manutenção:
+      // o handler envia explicitamente a empresa atualmente hidratada no formulário
+      // e o ambiente operacional resolvido no runtime para impedir mistura entre
+      // sandbox/produção ou entre empresa ativa e empresa exibida na tela.
       // Comentário de manutenção: a verificação manual agora usa endpoint dedicado.
       // Não reaproveitamos `create-asaas-account` porque health check não deve criar conta,
       // revalidar onboarding nem alterar os campos da empresa durante o diagnóstico.
@@ -558,6 +562,9 @@ export default function CompanyPage() {
         throw new Error('Resposta inválida ao verificar integração com o Asaas.');
       }
 
+      // Comentário de suporte:
+      // tratamos o payload estruturado do backend sem cair em toast genérico quando a
+      // causa já foi identificada. Isso deixa a operação mais confiável para suporte.
       if (response.status === 'ok') {
         toast.success(response.message);
         return;
@@ -667,7 +674,7 @@ export default function CompanyPage() {
   const asaasStatus: AsaasIntegrationStatus = asaasSnapshot?.status ?? 'not_configured';
   const asaasStatusBadge = {
     connected: { label: 'Conectado', className: 'bg-green-100 text-green-700 border-green-200' },
-    partially_configured: { label: 'Parcial', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+    partially_configured: { label: 'Configuração pendente', className: 'bg-amber-100 text-amber-800 border-amber-200' },
     inconsistent: { label: 'Inconsistente', className: 'bg-destructive/10 text-destructive border-destructive/20' },
     not_configured: { label: 'Não conectado', className: '' },
   }[asaasStatus];

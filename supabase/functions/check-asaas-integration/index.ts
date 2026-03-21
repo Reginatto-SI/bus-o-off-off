@@ -83,7 +83,6 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
   const hasWalletId = Boolean(normalizeCompanyField(companyConfig[envFields.walletId]));
   const missingFields = [
     !hasApiKey ? "api_key" : null,
-    !hasAccountId ? "account_id" : null,
     !hasWalletId ? "wallet_id" : null,
   ].filter((value): value is string => Boolean(value));
 
@@ -305,7 +304,7 @@ serve(async (req) => {
           ...details,
           error_type: "missing_credentials",
         },
-        message: `Credenciais incompletas no ambiente ${paymentEnv}: faltando ${details.missing_fields.join(", ")}.`,
+        message: `A conta Asaas deste ambiente ainda não está completamente configurada: faltando ${details.missing_fields.join(", ")}.`,
       };
 
       logCheck("warn", "[check-asaas-integration] missing environment credentials before Asaas call", {
@@ -395,6 +394,45 @@ serve(async (req) => {
       const asaasAccountFound = Boolean(remoteAccountId);
       const walletFound = Boolean(remoteWalletId);
       const onboardingComplete = details.onboarding_complete;
+
+      /**
+       * Comentário de manutenção:
+       * a conta pode estar operacional com API key + wallet válidas, mas sem `account_id`
+       * persistido localmente em empresas que passaram por vínculo anterior/legado.
+       * Nesses casos a verificação manual não deve falhar genericamente antes de consultar
+       * o Asaas. Primeiro validamos o gateway real e, só depois, devolvemos pendência clara
+       * de cadastro local para o ambiente ativo.
+       */
+      if (!storedAccountId) {
+        const missingLocalAccountIdResponse: CheckResponse = {
+          status: "error",
+          integration_status: "pending",
+          environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          details: {
+            ...details,
+            asaas_request_attempted: true,
+            asaas_account_found: asaasAccountFound,
+            wallet_found: walletFound,
+            account_id_matches: false,
+            wallet_id_matches: walletIdMatches,
+            error_type: "missing_local_account_id",
+          },
+          message: "Conta Asaas validada no gateway, mas falta salvar o account_id deste ambiente no cadastro da empresa.",
+        };
+
+        logCheck("warn", "[check-asaas-integration] gateway validated account but local account_id is missing", {
+          company_id: companyId,
+          requested_target_environment: requestedEnvironment,
+          resolved_payment_environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          asaas_request_attempted: true,
+          error_type: "missing_local_account_id",
+          remote_account_id: remoteAccountId,
+        });
+
+        return jsonResponse(missingLocalAccountIdResponse, 200);
+      }
 
       if (!asaasAccountFound || !accountIdMatches) {
         const accountMismatchResponse: CheckResponse = {
@@ -505,7 +543,7 @@ serve(async (req) => {
           account_id_matches: accountIdMatches,
           wallet_id_matches: walletIdMatches,
         },
-        message: "Integração válida e pronta para uso.",
+        message: "Integração Asaas validada com sucesso.",
       };
 
       logCheck("log", "[check-asaas-integration] Asaas integration validated successfully", {
