@@ -467,16 +467,15 @@ export default function LandingPage() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Building2 className="h-3.5 w-3.5" />
-                Para empresas, organizadores, revendedores e vendedores independentes
+                Para quem vende passagens — empresas e vendedores independentes
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Feito para quem precisa vender passagens com mais presença digital e operação profissional
+                Feito para quem quer vender mais passagens com organização e presença profissional
               </h2>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                O Smartbus BR foi pensado para empresas que precisam divulgar saídas, acompanhar vendedores,
-                controlar embarques e visualizar resultados por evento — e também para quem vende por conta própria e quer mais organização para crescer.
+                O Smartbus BR foi feito para quem vende passagens — seja uma empresa estruturada ou alguém que vende por conta própria. Divulgue suas viagens, acompanhe vendas, organize embarques e tenha controle total para crescer com mais profissionalismo.
               </p>
-              {/* Nova hierarquia de valor: a seção apresenta os quatro pilares do produto usando os mesmos cards da landing. */}
+              {/* Ajuste de conversão: a copy desta seção reduz o foco institucional em empresa e equilibra empresa + autônomo sem alterar o layout. */}
               <div className="grid gap-3 sm:grid-cols-2">
                 {PLATFORM_PILLARS.map((benefit) => (
                   <div key={benefit.title} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -495,7 +494,7 @@ export default function LandingPage() {
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Vitrine própria</p>
                   <p className="mt-3 text-3xl font-bold text-primary">Link + QR Code</p>
-                  <p className="mt-2 text-sm text-white/65">para divulgar sua empresa, publicar viagens e centralizar redes sociais em uma página profissional.</p>
+                  <p className="mt-2 text-sm text-white/65">para divulgar suas viagens, compartilhar seu link de vendas e centralizar tudo em uma página profissional.</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Resultado operacional</p>
@@ -505,13 +504,13 @@ export default function LandingPage() {
               </div>
               <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/10 p-5">
                 <p className="text-sm text-white/75">
-                  Da divulgação ao embarque, a empresa ganha uma estrutura mais organizada para vender, operar e acompanhar o que realmente está acontecendo em cada evento.
+                  Da divulgação ao embarque, você ganha uma estrutura mais organizada para vender, operar e acompanhar tudo o que acontece em cada evento.
                 </p>
                 <Link
                   to="/cadastro"
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
-                  Quero vender com mais controle
+                  Quero começar a vender melhor
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
