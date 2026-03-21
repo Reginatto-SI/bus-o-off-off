@@ -462,6 +462,32 @@ serve(async (req) => {
           }
         }
 
+        // Fallback 2: platform /accounts lookup by cpfCnpj or email
+        if (!walletIdFromResponse && PLATFORM_API_KEY) {
+          const acctEmail = accountData?.email || companyConfig?.email;
+          const acctCpfCnpj = accountData?.cpfCnpj;
+          const searchParam = acctCpfCnpj
+            ? `cpfCnpj=${encodeURIComponent(acctCpfCnpj)}`
+            : acctEmail
+              ? `email=${encodeURIComponent(acctEmail)}`
+              : null;
+
+          if (searchParam) {
+            try {
+              const accountsRes = await fetch(`${asaasBaseUrl}/accounts?${searchParam}`, {
+                headers: { "access_token": PLATFORM_API_KEY },
+              });
+              if (accountsRes.ok) {
+                const accountsData = await accountsRes.json();
+                const firstAccount = Array.isArray(accountsData?.data) ? accountsData.data[0] : accountsData;
+                walletIdFromResponse = extractWalletIdFromAsaasPayload(firstAccount);
+              } else {
+                await accountsRes.text();
+              }
+            } catch (_e) { /* ignore */ }
+          }
+        }
+
         const walletId = walletIdFromResponse ?? companyConfig[envFields.walletId] ?? null;
 
         if (!walletId) {
@@ -542,6 +568,7 @@ serve(async (req) => {
         let walletLookupStatus: number | null = null;
         let walletLookupSummary: ReturnType<typeof summarizeAsaasPayload> | null = null;
 
+        // Fallback 1: /wallets endpoint with user's key
         if (!walletId) {
           try {
             const walletRes = await fetch(`${asaasBaseUrl}/wallets`, {
@@ -566,7 +593,6 @@ serve(async (req) => {
                 status: walletRes.status,
                 response: walletError,
                 environment: paymentEnv,
-                asaas_base_url: asaasBaseUrl,
               });
             }
           } catch (walletLookupError) {
@@ -578,12 +604,57 @@ serve(async (req) => {
           }
         }
 
+        // Fallback 2: use platform API key to search /accounts by cpfCnpj or email
+        if (!walletId && PLATFORM_API_KEY) {
+          const searchParams: string[] = [];
+          if (accountData.cpfCnpj) searchParams.push(`cpfCnpj=${encodeURIComponent(accountData.cpfCnpj)}`);
+          else if (accountData.email) searchParams.push(`email=${encodeURIComponent(accountData.email)}`);
+
+          if (searchParams.length > 0) {
+            try {
+              const accountsRes = await fetch(`${asaasBaseUrl}/accounts?${searchParams.join("&")}`, {
+                headers: { "access_token": PLATFORM_API_KEY },
+              });
+              console.log("[create-asaas-account] link_existing platform accounts lookup", {
+                company_id,
+                environment: paymentEnv,
+                status: accountsRes.status,
+              });
+
+              if (accountsRes.ok) {
+                const accountsData = await accountsRes.json();
+                // /accounts returns { data: [...] } — pick the first match
+                const firstAccount = Array.isArray(accountsData?.data) ? accountsData.data[0] : accountsData;
+                const platformWalletId = extractWalletIdFromAsaasPayload(firstAccount);
+                if (platformWalletId) {
+                  walletId = platformWalletId;
+                  console.log("[create-asaas-account] walletId resolved via platform /accounts lookup", {
+                    company_id,
+                    environment: paymentEnv,
+                    wallet_id_preview: maskSensitiveValue(walletId),
+                  });
+                }
+              } else {
+                const errText = await accountsRes.text();
+                console.warn("[create-asaas-account] platform accounts lookup failed", {
+                  company_id,
+                  status: accountsRes.status,
+                  response: errText.slice(0, 300),
+                });
+              }
+            } catch (platformLookupError) {
+              console.warn("[create-asaas-account] platform accounts lookup error", {
+                company_id,
+                message: platformLookupError instanceof Error ? platformLookupError.message : String(platformLookupError),
+              });
+            }
+          }
+        }
+
         if (!walletId) {
-          console.error("[create-asaas-account] walletId missing from /myAccount response", {
+          console.error("[create-asaas-account] walletId missing after all fallbacks", {
             company_id,
             environment: paymentEnv,
-            asaas_base_url: asaasBaseUrl,
-            my_account_status: myAccountRes.status,
             response_keys: Object.keys(accountData || {}),
             my_account_summary: summarizeAsaasPayload(accountData),
             wallets_lookup_status: walletLookupStatus,
