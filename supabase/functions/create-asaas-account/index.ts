@@ -168,9 +168,51 @@ serve(async (req) => {
       // Comentário de manutenção: onboarding/revalidate/disconnect só devem ler o contrato por ambiente.
       .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox")
       .eq("id", company_id)
-      .single();
+      .maybeSingle();
 
-    if (companyError || !company) {
+    /**
+     * Correção mínima e segura:
+     * - `target_environment` continua prevalecendo sobre o host no fluxo de revalidação,
+     *   porque a verificação manual precisa consultar exatamente o mesmo ambiente operacional
+     *   cujas credenciais aparecem no card de /admin/empresa.
+     * - lookup da empresa acontece ANTES de qualquer chamada ao Asaas; portanto, falha de query
+     *   aqui é erro interno/estrutural do sistema e não pode ser mascarada como 404 de empresa ausente.
+     */
+    if (companyError) {
+      console.error("[create-asaas-account] company lookup failed before Asaas call", {
+        company_id,
+        requested_target_environment: target_environment ?? null,
+        resolved_payment_environment: paymentEnv,
+        onboarding_mode: mode ?? "create",
+        company_lookup_error: {
+          code: companyError.code ?? null,
+          message: companyError.message ?? null,
+          details: companyError.details ?? null,
+          hint: companyError.hint ?? null,
+        },
+        asaas_request_attempted: false,
+        error_origin: "internal_company_lookup",
+      });
+
+      return new Response(JSON.stringify({
+        error: "Internal error while loading company integration data",
+        diagnostic_stage: "company_lookup",
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!company) {
+      console.warn("[create-asaas-account] company not found before Asaas call", {
+        company_id,
+        requested_target_environment: target_environment ?? null,
+        resolved_payment_environment: paymentEnv,
+        onboarding_mode: mode ?? "create",
+        asaas_request_attempted: false,
+        error_origin: "company_not_found",
+      });
+
       return new Response(JSON.stringify({ error: "Company not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -244,9 +286,15 @@ serve(async (req) => {
       });
 
       try {
+        // Comentário de suporte: a partir daqui o fluxo deixa de ser erro interno puro.
+        // Qualquer falha abaixo já representa tentativa real de consulta ao gateway Asaas.
         console.log("[ASAAS][VERIFY] Endpoint called", {
           company_id,
+          requested_target_environment: target_environment ?? null,
+          resolved_payment_environment: paymentEnv,
           endpoint: verificationEndpoint,
+          asaas_request_attempted: true,
+          error_origin: "gateway_request_started",
         });
 
         const myAccountRes = await fetch(verificationEndpoint, {
@@ -323,7 +371,15 @@ serve(async (req) => {
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (err) {
-        console.error("Error revalidating Asaas account:", err);
+        console.error("[ASAAS][VERIFY] Unexpected error after gateway attempt", {
+          company_id,
+          requested_target_environment: target_environment ?? null,
+          resolved_payment_environment: paymentEnv,
+          endpoint: verificationEndpoint,
+          asaas_request_attempted: true,
+          error_origin: "gateway_or_runtime_after_attempt",
+          error_message: err instanceof Error ? err.message : String(err),
+        });
         return new Response(
           JSON.stringify({ error: "Erro ao validar integração com o Asaas. Tente novamente." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
