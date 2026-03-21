@@ -65,6 +65,7 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
       apiKey: "asaas_api_key_production",
       walletId: "asaas_wallet_id_production",
       accountId: "asaas_account_id_production",
+      accountEmail: "asaas_account_email_production",
       onboardingComplete: "asaas_onboarding_complete_production",
     } as const;
   }
@@ -73,6 +74,7 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
     apiKey: "asaas_api_key_sandbox",
     walletId: "asaas_wallet_id_sandbox",
     accountId: "asaas_account_id_sandbox",
+    accountEmail: "asaas_account_email_sandbox",
     onboardingComplete: "asaas_onboarding_complete_sandbox",
   } as const;
 }
@@ -83,7 +85,6 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
   const hasWalletId = Boolean(normalizeCompanyField(companyConfig[envFields.walletId]));
   const missingFields = [
     !hasApiKey ? "api_key" : null,
-    !hasAccountId ? "account_id" : null,
     !hasWalletId ? "wallet_id" : null,
   ].filter((value): value is string => Boolean(value));
 
@@ -156,6 +157,9 @@ serve(async (req) => {
         : null;
 
     if (!companyId || !requestedEnvironment) {
+      const invalidInputMessage = !companyId
+        ? "Empresa atual não localizada para validar a integração."
+        : "O ambiente operacional informado não é válido para esta verificação.";
       const invalidResponse: CheckResponse = {
         status: "error",
         integration_status: "incomplete",
@@ -172,9 +176,9 @@ serve(async (req) => {
           account_id_matches: false,
           wallet_id_matches: false,
           onboarding_complete: false,
-          error_type: "invalid_input",
+          error_type: !companyId ? "company_context_missing" : "invalid_target_environment",
         },
-        message: "Informe company_id e target_environment para verificar a integração Asaas.",
+        message: invalidInputMessage,
       };
 
       logCheck("warn", "[check-asaas-integration] invalid input", {
@@ -212,9 +216,22 @@ serve(async (req) => {
       });
     }
 
+    // Comentário de manutenção:
+    // depois de resolver o ambiente ativo, lemos somente o bloco de colunas daquele ambiente.
+    // É proibido complementar produção com sandbox (ou o inverso) durante a verificação manual.
+    const companySelect = [
+      "id",
+      "name",
+      envFields.apiKey,
+      envFields.walletId,
+      envFields.accountId,
+      envFields.accountEmail,
+      envFields.onboardingComplete,
+    ].join(", ");
+
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
-      .select("id, name, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_onboarding_complete_sandbox")
+      .select(companySelect)
       .eq("id", companyId)
       .maybeSingle();
 
@@ -277,7 +294,7 @@ serve(async (req) => {
           onboarding_complete: false,
           error_type: "company_not_found",
         },
-        message: "Empresa não encontrada para verificar a integração Asaas.",
+          message: "Empresa atual não localizada para validar a integração.",
       };
 
       logCheck("warn", "[check-asaas-integration] company not found before Asaas call", {
@@ -305,7 +322,7 @@ serve(async (req) => {
           ...details,
           error_type: "missing_credentials",
         },
-        message: `Credenciais incompletas no ambiente ${paymentEnv}: faltando ${details.missing_fields.join(", ")}.`,
+        message: `A conta Asaas deste ambiente ainda não está completamente configurada: faltando ${details.missing_fields.join(", ")}.`,
       };
 
       logCheck("warn", "[check-asaas-integration] missing environment credentials before Asaas call", {
@@ -395,6 +412,45 @@ serve(async (req) => {
       const asaasAccountFound = Boolean(remoteAccountId);
       const walletFound = Boolean(remoteWalletId);
       const onboardingComplete = details.onboarding_complete;
+
+      /**
+       * Comentário de manutenção:
+       * a conta pode estar operacional com API key + wallet válidas, mas sem `account_id`
+       * persistido localmente em empresas que passaram por vínculo anterior/legado.
+       * Nesses casos a verificação manual não deve falhar genericamente antes de consultar
+       * o Asaas. Primeiro validamos o gateway real e, só depois, devolvemos pendência clara
+       * de cadastro local para o ambiente ativo.
+       */
+      if (!storedAccountId) {
+        const missingLocalAccountIdResponse: CheckResponse = {
+          status: "error",
+          integration_status: "pending",
+          environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          details: {
+            ...details,
+            asaas_request_attempted: true,
+            asaas_account_found: asaasAccountFound,
+            wallet_found: walletFound,
+            account_id_matches: false,
+            wallet_id_matches: walletIdMatches,
+            error_type: "missing_local_account_id",
+          },
+          message: "Conta Asaas validada no gateway, mas falta salvar o identificador da conta deste ambiente no cadastro da empresa.",
+        };
+
+        logCheck("warn", "[check-asaas-integration] gateway validated account but local account_id is missing", {
+          company_id: companyId,
+          requested_target_environment: requestedEnvironment,
+          resolved_payment_environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          asaas_request_attempted: true,
+          error_type: "missing_local_account_id",
+          remote_account_id: remoteAccountId,
+        });
+
+        return jsonResponse(missingLocalAccountIdResponse, 200);
+      }
 
       if (!asaasAccountFound || !accountIdMatches) {
         const accountMismatchResponse: CheckResponse = {
@@ -505,7 +561,7 @@ serve(async (req) => {
           account_id_matches: accountIdMatches,
           wallet_id_matches: walletIdMatches,
         },
-        message: "Integração válida e pronta para uso.",
+        message: "Integração Asaas validada com sucesso.",
       };
 
       logCheck("log", "[check-asaas-integration] Asaas integration validated successfully", {
