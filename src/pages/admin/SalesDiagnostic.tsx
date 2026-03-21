@@ -1205,130 +1205,134 @@ export default function SalesDiagnostic() {
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                  <TableHead className="w-[120px]">Data</TableHead>
-                  <TableHead className="w-[150px]">Evento</TableHead>
-                  <TableHead className="w-[140px]">Comprador</TableHead>
-                  <TableHead className="w-[105px]">Valor</TableHead>
-                  <TableHead className="w-[95px]">Gateway</TableHead>
-                  <TableHead className="w-[105px]">Ambiente</TableHead>
-                  <TableHead className="w-[150px]">Status da venda</TableHead>
-                  <TableHead className="w-[190px]">Status do pagamento</TableHead>
-                  <TableHead className="w-[240px]">Situação operacional</TableHead>
-                  <TableHead className="w-[210px]">Causa principal</TableHead>
-                  <TableHead className="w-[220px]">Tempo / validade</TableHead>
-                  <TableHead className="w-[210px]">Ação sugerida</TableHead>
-                  <TableHead className="w-[170px]">Bloqueio temporário</TableHead>
-                  <TableHead className="w-[170px]">Fluxo</TableHead>
-                  <TableHead className="w-[76px]">Ações</TableHead>
+                    <TableHead className="w-[29%] min-w-[280px]">Venda</TableHead>
+                    <TableHead className="w-[24%] min-w-[240px]">Status</TableHead>
+                    <TableHead className="w-[25%] min-w-[240px]">Diagnóstico</TableHead>
+                    <TableHead className="w-[16%] min-w-[170px]">Controle</TableHead>
+                    <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {salesWithOperationalView.map(({ sale, operational }) => {
-                  const gateway = computeGateway(sale);
-                  const paymentStatus = computePaymentStatus(sale);
-                  const lockStatus = computeLockStatus(sale);
-                  const flowStage = computeFlowStage(sale);
-                  const FlowIcon = flowStage.icon;
-                  const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
+                  {salesWithOperationalView.map(({ sale, operational }) => {
+                    const gateway = computeGateway(sale);
+                    const paymentStatus = computePaymentStatus(sale);
+                    const lockStatus = computeLockStatus(sale);
+                    const flowStage = computeFlowStage(sale);
+                    const FlowIcon = flowStage.icon;
+                    const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
+                    const createdAtLabel = format(parseISO(sale.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR });
+                    const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
+                    const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
 
-                  const actions: ActionItem[] = [
-                    {
-                      label: 'Ver detalhes da venda',
-                      icon: Eye,
-                      onClick: () => openDetail(sale),
-                    },
-                  ];
+                    const actions: ActionItem[] = [
+                      {
+                        label: 'Ver detalhes da venda',
+                        icon: Eye,
+                        onClick: () => openDetail(sale),
+                      },
+                    ];
 
-                  return (
-                    <TableRow key={sale.id} className={operational.category === 'divergencia' ? 'bg-destructive/5' : ''}>
-                      <TableCell className="whitespace-nowrap py-5 text-sm">
-                        {format(parseISO(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
-                      </TableCell>
-                      <TableCell className="max-w-[150px] truncate py-5 text-sm">
-                        {sale.event_name}
-                      </TableCell>
-                      <TableCell className="max-w-[140px] truncate py-5 text-sm">
-                        {sale.customer_name}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap py-5 text-sm">
-                        {formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price)}
-                      </TableCell>
-                      <TableCell className="py-5">
-                        <Badge variant="outline" className="text-xs">
-                          {gateway}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-5">
-                        {/* Suporte: mostra o ambiente persistido da venda (fonte de verdade do fluxo). */}
-                        <Badge variant="outline" className="text-xs">
-                          {sale.payment_environment === 'production' ? '🌐 Produção' : '🧪 Sandbox'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        <StatusBadge status={sale.status} />
-                        <p className="mt-1 text-xs text-muted-foreground">{operational.saleStatusLabel}</p>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        {/* A separação explícita entre venda e pagamento evita que a UI trate pendência operacional
-                            como erro financeiro ou vice-versa. */}
-                        <div className="space-y-1">
-                          <Badge variant={paymentStatus.variant} className="text-xs whitespace-nowrap">
-                            {operational.paymentStatusLabel}
-                          </Badge>
-                          {paymentStatus.detail && <p className="text-xs text-muted-foreground">{paymentStatus.detail}</p>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        <div className="space-y-1.5">
-                          <Badge variant={operational.categoryVariant} className={`text-xs whitespace-nowrap ${operational.categoryClassName ?? ''}`}>
-                            {operational.categoryLabel}
-                          </Badge>
-                          <p className="text-sm font-medium leading-tight">{operational.operationalLabel}</p>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{operational.operationalDetail}</p>
-                          {operational.hasGatewayDivergence && (
-                            <Badge variant="destructive" className="text-xs mt-1">Divergência gateway</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        {/* Esta coluna calcula a causa principal única da linha para evitar diagnóstico ambíguo. */}
-                        <p className="text-sm leading-relaxed">{operational.causeLabel}</p>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        <div className="space-y-1 text-xs">
-                          <p className="font-medium text-foreground">{operational.timeLabel}</p>
-                          <p className="text-muted-foreground">{operational.timeDetail}</p>
-                          <p className="text-muted-foreground/80">{operational.timeSourceLabel}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        {/* A ação sugerida é textual de propósito: orienta o operador sem criar automação nova
-                            fora do escopo permitido desta etapa. */}
-                        <p className="text-sm leading-relaxed">{operational.actionLabel}</p>
-                      </TableCell>
-                      <TableCell className="py-5 align-top">
-                        {/* Comentário de manutenção: a antiga coluna técnica de lock foi traduzida para leitura operacional. */}
-                        <div className="space-y-1">
-                          <Badge variant={operational.lockVariant} className="text-xs whitespace-nowrap">
-                            {operational.lockLabel}
-                          </Badge>
-                          {lockStatus.detail && (
-                            <p className="text-xs text-muted-foreground">{lockStatus.detail}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-5">
-                        <span className={`flex items-center gap-1.5 whitespace-nowrap text-sm ${flowStage.color}`}>
-                          <FlowIcon className="h-3.5 w-3.5" />
-                          {compactFlowLabel}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-5">
-                        <ActionsDropdown actions={actions} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                    return (
+                      <TableRow key={sale.id} className={operational.category === 'divergencia' ? 'bg-destructive/5' : ''}>
+                        <TableCell className="py-5 align-top">
+                          {/* Reorganização principal: consolidamos os metadados comerciais em um resumo único
+                              para reduzir largura sem perder contexto operacional importante. */}
+                          <div className="space-y-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold uppercase tracking-tight text-foreground">
+                                {sale.event_name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Comprador: <span className="font-medium text-foreground">{sale.customer_name}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {createdAtLabel} • {saleAmountLabel}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {gateway}
+                              </Badge>
+                              {/* Suporte: mostra o ambiente persistido da venda, mas agora dentro do bloco
+                                  de resumo comercial para evitar a antiga fragmentação em colunas. */}
+                              <Badge variant="outline" className="text-xs">
+                                {paymentEnvironmentLabel}
+                              </Badge>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-5 align-top">
+                          {/* A hierarquia desta célula separa leitura rápida (badges) de contexto analítico
+                              (situação operacional + detalhe), mantendo a distinção venda x pagamento. */}
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                              <StatusBadge status={sale.status} />
+                              <Badge variant={paymentStatus.variant} className="text-xs">
+                                {operational.paymentStatusLabel}
+                              </Badge>
+                              <Badge variant={operational.categoryVariant} className={`text-xs ${operational.categoryClassName ?? ''}`}>
+                                {operational.categoryLabel}
+                              </Badge>
+                              {operational.hasGatewayDivergence && (
+                                <Badge variant="destructive" className="text-xs">Divergência gateway</Badge>
+                              )}
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold leading-tight">{operational.operationalLabel}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Venda: {operational.saleStatusLabel} • Pagamento: {paymentStatus.detail ?? operational.paymentStatusLabel}
+                              </p>
+                              <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-5 align-top">
+                          {/* A antiga sequência causa + tempo + ação foi agrupada para deixar o diagnóstico
+                              escaneável em um único bloco sem diluir a narrativa principal da linha. */}
+                          <div className="space-y-2">
+                            <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                              <span className="font-medium text-foreground">Ação sugerida:</span> {operational.actionLabel}
+                            </p>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              <p>{operational.timeLabel} • {operational.timeDetail}</p>
+                              <p>{operational.timeSourceLabel}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-5 align-top">
+                          {/* Controle mantém apenas os sinais curtos de operação contínua: bloqueio e estágio do fluxo. */}
+                          <div className="space-y-3">
+                            <div className="space-y-1">
+                              <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
+                                {operational.lockLabel}
+                              </Badge>
+                              {lockStatus.detail && (
+                                <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
+                              )}
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
+                              <span className={`flex items-center gap-1.5 text-sm ${flowStage.color}`}>
+                                <FlowIcon className="h-3.5 w-3.5 shrink-0" />
+                                <span>{compactFlowLabel}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-5 align-top">
+                          <ActionsDropdown actions={actions} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
