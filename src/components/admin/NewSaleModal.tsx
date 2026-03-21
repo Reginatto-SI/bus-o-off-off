@@ -61,6 +61,11 @@ import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-enviro
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
 
+// Reservas administrativas precisam de validade própria para não herdarem o TTL curto
+// do checkout público nem ficarem eternas. Mantemos a duração centralizada no fluxo
+// de criação manual para que a fonte de verdade entre no banco já no nascimento da venda.
+const MANUAL_RESERVATION_TTL_HOURS = 72;
+
 interface TripWithDetails extends Trip {
   vehicle?: Vehicle;
   driver?: Driver;
@@ -669,6 +674,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const grossTotal = isBlock ? 0 : seatsTotal + (feeBreakdown.totalFees * quantity);
 
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
+      const manualReservationExpiresAt = !isBlock
+        ? new Date(Date.now() + MANUAL_RESERVATION_TTL_HOURS * 60 * 60 * 1000).toISOString()
+        : null;
 
       // ── Cálculo da taxa da plataforma para vendas manuais ──
       // Fonte de verdade: company.platform_fee_percent (definido na empresa).
@@ -690,8 +698,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       }
 
       // 1. Insert sale
-      // Regra crítica: toda venda criada manualmente no admin nasce como 'reservado'.
-      // A transição para 'pago' acontece somente após confirmação da taxa da plataforma.
+      // Regra crítica: toda venda criada manualmente no admin nasce como 'reservado',
+      // mas não pode ficar eterna. Criamos `reservation_expires_at` na própria venda
+      // para separar a reserva operacional humana do TTL de 15 minutos do checkout público.
+      // Assim o cleanup passa a ter uma fonte de verdade explícita para reservas admin,
+      // sem depender de seat_locks nem misturar os dois fluxos de negócio.
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
         .insert({
@@ -711,6 +722,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           platform_fee_amount: platformFeeAmount,
           platform_fee_status: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
           block_reason: isBlock ? blockReason : null,
+          reservation_expires_at: manualReservationExpiresAt,
           // Etapa final Asaas: removemos a dependência do default do banco.
           // Toda venda manual também nasce com ambiente explícito para manter coerência operacional.
           payment_environment: runtimePaymentEnvironment,
@@ -761,10 +773,12 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         // Mantemos a action legada por compatibilidade com histórico/auditoria.
         logAction = 'manual_paid_created';
         const methodLabels: Record<string, string> = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão', outro: 'Outro' };
-        logDescription = `Venda manual criada como reservada (${methodLabels[paymentMethod] ?? paymentMethod})${observation ? `. Obs: ${observation}` : ''}`;
+        // Comentário operacional: o prazo fica explícito no log para o suporte entender
+        // que a reserva manual possui validade própria e não usa o TTL do checkout público.
+        logDescription = `Venda manual criada como reservada (${methodLabels[paymentMethod] ?? paymentMethod}) com validade até ${new Date(manualReservationExpiresAt!).toLocaleString('pt-BR')}${observation ? `. Obs: ${observation}` : ''}`;
       } else if (activeTab === 'reserva') {
         logAction = 'reservation_created';
-        logDescription = `Reserva criada${observation ? `. Obs: ${observation}` : ''}`;
+        logDescription = `Reserva criada com validade até ${new Date(manualReservationExpiresAt!).toLocaleString('pt-BR')}${observation ? `. Obs: ${observation}` : ''}`;
       } else {
         logAction = 'seat_block_created';
         const reasonLabels: Record<string, string> = { manutencao: 'Manutenção', staff: 'Staff', seguranca: 'Segurança', outro: 'Outro' };
