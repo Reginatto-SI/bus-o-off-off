@@ -1,7 +1,14 @@
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
+import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 
-const WHATSAPP_NUMBER = '5531987869700';
-const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}`;
+const WHATSAPP_PHONE = '(31) 99207-4309';
+const WHATSAPP_MESSAGE = 'Quero começar a vender passagens com o Smartbus BR';
+// Atualização obrigatória do contato comercial: centralizamos telefone e mensagem para evitar resquícios do número antigo.
+const WHATSAPP_URL =
+  buildWhatsappWaMeLink({
+    phone: WHATSAPP_PHONE,
+    message: WHATSAPP_MESSAGE,
+  }) ?? 'https://wa.me/5531992074309?text=Quero%20come%C3%A7ar%20a%20vender%20passagens%20com%20o%20Smartbus%20BR';
 
 export function FloatingWhatsApp() {
   return (
