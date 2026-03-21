@@ -52,7 +52,7 @@ type ProcessingResult = {
   paymentId?: string | null;
   externalReference?: string | null;
   paymentEnvironment?: PaymentEnvironment | null;
-  environmentDecisionSource?: "sale" | "host" | null;
+  environmentDecisionSource?: "sale" | "request" | "host" | null;
   environmentHostDetected?: string | null;
   asaasEventId?: string | null;
   incidentCode?: string | null;
