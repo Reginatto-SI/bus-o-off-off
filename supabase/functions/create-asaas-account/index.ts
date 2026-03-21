@@ -331,7 +331,34 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+        let walletIdFromResponse = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+
+        if (!walletIdFromResponse) {
+          try {
+            const walletRes = await fetch(`${asaasBaseUrl}/wallets`, {
+              headers: { "access_token": verificationToken },
+            });
+
+            if (walletRes.ok) {
+              const walletData = await walletRes.json();
+              walletIdFromResponse = walletData?.id ?? walletData?.wallet?.id ?? null;
+            } else {
+              const walletError = await walletRes.text();
+              console.warn("[ASAAS][VERIFY] wallet lookup failed", {
+                company_id,
+                endpoint: `${asaasBaseUrl}/wallets`,
+                status: walletRes.status,
+                response: walletError,
+              });
+            }
+          } catch (walletLookupError) {
+            console.warn("[ASAAS][VERIFY] wallet lookup runtime error", {
+              company_id,
+              message: walletLookupError instanceof Error ? walletLookupError.message : String(walletLookupError),
+            });
+          }
+        }
+
         const walletId = walletIdFromResponse ?? companyConfig[envFields.walletId] ?? null;
 
         if (!walletId) {
@@ -346,71 +373,7 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-
-        // Comentário de manutenção: nesta ação atualizamos apenas os campos exibidos no card
-        // e reafirmamos o status de integração para manter o UI sincronizado com o Asaas.
-        await supabaseAdmin
-          .from("companies")
-          .update(
-            buildCompanyConfigWithEnvironmentUpdate({
-              [envFields.walletId]: walletId,
-              [envFields.accountId]: accountData.id || environmentAccountId || null,
-              [envFields.accountEmail]: accountData.email || null,
-              [envFields.onboardingComplete]: true,
-            }),
-          )
-          .eq("id", company_id);
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            wallet_id: walletId,
-            account_name: accountData.name || accountData.tradingName || null,
-            account_email: accountData.email || null,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      } catch (err) {
-        console.error("[ASAAS][VERIFY] Unexpected error after gateway attempt", {
-          company_id,
-          requested_target_environment: target_environment ?? null,
-          resolved_payment_environment: paymentEnv,
-          endpoint: verificationEndpoint,
-          asaas_request_attempted: true,
-          error_origin: "gateway_or_runtime_after_attempt",
-          error_message: err instanceof Error ? err.message : String(err),
-        });
-        return new Response(
-          JSON.stringify({ error: "Erro ao validar integração com o Asaas. Tente novamente." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
-    if (mode === "disconnect") {
-      await supabaseAdmin
-        .from("companies")
-        .update(
-          buildCompanyConfigWithEnvironmentUpdate({
-            [envFields.apiKey]: null,
-            [envFields.walletId]: null,
-            [envFields.accountId]: null,
-            [envFields.accountEmail]: null,
-            [envFields.onboardingComplete]: false,
-          }),
-        )
-        .eq("id", company_id);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          disconnected_environment: paymentEnv,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ====== MODE: Link existing account ======
+...
     if (mode === "link_existing" && api_key) {
       try {
         const myAccountRes = await fetch(`${asaasBaseUrl}/myAccount`, {
@@ -427,7 +390,34 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletId = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+        let walletId = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
+
+        if (!walletId) {
+          try {
+            const walletRes = await fetch(`${asaasBaseUrl}/wallets`, {
+              headers: { "access_token": api_key },
+            });
+
+            if (walletRes.ok) {
+              const walletData = await walletRes.json();
+              walletId = walletData?.id ?? walletData?.wallet?.id ?? null;
+            } else {
+              const walletError = await walletRes.text();
+              console.warn("[create-asaas-account] wallet lookup failed", {
+                company_id,
+                status: walletRes.status,
+                response: walletError,
+                environment: paymentEnv,
+              });
+            }
+          } catch (walletLookupError) {
+            console.warn("[create-asaas-account] wallet lookup runtime error", {
+              company_id,
+              environment: paymentEnv,
+              message: walletLookupError instanceof Error ? walletLookupError.message : String(walletLookupError),
+            });
+          }
+        }
 
         if (!walletId) {
           console.error("[create-asaas-account] walletId missing from /myAccount response", {
@@ -436,7 +426,7 @@ serve(async (req) => {
             environment: paymentEnv,
           });
           return new Response(
-            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas. Verifique se a API Key está correta." }),
+            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
