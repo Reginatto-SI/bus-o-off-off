@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// deno-lint-ignore no-explicit-any
+type SupabaseAdmin = ReturnType<typeof createClient<any>>;
 import {
   logPaymentTrace,
   logSaleOperationalEvent,
@@ -47,7 +49,7 @@ export type SaleConsistencyInspection = {
 };
 
 export async function inspectSaleConsistency(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseAdmin,
   saleId: string,
 ): Promise<SaleConsistencyInspection> {
   const { data: sale, error: saleError } = await supabaseAdmin
@@ -103,7 +105,7 @@ export async function inspectSaleConsistency(
 }
 
 export async function createTicketsFromPassengersShared(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseAdmin,
   saleId: string,
   companyId: string,
 ): Promise<{ status: TicketCreationStatus; message: string }> {
@@ -170,7 +172,7 @@ export async function createTicketsFromPassengersShared(
 }
 
 export async function finalizeConfirmedPayment(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: SupabaseAdmin;
   sale: {
     id: string;
     company_id: string;

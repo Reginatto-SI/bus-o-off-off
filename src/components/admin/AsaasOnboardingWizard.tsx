@@ -12,9 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
+import { useAuth } from '@/contexts/AuthContext';
 
 type AsaasWizardStep = 1 | 2 | 3 | 4;
 type AsaasWizardMode = 'create' | 'link';
+type AsaasEnvironmentSelection = 'auto' | 'sandbox' | 'production';
 
 export interface AsaasOnboardingCompanyData {
   companyId: string;
@@ -58,14 +60,26 @@ const maskCnpj = (value: string) => {
 };
 
 export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSuccess }: AsaasOnboardingWizardProps) {
+  const { isDeveloper } = useAuth();
   const [step, setStep] = useState<AsaasWizardStep>(1);
   const [mode, setMode] = useState<AsaasWizardMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showAddressModal, setShowAddressModal] = useState(false);
-  // Step 3: ambiente-alvo explícito para preparar onboarding separado por sandbox/produção.
-  const [targetEnvironment, setTargetEnvironment] = useState<'automatic' | 'sandbox' | 'production'>('automatic');
+  /**
+   * Comentário de manutenção:
+   * Sandbox existe apenas para suporte/testes internos. Expor isso para gerente/operador
+   * aumenta o risco de vincular a conta no ambiente errado e travar a operação real.
+   * Por isso somente developer pode alterar o ambiente; para os demais o fluxo nasce
+   * e permanece forçado em produção também na lógica de envio para a edge function.
+   */
+  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('auto');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
+  const effectiveTargetEnvironment: 'sandbox' | 'production' | undefined = !isDeveloper
+    ? 'production'
+    : targetEnvironment === 'auto'
+      ? undefined
+      : targetEnvironment;
 
   // Sync localCompanyData when companyData prop changes
   useEffect(() => {
@@ -109,7 +123,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
-      setTargetEnvironment('automatic');
+      setTargetEnvironment('auto');
     }
   }, [open]);
 
@@ -138,7 +152,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
+        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: effectiveTargetEnvironment },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
@@ -183,7 +197,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
+        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: effectiveTargetEnvironment },
       });
       if (error) {
         // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
@@ -261,15 +275,26 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       )}
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
-          <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">No Step 3 este seletor prepara o cadastro por ambiente sem alterar o checkout público atual.</p>
+        {isDeveloper ? (
+          <>
+            <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
+              <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automático pelo host</SelectItem>
+                <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+                <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Sandbox é para testes. Produção é para pagamentos reais com clientes.</p>
+          </>
+        ) : (
+          <>
+            <div id="asaas-target-environment" className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              Ambiente: Produção
+            </div>
+            <p className="text-xs text-muted-foreground">Produção é aplicada automaticamente para evitar configuração incorreta em contas reais.</p>
+          </>
+        )}
       </div>
 
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
@@ -311,7 +336,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
         <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
-        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{targetEnvironment === 'automatic' ? 'Automático pelo host atual' : targetEnvironment === 'sandbox' ? 'Sandbox' : 'Produção'}</strong>.</p>
+        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{effectiveTargetEnvironment === 'sandbox' ? 'Sandbox (testes)' : effectiveTargetEnvironment === 'production' ? 'Produção (pagamentos reais)' : 'Automático pelo host'}</strong>.</p>
       </div>
     </div>
   );
@@ -324,14 +349,20 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       </p>
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
-          <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
-          </SelectContent>
-        </Select>
+        {isDeveloper ? (
+          <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
+            <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Automático pelo host</SelectItem>
+              <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+              <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <div id="asaas-target-environment-link" className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            Ambiente: Produção
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
