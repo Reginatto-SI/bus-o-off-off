@@ -427,11 +427,16 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
-        const walletId = accountData.walletId ?? accountData.wallet?.id ?? null;
+        const walletId = accountData.walletId ?? accountData.wallet?.id ?? accountData.id ?? null;
 
         if (!walletId) {
+          console.error("[create-asaas-account] walletId missing from /myAccount response", {
+            company_id,
+            response_keys: Object.keys(accountData || {}),
+            environment: paymentEnv,
+          });
           return new Response(
-            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas." }),
+            JSON.stringify({ error: "Não foi possível obter o walletId da conta Asaas. Verifique se a API Key está correta." }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
