@@ -1185,6 +1185,7 @@ export type Database = {
           platform_fee_total: number | null
           platform_net_amount: number | null
           quantity: number
+          reservation_expires_at: string | null
           sale_origin: string
           seller_id: string | null
           status: Database["public"]["Enums"]["sale_status"]
@@ -1225,6 +1226,7 @@ export type Database = {
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity: number
+          reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
@@ -1265,6 +1267,7 @@ export type Database = {
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity?: number
+          reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
