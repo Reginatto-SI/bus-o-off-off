@@ -52,7 +52,7 @@ type ProcessingResult = {
   paymentId?: string | null;
   externalReference?: string | null;
   paymentEnvironment?: PaymentEnvironment | null;
-  environmentDecisionSource?: "sale" | "host" | null;
+  environmentDecisionSource?: "sale" | "request" | "host" | null;
   environmentHostDetected?: string | null;
   asaasEventId?: string | null;
   incidentCode?: string | null;
@@ -204,7 +204,7 @@ serve(async (req) => {
       : rawSaleId;
 
     // Pré-Step 5: webhook só segue quando o ambiente da venda foi determinado de forma explícita.
-    let saleEnv: PaymentEnvironment | undefined;
+    let saleEnv: PaymentEnvironment | null = null;
     if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
@@ -676,6 +676,7 @@ async function processPlatformFeeWebhook(
     if (updateError) {
       return {
         status: "failed",
+        resultCategory: "error" as ResultCategory,
         httpStatus: 500,
         message: `Falha ao confirmar taxa da plataforma da venda ${saleId}`,
         responseBody: { error: "Platform fee update failed", sale_id: saleId },

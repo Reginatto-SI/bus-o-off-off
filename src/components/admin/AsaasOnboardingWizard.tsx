@@ -64,7 +64,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showAddressModal, setShowAddressModal] = useState(false);
   // Step 3: ambiente-alvo explícito para preparar onboarding separado por sandbox/produção.
-  const [targetEnvironment, setTargetEnvironment] = useState<'automatic' | 'sandbox' | 'production'>('automatic');
+  const [targetEnvironment, setTargetEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
 
   // Sync localCompanyData when companyData prop changes
@@ -109,7 +109,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
-      setTargetEnvironment('automatic');
+      setTargetEnvironment('sandbox');
     }
   }, [open]);
 
@@ -138,7 +138,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
+        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
@@ -183,7 +183,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
+        body: { company_id: localCompanyData.companyId, mode: 'link_existing', api_key: apiKeyInput.trim(), target_environment: targetEnvironment },
       });
       if (error) {
         // Comentário de suporte: reaproveita o mesmo parser para cobrir os formatos de erro
@@ -261,15 +261,14 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       )}
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'sandbox' | 'production')}>
           <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
+            <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+            <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">No Step 3 este seletor prepara o cadastro por ambiente sem alterar o checkout público atual.</p>
+        <p className="text-xs text-muted-foreground">Sandbox é para testes. Produção é para pagamentos reais com clientes.</p>
       </div>
 
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
@@ -311,7 +310,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
         <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
         <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
-        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{targetEnvironment === 'automatic' ? 'Automático pelo host atual' : targetEnvironment === 'sandbox' ? 'Sandbox' : 'Produção'}</strong>.</p>
+        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{targetEnvironment === 'sandbox' ? 'Sandbox (testes)' : 'Produção (pagamentos reais)'}</strong>.</p>
       </div>
     </div>
   );
@@ -324,12 +323,11 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       </p>
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'sandbox' | 'production')}>
           <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
+            <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+            <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
           </SelectContent>
         </Select>
       </div>
