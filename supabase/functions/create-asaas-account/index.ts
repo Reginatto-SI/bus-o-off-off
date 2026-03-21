@@ -462,6 +462,32 @@ serve(async (req) => {
           }
         }
 
+        // Fallback 2: platform /accounts lookup by cpfCnpj or email
+        if (!walletIdFromResponse && PLATFORM_API_KEY) {
+          const acctEmail = accountData?.email || companyConfig?.email;
+          const acctCpfCnpj = accountData?.cpfCnpj;
+          const searchParam = acctCpfCnpj
+            ? `cpfCnpj=${encodeURIComponent(acctCpfCnpj)}`
+            : acctEmail
+              ? `email=${encodeURIComponent(acctEmail)}`
+              : null;
+
+          if (searchParam) {
+            try {
+              const accountsRes = await fetch(`${asaasBaseUrl}/accounts?${searchParam}`, {
+                headers: { "access_token": PLATFORM_API_KEY },
+              });
+              if (accountsRes.ok) {
+                const accountsData = await accountsRes.json();
+                const firstAccount = Array.isArray(accountsData?.data) ? accountsData.data[0] : accountsData;
+                walletIdFromResponse = extractWalletIdFromAsaasPayload(firstAccount);
+              } else {
+                await accountsRes.text();
+              }
+            } catch (_e) { /* ignore */ }
+          }
+        }
+
         const walletId = walletIdFromResponse ?? companyConfig[envFields.walletId] ?? null;
 
         if (!walletId) {
