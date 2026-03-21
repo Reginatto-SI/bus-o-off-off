@@ -138,7 +138,7 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-asaas-account', {
-        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment === 'automatic' ? null : targetEnvironment },
+        body: { company_id: localCompanyData.companyId, mode: 'create', target_environment: targetEnvironment },
       });
 
       // Comentário de suporte: quando a edge function falha, tentamos priorizar a mensagem real
