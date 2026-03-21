@@ -21,13 +21,13 @@ import {
   TrendingUp,
   QrCode,
   Link2,
-  LayoutGrid,
   Building2,
   Settings,
   Star,
 } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
+import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
@@ -106,9 +106,9 @@ const FEATURED_TRIPS = [
   },
 ];
 
-// Copy de apoio da dobra inicial com foco em valor para empresas sem perder clareza para o passageiro.
+// Copy de apoio da dobra inicial com foco em simplicidade comercial para empresas e vendedores independentes.
 const QUICK_BENEFITS = [
-  'Vitrine própria com link e QR Code',
+  'Link próprio para divulgar no WhatsApp e Instagram',
   'Venda online com pagamento integrado',
   'Embarque validado por QR Code',
 ];
@@ -131,35 +131,35 @@ const PASSENGER_STEPS = [
   },
 ];
 
-// Pilar comercial principal: comunicamos o Smartbus BR como solução completa para vender, divulgar, operar e acompanhar.
+// Pilar comercial principal: reforça benefícios concretos da operação sem expor linguagem interna de produto.
 const PLATFORM_PILLARS = [
   {
     icon: Building2,
-    title: 'Vitrine virtual da sua empresa',
-    desc: 'Tenha página própria, link público, QR Code de divulgação e redes sociais reunidas em um só lugar.',
+    title: 'Vitrine profissional para vender mais',
+    desc: 'Tenha página própria, link público, QR Code de divulgação e redes sociais reunidas para transformar divulgação em compra.',
   },
   {
     icon: TrendingUp,
     title: 'Venda online com mais controle',
-    desc: 'Organize viagens e eventos por saída, acompanhe ocupação e facilite a compra para o passageiro.',
+    desc: 'Organize viagens e eventos por saída, acompanhe ocupação e facilite a compra para o passageiro sem depender de processos manuais.',
   },
   {
     icon: Users,
-    title: 'Equipe comercial com vendedores',
-    desc: 'Distribua links individuais, acompanhe desempenho e calcule comissão por vendedor.',
+    title: 'Equipe comercial ou vendedores independentes',
+    desc: 'Distribua links individuais, acompanhe desempenho e calcule comissão de quem vende por conta própria ou em equipe.',
   },
   {
     icon: ClipboardCheck,
     title: 'Operação real de embarque',
-    desc: 'Use lista de embarque, validação de presença e app operacional para sair com mais organização.',
+    desc: 'Use lista de embarque, validação de presença e app operacional para sair com mais organização e menos confusão no dia da viagem.',
   },
 ];
 
 const PLATFORM_DIFFERENTIALS = [
   {
     icon: Link2,
-    title: 'Link público da vitrine',
-    desc: 'Divulgue sua empresa com uma página pronta para apresentar viagens, eventos e passeios.',
+    title: 'Link público para vender e divulgar',
+    desc: 'Compartilhe sua página pronta no WhatsApp, Instagram ou indicação direta para apresentar viagens, eventos e passeios.',
   },
   {
     icon: QrCode,
@@ -169,7 +169,7 @@ const PLATFORM_DIFFERENTIALS = [
   {
     icon: Users,
     title: 'App e comissão para vendedores',
-    desc: 'Fortaleça sua equipe comercial com vendas por link individual e acompanhamento de resultados.',
+    desc: 'Fortaleça sua equipe comercial ou seus revendedores com vendas por link individual e acompanhamento de resultados.',
   },
   {
     icon: Bus,
@@ -188,10 +188,11 @@ const PLATFORM_DIFFERENTIALS = [
   },
 ];
 
+// Cards de posicionamento dual: a mesma base atende empresa estruturada e quem vende de forma independente.
 const BUSINESS_BENEFITS = [
   {
     icon: Building2,
-    title: 'Sua empresa com presença digital pronta',
+    title: 'Sua operação com presença digital pronta',
     desc: 'Ganhe uma vitrine profissional para divulgar eventos, passeios e viagens com link próprio e redes sociais.',
   },
   {
@@ -206,20 +207,21 @@ const BUSINESS_BENEFITS = [
   },
 ];
 
+// Opções finais de jornada: mantemos a estrutura existente, mas com CTAs mais comerciais.
 const JOURNEY_OPTIONS = [
   {
     icon: Ticket,
     title: 'Quero comprar minha passagem',
-    desc: 'Veja as próximas viagens, compare preços e garanta sua vaga com confirmação online.',
-    cta: 'Ver viagens disponíveis',
+    desc: 'Veja as próximas viagens, compare preços e garanta seu lugar com confirmação online.',
+    cta: 'Comprar passagem',
     to: '/eventos',
     style: 'bg-background border-border hover:border-primary/30',
   },
   {
     icon: Building2,
-    title: 'Quero estruturar minha empresa no Smartbus BR',
-    desc: 'Venda passagens, divulgue eventos, acompanhe vendedores e opere o embarque em um só sistema.',
-    cta: 'Cadastrar minha empresa',
+    title: 'Quero vender passagens com mais organização',
+    desc: 'Sirva sua empresa ou sua operação independente com link de venda, controle comercial e embarque organizado.',
+    cta: 'Começar a vender',
     to: '/cadastro',
     style: 'bg-primary/5 border-primary/20 hover:border-primary/40',
   },
@@ -227,6 +229,12 @@ const JOURNEY_OPTIONS = [
 
 export default function LandingPage() {
   const [mobileMenu, setMobileMenu] = useState(false);
+  // CTA comercial unificado para a landing e para o botão flutuante, evitando números divergentes.
+  const salesWhatsappUrl =
+    buildWhatsappWaMeLink({
+      phone: '(31) 99207-4309',
+      message: 'Quero começar a vender passagens com o Smartbus BR',
+    }) ?? 'https://wa.me/5531992074309?text=Quero%20come%C3%A7ar%20a%20vender%20passagens%20com%20o%20Smartbus%20BR';
   // O header da landing usa três níveis de hierarquia.
   // Aqui os links públicos ficam leves, com ícone e hover discreto, sem virar um bloco pesado.
   const desktopNavLinkClass =
@@ -349,19 +357,19 @@ export default function LandingPage() {
 
                 <div className="space-y-4">
                   <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                    Venda passagens, divulgue seus eventos e controle o embarque
-                    <span className="text-primary"> com mais organização e mais resultado.</span>
+                    Venda passagens online, divulgue seus eventos e organize o embarque
+                    <span className="text-primary"> com uma operação simples, profissional e pronta para crescer.</span>
                   </h1>
                   <p className="max-w-3xl text-lg text-white/70 sm:text-xl">
-                    O Smartbus BR ajuda empresas de viagens, eventos e passeios a terem vitrine própria, venda online,
-                    equipe comercial, operação de embarque e relatórios em um único sistema.
+                    O Smartbus BR ajuda empresas e vendedores independentes a vender mais, compartilhar link próprio,
+                    acompanhar resultados e garantir um embarque mais organizado sem estrutura complexa.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-3 text-sm text-white/80">
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">+12 mil passageiros atendidos</div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">+45 empresas operando</div>
-                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">Relatórios, comissão e embarque no mesmo fluxo</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">Venda online e embarque no mesmo fluxo</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">Serve para empresas e para quem vende por conta própria</div>
+                  <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">Mais controle para crescer sem complicação</div>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -403,7 +411,7 @@ export default function LandingPage() {
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Search className="h-4 w-4" />
-                    Ver viagens disponíveis
+                    Comprar passagens agora
                   </Link>
                 </div>
               </div>
@@ -429,8 +437,8 @@ export default function LandingPage() {
               <div className="rounded-3xl border border-primary/20 bg-primary/10 p-5 text-white backdrop-blur-sm">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Para empresas</p>
-                    <h2 className="mt-2 text-2xl font-bold">Uma estrutura para vender, divulgar e operar melhor</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Para empresas e vendedores independentes</p>
+                    <h2 className="mt-2 text-2xl font-bold">Uma estrutura simples para vender, divulgar e operar melhor</h2>
                   </div>
                   <div className="rounded-2xl bg-white/10 p-3">
                     <BarChart3 className="h-6 w-6 text-primary" />
@@ -459,16 +467,15 @@ export default function LandingPage() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Building2 className="h-3.5 w-3.5" />
-                Para empresas, organizadores e operações de viagem
+                Para quem vende passagens — empresas e vendedores independentes
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Feito para quem precisa vender passagens e operar com visão profissional
+                Feito para quem quer vender mais passagens com organização e presença profissional
               </h2>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                O Smartbus BR foi pensado para empresas que precisam divulgar saídas, acompanhar vendedores,
-                controlar embarques e visualizar resultados por evento sem depender de processos soltos.
+                O Smartbus BR foi feito para quem vende passagens — seja uma empresa estruturada ou alguém que vende por conta própria. Divulgue suas viagens, acompanhe vendas, organize embarques e tenha controle total para crescer com mais profissionalismo.
               </p>
-              {/* Nova hierarquia de valor: a seção apresenta os quatro pilares do produto usando os mesmos cards da landing. */}
+              {/* Ajuste de conversão: a copy desta seção reduz o foco institucional em empresa e equilibra empresa + autônomo sem alterar o layout. */}
               <div className="grid gap-3 sm:grid-cols-2">
                 {PLATFORM_PILLARS.map((benefit) => (
                   <div key={benefit.title} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -487,7 +494,7 @@ export default function LandingPage() {
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Vitrine própria</p>
                   <p className="mt-3 text-3xl font-bold text-primary">Link + QR Code</p>
-                  <p className="mt-2 text-sm text-white/65">para divulgar sua empresa, publicar viagens e centralizar redes sociais em uma página profissional.</p>
+                  <p className="mt-2 text-sm text-white/65">para divulgar suas viagens, compartilhar seu link de vendas e centralizar tudo em uma página profissional.</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Resultado operacional</p>
@@ -497,16 +504,57 @@ export default function LandingPage() {
               </div>
               <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/10 p-5">
                 <p className="text-sm text-white/75">
-                  Da divulgação ao embarque, a empresa ganha uma estrutura mais organizada para vender, operar e acompanhar o que realmente está acontecendo em cada evento.
+                  Da divulgação ao embarque, você ganha uma estrutura mais organizada para vender, operar e acompanhar tudo o que acontece em cada evento.
                 </p>
                 <Link
                   to="/cadastro"
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                 >
-                  Quero estruturar minha operação
+                  Quero começar a vender melhor
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <section className="bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <Users className="h-3.5 w-3.5" />
+              Posicionamento comercial claro para os dois públicos principais
+            </div>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Serve para sua empresa e também para quem vende passagens por conta própria</h2>
+            <p className="mt-3 text-muted-foreground sm:text-lg">
+              {/* Ajuste estratégico de copy: deixamos explícita a dualidade empresa + autônomo sem criar nova arquitetura visual. */}
+              Seja para profissionalizar uma operação completa ou começar com um link de venda no celular, o Smartbus BR ajuda a divulgar melhor, vender com mais controle e garantir um embarque mais organizado.
+            </p>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Empresas</p>
+              <h3 className="mt-3 text-2xl font-bold text-foreground">Mais estrutura para vender, operar e acompanhar resultados</h3>
+              <p className="mt-3 text-muted-foreground">Organize equipe comercial, acompanhe saídas, valide embarque e centralize relatórios em um fluxo mais profissional.</p>
+              <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Controle da operação e dos vendedores no mesmo lugar</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Embarque mais organizado, com menos papel e menos confusão</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Presença digital pronta para divulgar viagens e eventos</li>
+              </ul>
+            </div>
+
+            <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Vendedores independentes</p>
+              <h3 className="mt-3 text-2xl font-bold text-foreground">Mais praticidade para vender pelo link e se apresentar com profissionalismo</h3>
+              <p className="mt-3 text-muted-foreground">Ideal para quem vende por WhatsApp, Instagram, indicação direta ou excursão própria e quer sair do improviso sem complicação.</p>
+              <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Link de venda para compartilhar com clientes no celular</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Mais controle das passagens vendidas e dos lugares confirmados</li>
+                <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Serve para quem está começando e para quem já quer crescer organizado</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -601,8 +649,8 @@ export default function LandingPage() {
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Como o Smartbus BR ajuda a empresa a crescer e operar melhor</h2>
-            <p className="mt-2 text-muted-foreground">Uma jornada clara para divulgar, vender, embarcar e acompanhar resultados.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Como o Smartbus BR ajuda a vender mais e embarcar com menos confusão</h2>
+            <p className="mt-2 text-muted-foreground">Uma jornada clara para divulgar melhor, vender com mais controle e validar o embarque com segurança.</p>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
@@ -628,7 +676,7 @@ export default function LandingPage() {
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Diferenciais que mostram a força real do produto</h2>
               <p className="mt-2 max-w-3xl text-muted-foreground">
-                A landing passa a comunicar o Smartbus BR como uma solução completa para vitrine, vendas, equipe comercial, operação de embarque e gestão.
+                Transforme sua divulgação em vendas, acompanhe sua operação com mais clareza e leve mais organização para o embarque de cada evento.
               </p>
             </div>
           </div>
@@ -653,8 +701,8 @@ export default function LandingPage() {
       <section className="bg-muted/40 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Escolha seu caminho</h2>
-            <p className="mt-2 text-muted-foreground">A página deixa claro, em poucos segundos, se você quer comprar uma passagem ou estruturar sua empresa para vender mais.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Escolha como você quer usar o Smartbus BR</h2>
+            <p className="mt-2 text-muted-foreground">Em poucos segundos, fica claro se você quer comprar sua passagem ou começar a vender com mais organização.</p>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2">
@@ -685,29 +733,33 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-[2rem] border border-primary/15 bg-card p-8 text-center shadow-xl sm:p-10">
             {/* CTA final reforçado para conversão B2B sem remover a alternativa do passageiro. */}
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Profissionalize sua operação e transforme sua divulgação em vendas</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Comece a vender passagens com mais organização, presença digital e controle</h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              Com o Smartbus BR, sua empresa pode ter vitrine própria, vender online, acompanhar vendedores, organizar o embarque e visualizar relatórios em um único fluxo.
+              {/* CTA final com menos objeção: reforça facilidade para empresa e autônomo sem prometer funcionalidades novas. */}
+              Com o Smartbus BR, sua empresa ou operação independente pode divulgar melhor, vender online, acompanhar resultados e organizar o embarque sem depender de uma estrutura complexa.
             </p>
             <div className="mt-8 flex flex-col items-stretch justify-center gap-4 sm:flex-row">
               <Link
                 to="/cadastro"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Cadastrar minha empresa
+                Começar a vender
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link
-                to="/eventos"
+              {/* CTA de apoio com WhatsApp atualizado para contato comercial direto sem criar novo componente. */}
+              <a
+                href={salesWhatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-8 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
-                Ver viagens disponíveis
-              </Link>
+                Falar com a equipe
+              </a>
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Building2 className="h-4 w-4 text-primary" /> Vitrine com link e redes sociais</span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Users className="h-4 w-4 text-primary" /> Comissão e links para vendedores</span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Bus className="h-4 w-4 text-primary" /> Lista de embarque e validação</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Building2 className="h-4 w-4 text-primary" /> Link de venda e vitrine profissional</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Users className="h-4 w-4 text-primary" /> Funciona para equipe comercial e vendedor independente</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2"><Bus className="h-4 w-4 text-primary" /> Lista de embarque e validação no celular</span>
             </div>
           </div>
         </div>
