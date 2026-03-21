@@ -261,15 +261,14 @@ export function AsaasOnboardingWizard({ open, onOpenChange, companyData, onSucce
       )}
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
-        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'automatic' | 'sandbox' | 'production')}>
+        <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as 'sandbox' | 'production')}>
           <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="automatic">Automático pelo host atual</SelectItem>
-            <SelectItem value="sandbox">Sandbox</SelectItem>
-            <SelectItem value="production">Produção</SelectItem>
+            <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
+            <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">No Step 3 este seletor prepara o cadastro por ambiente sem alterar o checkout público atual.</p>
+        <p className="text-xs text-muted-foreground">Sandbox é para testes. Produção é para pagamentos reais com clientes.</p>
       </div>
 
       <div className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
