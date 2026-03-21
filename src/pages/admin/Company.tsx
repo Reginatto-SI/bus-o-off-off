@@ -44,6 +44,39 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+
+type AsaasIntegrationCheckResponse = {
+  status: 'ok' | 'error';
+  integration_status:
+    | 'valid'
+    | 'invalid'
+    | 'incomplete'
+    | 'not_found'
+    | 'pending'
+    | 'communication_error';
+  environment: 'production' | 'sandbox';
+  diagnostic_stage:
+    | 'input_validation'
+    | 'company_lookup'
+    | 'credentials_validation'
+    | 'asaas_request';
+  details: {
+    has_api_key: boolean;
+    has_account_id: boolean;
+    has_wallet_id: boolean;
+    missing_fields: string[];
+    asaas_request_attempted: boolean;
+    asaas_account_found: boolean;
+    wallet_found: boolean;
+    account_id_matches: boolean;
+    wallet_id_matches: boolean;
+    onboarding_complete: boolean;
+    asaas_http_status?: number;
+    error_type?: string;
+  };
+  message: string;
+};
+
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_LOGO_SIZE_MB = 2;
 const MAX_LOGO_SIZE_BYTES = MAX_LOGO_SIZE_MB * 1024 * 1024;
@@ -484,43 +517,56 @@ export default function CompanyPage() {
   };
 
   const handleRevalidateAsaasIntegration = async () => {
-    if (!editingId) {
-      toast.error('Empresa não identificada para validar integração');
+    if (!editingId || !runtimePaymentEnvironment) {
+      toast.error('Empresa ou ambiente operacional não identificado para validar integração');
       return;
     }
 
     setAsaasRevalidating(true);
     try {
-      // Comentário de suporte: reutiliza a mesma edge function para validar novamente
-      // os dados da conta conectada sem alterar o layout atual do card.
-      // Enviamos o ambiente operacional explícito para impedir que preview/produção
-      // recalculados por host acabem validando a credencial errada.
-      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
+      // Comentário de manutenção: a verificação manual agora usa endpoint dedicado.
+      // Não reaproveitamos `create-asaas-account` porque health check não deve criar conta,
+      // revalidar onboarding nem alterar os campos da empresa durante o diagnóstico.
+      const { data, error } = await supabase.functions.invoke('check-asaas-integration', {
         body: {
           company_id: editingId,
-          mode: 'revalidate',
           target_environment: runtimePaymentEnvironment,
         },
       });
 
       if (error) {
-        // Comentário de suporte: na revalidação, exibimos a causa retornada pela edge function
-        // para evitar mensagem genérica de API Key quando o problema real for outro.
+        // Comentário de suporte: erros HTTP continuam reservados para falhas internas,
+        // lookup da empresa e violações contratuais do request. O endpoint dedicado
+        // devolve cenários operacionais do Asaas no payload estruturado de sucesso.
         const { message, statusCode } = await extractAsaasErrorMessage({
           data,
           error,
-          fallbackMessage: 'Não foi possível validar a integração com o Asaas. Tente novamente.',
+          fallbackMessage: 'Não foi possível verificar a integração com o Asaas. Tente novamente.',
         });
         const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
         throw new Error(`${message}${statusSuffix}`);
       }
 
-      await fetchCompany();
-      toast.success('Integração verificada com sucesso');
+      const response = data as AsaasIntegrationCheckResponse | null;
+      if (!response?.message) {
+        throw new Error('Resposta inválida ao verificar integração com o Asaas.');
+      }
+
+      if (response.status === 'ok') {
+        toast.success(response.message);
+        return;
+      }
+
+      if (response.integration_status === 'incomplete' || response.integration_status === 'pending') {
+        toast.warning(response.message);
+        return;
+      }
+
+      toast.error(response.message);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error
         ? err.message
-        : 'Não foi possível validar a integração com o Asaas. Tente novamente.';
+        : 'Não foi possível verificar a integração com o Asaas. Tente novamente.';
       toast.error(errorMessage);
     } finally {
       setAsaasRevalidating(false);
