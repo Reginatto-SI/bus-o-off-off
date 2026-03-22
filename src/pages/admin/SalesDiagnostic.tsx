@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleLog, SaleStatus } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -57,6 +57,7 @@ import { ptBR } from 'date-fns/locale';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatsCard } from '@/components/admin/StatsCard';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 
 // ── Types ──
 interface DiagnosticFilters {
@@ -830,11 +831,20 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
 
 // ── Component ──
 export default function SalesDiagnostic() {
-  const { activeCompanyId } = useAuth();
+  const { activeCompanyId, activeCompany } = useAuth();
+  const {
+    environment: runtimePaymentEnvironment,
+    isReady: isRuntimePaymentEnvironmentReady,
+  } = useRuntimePaymentEnvironment();
   const [sales, setSales] = useState<DiagnosticSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<DiagnosticFilters>(initialFilters);
   const [events, setEvents] = useState<{ id: string; name: string; date: string }[]>([]);
+  const [availableGateways, setAvailableGateways] = useState<string[]>([]);
+  const [isCompanyScopeRefreshing, setIsCompanyScopeRefreshing] = useState(false);
+  const latestSalesRequestIdRef = useRef(0);
+  const latestEventsRequestIdRef = useRef(0);
+  const previousCompanyIdRef = useRef<string | null>(null);
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
@@ -889,11 +899,14 @@ export default function SalesDiagnostic() {
     return sales
       .map((sale) => ({ sale, operational: computeOperationalView(sale) }))
       .sort((a, b) => {
-        // Diagnóstico operacional: problemas ficam no topo para leitura imediata de suporte.
-        if (a.operational.priority !== b.operational.priority) {
-          return a.operational.priority - b.operational.priority;
+        // Correção operacional: a ordenação padrão precisa ser previsível e sempre começar
+        // pela venda mais recente. A prioridade passa a ser apenas critério secundário.
+        const createdAtDiff = new Date(b.sale.created_at).getTime() - new Date(a.sale.created_at).getTime();
+        if (createdAtDiff !== 0) {
+          return createdAtDiff;
         }
-        return new Date(b.sale.created_at).getTime() - new Date(a.sale.created_at).getTime();
+
+        return a.operational.priority - b.operational.priority;
       });
   }, [sales]);
 
@@ -909,8 +922,24 @@ export default function SalesDiagnostic() {
     }, { total: 0, saudavel: 0, atencao: 0, problema: 0, pago: 0, cancelado: 0 });
   }, [salesWithOperationalView]);
 
-  const fetchSales = async () => {
+  const fetchSales = useCallback(async () => {
+    const requestId = ++latestSalesRequestIdRef.current;
     setLoading(true);
+    setIsCompanyScopeRefreshing(true);
+
+    // Ambiente também faz parte do escopo operacional da tela. Esperamos a fonte oficial do app
+    // antes de consultar para evitar uma primeira renderização com dados de ambiente misturado.
+    if (!isRuntimePaymentEnvironmentReady) {
+      return;
+    }
+
+    if (!activeCompanyId) {
+      setSales([]);
+      setAvailableGateways([]);
+      setLoading(false);
+      setIsCompanyScopeRefreshing(false);
+      return;
+    }
 
     let query = supabase
       .from('sales')
@@ -920,13 +949,17 @@ export default function SalesDiagnostic() {
         company:companies(name)
       `)
       .order('created_at', { ascending: false })
+      // Painel operacional: mantemos recorte nas 100 vendas mais recentes para preservar custo/tempo
+      // de resposta. A rastreabilidade da correção documenta essa decisão para não ficar ambígua.
       .limit(100);
 
     // Correção mínima: esta tela deve seguir o mesmo contrato visual do restante do admin.
     // Se o header mostra uma empresa ativa, a consulta precisa respeitar esse `company_id`,
     // inclusive para developer, evitando leitura cross-company implícita nesta rota.
-    if (activeCompanyId) {
-      query = query.eq('company_id', activeCompanyId);
+    query = query.eq('company_id', activeCompanyId);
+
+    if (runtimePaymentEnvironment) {
+      query = query.eq('payment_environment', runtimePaymentEnvironment);
     }
 
     if (filters.search.trim()) {
@@ -984,11 +1017,19 @@ export default function SalesDiagnostic() {
       // Mantemos ticket e evento como apoio mínimo à UX já prometida pelo campo de busca,
       // sem trocar a fonte principal da grade nem introduzir nova arquitetura de consulta.
       const [ticketSearchRes, eventSearchRes] = await Promise.all([
-        supabase
-          .from('tickets')
-          .select('sale_id')
-          .ilike('ticket_number', `%${searchTerm}%`)
-          .limit(100),
+        (() => {
+          let ticketQuery = supabase
+            .from('tickets')
+            .select('sale_id')
+            .ilike('ticket_number', `%${searchTerm}%`)
+            .limit(100);
+
+          // Blindagem multiempresa: a resolução de ticket também deve obedecer à empresa ativa,
+          // não apenas a query final de `sales`, para evitar encadeamento parcial do escopo.
+          ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
+
+          return ticketQuery;
+        })(),
         (() => {
           let eventsQuery = supabase
             .from('events')
@@ -996,9 +1037,7 @@ export default function SalesDiagnostic() {
             .ilike('name', `%${searchTerm}%`)
             .limit(50);
 
-          if (activeCompanyId) {
-            eventsQuery = eventsQuery.eq('company_id', activeCompanyId);
-          }
+          eventsQuery = eventsQuery.eq('company_id', activeCompanyId);
 
           return eventsQuery;
         })(),
@@ -1022,9 +1061,7 @@ export default function SalesDiagnostic() {
           .in('event_id', matchedEventIds)
           .limit(100);
 
-        if (activeCompanyId) {
-          salesByEventQuery = salesByEventQuery.eq('company_id', activeCompanyId);
-        }
+        salesByEventQuery = salesByEventQuery.eq('company_id', activeCompanyId);
 
         const { data: salesByEvent, error: salesByEventError } = await salesByEventQuery;
 
@@ -1061,9 +1098,14 @@ export default function SalesDiagnostic() {
 
     const { data, error } = await query;
 
+    if (requestId !== latestSalesRequestIdRef.current) {
+      return;
+    }
+
     if (error) {
       toast.error('Erro ao carregar vendas para diagnóstico');
       setLoading(false);
+      setIsCompanyScopeRefreshing(false);
       return;
     }
 
@@ -1078,15 +1120,33 @@ export default function SalesDiagnostic() {
     const latestLockExpiryBySale: Record<string, string> = {};
     if (saleIds.length > 0) {
       const [ticketsRes, locksRes] = await Promise.all([
-        supabase
-          .from('tickets')
-          .select('sale_id')
-          .in('sale_id', saleIds),
-        supabase
-          .from('seat_locks')
-          .select('sale_id, expires_at')
-          .in('sale_id', saleIds),
+        (() => {
+          let ticketsQuery = supabase
+            .from('tickets')
+            .select('sale_id')
+            .in('sale_id', saleIds);
+
+          ticketsQuery = ticketsQuery.eq('company_id', activeCompanyId);
+
+          return ticketsQuery;
+        })(),
+        (() => {
+          let locksQuery = supabase
+            .from('seat_locks')
+            .select('sale_id, expires_at')
+            .in('sale_id', saleIds);
+
+          // Blindagem explícita: seat_locks também carrega company_id no schema e precisa repetir
+          // o mesmo escopo da venda selecionada para evitar qualquer leitura cruzada implícita.
+          locksQuery = locksQuery.eq('company_id', activeCompanyId);
+
+          return locksQuery;
+        })(),
       ]);
+
+      if (requestId !== latestSalesRequestIdRef.current) {
+        return;
+      }
 
       const tickets = ticketsRes.data ?? [];
       const seatLocks = locksRes.data ?? [];
@@ -1120,6 +1180,9 @@ export default function SalesDiagnostic() {
       latest_lock_expires_at: latestLockExpiryBySale[s.id] ?? null,
     }));
 
+    const companyGateways = Array.from(new Set(mapped.map((sale) => computeGateway(sale).toLowerCase())));
+    setAvailableGateways(companyGateways);
+
     // Client-side filters for gateway and payment status
     let filtered = mapped;
 
@@ -1142,9 +1205,17 @@ export default function SalesDiagnostic() {
 
     setSales(filtered);
     setLoading(false);
-  };
+    setIsCompanyScopeRefreshing(false);
+  }, [activeCompanyId, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
+    const requestId = ++latestEventsRequestIdRef.current;
+
+    if (!activeCompanyId) {
+      setEvents([]);
+      return;
+    }
+
     let query = supabase
       .from('events')
       .select('id, name, date')
@@ -1157,8 +1228,11 @@ export default function SalesDiagnostic() {
     }
 
     const { data } = await query;
+    if (requestId !== latestEventsRequestIdRef.current) {
+      return;
+    }
     setEvents((data ?? []) as { id: string; name: string; date: string }[]);
-  };
+  }, [activeCompanyId]);
 
   const openDetail = async (sale: DiagnosticSale) => {
     setDetailSale(sale);
@@ -1172,12 +1246,15 @@ export default function SalesDiagnostic() {
         .from('sale_logs')
         .select('*')
         .eq('sale_id', sale.id)
+        .eq('company_id', sale.company_id)
         .order('created_at', { ascending: true }),
       // Usa trilha técnica persistida para diagnóstico confiável do webhook/payload.
       supabase
         .from('sale_integration_logs')
         .select('*')
         .eq('sale_id', sale.id)
+        .eq('company_id', sale.company_id)
+        .eq('payment_environment', sale.payment_environment)
         .order('created_at', { ascending: false })
         .limit(30),
       supabase
@@ -1194,8 +1271,46 @@ export default function SalesDiagnostic() {
     setDetailLoading(false);
   };
 
-  useEffect(() => { fetchSales(); }, [activeCompanyId, filters]);
-  useEffect(() => { fetchEvents(); }, [activeCompanyId]);
+  useEffect(() => {
+    fetchSales();
+  }, [fetchSales]);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  useEffect(() => {
+    if (previousCompanyIdRef.current === activeCompanyId) return;
+
+    previousCompanyIdRef.current = activeCompanyId;
+    latestSalesRequestIdRef.current += 1;
+    latestEventsRequestIdRef.current += 1;
+    setSales([]);
+    setEvents([]);
+    setAvailableGateways([]);
+
+    // Filtros dependentes precisam ser limpos ao trocar a empresa para não carregar um valor
+    // invisivelmente inválido herdado da empresa anterior.
+    setFilters((currentFilters) => {
+      const nextFilters = {
+        ...currentFilters,
+        eventId: 'all',
+        gateway: 'all',
+        paymentStatus: 'all',
+      };
+
+      const filtersChanged =
+        nextFilters.eventId !== currentFilters.eventId ||
+        nextFilters.gateway !== currentFilters.gateway ||
+        nextFilters.paymentStatus !== currentFilters.paymentStatus;
+
+      if (filtersChanged) {
+        toast.success('Empresa alterada. Filtros dependentes foram atualizados.');
+      }
+
+      return nextFilters;
+    });
+  }, [activeCompanyId]);
 
   const filterSelects = [
     {
@@ -1221,9 +1336,9 @@ export default function SalesDiagnostic() {
       icon: CreditCard,
       options: [
         { value: 'all', label: 'Todos' },
-        { value: 'asaas', label: 'Asaas' },
-        { value: 'stripe', label: 'Stripe' },
-        { value: 'manual', label: 'Manual' },
+        ...(availableGateways.includes('asaas') ? [{ value: 'asaas', label: 'Asaas' }] : []),
+        ...(availableGateways.includes('stripe') ? [{ value: 'stripe', label: 'Stripe' }] : []),
+        ...(availableGateways.includes('manual') ? [{ value: 'manual', label: 'Manual' }] : []),
       ],
     },
     {
@@ -1297,6 +1412,25 @@ export default function SalesDiagnostic() {
           description="Ferramenta para análise de vendas, pagamentos e retorno das integrações do sistema."
         />
 
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {activeCompany?.name && (
+            <Badge variant="outline" className="text-xs">
+              Empresa ativa: {activeCompany.name}
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs">
+            Ordenação: mais recentes primeiro
+          </Badge>
+          {runtimePaymentEnvironment && (
+            <Badge variant="outline" className="text-xs">
+              Ambiente: {runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}
+            </Badge>
+          )}
+          <span className="text-xs">
+            Escopo operacional: últimas 100 vendas mais recentes.
+          </span>
+        </div>
+
         <div className="mb-6">
           {/* Mantém o mesmo espaçamento e hierarquia visual das demais telas administrativas. */}
           <FilterCard
@@ -1306,7 +1440,10 @@ export default function SalesDiagnostic() {
             searchIcon={Search}
             selects={filterSelects}
             mainFilters={mainFilters}
-            onClearFilters={() => setFilters(initialFilters)}
+            onClearFilters={() => {
+              setFilters(initialFilters);
+              toast.success('Filtros dependentes limpos com sucesso.');
+            }}
             hasActiveFilters={hasActiveFilters}
           />
         </div>
@@ -1322,6 +1459,12 @@ export default function SalesDiagnostic() {
           </div>
         )}
 
+        {isCompanyScopeRefreshing && !loading && (
+          <div className="mb-4 text-xs text-muted-foreground">
+            Atualizando o diagnóstico da empresa ativa...
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1330,7 +1473,7 @@ export default function SalesDiagnostic() {
           <EmptyState
             icon={<Activity className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
-            description="Ajuste os filtros para buscar vendas."
+            description={`Nenhuma venda encontrada para ${activeCompany?.name ?? 'a empresa ativa'} com os filtros atuais.`}
           />
         ) : (
           <Card>
