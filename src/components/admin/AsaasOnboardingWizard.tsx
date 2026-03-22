@@ -128,7 +128,7 @@ export function AsaasOnboardingWizard({
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
-      setTargetEnvironment('auto');
+      setTargetEnvironment('sandbox');
     }
   }, [open]);
 
