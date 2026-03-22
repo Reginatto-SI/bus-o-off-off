@@ -14,15 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -32,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -48,7 +40,6 @@ import {
   Clock,
   AlertTriangle,
   Ticket,
-  ChevronDown,
   Webhook,
   Code,
   FileJson,
@@ -245,12 +236,17 @@ interface LockStatusView {
   expiresAt: string | null;
 }
 
+type OperationalPriority = 'critico' | 'atencao' | 'ok';
+type MonitoringFreshness = 'novo' | 'recente' | 'estavel';
+type QuickFocusFilter = 'todos' | 'criticos' | 'novos' | 'acompanhamento' | 'ok';
+
 interface DiagnosticOperationalView {
   category: OperationalCategory;
   categoryLabel: string;
   categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   categoryClassName?: string;
   priority: number;
+  operationalPriority: OperationalPriority;
   saleStatusLabel: string;
   paymentStatusLabel: string;
   operationalLabel: string;
@@ -263,6 +259,89 @@ interface DiagnosticOperationalView {
   lockLabel: string;
   lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   hasGatewayDivergence: boolean;
+}
+
+
+function computeOperationalPriority(view: Pick<DiagnosticOperationalView, 'category' | 'hasGatewayDivergence'>): OperationalPriority {
+  // A prioridade operacional é derivada apenas de sinais já calculados pela própria tela.
+  // Não cria regra paralela de negócio: apenas traduz a leitura existente para triagem explícita,
+  // mantendo o diagnóstico previsível, auditável e igual em sandbox/produção.
+  if (view.category === 'divergencia' || view.hasGatewayDivergence) return 'critico';
+  if (view.category === 'atencao') return 'atencao';
+  return 'ok';
+}
+
+function getOperationalPriorityPresentation(priority: OperationalPriority): {
+  label: string;
+  actionLabel: string;
+  actionDescription: string;
+} {
+  if (priority === 'critico') {
+    return {
+      label: 'Crítico',
+      actionLabel: 'Revisar agora',
+      actionDescription: 'Exige ação imediata.',
+    };
+  }
+
+  if (priority === 'atencao') {
+    return {
+      label: 'Atenção',
+      actionLabel: 'Acompanhar',
+      actionDescription: 'Exige acompanhamento operacional.',
+    };
+  }
+
+  return {
+    label: 'OK',
+    actionLabel: 'Sem ação',
+    actionDescription: 'Sem necessidade de intervenção.',
+  };
+}
+
+function getOperationalHeadlineLabel(view: DiagnosticOperationalView): string {
+  if (view.operationalPriority === 'critico') return 'Venda com divergência';
+  if (view.operationalPriority === 'atencao') return 'Venda em acompanhamento';
+
+  if (view.category === 'cancelado') return 'Venda cancelada corretamente';
+  if (view.category === 'pago') return 'Pagamento confirmado com sucesso';
+  return 'Fluxo estável';
+}
+
+function computeMonitoringFreshness(sale: DiagnosticSale, isNewInSession: boolean): MonitoringFreshness {
+  // "Novo" e "recente" não significam a mesma coisa:
+  // - novo = item percebido pela sessão atual depois de um refresh desta tela;
+  // - recente = item criado há pouco tempo, mesmo que já estivesse visível antes.
+  // Isso mantém a leitura auditável e evita chamar de novidade algo que é apenas recente por data.
+  if (isNewInSession) return 'novo';
+
+  const createdAtMs = new Date(sale.created_at).getTime();
+  const recentWindowMs = 1000 * 60 * 60 * 2;
+  return Date.now() - createdAtMs <= recentWindowMs ? 'recente' : 'estavel';
+}
+
+function getMonitoringFreshnessPresentation(freshness: MonitoringFreshness): {
+  label: string;
+  description: string;
+} {
+  if (freshness === 'novo') {
+    return {
+      label: 'Novo nesta sessão',
+      description: 'Entrou no monitoramento após atualização desta sessão.',
+    };
+  }
+
+  if (freshness === 'recente') {
+    return {
+      label: 'Recente no monitoramento',
+      description: 'Venda criada há pouco tempo dentro da janela operacional.',
+    };
+  }
+
+  return {
+    label: 'Sem mudança recente',
+    description: 'Nenhum sinal recente adicional percebido nesta sessão.',
+  };
 }
 
 function computeGateway(sale: DiagnosticSale): string {
@@ -771,6 +850,8 @@ function detectPaymentConfirmationSource(
 
 function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
   const entries: TimelineEntry[] = [];
+  const lockStatus = computeLockStatus(sale);
+  const operationalView = computeOperationalView(sale);
 
   // 1. Sale created
   entries.push({
@@ -790,6 +871,16 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
       color: 'text-blue-600',
     });
   }
+
+  // 3. Operational lock state
+  // Esta timeline é derivada da leitura atual da tela; não promete auditoria histórica completa.
+  // Ela apenas organiza marcos inferíveis com honestidade a partir do snapshot atual da venda.
+  entries.push({
+    time: format(parseISO(sale.updated_at), 'HH:mm:ss', { locale: ptBR }),
+    label: lockStatus.label,
+    icon: lockStatus.isExpired ? AlertTriangle : lockStatus.isMissing ? XCircle : CheckCircle,
+    color: lockStatus.isExpired || lockStatus.isMissing ? 'text-amber-600' : 'text-blue-600',
+  });
 
   // 3. Logs
   logs
@@ -833,6 +924,13 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
     });
   }
 
+  entries.push({
+    time: format(parseISO(sale.updated_at), 'HH:mm:ss', { locale: ptBR }),
+    label: `Estado operacional atual: ${operationalView.operationalLabel}`,
+    icon: operationalView.operationalPriority === 'critico' ? AlertTriangle : CheckCircle,
+    color: operationalView.operationalPriority === 'critico' ? 'text-destructive' : 'text-emerald-600',
+  });
+
   return entries;
 }
 
@@ -853,12 +951,16 @@ export default function SalesDiagnostic() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [groupByOperationalStatus, setGroupByOperationalStatus] = useState(false);
   const [showOnlyProblems, setShowOnlyProblems] = useState(false);
+  const [quickFocusFilter, setQuickFocusFilter] = useState<QuickFocusFilter>('todos');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [lastRelevantChangeAt, setLastRelevantChangeAt] = useState<string | null>(null);
+  const [lastRelevantChangeLabel, setLastRelevantChangeLabel] = useState('Nenhuma mudança relevante percebida nesta sessão.');
   const [newSaleIds, setNewSaleIds] = useState<string[]>([]);
   const latestSalesRequestIdRef = useRef(0);
   const latestEventsRequestIdRef = useRef(0);
   const previousCompanyIdRef = useRef<string | null>(null);
   const previousRenderedSaleIdsRef = useRef<string[]>([]);
+  const previousSalesSnapshotRef = useRef<Record<string, string>>({});
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
@@ -911,7 +1013,19 @@ export default function SalesDiagnostic() {
 
   const salesWithOperationalView = useMemo(() => {
     return sales
-      .map((sale) => ({ sale, operational: computeOperationalView(sale) }))
+      .map((sale) => {
+        const operational = computeOperationalView(sale);
+        const isNewInSession = newSaleIds.includes(sale.id);
+
+        return {
+          sale,
+          operational: {
+            ...operational,
+            operationalPriority: computeOperationalPriority(operational),
+          },
+          freshness: computeMonitoringFreshness(sale, isNewInSession),
+        };
+      })
       .sort((a, b) => {
         // Correção operacional: a ordenação padrão precisa ser previsível e sempre começar
         // pela venda mais recente. A prioridade passa a ser apenas critério secundário.
@@ -922,44 +1036,61 @@ export default function SalesDiagnostic() {
 
         return a.operational.priority - b.operational.priority;
       });
-  }, [sales]);
+  }, [newSaleIds, sales]);
 
   const visibleSalesWithOperationalView = useMemo(() => {
-    if (!showOnlyProblems) return salesWithOperationalView;
+    let visibleEntries = salesWithOperationalView;
 
-    return salesWithOperationalView.filter((entry) => (
-      entry.operational.category === 'divergencia' || entry.operational.category === 'atencao'
-    ));
-  }, [salesWithOperationalView, showOnlyProblems]);
+    // Precedência explícita: primeiro aplicamos o toggle global de problemas,
+    // depois o foco rápido só refina a renderização visível sem mexer nos filtros estruturais.
+    if (showOnlyProblems) {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority !== 'ok');
+    }
+
+    if (quickFocusFilter === 'criticos') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'critico');
+    } else if (quickFocusFilter === 'novos') {
+      visibleEntries = visibleEntries.filter((entry) => entry.freshness === 'novo' || entry.freshness === 'recente');
+    } else if (quickFocusFilter === 'acompanhamento') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'atencao');
+    } else if (quickFocusFilter === 'ok') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'ok');
+    }
+
+    return visibleEntries;
+  }, [quickFocusFilter, salesWithOperationalView, showOnlyProblems]);
 
   const visibleOperationalSummary = useMemo(() => {
     return visibleSalesWithOperationalView.reduce((acc, entry) => {
       acc.total += 1;
-      if (entry.operational.category === 'saudavel') acc.saudavel += 1;
-      if (entry.operational.category === 'atencao') acc.atencao += 1;
-      if (entry.operational.category === 'divergencia') acc.problema += 1;
+      if (entry.operational.operationalPriority === 'critico') acc.critico += 1;
+      if (entry.operational.operationalPriority === 'atencao') acc.atencao += 1;
+      if (entry.operational.operationalPriority === 'ok') acc.ok += 1;
+      if (entry.freshness === 'novo') acc.novo += 1;
+      if (entry.freshness === 'recente') acc.recente += 1;
+      if (entry.operational.operationalPriority === 'critico' && entry.freshness !== 'estavel') acc.criticoRecente += 1;
       if (entry.operational.category === 'pago') acc.pago += 1;
       if (entry.operational.category === 'cancelado') acc.cancelado += 1;
       return acc;
-    }, { total: 0, saudavel: 0, atencao: 0, problema: 0, pago: 0, cancelado: 0 });
+    }, { total: 0, critico: 0, atencao: 0, ok: 0, novo: 0, recente: 0, criticoRecente: 0, pago: 0, cancelado: 0 });
   }, [visibleSalesWithOperationalView]);
 
   const groupedSalesWithOperationalView = useMemo(() => {
-    const groupedEntries = new Map<OperationalCategory, typeof visibleSalesWithOperationalView>();
-    const orderedCategories: OperationalCategory[] = ['divergencia', 'atencao', 'saudavel', 'pago', 'cancelado'];
+    const orderedPriorities: OperationalPriority[] = ['critico', 'atencao', 'ok'];
+    const groupedEntries = new Map<OperationalPriority, typeof visibleSalesWithOperationalView>();
 
-    orderedCategories.forEach((category) => {
-      groupedEntries.set(category, []);
+    orderedPriorities.forEach((priority) => {
+      groupedEntries.set(priority, []);
     });
 
     visibleSalesWithOperationalView.forEach((entry) => {
-      groupedEntries.get(entry.operational.category)?.push(entry);
+      groupedEntries.get(entry.operational.operationalPriority)?.push(entry);
     });
 
-    return orderedCategories
-      .map((category) => ({
-        category,
-        entries: groupedEntries.get(category) ?? [],
+    return orderedPriorities
+      .map((priority) => ({
+        priority,
+        entries: groupedEntries.get(priority) ?? [],
       }))
       .filter((group) => group.entries.length > 0);
   }, [visibleSalesWithOperationalView]);
@@ -969,21 +1100,94 @@ export default function SalesDiagnostic() {
     return format(parseISO(lastUpdatedAt), "HH:mm:ss", { locale: ptBR });
   }, [lastUpdatedAt]);
 
-  const systemFeedbackMessage = useMemo(() => {
-    if (visibleOperationalSummary.problema > 0) {
-      return `${visibleOperationalSummary.problema} venda(s) com divergência nas últimas atualizações.`;
+  const executiveSummaryMessages = useMemo(() => {
+    if (visibleOperationalSummary.total === 0) {
+      return ['Aguardando vendas dentro do escopo operacional atual.'];
+    }
+
+    // O resumo executivo usa apenas contagens visíveis no recorte atual.
+    // Isso melhora a triagem sem esconder a origem dos números e mantém a leitura determinística.
+    const messages: string[] = [];
+
+    if (visibleOperationalSummary.critico > 0) {
+      messages.push(`${visibleOperationalSummary.critico} venda(s) crítica(s) exigem revisão imediata.`);
+    } else {
+      messages.push('Nenhuma venda crítica encontrada neste recorte.');
     }
 
     if (visibleOperationalSummary.atencao > 0) {
-      return `${visibleOperationalSummary.atencao} venda(s) em atenção no monitoramento atual.`;
+      messages.push(`${visibleOperationalSummary.atencao} venda(s) estão em acompanhamento.`);
     }
 
-    if (visibleOperationalSummary.total > 0) {
-      return 'Nenhum problema encontrado nas últimas vendas carregadas.';
+    if (visibleOperationalSummary.ok > 0) {
+      messages.push(
+        visibleOperationalSummary.ok === visibleOperationalSummary.total
+          ? 'Todas as vendas visíveis estão estáveis.'
+          : `${visibleOperationalSummary.ok} venda(s) estão sem necessidade de ação.`
+      );
     }
 
-    return 'Aguardando vendas dentro do escopo operacional atual.';
+    return messages;
   }, [visibleOperationalSummary]);
+
+  const movementSummaryMessages = useMemo(() => {
+    if (visibleOperationalSummary.total === 0) {
+      return ['Monitoramento sem itens visíveis neste recorte.'];
+    }
+
+    const messages: string[] = [];
+
+    if (visibleOperationalSummary.novo > 0) {
+      messages.push(`${visibleOperationalSummary.novo} nova(s) venda(s) entraram no monitoramento nesta sessão.`);
+    }
+
+    if (visibleOperationalSummary.criticoRecente > 0) {
+      messages.push(`${visibleOperationalSummary.criticoRecente} item(ns) crítico(s) são novos ou recentes e exigem atenção imediata.`);
+    } else if (visibleOperationalSummary.critico === 0) {
+      messages.push('Nenhuma nova divergência detectada desde a última atualização.');
+    }
+
+    if (messages.length === 0) {
+      messages.push('Monitoramento estável no recorte atual.');
+    }
+
+    return messages;
+  }, [visibleOperationalSummary]);
+
+  const operationalBanner = useMemo(() => {
+    // O banner operacional mostra uma única mensagem por vez, seguindo ordem de prioridade fixa.
+    // Assim o topo da tela continua previsível e preparado para futuros alertas sem criar múltiplos banners concorrentes.
+    if (visibleOperationalSummary.criticoRecente > 0) {
+      return {
+        tone: 'border-destructive/30 bg-destructive/10 text-destructive',
+        title: `Alerta: há ${visibleOperationalSummary.criticoRecente} divergência(s) nova(s) exigindo revisão imediata.`,
+      };
+    }
+
+    if (visibleOperationalSummary.critico > 0) {
+      return {
+        tone: 'border-destructive/20 bg-destructive/5 text-destructive',
+        title: `Atenção: existem ${visibleOperationalSummary.critico} vendas críticas no monitoramento atual.`,
+      };
+    }
+
+    if (visibleOperationalSummary.atencao > 0) {
+      return {
+        tone: 'border-amber-300 bg-amber-50 text-amber-900',
+        title: `Acompanhamento: ${visibleOperationalSummary.atencao} venda(s) seguem pendentes sem divergência estrutural.`,
+      };
+    }
+
+    return {
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+      title: 'Monitoramento estável: nenhuma ocorrência crítica no recorte atual.',
+    };
+  }, [visibleOperationalSummary]);
+
+  const lastRelevantChangeDisplayLabel = useMemo(() => {
+    if (!lastRelevantChangeAt) return lastRelevantChangeLabel;
+    return `${lastRelevantChangeLabel} Última mudança detectada às ${format(parseISO(lastRelevantChangeAt), 'HH:mm:ss', { locale: ptBR })}.`;
+  }, [lastRelevantChangeAt, lastRelevantChangeLabel]);
 
   const fetchSales = useCallback(async () => {
     const requestId = ++latestSalesRequestIdRef.current;
@@ -1270,15 +1474,44 @@ export default function SalesDiagnostic() {
     setLastUpdatedAt(new Date().toISOString());
 
     const currentSaleIds = filtered.map((sale) => sale.id);
+    const currentSnapshot = Object.fromEntries(
+      filtered.map((sale) => {
+        const operational = computeOperationalView(sale);
+        return [sale.id, `${sale.status}|${sale.updated_at}|${computeOperationalPriority(operational)}`];
+      })
+    );
+
+    const previousSnapshot = previousSalesSnapshotRef.current;
+    const changedSaleIds = currentSaleIds.filter((saleId) => previousSnapshot[saleId] && previousSnapshot[saleId] !== currentSnapshot[saleId]);
+
     if (autoRefreshEnabled) {
       const previousSaleIds = previousRenderedSaleIdsRef.current;
       const incomingSaleIds = currentSaleIds.filter((saleId) => !previousSaleIds.includes(saleId));
       setNewSaleIds(incomingSaleIds);
+
+      // A percepção de mudança existe só dentro desta sessão e compara snapshots em memória.
+      // Não prometemos histórico persistido; apenas sinalizamos quando a tela percebe novidade relevante.
+      if (incomingSaleIds.length > 0 || changedSaleIds.length > 0) {
+        const relevantChangeCount = incomingSaleIds.length + changedSaleIds.length;
+        const detectedAt = new Date().toISOString();
+        setLastRelevantChangeAt(detectedAt);
+        setLastRelevantChangeLabel(`${relevantChangeCount} mudança(s) percebida(s) nesta atualização.`);
+      } else {
+        setLastRelevantChangeLabel('Nenhuma mudança relevante desde a última atualização.');
+      }
     } else {
       setNewSaleIds([]);
+      if (changedSaleIds.length > 0) {
+        const detectedAt = new Date().toISOString();
+        setLastRelevantChangeAt(detectedAt);
+        setLastRelevantChangeLabel(`${changedSaleIds.length} mudança(s) percebida(s) na atualização manual.`);
+      } else {
+        setLastRelevantChangeLabel('Nenhuma mudança relevante desde a última atualização.');
+      }
     }
 
     previousRenderedSaleIdsRef.current = currentSaleIds;
+    previousSalesSnapshotRef.current = currentSnapshot;
     setLoading(false);
     setIsCompanyScopeRefreshing(false);
   }, [activeCompanyId, autoRefreshEnabled, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
@@ -1364,6 +1597,10 @@ export default function SalesDiagnostic() {
     setEvents([]);
     setAvailableGateways([]);
     setNewSaleIds([]);
+    setQuickFocusFilter('todos');
+    setLastRelevantChangeAt(null);
+    setLastRelevantChangeLabel('Nenhuma mudança relevante percebida nesta sessão.');
+    previousSalesSnapshotRef.current = {};
 
     // Filtros dependentes precisam ser limpos ao trocar a empresa para não carregar um valor
     // invisivelmente inválido herdado da empresa anterior.
@@ -1521,21 +1758,42 @@ export default function SalesDiagnostic() {
     </>
   );
 
-  const operationalGroupTitles: Record<OperationalCategory, string> = {
-    divergencia: 'Com divergência',
+  const operationalGroupTitles: Record<OperationalPriority, string> = {
+    critico: 'Críticos',
     atencao: 'Atenção',
-    saudavel: 'Saudáveis',
-    pago: 'Pagas',
-    cancelado: 'Canceladas',
+    ok: 'OK',
   };
 
-  const renderSaleRow = ({ sale, operational }: { sale: DiagnosticSale; operational: DiagnosticOperationalView }) => {
+  const getStatusToneClasses = (operational: DiagnosticOperationalView) => {
+    if (operational.operationalPriority === 'critico') {
+      return {
+        container: 'border-destructive bg-destructive/10 shadow-[inset_4px_0_0_0_theme(colors.destructive.DEFAULT)]',
+        badge: 'border-destructive/30 bg-destructive/10 text-destructive',
+        dot: 'bg-destructive',
+      };
+    }
+
+    if (operational.operationalPriority === 'atencao') {
+      return {
+        container: 'border-amber-300 bg-amber-50/70',
+        badge: 'border-amber-300 bg-amber-100 text-amber-800',
+        dot: 'bg-amber-500',
+      };
+    }
+
+    return {
+      container: 'border-emerald-200 bg-emerald-50/60',
+      badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+      dot: 'bg-emerald-500',
+    };
+  };
+
+  const renderSaleRow = ({ sale, operational, freshness }: { sale: DiagnosticSale; operational: DiagnosticOperationalView; freshness: MonitoringFreshness }) => {
     const gateway = computeGateway(sale);
     const paymentStatus = computePaymentStatus(sale);
     const lockStatus = computeLockStatus(sale);
     const flowStage = computeFlowStage(sale);
     const FlowIcon = flowStage.icon;
-    const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
     const createdAtLabel = format(parseISO(sale.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR });
     const createdAtRelativeLabel = formatDistanceToNowStrict(parseISO(sale.created_at), {
       addSuffix: true,
@@ -1543,6 +1801,11 @@ export default function SalesDiagnostic() {
     });
     const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
     const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
+    const statusTone = getStatusToneClasses(operational);
+    const priorityPresentation = getOperationalPriorityPresentation(operational.operationalPriority);
+    const freshnessPresentation = getMonitoringFreshnessPresentation(freshness);
+    const primaryStatusLabel = operational.hasGatewayDivergence ? 'Venda com divergência' : getOperationalHeadlineLabel(operational);
+    const secondaryStatusLabel = operational.operationalLabel;
 
     const actions: ActionItem[] = [
       {
@@ -1572,118 +1835,191 @@ export default function SalesDiagnostic() {
       },
     ];
 
-    const isNewSale = autoRefreshEnabled && newSaleIds.includes(sale.id);
+    const isNewSale = freshness === 'novo';
+    const isRecentSale = freshness === 'recente';
+    const isCriticalAndFresh = operational.operationalPriority === 'critico' && freshness !== 'estavel';
 
     return (
-      <TableRow
+      <div
         key={sale.id}
         className={cn(
-          'border-l-4 transition-colors',
-          operational.category === 'divergencia' && 'border-l-destructive bg-destructive/5',
-          operational.category === 'atencao' && 'border-l-amber-400 bg-amber-50/50',
-          operational.category === 'saudavel' && 'border-l-transparent',
-          operational.category === 'pago' && 'border-l-emerald-400 bg-emerald-50/40',
-          operational.category === 'cancelado' && 'border-l-zinc-300 bg-zinc-50/40'
+          'overflow-hidden rounded-xl border bg-card shadow-sm transition-colors',
+          statusTone.container,
+          isNewSale && 'ring-2 ring-primary/20',
+          isCriticalAndFresh && 'ring-2 ring-destructive/20'
         )}
       >
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold uppercase tracking-tight text-foreground">
+        {/* Nova divisão em 3 blocos: informação principal, status e ação.
+            Isso reduz ruído visual e replica a leitura operacional rápida adotada nas telas piloto do admin. */}
+        <div
+          className="grid cursor-pointer gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(240px,0.9fr)_minmax(180px,0.45fr)] lg:items-start"
+          onClick={() => void openDetail(sale)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              void openDetail(sale);
+            }
+          }}
+        >
+          <div className="min-w-0 space-y-3">
+            <div className="space-y-1.5">
+              <p className="text-base font-semibold uppercase tracking-tight text-foreground">
                 {sale.event_name}
               </p>
               <p className="text-sm text-muted-foreground">
                 Comprador: <span className="font-medium text-foreground">{sale.customer_name}</span>
               </p>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {createdAtLabel} • {saleAmountLabel}
-                </p>
-                <p className="text-xs font-medium text-foreground">
-                  {createdAtRelativeLabel}
-                </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{createdAtLabel}</span>
+                <span>•</span>
+                <span className="font-medium text-foreground">{saleAmountLabel}</span>
+                <span>•</span>
+                <span>{createdAtRelativeLabel}</span>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-[11px] font-normal">
                 {gateway}
               </Badge>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-[11px] font-normal">
                 {paymentEnvironmentLabel}
               </Badge>
-              {isNewSale && (
-                <Badge className="text-xs">Nova</Badge>
+              {(isNewSale || isRecentSale) && (
+                <Badge variant="outline" className="text-[11px] font-normal">
+                  {freshness === 'novo' ? 'Novo' : 'Recente'}
+                </Badge>
               )}
             </div>
+            <p className={cn('text-[11px]', isCriticalAndFresh ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+              {freshnessPresentation.label}
+            </p>
           </div>
-        </TableCell>
 
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge status={sale.status} />
-              <Badge variant={paymentStatus.variant} className="text-xs">
-                {operational.paymentStatusLabel}
+          <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            {/* Padronização de status: apenas um badge principal aparece na visão resumida.
+                Os detalhes complementares ficam em texto curto e os dados técnicos descem para o accordion.
+                Status técnico e prioridade operacional não são a mesma coisa: o primeiro explica o estado,
+                o segundo só informa urgência de triagem. */}
+            <div className="flex items-center gap-2">
+              <span className={cn('h-2.5 w-2.5 rounded-full', statusTone.dot)} />
+              <Badge variant="outline" className={cn('text-xs font-medium', statusTone.badge)}>
+                {primaryStatusLabel}
               </Badge>
-              <Badge variant={operational.categoryVariant} className={`text-xs ${operational.categoryClassName ?? ''}`}>
-                {operational.categoryLabel}
-              </Badge>
-              {operational.hasGatewayDivergence && (
-                <Badge variant="destructive" className="text-xs">Divergência gateway</Badge>
-              )}
             </div>
-
             <div className="space-y-1">
-              <p className="text-sm font-semibold leading-tight">{operational.operationalLabel}</p>
-              <p className="text-xs text-muted-foreground">
-                Venda: {operational.saleStatusLabel} • Pagamento: {paymentStatus.detail ?? operational.paymentStatusLabel}
-              </p>
+              <p className="text-lg font-semibold leading-none text-foreground">{secondaryStatusLabel}</p>
+              <p className="text-sm text-muted-foreground">{paymentStatus.label}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
             </div>
           </div>
-        </TableCell>
 
-        <TableCell className="py-5 align-top">
-          <div className="space-y-2">
-            <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Ação sugerida:</span> {operational.actionLabel}
-            </p>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p>{operational.timeLabel} • {operational.timeDetail}</p>
-              <p>{operational.timeSourceLabel}</p>
-            </div>
-          </div>
-        </TableCell>
-
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            {/* A antiga coluna "Controle" saiu da visão principal porque misturava leitura operacional com detalhe técnico.
+                A ação agora é objetiva e o restante fica recolhido no accordion abaixo. */}
             <div className="space-y-1">
-              <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
-                {operational.lockLabel}
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prioridade operacional</p>
+              <Badge variant="outline" className={cn('w-fit text-xs font-medium', statusTone.badge)}>
+                {priorityPresentation.label}
               </Badge>
-              {lockStatus.detail && (
-                <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
-              )}
+              <p className="text-sm font-semibold text-foreground">{priorityPresentation.actionLabel}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{priorityPresentation.actionDescription}</p>
             </div>
-
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
-              <span className={`flex items-center gap-1.5 text-sm ${flowStage.color}`}>
-                <FlowIcon className="h-3.5 w-3.5 shrink-0" />
-                <span>{compactFlowLabel}</span>
-              </span>
+            <div className="flex justify-start lg:justify-end" onClick={(event) => event.stopPropagation()}>
+              <ActionsDropdown actions={actions} />
             </div>
           </div>
-        </TableCell>
+        </div>
 
-        <TableCell className="py-5 align-top">
-          <ActionsDropdown actions={actions} />
-        </TableCell>
-      </TableRow>
+        {/* Os dados técnicos ficam em accordion fechado por padrão para preservar leitura em 3 segundos.
+            Assim o operador vê primeiro o essencial e expande somente quando precisar auditar a venda. */}
+        <Accordion type="single" collapsible>
+          <AccordionItem value={`sale-${sale.id}`} className="border-t border-border/70 px-4">
+            <AccordionTrigger className="py-3 text-sm font-medium text-muted-foreground hover:no-underline">
+              <span>Ver detalhes técnicos e trilha operacional</span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-4">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
+                <div className="space-y-2 rounded-lg border bg-background/80 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Diagnóstico completo</p>
+                  <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>{operational.timeLabel} • {operational.timeDetail}</p>
+                    <p>{operational.timeSourceLabel}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border bg-background/80 p-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
+                    <span className={`flex items-center gap-1.5 text-sm font-medium ${flowStage.color}`}>
+                      <FlowIcon className="h-4 w-4 shrink-0" />
+                      <span>{flowStage.label}</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pagamento</p>
+                    <p className="text-sm text-foreground">{operational.paymentStatusLabel}</p>
+                    {paymentStatus.detail && (
+                      <p className="text-xs leading-relaxed text-muted-foreground">{paymentStatus.detail}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status da venda</p>
+                    <div className="pt-0.5"><StatusBadge status={sale.status} /></div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border bg-background/80 p-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bloqueio</p>
+                    <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
+                      {operational.lockLabel}
+                    </Badge>
+                    {lockStatus.detail && (
+                      <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Logs relevantes</p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Gateway: {gateway} • Ambiente: {paymentEnvironmentLabel}
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Tickets gerados: {sale.ticket_count ?? 0} • Assentos bloqueados: {sale.active_lock_count ?? 0}
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Contexto temporal: {freshnessPresentation.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
     );
   };
+
+  const renderSalesGroup = (entries: typeof visibleSalesWithOperationalView, title?: string) => (
+    <div className="space-y-3">
+      {title && (
+        <div
+          className={cn(
+            'flex items-center justify-between rounded-lg border px-4 py-3',
+            title === 'Críticos' ? 'border-destructive/30 bg-destructive/5' : 'bg-muted/30'
+          )}
+        >
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <Badge variant="outline" className="text-xs">{entries.length} item(ns)</Badge>
+        </div>
+      )}
+      {entries.map((entry) => renderSaleRow(entry))}
+    </div>
+  );
 
   return (
     <AdminLayout>
@@ -1695,7 +2031,7 @@ export default function SalesDiagnostic() {
 
         <Card className="mb-4">
           <CardContent className="space-y-4 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {activeCompany?.name && (
                   <Badge variant="outline" className="text-xs">
@@ -1721,7 +2057,7 @@ export default function SalesDiagnostic() {
                 </Badge>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <div className="flex items-center gap-2 rounded-md border px-3 py-2">
                   <Switch
                     checked={autoRefreshEnabled}
@@ -1742,22 +2078,44 @@ export default function SalesDiagnostic() {
                   />
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium text-foreground">Agrupar por status</p>
-                    <p className="text-xs text-muted-foreground">Mantém a ordem por data dentro do grupo</p>
+                    <p className="text-xs text-muted-foreground">Críticos, atenção e OK</p>
                   </div>
                 </div>
 
-                <Button
-                  variant={showOnlyProblems ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setShowOnlyProblems((current) => !current)}
-                >
-                  {showOnlyProblems ? 'Mostrar todos' : 'Ver apenas problemas'}
-                </Button>
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Switch
+                    checked={showOnlyProblems}
+                    onCheckedChange={setShowOnlyProblems}
+                    aria-label="Ver apenas problemas"
+                  />
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Ver apenas problemas</p>
+                    <p className="text-xs text-muted-foreground">Oculta vendas estáveis e mostra apenas itens que exigem acompanhamento.</p>
+                  </div>
+                </div>
               </div>
             </div>
 
+            <div className="rounded-lg border bg-muted/20 p-3">
+              {/* O resumo executivo transforma contagens já filtradas em frases humanas curtas.
+                  Isso acelera a triagem sem criar inferência obscura ou lógica escondida fora da tela. */}
+              <div className="space-y-1 text-sm text-foreground">
+                {executiveSummaryMessages.map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-background p-3">
+              <div className="space-y-1 text-sm text-foreground">
+                {movementSummaryMessages.map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{lastRelevantChangeDisplayLabel}</p>
+            </div>
+
             <div className="flex flex-col gap-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
-              <p>{systemFeedbackMessage}</p>
               <p>
                 {isCompanyScopeRefreshing
                   ? 'Atualizando o diagnóstico da empresa ativa...'
@@ -1767,8 +2125,9 @@ export default function SalesDiagnostic() {
               </p>
             </div>
 
-            <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-              Espaço reservado para alertas em tempo real e integração futura com stream de webhook/log.
+            <div className={cn('rounded-md border px-3 py-2 text-sm', operationalBanner.tone)}>
+              <p className="font-medium">{operationalBanner.title}</p>
+              <p className="mt-1 text-xs opacity-90">Estrutura preparada para alertas futuros sem depender de backend novo nesta etapa.</p>
             </div>
           </CardContent>
         </Card>
@@ -1790,12 +2149,33 @@ export default function SalesDiagnostic() {
           />
         </div>
 
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[
+            { value: 'todos', label: 'Todos' },
+            { value: 'criticos', label: 'Críticos' },
+            { value: 'novos', label: 'Novos' },
+            { value: 'acompanhamento', label: 'Em acompanhamento' },
+            { value: 'ok', label: 'OK' },
+          ].map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={quickFocusFilter === option.value ? 'default' : 'outline'}
+              onClick={() => setQuickFocusFilter(option.value as QuickFocusFilter)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+
         {!loading && visibleSalesWithOperationalView.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Os KPIs usam nomes humanos porque a camada de prioridade é a principal linguagem de triagem do operador. */}
             <StatsCard label="Total" value={visibleOperationalSummary.total} icon={Activity} />
-            <StatsCard label="Pendentes saudáveis" value={visibleOperationalSummary.saudavel} icon={CheckCircle} variant="success" />
-            <StatsCard label="Pendentes atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
-            <StatsCard label="Com divergência" value={visibleOperationalSummary.problema} icon={XCircle} variant="destructive" />
+            <StatsCard label="Críticas" value={visibleOperationalSummary.critico} icon={XCircle} variant="destructive" />
+            <StatsCard label="Atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
+            <StatsCard label="OK" value={visibleOperationalSummary.ok} icon={CheckCircle} variant="success" />
             <StatsCard label="Pagas" value={visibleOperationalSummary.pago} icon={Ticket} variant="success" />
             <StatsCard label="Canceladas" value={visibleOperationalSummary.cancelado} icon={Clock} />
           </div>
@@ -1818,44 +2198,11 @@ export default function SalesDiagnostic() {
             description={`Nenhuma venda encontrada para ${activeCompany?.name ?? 'a empresa ativa'} com os filtros atuais.`}
           />
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[29%] min-w-[280px]">Venda</TableHead>
-                    <TableHead className="w-[24%] min-w-[240px]">Status</TableHead>
-                    <TableHead className="w-[25%] min-w-[240px]">Diagnóstico</TableHead>
-                    <TableHead className="w-[16%] min-w-[170px]">Controle</TableHead>
-                    <TableHead className="w-[76px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                {groupByOperationalStatus ? (
-                  groupedSalesWithOperationalView.map((group) => (
-                    <TableBody key={group.category}>
-                      <TableRow className="bg-muted/40">
-                        <TableCell colSpan={5} className="py-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-foreground">
-                              {operationalGroupTitles[group.category]}
-                            </span>
-                            <Badge variant="outline" className="text-xs">
-                              {group.entries.length} item(ns)
-                            </Badge>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {group.entries.map((entry) => renderSaleRow(entry))}
-                    </TableBody>
-                  ))
-                ) : (
-                  <TableBody>
-                    {visibleSalesWithOperationalView.map((entry) => renderSaleRow(entry))}
-                  </TableBody>
-                )}
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            {groupByOperationalStatus
+              ? groupedSalesWithOperationalView.map((group) => renderSalesGroup(group.entries, operationalGroupTitles[group.priority]))
+              : renderSalesGroup(visibleSalesWithOperationalView)}
+          </div>
         )}
 
         {/* Detail Modal */}
