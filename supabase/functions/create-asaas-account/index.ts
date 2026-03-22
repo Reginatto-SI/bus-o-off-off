@@ -186,6 +186,179 @@ function buildWalletDiagnosticMessage(params: {
   return `A conta Asaas respondeu no ambiente ${environmentLabel}, mas não foi possível identificar um walletId utilizável. Verifique se a API Key pertence a esse mesmo ambiente ou se a conta retornou um formato inesperado.${walletLookupSuffix}`;
 }
 
+const ASAAS_PAYMENT_WEBHOOK_EVENTS = [
+  "PAYMENT_CREATED",
+  "PAYMENT_UPDATED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_RECEIVED",
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+  "PAYMENT_RESTORED",
+  "PAYMENT_REFUNDED",
+] as const;
+
+type AsaasWebhookRecord = {
+  id?: string;
+  name?: string;
+  url?: string;
+  enabled?: boolean;
+  interrupted?: boolean;
+  sendType?: string;
+  events?: unknown;
+  authToken?: string | null;
+};
+
+function buildAsaasWebhookUrl() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!supabaseUrl) return null;
+  return `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/asaas-webhook`;
+}
+
+function buildAsaasWebhookPayload(params: {
+  companyName: string;
+  accountEmail: string | null;
+  webhookUrl: string;
+  webhookToken: string;
+}) {
+  return {
+    name: `Smartbus BR - ${params.companyName}`.slice(0, 100),
+    url: params.webhookUrl,
+    email: params.accountEmail,
+    enabled: true,
+    interrupted: false,
+    apiVersion: 3,
+    sendType: "SEQUENTIALLY",
+    authToken: params.webhookToken,
+    events: [...ASAAS_PAYMENT_WEBHOOK_EVENTS],
+  };
+}
+
+function normalizeWebhookEvents(events: unknown): string[] {
+  return Array.isArray(events)
+    ? events.filter((event): event is string => typeof event === "string").sort()
+    : [];
+}
+
+async function ensureAsaasWebhook(params: {
+  companyId: string;
+  companyName: string;
+  accountEmail: string | null;
+  environment: PaymentEnvironment;
+  asaasBaseUrl: string;
+  accessToken: string;
+}) {
+  const webhookUrl = buildAsaasWebhookUrl();
+  const webhookSecretName = params.environment === "production"
+    ? "ASAAS_WEBHOOK_TOKEN"
+    : "ASAAS_WEBHOOK_TOKEN_SANDBOX";
+  const webhookToken = Deno.env.get(webhookSecretName)?.trim() ?? null;
+
+  if (!webhookUrl || !webhookToken) {
+    console.warn("[create-asaas-account] webhook auto-config skipped", {
+      company_id: params.companyId,
+      environment: params.environment,
+      webhook_url_available: Boolean(webhookUrl),
+      webhook_token_secret_name: webhookSecretName,
+      webhook_token_available: Boolean(webhookToken),
+    });
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_webhook_runtime_configuration",
+    } as const;
+  }
+
+  const payload = buildAsaasWebhookPayload({
+    companyName: params.companyName,
+    accountEmail: params.accountEmail,
+    webhookUrl,
+    webhookToken,
+  });
+
+  const listRes = await fetch(`${params.asaasBaseUrl}/webhooks`, {
+    headers: { "access_token": params.accessToken },
+  });
+
+  if (!listRes.ok) {
+    const responsePreview = await listRes.text();
+    throw new Error(`webhook_list_failed:${listRes.status}:${responsePreview.slice(0, 300)}`);
+  }
+
+  const listData = await listRes.json();
+  const webhooks = Array.isArray(listData?.data)
+    ? listData.data
+    : Array.isArray(listData)
+      ? listData
+      : [];
+
+  const existingWebhook = webhooks.find((item: AsaasWebhookRecord) =>
+    item?.url === webhookUrl || item?.name === payload.name,
+  ) as AsaasWebhookRecord | undefined;
+
+  const hasExpectedEvents = JSON.stringify(normalizeWebhookEvents(existingWebhook?.events)) === JSON.stringify([...ASAAS_PAYMENT_WEBHOOK_EVENTS].sort());
+  const needsUpdate = Boolean(existingWebhook) && (
+    existingWebhook?.url !== webhookUrl ||
+    existingWebhook?.enabled !== true ||
+    existingWebhook?.interrupted !== false ||
+    existingWebhook?.sendType !== payload.sendType ||
+    !hasExpectedEvents
+  );
+
+  if (existingWebhook?.id && needsUpdate) {
+    const updateRes = await fetch(`${params.asaasBaseUrl}/webhooks/${existingWebhook.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "access_token": params.accessToken,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!updateRes.ok) {
+      const responsePreview = await updateRes.text();
+      throw new Error(`webhook_update_failed:${updateRes.status}:${responsePreview.slice(0, 300)}`);
+    }
+
+    return {
+      ok: true,
+      action: "updated",
+      webhookId: existingWebhook.id,
+      webhookUrl,
+    } as const;
+  }
+
+  if (existingWebhook?.id) {
+    return {
+      ok: true,
+      action: "unchanged",
+      webhookId: existingWebhook.id,
+      webhookUrl,
+    } as const;
+  }
+
+  const createRes = await fetch(`${params.asaasBaseUrl}/webhooks`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "access_token": params.accessToken,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!createRes.ok) {
+    const responsePreview = await createRes.text();
+    throw new Error(`webhook_create_failed:${createRes.status}:${responsePreview.slice(0, 300)}`);
+  }
+
+  const createdWebhook = await createRes.json();
+  return {
+    ok: true,
+    action: "created",
+    webhookId: typeof createdWebhook?.id === "string" ? createdWebhook.id : null,
+    webhookUrl,
+  } as const;
+}
+
 
 function resolveTargetEnvironment(params: { requestedEnv?: string | null; hostEnv: PaymentEnvironment }): PaymentEnvironment {
   if (params.requestedEnv === "production" || params.requestedEnv === "sandbox") {
@@ -840,6 +1013,24 @@ serve(async (req) => {
             )
             .eq("id", company_id);
 
+          try {
+            const webhookResult = await ensureAsaasWebhook({
+              companyId: company_id,
+              companyName: String(company.trade_name || company.legal_name || company.name || "Empresa"),
+              accountEmail: accountData.email || company.email || null,
+              environment: paymentEnv,
+              asaasBaseUrl,
+              accessToken: api_key,
+            });
+            console.log("[create-asaas-account] link_existing partial webhook auto-config result", webhookResult);
+          } catch (webhookError) {
+            console.warn("[create-asaas-account] link_existing partial webhook auto-config failed", {
+              company_id,
+              environment: paymentEnv,
+              message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+            });
+          }
+
           return new Response(
             JSON.stringify({
               success: true,
@@ -872,6 +1063,24 @@ serve(async (req) => {
             }),
           )
           .eq("id", company_id);
+
+        try {
+          const webhookResult = await ensureAsaasWebhook({
+            companyId: company_id,
+            companyName: String(company.trade_name || company.legal_name || company.name || "Empresa"),
+            accountEmail: accountData.email || company.email || null,
+            environment: paymentEnv,
+            asaasBaseUrl,
+            accessToken: api_key,
+          });
+          console.log("[create-asaas-account] link_existing webhook auto-config result", webhookResult);
+        } catch (webhookError) {
+          console.warn("[create-asaas-account] link_existing webhook auto-config failed", {
+            company_id,
+            environment: paymentEnv,
+            message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+          });
+        }
 
         console.log("[create-asaas-account] link_existing persisted account identity", {
           company_id,
@@ -1048,6 +1257,31 @@ serve(async (req) => {
           }),
         )
         .eq("id", company_id);
+
+      if (createData.apiKey) {
+        try {
+          const webhookResult = await ensureAsaasWebhook({
+            companyId: company_id,
+            companyName: displayName || "Empresa",
+            accountEmail: company.email || null,
+            environment: paymentEnv,
+            asaasBaseUrl,
+            accessToken: createData.apiKey,
+          });
+          console.log("[create-asaas-account] create_subaccount webhook auto-config result", webhookResult);
+        } catch (webhookError) {
+          console.warn("[create-asaas-account] create_subaccount webhook auto-config failed", {
+            company_id,
+            environment: paymentEnv,
+            message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+          });
+        }
+      } else {
+        console.warn("[create-asaas-account] create_subaccount webhook auto-config skipped: missing subaccount api key", {
+          company_id,
+          environment: paymentEnv,
+        });
+      }
 
       return new Response(
         JSON.stringify({
