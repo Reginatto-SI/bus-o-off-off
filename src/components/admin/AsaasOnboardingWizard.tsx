@@ -241,7 +241,11 @@ export function AsaasOnboardingWizard({
         throw new Error(`${message}${statusSuffix}`);
       }
 
-      toast.success('Conta Asaas vinculada com sucesso!');
+      if (data?.partial) {
+        toast.success('Conta Asaas vinculada parcialmente. WalletId não identificado — configure manualmente se necessário.');
+      } else {
+        toast.success('Conta Asaas vinculada com sucesso!');
+      }
       await onSuccess?.();
       setStep(4);
     } catch (err: unknown) {
