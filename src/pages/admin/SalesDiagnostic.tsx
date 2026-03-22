@@ -236,12 +236,15 @@ interface LockStatusView {
   expiresAt: string | null;
 }
 
+type OperationalPriority = 'critico' | 'atencao' | 'ok';
+
 interface DiagnosticOperationalView {
   category: OperationalCategory;
   categoryLabel: string;
   categoryVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   categoryClassName?: string;
   priority: number;
+  operationalPriority: OperationalPriority;
   saleStatusLabel: string;
   paymentStatusLabel: string;
   operationalLabel: string;
@@ -254,6 +257,61 @@ interface DiagnosticOperationalView {
   lockLabel: string;
   lockVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   hasGatewayDivergence: boolean;
+}
+
+
+function computeOperationalPriority(view: Pick<DiagnosticOperationalView, 'category' | 'hasGatewayDivergence'>): OperationalPriority {
+  // A prioridade operacional é derivada apenas de sinais já calculados pela própria tela.
+  // Não cria regra paralela de negócio: apenas traduz a leitura existente para triagem explícita,
+  // mantendo o diagnóstico previsível, auditável e igual em sandbox/produção.
+  if (view.category === 'divergencia' || view.hasGatewayDivergence) return 'critico';
+  if (view.category === 'atencao') return 'atencao';
+  return 'ok';
+}
+
+function getOperationalPriorityPresentation(priority: OperationalPriority): {
+  label: string;
+  actionLabel: string;
+  actionDescription: string;
+  groupTitle: string;
+  statsLabel: string;
+} {
+  if (priority === 'critico') {
+    return {
+      label: 'Crítico',
+      actionLabel: 'Revisar agora',
+      actionDescription: 'Exige ação imediata.',
+      groupTitle: 'Críticos',
+      statsLabel: 'Críticas',
+    };
+  }
+
+  if (priority === 'atencao') {
+    return {
+      label: 'Atenção',
+      actionLabel: 'Acompanhar',
+      actionDescription: 'Exige acompanhamento operacional.',
+      groupTitle: 'Atenção',
+      statsLabel: 'Atenção',
+    };
+  }
+
+  return {
+    label: 'OK',
+    actionLabel: 'Sem ação',
+    actionDescription: 'Sem necessidade de intervenção.',
+    groupTitle: 'OK',
+    statsLabel: 'OK',
+  };
+}
+
+function getOperationalHeadlineLabel(view: DiagnosticOperationalView): string {
+  if (view.operationalPriority === 'critico') return 'Venda com divergência';
+  if (view.operationalPriority === 'atencao') return 'Venda em acompanhamento';
+
+  if (view.category === 'cancelado') return 'Venda cancelada corretamente';
+  if (view.category === 'pago') return 'Pagamento confirmado com sucesso';
+  return 'Fluxo estável';
 }
 
 function computeGateway(sale: DiagnosticSale): string {
@@ -902,7 +960,17 @@ export default function SalesDiagnostic() {
 
   const salesWithOperationalView = useMemo(() => {
     return sales
-      .map((sale) => ({ sale, operational: computeOperationalView(sale) }))
+      .map((sale) => {
+        const operational = computeOperationalView(sale);
+
+        return {
+          sale,
+          operational: {
+            ...operational,
+            operationalPriority: computeOperationalPriority(operational),
+          },
+        };
+      })
       .sort((a, b) => {
         // Correção operacional: a ordenação padrão precisa ser previsível e sempre começar
         // pela venda mais recente. A prioridade passa a ser apenas critério secundário.
@@ -918,39 +986,37 @@ export default function SalesDiagnostic() {
   const visibleSalesWithOperationalView = useMemo(() => {
     if (!showOnlyProblems) return salesWithOperationalView;
 
-    return salesWithOperationalView.filter((entry) => (
-      entry.operational.category === 'divergencia' || entry.operational.category === 'atencao'
-    ));
+    return salesWithOperationalView.filter((entry) => entry.operational.operationalPriority !== 'ok');
   }, [salesWithOperationalView, showOnlyProblems]);
 
   const visibleOperationalSummary = useMemo(() => {
     return visibleSalesWithOperationalView.reduce((acc, entry) => {
       acc.total += 1;
-      if (entry.operational.category === 'saudavel') acc.saudavel += 1;
-      if (entry.operational.category === 'atencao') acc.atencao += 1;
-      if (entry.operational.category === 'divergencia') acc.problema += 1;
+      if (entry.operational.operationalPriority === 'critico') acc.critico += 1;
+      if (entry.operational.operationalPriority === 'atencao') acc.atencao += 1;
+      if (entry.operational.operationalPriority === 'ok') acc.ok += 1;
       if (entry.operational.category === 'pago') acc.pago += 1;
       if (entry.operational.category === 'cancelado') acc.cancelado += 1;
       return acc;
-    }, { total: 0, saudavel: 0, atencao: 0, problema: 0, pago: 0, cancelado: 0 });
+    }, { total: 0, critico: 0, atencao: 0, ok: 0, pago: 0, cancelado: 0 });
   }, [visibleSalesWithOperationalView]);
 
   const groupedSalesWithOperationalView = useMemo(() => {
-    const groupedEntries = new Map<OperationalCategory, typeof visibleSalesWithOperationalView>();
-    const orderedCategories: OperationalCategory[] = ['divergencia', 'atencao', 'saudavel', 'pago', 'cancelado'];
+    const orderedPriorities: OperationalPriority[] = ['critico', 'atencao', 'ok'];
+    const groupedEntries = new Map<OperationalPriority, typeof visibleSalesWithOperationalView>();
 
-    orderedCategories.forEach((category) => {
-      groupedEntries.set(category, []);
+    orderedPriorities.forEach((priority) => {
+      groupedEntries.set(priority, []);
     });
 
     visibleSalesWithOperationalView.forEach((entry) => {
-      groupedEntries.get(entry.operational.category)?.push(entry);
+      groupedEntries.get(entry.operational.operationalPriority)?.push(entry);
     });
 
-    return orderedCategories
-      .map((category) => ({
-        category,
-        entries: groupedEntries.get(category) ?? [],
+    return orderedPriorities
+      .map((priority) => ({
+        priority,
+        entries: groupedEntries.get(priority) ?? [],
       }))
       .filter((group) => group.entries.length > 0);
   }, [visibleSalesWithOperationalView]);
@@ -960,20 +1026,34 @@ export default function SalesDiagnostic() {
     return format(parseISO(lastUpdatedAt), "HH:mm:ss", { locale: ptBR });
   }, [lastUpdatedAt]);
 
-  const systemFeedbackMessage = useMemo(() => {
-    if (visibleOperationalSummary.problema > 0) {
-      return `${visibleOperationalSummary.problema} venda(s) com divergência nas últimas atualizações.`;
+  const executiveSummaryMessages = useMemo(() => {
+    if (visibleOperationalSummary.total === 0) {
+      return ['Aguardando vendas dentro do escopo operacional atual.'];
+    }
+
+    // O resumo executivo usa apenas contagens visíveis no recorte atual.
+    // Isso melhora a triagem sem esconder a origem dos números e mantém a leitura determinística.
+    const messages: string[] = [];
+
+    if (visibleOperationalSummary.critico > 0) {
+      messages.push(`${visibleOperationalSummary.critico} venda(s) crítica(s) exigem revisão imediata.`);
+    } else {
+      messages.push('Nenhuma venda crítica encontrada neste recorte.');
     }
 
     if (visibleOperationalSummary.atencao > 0) {
-      return `${visibleOperationalSummary.atencao} venda(s) em atenção no monitoramento atual.`;
+      messages.push(`${visibleOperationalSummary.atencao} venda(s) estão em acompanhamento.`);
     }
 
-    if (visibleOperationalSummary.total > 0) {
-      return 'Nenhum problema encontrado nas últimas vendas carregadas.';
+    if (visibleOperationalSummary.ok > 0) {
+      messages.push(
+        visibleOperationalSummary.ok === visibleOperationalSummary.total
+          ? 'Todas as vendas visíveis estão estáveis.'
+          : `${visibleOperationalSummary.ok} venda(s) estão sem necessidade de ação.`
+      );
     }
 
-    return 'Aguardando vendas dentro do escopo operacional atual.';
+    return messages;
   }, [visibleOperationalSummary]);
 
   const fetchSales = useCallback(async () => {
@@ -1512,43 +1592,38 @@ export default function SalesDiagnostic() {
     </>
   );
 
-  const operationalGroupTitles: Record<OperationalCategory, string> = {
-    divergencia: 'Problemas',
-    atencao: 'Pendentes',
-    saudavel: 'OK',
-    pago: 'OK',
-    cancelado: 'OK',
+  const operationalGroupTitles: Record<OperationalPriority, string> = {
+    critico: 'Críticos',
+    atencao: 'Atenção',
+    ok: 'OK',
   };
 
   const getStatusToneClasses = (operational: DiagnosticOperationalView) => {
-    if (operational.category === 'divergencia') {
+    const priorityPresentation = getOperationalPriorityPresentation(operational.operationalPriority);
+
+    if (operational.operationalPriority === 'critico') {
       return {
-        container: 'border-destructive/30 bg-destructive/5',
+        container: 'border-destructive bg-destructive/10 shadow-[inset_4px_0_0_0_theme(colors.destructive.DEFAULT)]',
         badge: 'border-destructive/30 bg-destructive/10 text-destructive',
         dot: 'bg-destructive',
+        priorityLabel: priorityPresentation.label,
       };
     }
 
-    if (operational.category === 'atencao') {
+    if (operational.operationalPriority === 'atencao') {
       return {
         container: 'border-amber-300 bg-amber-50/70',
         badge: 'border-amber-300 bg-amber-100 text-amber-800',
         dot: 'bg-amber-500',
-      };
-    }
-
-    if (operational.category === 'pago' || operational.category === 'saudavel') {
-      return {
-        container: 'border-emerald-200 bg-emerald-50/60',
-        badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
-        dot: 'bg-emerald-500',
+        priorityLabel: priorityPresentation.label,
       };
     }
 
     return {
-      container: 'border-zinc-200 bg-zinc-50/80',
-      badge: 'border-zinc-200 bg-zinc-100 text-zinc-700',
-      dot: 'bg-zinc-400',
+      container: 'border-emerald-200 bg-emerald-50/60',
+      badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+      dot: 'bg-emerald-500',
+      priorityLabel: priorityPresentation.label,
     };
   };
 
@@ -1566,13 +1641,9 @@ export default function SalesDiagnostic() {
     const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
     const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
     const statusTone = getStatusToneClasses(operational);
-    const primaryStatusLabel = operational.hasGatewayDivergence ? 'Divergência' : operational.categoryLabel;
+    const priorityPresentation = getOperationalPriorityPresentation(operational.operationalPriority);
+    const primaryStatusLabel = operational.hasGatewayDivergence ? 'Venda com divergência' : getOperationalHeadlineLabel(operational);
     const secondaryStatusLabel = operational.operationalLabel;
-    const actionSummaryLabel = (() => {
-      if (operational.category === 'divergencia') return 'Revisar';
-      if (operational.category === 'atencao') return 'Acompanhar';
-      return 'Sem ação';
-    })();
 
     const actions: ActionItem[] = [
       {
@@ -1615,7 +1686,18 @@ export default function SalesDiagnostic() {
       >
         {/* Nova divisão em 3 blocos: informação principal, status e ação.
             Isso reduz ruído visual e replica a leitura operacional rápida adotada nas telas piloto do admin. */}
-        <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(240px,0.9fr)_minmax(180px,0.45fr)] lg:items-start">
+        <div
+          className="grid cursor-pointer gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(240px,0.9fr)_minmax(180px,0.45fr)] lg:items-start"
+          onClick={() => void openDetail(sale)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              void openDetail(sale);
+            }
+          }}
+        >
           <div className="min-w-0 space-y-3">
             <div className="space-y-1.5">
               <p className="text-base font-semibold uppercase tracking-tight text-foreground">
@@ -1650,7 +1732,9 @@ export default function SalesDiagnostic() {
 
           <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
             {/* Padronização de status: apenas um badge principal aparece na visão resumida.
-                Os detalhes complementares ficam em texto curto e os dados técnicos descem para o accordion. */}
+                Os detalhes complementares ficam em texto curto e os dados técnicos descem para o accordion.
+                Status técnico e prioridade operacional não são a mesma coisa: o primeiro explica o estado,
+                o segundo só informa urgência de triagem. */}
             <div className="flex items-center gap-2">
               <span className={cn('h-2.5 w-2.5 rounded-full', statusTone.dot)} />
               <Badge variant="outline" className={cn('text-xs font-medium', statusTone.badge)}>
@@ -1668,11 +1752,14 @@ export default function SalesDiagnostic() {
             {/* A antiga coluna "Controle" saiu da visão principal porque misturava leitura operacional com detalhe técnico.
                 A ação agora é objetiva e o restante fica recolhido no accordion abaixo. */}
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ação sugerida</p>
-              <p className="text-sm font-semibold text-foreground">{actionSummaryLabel}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">{operational.actionLabel}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prioridade operacional</p>
+              <Badge variant="outline" className={cn('w-fit text-xs font-medium', statusTone.badge)}>
+                {priorityPresentation.label}
+              </Badge>
+              <p className="text-sm font-semibold text-foreground">{priorityPresentation.actionLabel}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{priorityPresentation.actionDescription}</p>
             </div>
-            <div className="flex justify-start lg:justify-end">
+            <div className="flex justify-start lg:justify-end" onClick={(event) => event.stopPropagation()}>
               <ActionsDropdown actions={actions} />
             </div>
           </div>
@@ -1749,7 +1836,12 @@ export default function SalesDiagnostic() {
   const renderSalesGroup = (entries: typeof visibleSalesWithOperationalView, title?: string) => (
     <div className="space-y-3">
       {title && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+        <div
+          className={cn(
+            'flex items-center justify-between rounded-lg border px-4 py-3',
+            title === 'Críticos' ? 'border-destructive/30 bg-destructive/5' : 'bg-muted/30'
+          )}
+        >
           <span className="text-sm font-semibold text-foreground">{title}</span>
           <Badge variant="outline" className="text-xs">{entries.length} item(ns)</Badge>
         </div>
@@ -1815,7 +1907,7 @@ export default function SalesDiagnostic() {
                   />
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium text-foreground">Agrupar por status</p>
-                    <p className="text-xs text-muted-foreground">Problemas, pendentes e OK</p>
+                    <p className="text-xs text-muted-foreground">Críticos, atenção e OK</p>
                   </div>
                 </div>
 
@@ -1827,14 +1919,23 @@ export default function SalesDiagnostic() {
                   />
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium text-foreground">Ver apenas problemas</p>
-                    <p className="text-xs text-muted-foreground">Oculta vendas OK para foco operacional</p>
+                    <p className="text-xs text-muted-foreground">Oculta vendas estáveis e mostra apenas itens que exigem acompanhamento.</p>
                   </div>
                 </div>
               </div>
             </div>
 
+            <div className="rounded-lg border bg-muted/20 p-3">
+              {/* O resumo executivo transforma contagens já filtradas em frases humanas curtas.
+                  Isso acelera a triagem sem criar inferência obscura ou lógica escondida fora da tela. */}
+              <div className="space-y-1 text-sm text-foreground">
+                {executiveSummaryMessages.map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
-              <p>{systemFeedbackMessage}</p>
               <p>
                 {isCompanyScopeRefreshing
                   ? 'Atualizando o diagnóstico da empresa ativa...'
@@ -1869,10 +1970,11 @@ export default function SalesDiagnostic() {
 
         {!loading && visibleSalesWithOperationalView.length > 0 && (
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Os KPIs usam nomes humanos porque a camada de prioridade é a principal linguagem de triagem do operador. */}
             <StatsCard label="Total" value={visibleOperationalSummary.total} icon={Activity} />
-            <StatsCard label="Pendentes saudáveis" value={visibleOperationalSummary.saudavel} icon={CheckCircle} variant="success" />
-            <StatsCard label="Pendentes atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
-            <StatsCard label="Com divergência" value={visibleOperationalSummary.problema} icon={XCircle} variant="destructive" />
+            <StatsCard label="Críticas" value={visibleOperationalSummary.critico} icon={XCircle} variant="destructive" />
+            <StatsCard label="Atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
+            <StatsCard label="OK" value={visibleOperationalSummary.ok} icon={CheckCircle} variant="success" />
             <StatsCard label="Pagas" value={visibleOperationalSummary.pago} icon={Ticket} variant="success" />
             <StatsCard label="Canceladas" value={visibleOperationalSummary.cancelado} icon={Clock} />
           </div>
@@ -1897,7 +1999,7 @@ export default function SalesDiagnostic() {
         ) : (
           <div className="space-y-4">
             {groupByOperationalStatus
-              ? groupedSalesWithOperationalView.map((group) => renderSalesGroup(group.entries, operationalGroupTitles[group.category]))
+              ? groupedSalesWithOperationalView.map((group) => renderSalesGroup(group.entries, operationalGroupTitles[group.priority]))
               : renderSalesGroup(visibleSalesWithOperationalView)}
           </div>
         )}
