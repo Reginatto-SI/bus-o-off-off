@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 type AsaasWizardStep = 1 | 2 | 3 | 4;
 type AsaasWizardMode = 'create' | 'link';
-type AsaasEnvironmentSelection = 'auto' | 'sandbox' | 'production';
+type AsaasEnvironmentSelection = 'sandbox' | 'production';
 
 export interface AsaasOnboardingCompanyData {
   companyId: string;
