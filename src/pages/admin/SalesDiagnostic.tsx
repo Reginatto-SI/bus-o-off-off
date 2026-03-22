@@ -105,6 +105,9 @@ interface SaleIntegrationLog {
   external_reference: string | null;
   http_status: number | null;
   processing_status: 'received' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized' | 'warning' | 'rejected' | 'duplicate';
+  result_category?: string | null;
+  incident_code?: string | null;
+  warning_code?: string | null;
   message: string;
   payload_json: Record<string, unknown> | null;
   response_json: Record<string, unknown> | null;
@@ -827,6 +830,7 @@ interface TimelineEntry {
 }
 
 type PaymentConfirmationSource = 'webhook' | 'on_demand' | 'none';
+type WebhookDiagnosticState = 'webhook_detected' | 'fallback_without_webhook' | 'not_identified';
 
 function detectPaymentConfirmationSource(
   sale: DiagnosticSale,
@@ -2405,6 +2409,18 @@ export default function SalesDiagnostic() {
                       const webhookLog = detailIntegrationLogs.find((log) => log.direction === 'incoming_webhook' && log.provider === 'asaas');
                       const webhookReceived = !!webhookLog;
                       const confirmationSource = detectPaymentConfirmationSource(detailSale, detailLogs, detailIntegrationLogs);
+                      const fallbackWithoutWebhookLog = detailIntegrationLogs.find((log) => (
+                        log.direction === 'manual_sync'
+                        && log.provider === 'asaas'
+                        && log.incident_code === 'webhook_not_observed_before_verify_confirmation'
+                      ));
+                      // Comentário de suporte: a aba agora separa ausência total de webhook
+                      // do caso em que o fallback confirmou o pagamento sem evidência persistida.
+                      const webhookDiagnosticState: WebhookDiagnosticState = webhookReceived
+                        ? 'webhook_detected'
+                        : (confirmationSource === 'on_demand' || fallbackWithoutWebhookLog)
+                          ? 'fallback_without_webhook'
+                          : 'not_identified';
                       const statusLabelMap: Record<SaleIntegrationLog['processing_status'], string> = {
                         received: 'Recebido',
                         ignored: 'Ignorado',
@@ -2425,9 +2441,9 @@ export default function SalesDiagnostic() {
                           </h3>
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
-                              <span className="text-muted-foreground">Webhook recebido</span>
+                              <span className="text-muted-foreground">Webhook persistido</span>
                               <p className={webhookReceived ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
-                                {webhookReceived ? 'Sim' : 'Não detectado'}
+                                {webhookReceived ? 'Encontrado' : 'Não encontrado'}
                               </p>
                             </div>
                             <div>
@@ -2439,9 +2455,30 @@ export default function SalesDiagnostic() {
                               </p>
                             </div>
                             <div>
+                              <span className="text-muted-foreground">Leitura diagnóstica</span>
+                              <p className={`font-medium ${
+                                webhookDiagnosticState === 'webhook_detected'
+                                  ? 'text-emerald-600'
+                                  : webhookDiagnosticState === 'fallback_without_webhook'
+                                    ? 'text-amber-600'
+                                    : 'text-muted-foreground'
+                              }`}>
+                                {webhookDiagnosticState === 'webhook_detected' && 'Webhook persistido e correlacionado'}
+                                {webhookDiagnosticState === 'fallback_without_webhook' && 'Fallback confirmou sem evidência persistida de webhook'}
+                                {webhookDiagnosticState === 'not_identified' && 'Sem webhook persistido e sem confirmação on-demand identificada'}
+                              </p>
+                            </div>
+                            <div>
                               <span className="text-muted-foreground">Ambiente persistido da venda</span>
                               <p className="font-medium">{formatPaymentEnvironmentLabel(detailSale.payment_environment)}</p>
                             </div>
+                            {fallbackWithoutWebhookLog && (
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">Incidente de observabilidade</span>
+                                <p className="font-mono text-xs break-all">{fallbackWithoutWebhookLog.incident_code}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{fallbackWithoutWebhookLog.message}</p>
+                              </div>
+                            )}
                             {webhookLog && (
                               <>
                                 <div>
@@ -2483,12 +2520,16 @@ export default function SalesDiagnostic() {
                               </>
                             )}
                           </div>
-                          {!webhookReceived && (
-                            <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-                              {confirmationSource === 'on_demand' ? (
-                                <p>Nenhum log de webhook encontrado, mas o pagamento foi confirmado por verificação on-demand.</p>
+                          {webhookDiagnosticState !== 'webhook_detected' && (
+                            <div className={`rounded-md border p-3 text-xs ${
+                              webhookDiagnosticState === 'fallback_without_webhook'
+                                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                : 'border-border bg-muted/50 text-muted-foreground'
+                            }`}>
+                              {webhookDiagnosticState === 'fallback_without_webhook' ? (
+                                <p>Webhook persistido não encontrado até o momento da confirmação. A venda foi confirmada por verificação on-demand e o sistema registrou a anomalia de observabilidade para suporte.</p>
                               ) : (
-                                <p>Nenhum log técnico de webhook encontrado para esta venda.</p>
+                                <p>Nenhum log técnico de webhook ou confirmação on-demand foi identificado para esta venda.</p>
                               )}
                             </div>
                           )}

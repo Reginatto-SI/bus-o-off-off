@@ -130,6 +130,52 @@ serve(async (req) => {
       });
     };
 
+    const ensureMissingWebhookObservationLog = async () => {
+      // Comentário de suporte: quando o fallback confirma sem `incoming_webhook`,
+      // gravamos um incidente único para explicitar a lacuna de observabilidade da venda.
+      const webhookQuery = supabaseAdmin
+          .from("sale_integration_logs")
+          .select("id", { head: true, count: "exact" })
+          .eq("sale_id", sale.id)
+          .eq("company_id", sale.company_id)
+          .eq("provider", "asaas")
+          .eq("direction", "incoming_webhook");
+      const existingIncidentQuery = supabaseAdmin
+          .from("sale_integration_logs")
+          .select("id", { head: true, count: "exact" })
+          .eq("sale_id", sale.id)
+          .eq("company_id", sale.company_id)
+          .eq("provider", "asaas")
+          .eq("direction", "manual_sync")
+          .eq("incident_code", "webhook_not_observed_before_verify_confirmation");
+
+      if (sale.payment_environment) {
+        webhookQuery.eq("payment_environment", sale.payment_environment);
+        existingIncidentQuery.eq("payment_environment", sale.payment_environment);
+      }
+
+      const [webhookRes, existingIncidentRes] = await Promise.all([
+        webhookQuery,
+        existingIncidentQuery,
+      ]);
+
+      if ((webhookRes.count ?? 0) > 0 || (existingIncidentRes.count ?? 0) > 0) {
+        return;
+      }
+
+      await persistVerifyLog({
+        processingStatus: "warning",
+        resultCategory: "warning",
+        incidentCode: "webhook_not_observed_before_verify_confirmation",
+        httpStatus: 200,
+        message: "Pagamento confirmado via verify-payment-status sem webhook persistido correlacionado até o momento da confirmação",
+        responseJson: {
+          paymentStatus: "pago",
+          observability_warning: "webhook_not_observed_before_verify_confirmation",
+        },
+      });
+    };
+
     if (sale.status === "pago") {
       const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
@@ -550,6 +596,8 @@ serve(async (req) => {
         httpStatus: 200,
         responseJson: { paymentStatus: "pago", paymentConfirmedAt: confirmedAt, asaas_status: asaasStatus },
       });
+
+      await ensureMissingWebhookObservationLog();
 
       return jsonResponse({ paymentStatus: "pago", paymentConfirmedAt: confirmedAt }, 200);
     }
