@@ -335,6 +335,44 @@ serve(async (req) => {
       api_key_source: apiKeySecretName,
     });
 
+    // ====== MODE: Disconnect existing integration ======
+    if (mode === "disconnect") {
+      console.log("[create-asaas-account] disconnect started", {
+        company_id,
+        environment: paymentEnv,
+      });
+
+      const { error: disconnectError } = await supabaseAdmin
+        .from("companies")
+        .update(
+          buildCompanyConfigWithEnvironmentUpdate({
+            [envFields.walletId]: null,
+            [envFields.apiKey]: null,
+            [envFields.accountId]: null,
+            [envFields.accountEmail]: null,
+            [envFields.onboardingComplete]: false,
+          }),
+        )
+        .eq("id", company_id);
+
+      if (disconnectError) {
+        console.error("[create-asaas-account] disconnect failed", {
+          company_id,
+          environment: paymentEnv,
+          error: disconnectError,
+        });
+        return new Response(
+          JSON.stringify({ error: "Erro ao desvincular a conta Asaas." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, disconnected: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ====== MODE: Revalidate existing integration ======
     if (mode === "revalidate") {
       console.log("[ASAAS][VERIFY] Starting verification", {
