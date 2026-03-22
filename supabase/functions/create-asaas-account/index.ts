@@ -690,7 +690,11 @@ serve(async (req) => {
         }
 
         if (!walletId) {
-          console.error("[create-asaas-account] walletId missing after all fallbacks", {
+          // Comentário de manutenção:
+          // Sub-contas Asaas nem sempre expõem walletId via API.
+          // Se a autenticação (myAccount) foi bem-sucedida, persistimos a API Key
+          // e marcamos como parcialmente configurado para não bloquear o fluxo.
+          console.warn("[create-asaas-account] walletId missing after all fallbacks — proceeding with partial link", {
             company_id,
             environment: paymentEnv,
             response_keys: Object.keys(accountData || {}),
@@ -698,15 +702,29 @@ serve(async (req) => {
             wallets_lookup_status: walletLookupStatus,
             wallets_lookup_summary: walletLookupSummary,
           });
+
+          await supabaseAdmin
+            .from("companies")
+            .update(
+              buildCompanyConfigWithEnvironmentUpdate({
+                [envFields.walletId]: null,
+                [envFields.apiKey]: api_key,
+                [envFields.accountId]: accountData.id || null,
+                [envFields.accountEmail]: accountData.email || null,
+                [envFields.onboardingComplete]: false,
+              }),
+            )
+            .eq("id", company_id);
+
           return new Response(
             JSON.stringify({
-              error: buildWalletDiagnosticMessage({
-                environment: paymentEnv,
-                walletLookupAttempted: walletLookupStatus !== null,
-                walletLookupStatus,
-              }),
+              success: true,
+              partial: true,
+              wallet_id: null,
+              account_name: accountData.name || accountData.tradingName || null,
+              warning: "API Key validada e salva, mas o walletId não foi identificado. A conta foi vinculada parcialmente.",
             }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
