@@ -580,6 +580,9 @@ serve(async (req) => {
         );
       }
     }
+
+    // ====== MODE: Link existing account via API Key ======
+    if (mode === "link_existing" && api_key) {
       try {
         // Comentário de manutenção:
         // o vínculo por API Key agora é disparado apenas pelo wizard reutilizável no frontend.
