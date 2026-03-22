@@ -33,6 +33,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import {
   Activity,
   Eye,
@@ -50,6 +52,9 @@ import {
   Webhook,
   Code,
   FileJson,
+  Copy,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -58,6 +63,8 @@ import { formatCurrencyBRL } from '@/lib/currency';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 // ── Types ──
 interface DiagnosticFilters {
@@ -831,6 +838,7 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
 
 // ── Component ──
 export default function SalesDiagnostic() {
+  const navigate = useNavigate();
   const { activeCompanyId, activeCompany } = useAuth();
   const {
     environment: runtimePaymentEnvironment,
@@ -842,9 +850,15 @@ export default function SalesDiagnostic() {
   const [events, setEvents] = useState<{ id: string; name: string; date: string }[]>([]);
   const [availableGateways, setAvailableGateways] = useState<string[]>([]);
   const [isCompanyScopeRefreshing, setIsCompanyScopeRefreshing] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
+  const [groupByOperationalStatus, setGroupByOperationalStatus] = useState(false);
+  const [showOnlyProblems, setShowOnlyProblems] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [newSaleIds, setNewSaleIds] = useState<string[]>([]);
   const latestSalesRequestIdRef = useRef(0);
   const latestEventsRequestIdRef = useRef(0);
   const previousCompanyIdRef = useRef<string | null>(null);
+  const previousRenderedSaleIdsRef = useRef<string[]>([]);
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
@@ -910,8 +924,16 @@ export default function SalesDiagnostic() {
       });
   }, [sales]);
 
-  const operationalSummary = useMemo(() => {
-    return salesWithOperationalView.reduce((acc, entry) => {
+  const visibleSalesWithOperationalView = useMemo(() => {
+    if (!showOnlyProblems) return salesWithOperationalView;
+
+    return salesWithOperationalView.filter((entry) => (
+      entry.operational.category === 'divergencia' || entry.operational.category === 'atencao'
+    ));
+  }, [salesWithOperationalView, showOnlyProblems]);
+
+  const visibleOperationalSummary = useMemo(() => {
+    return visibleSalesWithOperationalView.reduce((acc, entry) => {
       acc.total += 1;
       if (entry.operational.category === 'saudavel') acc.saudavel += 1;
       if (entry.operational.category === 'atencao') acc.atencao += 1;
@@ -920,7 +942,48 @@ export default function SalesDiagnostic() {
       if (entry.operational.category === 'cancelado') acc.cancelado += 1;
       return acc;
     }, { total: 0, saudavel: 0, atencao: 0, problema: 0, pago: 0, cancelado: 0 });
-  }, [salesWithOperationalView]);
+  }, [visibleSalesWithOperationalView]);
+
+  const groupedSalesWithOperationalView = useMemo(() => {
+    const groupedEntries = new Map<OperationalCategory, typeof visibleSalesWithOperationalView>();
+    const orderedCategories: OperationalCategory[] = ['divergencia', 'atencao', 'saudavel', 'pago', 'cancelado'];
+
+    orderedCategories.forEach((category) => {
+      groupedEntries.set(category, []);
+    });
+
+    visibleSalesWithOperationalView.forEach((entry) => {
+      groupedEntries.get(entry.operational.category)?.push(entry);
+    });
+
+    return orderedCategories
+      .map((category) => ({
+        category,
+        entries: groupedEntries.get(category) ?? [],
+      }))
+      .filter((group) => group.entries.length > 0);
+  }, [visibleSalesWithOperationalView]);
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastUpdatedAt) return 'Aguardando primeira atualização';
+    return format(parseISO(lastUpdatedAt), "HH:mm:ss", { locale: ptBR });
+  }, [lastUpdatedAt]);
+
+  const systemFeedbackMessage = useMemo(() => {
+    if (visibleOperationalSummary.problema > 0) {
+      return `${visibleOperationalSummary.problema} venda(s) com divergência nas últimas atualizações.`;
+    }
+
+    if (visibleOperationalSummary.atencao > 0) {
+      return `${visibleOperationalSummary.atencao} venda(s) em atenção no monitoramento atual.`;
+    }
+
+    if (visibleOperationalSummary.total > 0) {
+      return 'Nenhum problema encontrado nas últimas vendas carregadas.';
+    }
+
+    return 'Aguardando vendas dentro do escopo operacional atual.';
+  }, [visibleOperationalSummary]);
 
   const fetchSales = useCallback(async () => {
     const requestId = ++latestSalesRequestIdRef.current;
@@ -1204,9 +1267,21 @@ export default function SalesDiagnostic() {
     }
 
     setSales(filtered);
+    setLastUpdatedAt(new Date().toISOString());
+
+    const currentSaleIds = filtered.map((sale) => sale.id);
+    if (autoRefreshEnabled) {
+      const previousSaleIds = previousRenderedSaleIdsRef.current;
+      const incomingSaleIds = currentSaleIds.filter((saleId) => !previousSaleIds.includes(saleId));
+      setNewSaleIds(incomingSaleIds);
+    } else {
+      setNewSaleIds([]);
+    }
+
+    previousRenderedSaleIdsRef.current = currentSaleIds;
     setLoading(false);
     setIsCompanyScopeRefreshing(false);
-  }, [activeCompanyId, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
+  }, [activeCompanyId, autoRefreshEnabled, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
 
   const fetchEvents = useCallback(async () => {
     const requestId = ++latestEventsRequestIdRef.current;
@@ -1234,7 +1309,7 @@ export default function SalesDiagnostic() {
     setEvents((data ?? []) as { id: string; name: string; date: string }[]);
   }, [activeCompanyId]);
 
-  const openDetail = async (sale: DiagnosticSale) => {
+  const openDetail = useCallback(async (sale: DiagnosticSale) => {
     setDetailSale(sale);
     setDetailLoading(true);
     setDetailLogs([]);
@@ -1269,7 +1344,7 @@ export default function SalesDiagnostic() {
     setDetailIntegrationLogs((integrationLogsRes.data ?? []) as SaleIntegrationLog[]);
     setDetailCompany((companyRes.data ?? null) as typeof detailCompany);
     setDetailLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchSales();
@@ -1288,6 +1363,7 @@ export default function SalesDiagnostic() {
     setSales([]);
     setEvents([]);
     setAvailableGateways([]);
+    setNewSaleIds([]);
 
     // Filtros dependentes precisam ser limpos ao trocar a empresa para não carregar um valor
     // invisivelmente inválido herdado da empresa anterior.
@@ -1311,6 +1387,47 @@ export default function SalesDiagnostic() {
       return nextFilters;
     });
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled || detailSale) return;
+
+    // Modo monitoramento: atualiza sem resetar filtros nem quebrar o layout; pausamos com modal
+    // aberto para não sobrescrever uma investigação em curso do suporte.
+    const refreshInterval = window.setInterval(() => {
+      fetchSales();
+    }, 30000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [autoRefreshEnabled, detailSale, fetchSales]);
+
+  useEffect(() => {
+    if (newSaleIds.length === 0) return;
+
+    const cleanupTimer = window.setTimeout(() => {
+      setNewSaleIds([]);
+    }, 45000);
+
+    return () => window.clearTimeout(cleanupTimer);
+  }, [newSaleIds]);
+
+  const handleCopyToClipboard = useCallback(async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado com sucesso.`);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+    }
+  }, []);
+
+  const handleRefreshSingleSale = useCallback(async (sale: DiagnosticSale) => {
+    await fetchSales();
+
+    if (detailSale?.id === sale.id) {
+      await openDetail(sale);
+    }
+
+    toast.success('Diagnóstico da venda recarregado.');
+  }, [detailSale?.id, fetchSales, openDetail]);
 
   const filterSelects = [
     {
@@ -1404,6 +1521,170 @@ export default function SalesDiagnostic() {
     </>
   );
 
+  const operationalGroupTitles: Record<OperationalCategory, string> = {
+    divergencia: 'Com divergência',
+    atencao: 'Atenção',
+    saudavel: 'Saudáveis',
+    pago: 'Pagas',
+    cancelado: 'Canceladas',
+  };
+
+  const renderSaleRow = ({ sale, operational }: { sale: DiagnosticSale; operational: DiagnosticOperationalView }) => {
+    const gateway = computeGateway(sale);
+    const paymentStatus = computePaymentStatus(sale);
+    const lockStatus = computeLockStatus(sale);
+    const flowStage = computeFlowStage(sale);
+    const FlowIcon = flowStage.icon;
+    const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
+    const createdAtLabel = format(parseISO(sale.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR });
+    const createdAtRelativeLabel = formatDistanceToNowStrict(parseISO(sale.created_at), {
+      addSuffix: true,
+      locale: ptBR,
+    });
+    const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
+    const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
+
+    const actions: ActionItem[] = [
+      {
+        label: 'Ver detalhes da venda',
+        icon: Eye,
+        onClick: () => openDetail(sale),
+      },
+      {
+        label: 'Copiar ID da venda',
+        icon: Copy,
+        onClick: () => void handleCopyToClipboard('ID da venda', sale.id),
+      },
+      {
+        label: 'Copiar CPF',
+        icon: Copy,
+        onClick: () => void handleCopyToClipboard('CPF', sale.customer_cpf),
+      },
+      {
+        label: 'Abrir evento relacionado',
+        icon: ExternalLink,
+        onClick: () => navigate(`/admin/eventos/${sale.event_id}`),
+      },
+      {
+        label: 'Recarregar diagnóstico da venda',
+        icon: RefreshCw,
+        onClick: () => void handleRefreshSingleSale(sale),
+      },
+    ];
+
+    const isNewSale = autoRefreshEnabled && newSaleIds.includes(sale.id);
+
+    return (
+      <TableRow
+        key={sale.id}
+        className={cn(
+          'border-l-4 transition-colors',
+          operational.category === 'divergencia' && 'border-l-destructive bg-destructive/5',
+          operational.category === 'atencao' && 'border-l-amber-400 bg-amber-50/50',
+          operational.category === 'saudavel' && 'border-l-transparent',
+          operational.category === 'pago' && 'border-l-emerald-400 bg-emerald-50/40',
+          operational.category === 'cancelado' && 'border-l-zinc-300 bg-zinc-50/40'
+        )}
+      >
+        <TableCell className="py-5 align-top">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold uppercase tracking-tight text-foreground">
+                {sale.event_name}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Comprador: <span className="font-medium text-foreground">{sale.customer_name}</span>
+              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {createdAtLabel} • {saleAmountLabel}
+                </p>
+                <p className="text-xs font-medium text-foreground">
+                  {createdAtRelativeLabel}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-xs">
+                {gateway}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {paymentEnvironmentLabel}
+              </Badge>
+              {isNewSale && (
+                <Badge className="text-xs">Nova</Badge>
+              )}
+            </div>
+          </div>
+        </TableCell>
+
+        <TableCell className="py-5 align-top">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge status={sale.status} />
+              <Badge variant={paymentStatus.variant} className="text-xs">
+                {operational.paymentStatusLabel}
+              </Badge>
+              <Badge variant={operational.categoryVariant} className={`text-xs ${operational.categoryClassName ?? ''}`}>
+                {operational.categoryLabel}
+              </Badge>
+              {operational.hasGatewayDivergence && (
+                <Badge variant="destructive" className="text-xs">Divergência gateway</Badge>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-sm font-semibold leading-tight">{operational.operationalLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                Venda: {operational.saleStatusLabel} • Pagamento: {paymentStatus.detail ?? operational.paymentStatusLabel}
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
+            </div>
+          </div>
+        </TableCell>
+
+        <TableCell className="py-5 align-top">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">Ação sugerida:</span> {operational.actionLabel}
+            </p>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>{operational.timeLabel} • {operational.timeDetail}</p>
+              <p>{operational.timeSourceLabel}</p>
+            </div>
+          </div>
+        </TableCell>
+
+        <TableCell className="py-5 align-top">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
+                {operational.lockLabel}
+              </Badge>
+              {lockStatus.detail && (
+                <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
+              <span className={`flex items-center gap-1.5 text-sm ${flowStage.color}`}>
+                <FlowIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>{compactFlowLabel}</span>
+              </span>
+            </div>
+          </div>
+        </TableCell>
+
+        <TableCell className="py-5 align-top">
+          <ActionsDropdown actions={actions} />
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
     <AdminLayout>
       <div className="page-container">
@@ -1412,24 +1693,85 @@ export default function SalesDiagnostic() {
           description="Ferramenta para análise de vendas, pagamentos e retorno das integrações do sistema."
         />
 
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {activeCompany?.name && (
-            <Badge variant="outline" className="text-xs">
-              Empresa ativa: {activeCompany.name}
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-xs">
-            Ordenação: mais recentes primeiro
-          </Badge>
-          {runtimePaymentEnvironment && (
-            <Badge variant="outline" className="text-xs">
-              Ambiente: {runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}
-            </Badge>
-          )}
-          <span className="text-xs">
-            Escopo operacional: últimas 100 vendas mais recentes.
-          </span>
-        </div>
+        <Card className="mb-4">
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {activeCompany?.name && (
+                  <Badge variant="outline" className="text-xs">
+                    Empresa: {activeCompany.name}
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-xs">
+                  Ambiente: {runtimePaymentEnvironment
+                    ? (runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox')
+                    : 'Carregando...'}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Ordenação: mais recentes primeiro
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {filters.dateFrom || filters.dateTo ? 'Período filtrado' : 'Últimas 100 vendas'}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {sales.length} venda(s) carregada(s)
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Atualizado às {lastUpdatedLabel}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Switch
+                    checked={autoRefreshEnabled}
+                    onCheckedChange={setAutoRefreshEnabled}
+                    aria-label="Atualizar automaticamente"
+                  />
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Atualizar automaticamente</p>
+                    <p className="text-xs text-muted-foreground">A cada 30 segundos</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Switch
+                    checked={groupByOperationalStatus}
+                    onCheckedChange={setGroupByOperationalStatus}
+                    aria-label="Agrupar por status"
+                  />
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Agrupar por status</p>
+                    <p className="text-xs text-muted-foreground">Mantém a ordem por data dentro do grupo</p>
+                  </div>
+                </div>
+
+                <Button
+                  variant={showOnlyProblems ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowOnlyProblems((current) => !current)}
+                >
+                  {showOnlyProblems ? 'Mostrar todos' : 'Ver apenas problemas'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
+              <p>{systemFeedbackMessage}</p>
+              <p>
+                {isCompanyScopeRefreshing
+                  ? 'Atualizando o diagnóstico da empresa ativa...'
+                  : autoRefreshEnabled
+                    ? 'Atualização automática ativa.'
+                    : 'Atualização manual em modo estável.'}
+              </p>
+            </div>
+
+            <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              Espaço reservado para alertas em tempo real e integração futura com stream de webhook/log.
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="mb-6">
           {/* Mantém o mesmo espaçamento e hierarquia visual das demais telas administrativas. */}
@@ -1448,14 +1790,14 @@ export default function SalesDiagnostic() {
           />
         </div>
 
-        {!loading && sales.length > 0 && (
+        {!loading && visibleSalesWithOperationalView.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-            <StatsCard label="Total" value={operationalSummary.total} icon={Activity} />
-            <StatsCard label="Pendentes saudáveis" value={operationalSummary.saudavel} icon={CheckCircle} variant="success" />
-            <StatsCard label="Pendentes atenção" value={operationalSummary.atencao} icon={AlertTriangle} variant="warning" />
-            <StatsCard label="Com divergência" value={operationalSummary.problema} icon={XCircle} variant="destructive" />
-            <StatsCard label="Pagas" value={operationalSummary.pago} icon={Ticket} variant="success" />
-            <StatsCard label="Canceladas" value={operationalSummary.cancelado} icon={Clock} />
+            <StatsCard label="Total" value={visibleOperationalSummary.total} icon={Activity} />
+            <StatsCard label="Pendentes saudáveis" value={visibleOperationalSummary.saudavel} icon={CheckCircle} variant="success" />
+            <StatsCard label="Pendentes atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
+            <StatsCard label="Com divergência" value={visibleOperationalSummary.problema} icon={XCircle} variant="destructive" />
+            <StatsCard label="Pagas" value={visibleOperationalSummary.pago} icon={Ticket} variant="success" />
+            <StatsCard label="Canceladas" value={visibleOperationalSummary.cancelado} icon={Clock} />
           </div>
         )}
 
@@ -1469,7 +1811,7 @@ export default function SalesDiagnostic() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : sales.length === 0 ? (
+        ) : visibleSalesWithOperationalView.length === 0 ? (
           <EmptyState
             icon={<Activity className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
@@ -1488,128 +1830,29 @@ export default function SalesDiagnostic() {
                     <TableHead className="w-[76px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {salesWithOperationalView.map(({ sale, operational }) => {
-                    const gateway = computeGateway(sale);
-                    const paymentStatus = computePaymentStatus(sale);
-                    const lockStatus = computeLockStatus(sale);
-                    const flowStage = computeFlowStage(sale);
-                    const FlowIcon = flowStage.icon;
-                    const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
-                    const createdAtLabel = format(parseISO(sale.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR });
-                    const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
-                    const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
-
-                    const actions: ActionItem[] = [
-                      {
-                        label: 'Ver detalhes da venda',
-                        icon: Eye,
-                        onClick: () => openDetail(sale),
-                      },
-                    ];
-
-                    return (
-                      <TableRow key={sale.id} className={operational.category === 'divergencia' ? 'bg-destructive/5' : ''}>
-                        <TableCell className="py-5 align-top">
-                          {/* Reorganização principal: consolidamos os metadados comerciais em um resumo único
-                              para reduzir largura sem perder contexto operacional importante. */}
-                          <div className="space-y-3">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold uppercase tracking-tight text-foreground">
-                                {sale.event_name}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                Comprador: <span className="font-medium text-foreground">{sale.customer_name}</span>
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {createdAtLabel} • {saleAmountLabel}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {gateway}
-                              </Badge>
-                              {/* Suporte: mostra o ambiente persistido da venda, mas agora dentro do bloco
-                                  de resumo comercial para evitar a antiga fragmentação em colunas. */}
-                              <Badge variant="outline" className="text-xs">
-                                {paymentEnvironmentLabel}
-                              </Badge>
-                            </div>
+                {groupByOperationalStatus ? (
+                  groupedSalesWithOperationalView.map((group) => (
+                    <TableBody key={group.category}>
+                      <TableRow className="bg-muted/40">
+                        <TableCell colSpan={5} className="py-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-foreground">
+                              {operationalGroupTitles[group.category]}
+                            </span>
+                            <Badge variant="outline" className="text-xs">
+                              {group.entries.length} item(ns)
+                            </Badge>
                           </div>
-                        </TableCell>
-
-                        <TableCell className="py-5 align-top">
-                          {/* A hierarquia desta célula separa leitura rápida (badges) de contexto analítico
-                              (situação operacional + detalhe), mantendo a distinção venda x pagamento. */}
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap gap-2">
-                              <StatusBadge status={sale.status} />
-                              <Badge variant={paymentStatus.variant} className="text-xs">
-                                {operational.paymentStatusLabel}
-                              </Badge>
-                              <Badge variant={operational.categoryVariant} className={`text-xs ${operational.categoryClassName ?? ''}`}>
-                                {operational.categoryLabel}
-                              </Badge>
-                              {operational.hasGatewayDivergence && (
-                                <Badge variant="destructive" className="text-xs">Divergência gateway</Badge>
-                              )}
-                            </div>
-
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold leading-tight">{operational.operationalLabel}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Venda: {operational.saleStatusLabel} • Pagamento: {paymentStatus.detail ?? operational.paymentStatusLabel}
-                              </p>
-                              <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="py-5 align-top">
-                          {/* A antiga sequência causa + tempo + ação foi agrupada para deixar o diagnóstico
-                              escaneável em um único bloco sem diluir a narrativa principal da linha. */}
-                          <div className="space-y-2">
-                            <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
-                            <p className="text-sm leading-relaxed text-muted-foreground">
-                              <span className="font-medium text-foreground">Ação sugerida:</span> {operational.actionLabel}
-                            </p>
-                            <div className="space-y-1 text-xs text-muted-foreground">
-                              <p>{operational.timeLabel} • {operational.timeDetail}</p>
-                              <p>{operational.timeSourceLabel}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="py-5 align-top">
-                          {/* Controle mantém apenas os sinais curtos de operação contínua: bloqueio e estágio do fluxo. */}
-                          <div className="space-y-3">
-                            <div className="space-y-1">
-                              <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
-                                {operational.lockLabel}
-                              </Badge>
-                              {lockStatus.detail && (
-                                <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
-                              )}
-                            </div>
-
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
-                              <span className={`flex items-center gap-1.5 text-sm ${flowStage.color}`}>
-                                <FlowIcon className="h-3.5 w-3.5 shrink-0" />
-                                <span>{compactFlowLabel}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="py-5 align-top">
-                          <ActionsDropdown actions={actions} />
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
+                      {group.entries.map((entry) => renderSaleRow(entry))}
+                    </TableBody>
+                  ))
+                ) : (
+                  <TableBody>
+                    {visibleSalesWithOperationalView.map((entry) => renderSaleRow(entry))}
+                  </TableBody>
+                )}
               </Table>
             </CardContent>
           </Card>
