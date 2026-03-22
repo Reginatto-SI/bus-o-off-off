@@ -44,6 +44,7 @@ export function AsaasDiagnosticPanel({
 }: AsaasDiagnosticPanelProps) {
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [repairingWebhook, setRepairingWebhook] = useState(false);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
 
   const handleTestConnection = async () => {
@@ -155,6 +156,110 @@ export function AsaasDiagnosticPanel({
     }
   };
 
+  const handleRepairWebhook = async () => {
+    if (!editingId || !runtimeEnvironment) {
+      toast.error('Empresa ou ambiente não identificado.');
+      return;
+    }
+
+    setRepairingWebhook(true);
+    const steps: DiagnosticStep[] = [
+      { label: 'Identificar empresa', status: 'success', detail: editingId },
+      { label: 'Resolver ambiente', status: 'success', detail: `${runtimeEnvironment} (${runtimeSource})` },
+      { label: 'Reconfigurar webhook Asaas', status: 'running' },
+    ];
+
+    setResult({
+      timestamp: new Date().toISOString(),
+      environment: runtimeEnvironment,
+      environmentSource: runtimeSource,
+      companyId: editingId,
+      integrationStatus: asaasStatus,
+      steps: [...steps],
+      rawResponse: null,
+      rawError: null,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-asaas-account', {
+        body: {
+          company_id: editingId,
+          mode: 'ensure_webhook',
+          target_environment: runtimeEnvironment,
+        },
+      });
+
+      if (error) {
+        let errorBody: unknown = null;
+        try {
+          if (error && typeof error === 'object' && 'context' in error) {
+            const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+            errorBody = await ctx?.json?.();
+          }
+        } catch { /* ignore */ }
+
+        const errorMessage = (errorBody as { error?: string })?.error
+          || (data as { error?: string })?.error
+          || error.message
+          || 'Erro desconhecido';
+
+        steps[2] = { label: 'Reconfigurar webhook Asaas', status: 'error', detail: errorMessage };
+        setResult({
+          timestamp: new Date().toISOString(),
+          environment: runtimeEnvironment,
+          environmentSource: runtimeSource,
+          companyId: editingId,
+          integrationStatus: asaasStatus,
+          steps: [...steps],
+          rawResponse: data ?? errorBody,
+          rawError: errorMessage,
+        });
+        return;
+      }
+
+      const action = typeof data?.action === 'string' ? data.action : 'desconhecida';
+      const detail = data?.message || `Ação executada: ${action}`;
+      steps[2] = {
+        label: 'Reconfigurar webhook Asaas',
+        status: data?.success === true ? 'success' : 'skipped',
+        detail,
+      };
+
+      setResult({
+        timestamp: new Date().toISOString(),
+        environment: runtimeEnvironment,
+        environmentSource: runtimeSource,
+        companyId: editingId,
+        integrationStatus: asaasStatus,
+        steps: [...steps],
+        rawResponse: data,
+        rawError: null,
+      });
+
+      if (data?.success === true) {
+        toast.success(detail);
+      } else {
+        toast.warning(detail);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      steps[2] = { label: 'Reconfigurar webhook Asaas', status: 'error', detail: message };
+      setResult({
+        timestamp: new Date().toISOString(),
+        environment: runtimeEnvironment,
+        environmentSource: runtimeSource,
+        companyId: editingId,
+        integrationStatus: asaasStatus,
+        steps: [...steps],
+        rawResponse: null,
+        rawError: message,
+      });
+      toast.error(message);
+    } finally {
+      setRepairingWebhook(false);
+    }
+  };
+
   const handleCopyDiagnostic = () => {
     const diagnosticPayload = {
       ...result,
@@ -254,6 +359,16 @@ export function AsaasDiagnosticPanel({
           >
             {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
             Testar conexão
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRepairWebhook}
+            disabled={repairingWebhook || !editingId || !runtimeEnvironment}
+          >
+            {repairingWebhook ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+            Reconfigurar webhook
           </Button>
           {result && (
             <Button type="button" variant="ghost" size="sm" onClick={handleCopyDiagnostic}>
