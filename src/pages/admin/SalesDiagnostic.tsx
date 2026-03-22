@@ -237,6 +237,8 @@ interface LockStatusView {
 }
 
 type OperationalPriority = 'critico' | 'atencao' | 'ok';
+type MonitoringFreshness = 'novo' | 'recente' | 'estavel';
+type QuickFocusFilter = 'todos' | 'criticos' | 'novos' | 'acompanhamento' | 'ok';
 
 interface DiagnosticOperationalView {
   category: OperationalCategory;
@@ -273,16 +275,12 @@ function getOperationalPriorityPresentation(priority: OperationalPriority): {
   label: string;
   actionLabel: string;
   actionDescription: string;
-  groupTitle: string;
-  statsLabel: string;
 } {
   if (priority === 'critico') {
     return {
       label: 'Crítico',
       actionLabel: 'Revisar agora',
       actionDescription: 'Exige ação imediata.',
-      groupTitle: 'Críticos',
-      statsLabel: 'Críticas',
     };
   }
 
@@ -291,8 +289,6 @@ function getOperationalPriorityPresentation(priority: OperationalPriority): {
       label: 'Atenção',
       actionLabel: 'Acompanhar',
       actionDescription: 'Exige acompanhamento operacional.',
-      groupTitle: 'Atenção',
-      statsLabel: 'Atenção',
     };
   }
 
@@ -300,8 +296,6 @@ function getOperationalPriorityPresentation(priority: OperationalPriority): {
     label: 'OK',
     actionLabel: 'Sem ação',
     actionDescription: 'Sem necessidade de intervenção.',
-    groupTitle: 'OK',
-    statsLabel: 'OK',
   };
 }
 
@@ -312,6 +306,42 @@ function getOperationalHeadlineLabel(view: DiagnosticOperationalView): string {
   if (view.category === 'cancelado') return 'Venda cancelada corretamente';
   if (view.category === 'pago') return 'Pagamento confirmado com sucesso';
   return 'Fluxo estável';
+}
+
+function computeMonitoringFreshness(sale: DiagnosticSale, isNewInSession: boolean): MonitoringFreshness {
+  // "Novo" e "recente" não significam a mesma coisa:
+  // - novo = item percebido pela sessão atual depois de um refresh desta tela;
+  // - recente = item criado há pouco tempo, mesmo que já estivesse visível antes.
+  // Isso mantém a leitura auditável e evita chamar de novidade algo que é apenas recente por data.
+  if (isNewInSession) return 'novo';
+
+  const createdAtMs = new Date(sale.created_at).getTime();
+  const recentWindowMs = 1000 * 60 * 60 * 2;
+  return Date.now() - createdAtMs <= recentWindowMs ? 'recente' : 'estavel';
+}
+
+function getMonitoringFreshnessPresentation(freshness: MonitoringFreshness): {
+  label: string;
+  description: string;
+} {
+  if (freshness === 'novo') {
+    return {
+      label: 'Novo nesta sessão',
+      description: 'Entrou no monitoramento após atualização desta sessão.',
+    };
+  }
+
+  if (freshness === 'recente') {
+    return {
+      label: 'Recente no monitoramento',
+      description: 'Venda criada há pouco tempo dentro da janela operacional.',
+    };
+  }
+
+  return {
+    label: 'Sem mudança recente',
+    description: 'Nenhum sinal recente adicional percebido nesta sessão.',
+  };
 }
 
 function computeGateway(sale: DiagnosticSale): string {
@@ -820,6 +850,8 @@ function detectPaymentConfirmationSource(
 
 function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
   const entries: TimelineEntry[] = [];
+  const lockStatus = computeLockStatus(sale);
+  const operationalView = computeOperationalView(sale);
 
   // 1. Sale created
   entries.push({
@@ -839,6 +871,16 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
       color: 'text-blue-600',
     });
   }
+
+  // 3. Operational lock state
+  // Esta timeline é derivada da leitura atual da tela; não promete auditoria histórica completa.
+  // Ela apenas organiza marcos inferíveis com honestidade a partir do snapshot atual da venda.
+  entries.push({
+    time: format(parseISO(sale.updated_at), 'HH:mm:ss', { locale: ptBR }),
+    label: lockStatus.label,
+    icon: lockStatus.isExpired ? AlertTriangle : lockStatus.isMissing ? XCircle : CheckCircle,
+    color: lockStatus.isExpired || lockStatus.isMissing ? 'text-amber-600' : 'text-blue-600',
+  });
 
   // 3. Logs
   logs
@@ -882,6 +924,13 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
     });
   }
 
+  entries.push({
+    time: format(parseISO(sale.updated_at), 'HH:mm:ss', { locale: ptBR }),
+    label: `Estado operacional atual: ${operationalView.operationalLabel}`,
+    icon: operationalView.operationalPriority === 'critico' ? AlertTriangle : CheckCircle,
+    color: operationalView.operationalPriority === 'critico' ? 'text-destructive' : 'text-emerald-600',
+  });
+
   return entries;
 }
 
@@ -902,12 +951,16 @@ export default function SalesDiagnostic() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [groupByOperationalStatus, setGroupByOperationalStatus] = useState(false);
   const [showOnlyProblems, setShowOnlyProblems] = useState(false);
+  const [quickFocusFilter, setQuickFocusFilter] = useState<QuickFocusFilter>('todos');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [lastRelevantChangeAt, setLastRelevantChangeAt] = useState<string | null>(null);
+  const [lastRelevantChangeLabel, setLastRelevantChangeLabel] = useState('Nenhuma mudança relevante percebida nesta sessão.');
   const [newSaleIds, setNewSaleIds] = useState<string[]>([]);
   const latestSalesRequestIdRef = useRef(0);
   const latestEventsRequestIdRef = useRef(0);
   const previousCompanyIdRef = useRef<string | null>(null);
   const previousRenderedSaleIdsRef = useRef<string[]>([]);
+  const previousSalesSnapshotRef = useRef<Record<string, string>>({});
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
@@ -962,6 +1015,7 @@ export default function SalesDiagnostic() {
     return sales
       .map((sale) => {
         const operational = computeOperationalView(sale);
+        const isNewInSession = newSaleIds.includes(sale.id);
 
         return {
           sale,
@@ -969,6 +1023,7 @@ export default function SalesDiagnostic() {
             ...operational,
             operationalPriority: computeOperationalPriority(operational),
           },
+          freshness: computeMonitoringFreshness(sale, isNewInSession),
         };
       })
       .sort((a, b) => {
@@ -981,13 +1036,29 @@ export default function SalesDiagnostic() {
 
         return a.operational.priority - b.operational.priority;
       });
-  }, [sales]);
+  }, [newSaleIds, sales]);
 
   const visibleSalesWithOperationalView = useMemo(() => {
-    if (!showOnlyProblems) return salesWithOperationalView;
+    let visibleEntries = salesWithOperationalView;
 
-    return salesWithOperationalView.filter((entry) => entry.operational.operationalPriority !== 'ok');
-  }, [salesWithOperationalView, showOnlyProblems]);
+    // Precedência explícita: primeiro aplicamos o toggle global de problemas,
+    // depois o foco rápido só refina a renderização visível sem mexer nos filtros estruturais.
+    if (showOnlyProblems) {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority !== 'ok');
+    }
+
+    if (quickFocusFilter === 'criticos') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'critico');
+    } else if (quickFocusFilter === 'novos') {
+      visibleEntries = visibleEntries.filter((entry) => entry.freshness === 'novo' || entry.freshness === 'recente');
+    } else if (quickFocusFilter === 'acompanhamento') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'atencao');
+    } else if (quickFocusFilter === 'ok') {
+      visibleEntries = visibleEntries.filter((entry) => entry.operational.operationalPriority === 'ok');
+    }
+
+    return visibleEntries;
+  }, [quickFocusFilter, salesWithOperationalView, showOnlyProblems]);
 
   const visibleOperationalSummary = useMemo(() => {
     return visibleSalesWithOperationalView.reduce((acc, entry) => {
@@ -995,10 +1066,13 @@ export default function SalesDiagnostic() {
       if (entry.operational.operationalPriority === 'critico') acc.critico += 1;
       if (entry.operational.operationalPriority === 'atencao') acc.atencao += 1;
       if (entry.operational.operationalPriority === 'ok') acc.ok += 1;
+      if (entry.freshness === 'novo') acc.novo += 1;
+      if (entry.freshness === 'recente') acc.recente += 1;
+      if (entry.operational.operationalPriority === 'critico' && entry.freshness !== 'estavel') acc.criticoRecente += 1;
       if (entry.operational.category === 'pago') acc.pago += 1;
       if (entry.operational.category === 'cancelado') acc.cancelado += 1;
       return acc;
-    }, { total: 0, critico: 0, atencao: 0, ok: 0, pago: 0, cancelado: 0 });
+    }, { total: 0, critico: 0, atencao: 0, ok: 0, novo: 0, recente: 0, criticoRecente: 0, pago: 0, cancelado: 0 });
   }, [visibleSalesWithOperationalView]);
 
   const groupedSalesWithOperationalView = useMemo(() => {
@@ -1055,6 +1129,65 @@ export default function SalesDiagnostic() {
 
     return messages;
   }, [visibleOperationalSummary]);
+
+  const movementSummaryMessages = useMemo(() => {
+    if (visibleOperationalSummary.total === 0) {
+      return ['Monitoramento sem itens visíveis neste recorte.'];
+    }
+
+    const messages: string[] = [];
+
+    if (visibleOperationalSummary.novo > 0) {
+      messages.push(`${visibleOperationalSummary.novo} nova(s) venda(s) entraram no monitoramento nesta sessão.`);
+    }
+
+    if (visibleOperationalSummary.criticoRecente > 0) {
+      messages.push(`${visibleOperationalSummary.criticoRecente} item(ns) crítico(s) são novos ou recentes e exigem atenção imediata.`);
+    } else if (visibleOperationalSummary.critico === 0) {
+      messages.push('Nenhuma nova divergência detectada desde a última atualização.');
+    }
+
+    if (messages.length === 0) {
+      messages.push('Monitoramento estável no recorte atual.');
+    }
+
+    return messages;
+  }, [visibleOperationalSummary]);
+
+  const operationalBanner = useMemo(() => {
+    // O banner operacional mostra uma única mensagem por vez, seguindo ordem de prioridade fixa.
+    // Assim o topo da tela continua previsível e preparado para futuros alertas sem criar múltiplos banners concorrentes.
+    if (visibleOperationalSummary.criticoRecente > 0) {
+      return {
+        tone: 'border-destructive/30 bg-destructive/10 text-destructive',
+        title: `Alerta: há ${visibleOperationalSummary.criticoRecente} divergência(s) nova(s) exigindo revisão imediata.`,
+      };
+    }
+
+    if (visibleOperationalSummary.critico > 0) {
+      return {
+        tone: 'border-destructive/20 bg-destructive/5 text-destructive',
+        title: `Atenção: existem ${visibleOperationalSummary.critico} vendas críticas no monitoramento atual.`,
+      };
+    }
+
+    if (visibleOperationalSummary.atencao > 0) {
+      return {
+        tone: 'border-amber-300 bg-amber-50 text-amber-900',
+        title: `Acompanhamento: ${visibleOperationalSummary.atencao} venda(s) seguem pendentes sem divergência estrutural.`,
+      };
+    }
+
+    return {
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+      title: 'Monitoramento estável: nenhuma ocorrência crítica no recorte atual.',
+    };
+  }, [visibleOperationalSummary]);
+
+  const lastRelevantChangeDisplayLabel = useMemo(() => {
+    if (!lastRelevantChangeAt) return lastRelevantChangeLabel;
+    return `${lastRelevantChangeLabel} Última mudança detectada às ${format(parseISO(lastRelevantChangeAt), 'HH:mm:ss', { locale: ptBR })}.`;
+  }, [lastRelevantChangeAt, lastRelevantChangeLabel]);
 
   const fetchSales = useCallback(async () => {
     const requestId = ++latestSalesRequestIdRef.current;
@@ -1341,15 +1474,44 @@ export default function SalesDiagnostic() {
     setLastUpdatedAt(new Date().toISOString());
 
     const currentSaleIds = filtered.map((sale) => sale.id);
+    const currentSnapshot = Object.fromEntries(
+      filtered.map((sale) => {
+        const operational = computeOperationalView(sale);
+        return [sale.id, `${sale.status}|${sale.updated_at}|${computeOperationalPriority(operational)}`];
+      })
+    );
+
+    const previousSnapshot = previousSalesSnapshotRef.current;
+    const changedSaleIds = currentSaleIds.filter((saleId) => previousSnapshot[saleId] && previousSnapshot[saleId] !== currentSnapshot[saleId]);
+
     if (autoRefreshEnabled) {
       const previousSaleIds = previousRenderedSaleIdsRef.current;
       const incomingSaleIds = currentSaleIds.filter((saleId) => !previousSaleIds.includes(saleId));
       setNewSaleIds(incomingSaleIds);
+
+      // A percepção de mudança existe só dentro desta sessão e compara snapshots em memória.
+      // Não prometemos histórico persistido; apenas sinalizamos quando a tela percebe novidade relevante.
+      if (incomingSaleIds.length > 0 || changedSaleIds.length > 0) {
+        const relevantChangeCount = incomingSaleIds.length + changedSaleIds.length;
+        const detectedAt = new Date().toISOString();
+        setLastRelevantChangeAt(detectedAt);
+        setLastRelevantChangeLabel(`${relevantChangeCount} mudança(s) percebida(s) nesta atualização.`);
+      } else {
+        setLastRelevantChangeLabel('Nenhuma mudança relevante desde a última atualização.');
+      }
     } else {
       setNewSaleIds([]);
+      if (changedSaleIds.length > 0) {
+        const detectedAt = new Date().toISOString();
+        setLastRelevantChangeAt(detectedAt);
+        setLastRelevantChangeLabel(`${changedSaleIds.length} mudança(s) percebida(s) na atualização manual.`);
+      } else {
+        setLastRelevantChangeLabel('Nenhuma mudança relevante desde a última atualização.');
+      }
     }
 
     previousRenderedSaleIdsRef.current = currentSaleIds;
+    previousSalesSnapshotRef.current = currentSnapshot;
     setLoading(false);
     setIsCompanyScopeRefreshing(false);
   }, [activeCompanyId, autoRefreshEnabled, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
@@ -1435,6 +1597,10 @@ export default function SalesDiagnostic() {
     setEvents([]);
     setAvailableGateways([]);
     setNewSaleIds([]);
+    setQuickFocusFilter('todos');
+    setLastRelevantChangeAt(null);
+    setLastRelevantChangeLabel('Nenhuma mudança relevante percebida nesta sessão.');
+    previousSalesSnapshotRef.current = {};
 
     // Filtros dependentes precisam ser limpos ao trocar a empresa para não carregar um valor
     // invisivelmente inválido herdado da empresa anterior.
@@ -1599,14 +1765,11 @@ export default function SalesDiagnostic() {
   };
 
   const getStatusToneClasses = (operational: DiagnosticOperationalView) => {
-    const priorityPresentation = getOperationalPriorityPresentation(operational.operationalPriority);
-
     if (operational.operationalPriority === 'critico') {
       return {
         container: 'border-destructive bg-destructive/10 shadow-[inset_4px_0_0_0_theme(colors.destructive.DEFAULT)]',
         badge: 'border-destructive/30 bg-destructive/10 text-destructive',
         dot: 'bg-destructive',
-        priorityLabel: priorityPresentation.label,
       };
     }
 
@@ -1615,7 +1778,6 @@ export default function SalesDiagnostic() {
         container: 'border-amber-300 bg-amber-50/70',
         badge: 'border-amber-300 bg-amber-100 text-amber-800',
         dot: 'bg-amber-500',
-        priorityLabel: priorityPresentation.label,
       };
     }
 
@@ -1623,11 +1785,10 @@ export default function SalesDiagnostic() {
       container: 'border-emerald-200 bg-emerald-50/60',
       badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
       dot: 'bg-emerald-500',
-      priorityLabel: priorityPresentation.label,
     };
   };
 
-  const renderSaleRow = ({ sale, operational }: { sale: DiagnosticSale; operational: DiagnosticOperationalView }) => {
+  const renderSaleRow = ({ sale, operational, freshness }: { sale: DiagnosticSale; operational: DiagnosticOperationalView; freshness: MonitoringFreshness }) => {
     const gateway = computeGateway(sale);
     const paymentStatus = computePaymentStatus(sale);
     const lockStatus = computeLockStatus(sale);
@@ -1642,6 +1803,7 @@ export default function SalesDiagnostic() {
     const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
     const statusTone = getStatusToneClasses(operational);
     const priorityPresentation = getOperationalPriorityPresentation(operational.operationalPriority);
+    const freshnessPresentation = getMonitoringFreshnessPresentation(freshness);
     const primaryStatusLabel = operational.hasGatewayDivergence ? 'Venda com divergência' : getOperationalHeadlineLabel(operational);
     const secondaryStatusLabel = operational.operationalLabel;
 
@@ -1673,7 +1835,9 @@ export default function SalesDiagnostic() {
       },
     ];
 
-    const isNewSale = autoRefreshEnabled && newSaleIds.includes(sale.id);
+    const isNewSale = freshness === 'novo';
+    const isRecentSale = freshness === 'recente';
+    const isCriticalAndFresh = operational.operationalPriority === 'critico' && freshness !== 'estavel';
 
     return (
       <div
@@ -1681,7 +1845,8 @@ export default function SalesDiagnostic() {
         className={cn(
           'overflow-hidden rounded-xl border bg-card shadow-sm transition-colors',
           statusTone.container,
-          isNewSale && 'ring-2 ring-primary/20'
+          isNewSale && 'ring-2 ring-primary/20',
+          isCriticalAndFresh && 'ring-2 ring-destructive/20'
         )}
       >
         {/* Nova divisão em 3 blocos: informação principal, status e ação.
@@ -1722,12 +1887,15 @@ export default function SalesDiagnostic() {
               <Badge variant="outline" className="text-[11px] font-normal">
                 {paymentEnvironmentLabel}
               </Badge>
-              {isNewSale && (
+              {(isNewSale || isRecentSale) && (
                 <Badge variant="outline" className="text-[11px] font-normal">
-                  Nova
+                  {freshness === 'novo' ? 'Novo' : 'Recente'}
                 </Badge>
               )}
             </div>
+            <p className={cn('text-[11px]', isCriticalAndFresh ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+              {freshnessPresentation.label}
+            </p>
           </div>
 
           <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
@@ -1822,6 +1990,9 @@ export default function SalesDiagnostic() {
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground">
                       Tickets gerados: {sale.ticket_count ?? 0} • Assentos bloqueados: {sale.active_lock_count ?? 0}
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Contexto temporal: {freshnessPresentation.description}
                     </p>
                   </div>
                 </div>
@@ -1935,6 +2106,15 @@ export default function SalesDiagnostic() {
               </div>
             </div>
 
+            <div className="rounded-lg border bg-background p-3">
+              <div className="space-y-1 text-sm text-foreground">
+                {movementSummaryMessages.map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{lastRelevantChangeDisplayLabel}</p>
+            </div>
+
             <div className="flex flex-col gap-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
               <p>
                 {isCompanyScopeRefreshing
@@ -1945,8 +2125,9 @@ export default function SalesDiagnostic() {
               </p>
             </div>
 
-            <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-              Espaço reservado para alertas em tempo real e integração futura com stream de webhook/log.
+            <div className={cn('rounded-md border px-3 py-2 text-sm', operationalBanner.tone)}>
+              <p className="font-medium">{operationalBanner.title}</p>
+              <p className="mt-1 text-xs opacity-90">Estrutura preparada para alertas futuros sem depender de backend novo nesta etapa.</p>
             </div>
           </CardContent>
         </Card>
@@ -1966,6 +2147,26 @@ export default function SalesDiagnostic() {
             }}
             hasActiveFilters={hasActiveFilters}
           />
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          {[
+            { value: 'todos', label: 'Todos' },
+            { value: 'criticos', label: 'Críticos' },
+            { value: 'novos', label: 'Novos' },
+            { value: 'acompanhamento', label: 'Em acompanhamento' },
+            { value: 'ok', label: 'OK' },
+          ].map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={quickFocusFilter === option.value ? 'default' : 'outline'}
+              onClick={() => setQuickFocusFilter(option.value as QuickFocusFilter)}
+            >
+              {option.label}
+            </Button>
+          ))}
         </div>
 
         {!loading && visibleSalesWithOperationalView.length > 0 && (
