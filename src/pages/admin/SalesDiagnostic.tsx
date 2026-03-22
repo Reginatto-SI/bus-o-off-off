@@ -24,6 +24,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -46,6 +47,7 @@ import {
   Copy,
   RefreshCw,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -2505,6 +2507,8 @@ export default function SalesDiagnostic() {
                         Payloads Técnicos
                       </h3>
 
+                      {/* Causa do runtime: estes blocos já usavam o Collapsible padrão do projeto,
+                          mas o arquivo ficou sem importar os símbolos necessários. */}
                       {/* Raw sale data */}
                       <Collapsible>
                         <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
@@ -2528,6 +2532,7 @@ export default function SalesDiagnostic() {
                         </CollapsibleContent>
                       </Collapsible>
 
+                      {/* Mantemos o padrão consolidado já usado no admin/public em vez de trocar a UI. */}
                       {/* Sale logs */}
                       <Collapsible>
                         <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors w-full">
