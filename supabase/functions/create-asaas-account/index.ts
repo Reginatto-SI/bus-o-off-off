@@ -511,7 +511,7 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-...
+
     if (mode === "link_existing" && api_key) {
       try {
         // Comentário de manutenção:
