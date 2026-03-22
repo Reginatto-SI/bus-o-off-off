@@ -335,6 +335,44 @@ serve(async (req) => {
       api_key_source: apiKeySecretName,
     });
 
+    // ====== MODE: Disconnect existing integration ======
+    if (mode === "disconnect") {
+      console.log("[create-asaas-account] disconnect started", {
+        company_id,
+        environment: paymentEnv,
+      });
+
+      const { error: disconnectError } = await supabaseAdmin
+        .from("companies")
+        .update(
+          buildCompanyConfigWithEnvironmentUpdate({
+            [envFields.walletId]: null,
+            [envFields.apiKey]: null,
+            [envFields.accountId]: null,
+            [envFields.accountEmail]: null,
+            [envFields.onboardingComplete]: false,
+          }),
+        )
+        .eq("id", company_id);
+
+      if (disconnectError) {
+        console.error("[create-asaas-account] disconnect failed", {
+          company_id,
+          environment: paymentEnv,
+          error: disconnectError,
+        });
+        return new Response(
+          JSON.stringify({ error: "Erro ao desvincular a conta Asaas." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, disconnected: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ====== MODE: Revalidate existing integration ======
     if (mode === "revalidate") {
       console.log("[ASAAS][VERIFY] Starting verification", {
@@ -512,6 +550,38 @@ serve(async (req) => {
           );
         }
 
+        // Revalidation succeeded — wallet found
+        console.log("[ASAAS][VERIFY] Validation succeeded", {
+          company_id,
+          environment: paymentEnv,
+          wallet_id_preview: maskSensitiveValue(String(walletId)),
+          account_status: accountData?.status ?? null,
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            revalidated: true,
+            wallet_id: walletId,
+            account_status: accountData?.status ?? null,
+            account_name: accountData?.name || accountData?.tradingName || null,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (revalidateErr) {
+        console.error("[ASAAS][VERIFY] unexpected error", {
+          company_id,
+          environment: paymentEnv,
+          error: revalidateErr instanceof Error ? revalidateErr.message : String(revalidateErr),
+        });
+        return new Response(
+          JSON.stringify({ error: "Erro inesperado ao revalidar integração Asaas." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ====== MODE: Link existing account via API Key ======
     if (mode === "link_existing" && api_key) {
       try {
         // Comentário de manutenção:
@@ -652,7 +722,11 @@ serve(async (req) => {
         }
 
         if (!walletId) {
-          console.error("[create-asaas-account] walletId missing after all fallbacks", {
+          // Comentário de manutenção:
+          // Sub-contas Asaas nem sempre expõem walletId via API.
+          // Se a autenticação (myAccount) foi bem-sucedida, persistimos a API Key
+          // e marcamos como parcialmente configurado para não bloquear o fluxo.
+          console.warn("[create-asaas-account] walletId missing after all fallbacks — proceeding with partial link", {
             company_id,
             environment: paymentEnv,
             response_keys: Object.keys(accountData || {}),
@@ -660,15 +734,29 @@ serve(async (req) => {
             wallets_lookup_status: walletLookupStatus,
             wallets_lookup_summary: walletLookupSummary,
           });
+
+          await supabaseAdmin
+            .from("companies")
+            .update(
+              buildCompanyConfigWithEnvironmentUpdate({
+                [envFields.walletId]: null,
+                [envFields.apiKey]: api_key,
+                [envFields.accountId]: accountData.id || null,
+                [envFields.accountEmail]: accountData.email || null,
+                [envFields.onboardingComplete]: false,
+              }),
+            )
+            .eq("id", company_id);
+
           return new Response(
             JSON.stringify({
-              error: buildWalletDiagnosticMessage({
-                environment: paymentEnv,
-                walletLookupAttempted: walletLookupStatus !== null,
-                walletLookupStatus,
-              }),
+              success: true,
+              partial: true,
+              wallet_id: null,
+              account_name: accountData.name || accountData.tradingName || null,
+              warning: "API Key validada e salva, mas o walletId não foi identificado. A conta foi vinculada parcialmente.",
             }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 

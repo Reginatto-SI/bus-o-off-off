@@ -16,7 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 type AsaasWizardStep = 1 | 2 | 3 | 4;
 type AsaasWizardMode = 'create' | 'link';
-type AsaasEnvironmentSelection = 'auto' | 'sandbox' | 'production';
+type AsaasEnvironmentSelection = 'sandbox' | 'production';
 
 export interface AsaasOnboardingCompanyData {
   companyId: string;
@@ -80,13 +80,11 @@ export function AsaasOnboardingWizard({
    * Por isso somente developer pode alterar o ambiente; para os demais o fluxo nasce
    * e permanece forçado em produção também na lógica de envio para a edge function.
    */
-  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('auto');
+  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('sandbox');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
-  const effectiveTargetEnvironment: 'sandbox' | 'production' | undefined = !isDeveloper
+  const effectiveTargetEnvironment: 'sandbox' | 'production' = !isDeveloper
     ? 'production'
-    : targetEnvironment === 'auto'
-      ? undefined
-      : targetEnvironment;
+    : targetEnvironment;
 
   // Sync localCompanyData when companyData prop changes
   useEffect(() => {
@@ -130,7 +128,7 @@ export function AsaasOnboardingWizard({
       setSubmitting(false);
       setApiKeyInput('');
       setShowAddressModal(false);
-      setTargetEnvironment('auto');
+      setTargetEnvironment('sandbox');
     }
   }, [open]);
 
@@ -243,7 +241,11 @@ export function AsaasOnboardingWizard({
         throw new Error(`${message}${statusSuffix}`);
       }
 
-      toast.success('Conta Asaas vinculada com sucesso!');
+      if (data?.partial) {
+        toast.success('Conta Asaas vinculada parcialmente. WalletId não identificado — configure manualmente se necessário.');
+      } else {
+        toast.success('Conta Asaas vinculada com sucesso!');
+      }
       await onSuccess?.();
       setStep(4);
     } catch (err: unknown) {
@@ -311,10 +313,9 @@ export function AsaasOnboardingWizard({
         <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
         {isDeveloper ? (
           <>
-            <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
+           <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
               <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Automático pelo host</SelectItem>
                 <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
                 <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
               </SelectContent>
@@ -370,7 +371,7 @@ export function AsaasOnboardingWizard({
         <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
         <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
-        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{effectiveTargetEnvironment === 'sandbox' ? 'Sandbox (testes)' : effectiveTargetEnvironment === 'production' ? 'Produção (pagamentos reais)' : 'Automático pelo host'}</strong>.</p>
+        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{effectiveTargetEnvironment === 'sandbox' ? 'Sandbox (testes)' : 'Produção (pagamentos reais)'}</strong>.</p>
       </div>
     </div>
   );
@@ -383,11 +384,10 @@ export function AsaasOnboardingWizard({
       </p>
       <div className="space-y-2">
         <Label htmlFor="asaas-target-environment-link">Ambiente alvo</Label>
-        {isDeveloper ? (
+         {isDeveloper ? (
           <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
             <SelectTrigger id="asaas-target-environment-link"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="auto">Automático pelo host</SelectItem>
               <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
               <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
             </SelectContent>

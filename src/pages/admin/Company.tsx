@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
+import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate } from 'react-router-dom';
@@ -176,7 +177,7 @@ const getCompanyDisplayNameForPersistence = ({
 
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
-  const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
+  const { environment: runtimePaymentEnvironment, source: runtimePaymentSource } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
   const [financialSocios, setFinancialSocios] = useState<Array<{
@@ -1947,6 +1948,17 @@ export default function CompanyPage() {
                         </div>
                       )}
                     </div>
+
+                    {isDeveloper && (
+                      <AsaasDiagnosticPanel
+                        company={company}
+                        runtimeEnvironment={runtimePaymentEnvironment}
+                        runtimeSource={runtimePaymentSource}
+                        asaasStatus={asaasStatus}
+                        editingId={editingId}
+                        asaasSnapshot={asaasSnapshot}
+                      />
+                    )}
                   </TabsContent>
 
 
