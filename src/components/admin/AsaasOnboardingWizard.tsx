@@ -309,10 +309,9 @@ export function AsaasOnboardingWizard({
         <Label htmlFor="asaas-target-environment">Ambiente alvo</Label>
         {isDeveloper ? (
           <>
-            <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
+           <Select value={targetEnvironment} onValueChange={(value) => setTargetEnvironment(value as AsaasEnvironmentSelection)}>
               <SelectTrigger id="asaas-target-environment"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Automático pelo host</SelectItem>
                 <SelectItem value="sandbox">Sandbox (testes)</SelectItem>
                 <SelectItem value="production">Produção (pagamentos reais)</SelectItem>
               </SelectContent>
