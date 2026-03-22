@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
+import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate } from 'react-router-dom';
