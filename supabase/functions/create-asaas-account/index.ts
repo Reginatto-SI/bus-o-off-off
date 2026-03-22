@@ -6,7 +6,11 @@ import {
   getAsaasApiKeySecretName,
   type PaymentEnvironment,
 } from "../_shared/runtime-env.ts";
-import { inferPaymentOwnerType, logPaymentTrace } from "../_shared/payment-observability.ts";
+import {
+  inferPaymentOwnerType,
+  logPaymentTrace,
+  logSaleIntegrationEvent,
+} from "../_shared/payment-observability.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -184,6 +188,287 @@ function buildWalletDiagnosticMessage(params: {
     : "";
 
   return `A conta Asaas respondeu no ambiente ${environmentLabel}, mas não foi possível identificar um walletId utilizável. Verifique se a API Key pertence a esse mesmo ambiente ou se a conta retornou um formato inesperado.${walletLookupSuffix}`;
+}
+
+const ASAAS_PAYMENT_WEBHOOK_EVENTS = [
+  "PAYMENT_CREATED",
+  "PAYMENT_UPDATED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_RECEIVED",
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+  "PAYMENT_RESTORED",
+  "PAYMENT_REFUNDED",
+] as const;
+
+type AsaasWebhookRecord = {
+  id?: string;
+  name?: string;
+  url?: string;
+  enabled?: boolean;
+  interrupted?: boolean;
+  sendType?: string;
+  events?: unknown;
+  authToken?: string | null;
+};
+
+type AsaasWebhookFlowType =
+  | "link_existing"
+  | "link_existing_partial"
+  | "create_subaccount"
+  | "manual_repair";
+
+type AsaasWebhookEnsureResult =
+  | {
+    ok: true;
+    action: "created" | "updated" | "unchanged";
+    webhookId: string | null;
+    webhookUrl: string;
+  }
+  | {
+    ok: false;
+    skipped: true;
+    reason: string;
+  };
+
+function buildAsaasWebhookUrl() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!supabaseUrl) return null;
+  return `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/asaas-webhook`;
+}
+
+function buildAsaasWebhookPayload(params: {
+  companyName: string;
+  accountEmail: string | null;
+  webhookUrl: string;
+  webhookToken: string;
+}) {
+  return {
+    name: `Smartbus BR - ${params.companyName}`.slice(0, 100),
+    url: params.webhookUrl,
+    email: params.accountEmail,
+    enabled: true,
+    interrupted: false,
+    apiVersion: 3,
+    sendType: "SEQUENTIALLY",
+    authToken: params.webhookToken,
+    events: [...ASAAS_PAYMENT_WEBHOOK_EVENTS],
+  };
+}
+
+function normalizeWebhookEvents(events: unknown): string[] {
+  return Array.isArray(events)
+    ? events.filter((event): event is string => typeof event === "string").sort()
+    : [];
+}
+
+async function ensureAsaasWebhook(params: {
+  companyId: string;
+  companyName: string;
+  accountEmail: string | null;
+  environment: PaymentEnvironment;
+  asaasBaseUrl: string;
+  accessToken: string;
+}) {
+  const webhookUrl = buildAsaasWebhookUrl();
+  const webhookSecretName = params.environment === "production"
+    ? "ASAAS_WEBHOOK_TOKEN"
+    : "ASAAS_WEBHOOK_TOKEN_SANDBOX";
+  const webhookToken = Deno.env.get(webhookSecretName)?.trim() ?? null;
+
+  if (!webhookUrl || !webhookToken) {
+    console.warn("[create-asaas-account] webhook auto-config skipped", {
+      company_id: params.companyId,
+      environment: params.environment,
+      webhook_url_available: Boolean(webhookUrl),
+      webhook_token_secret_name: webhookSecretName,
+      webhook_token_available: Boolean(webhookToken),
+    });
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_webhook_runtime_configuration",
+    } as const;
+  }
+
+  const payload = buildAsaasWebhookPayload({
+    companyName: params.companyName,
+    accountEmail: params.accountEmail,
+    webhookUrl,
+    webhookToken,
+  });
+
+  const listRes = await fetch(`${params.asaasBaseUrl}/webhooks`, {
+    headers: { "access_token": params.accessToken },
+  });
+
+  if (!listRes.ok) {
+    const responsePreview = await listRes.text();
+    throw new Error(`webhook_list_failed:${listRes.status}:${responsePreview.slice(0, 300)}`);
+  }
+
+  const listData = await listRes.json();
+  const webhooks = Array.isArray(listData?.data)
+    ? listData.data
+    : Array.isArray(listData)
+      ? listData
+      : [];
+
+  const existingWebhook = webhooks.find((item: AsaasWebhookRecord) =>
+    item?.url === webhookUrl || item?.name === payload.name,
+  ) as AsaasWebhookRecord | undefined;
+
+  const hasExpectedEvents = JSON.stringify(normalizeWebhookEvents(existingWebhook?.events)) === JSON.stringify([...ASAAS_PAYMENT_WEBHOOK_EVENTS].sort());
+  const needsUpdate = Boolean(existingWebhook) && (
+    existingWebhook?.url !== webhookUrl ||
+    existingWebhook?.enabled !== true ||
+    existingWebhook?.interrupted !== false ||
+    existingWebhook?.sendType !== payload.sendType ||
+    !hasExpectedEvents
+  );
+
+  if (existingWebhook?.id && needsUpdate) {
+    const updateRes = await fetch(`${params.asaasBaseUrl}/webhooks/${existingWebhook.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "access_token": params.accessToken,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!updateRes.ok) {
+      const responsePreview = await updateRes.text();
+      throw new Error(`webhook_update_failed:${updateRes.status}:${responsePreview.slice(0, 300)}`);
+    }
+
+    return {
+      ok: true,
+      action: "updated",
+      webhookId: existingWebhook.id,
+      webhookUrl,
+    } as const;
+  }
+
+  if (existingWebhook?.id) {
+    return {
+      ok: true,
+      action: "unchanged",
+      webhookId: existingWebhook.id,
+      webhookUrl,
+    } as const;
+  }
+
+  const createRes = await fetch(`${params.asaasBaseUrl}/webhooks`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "access_token": params.accessToken,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!createRes.ok) {
+    const responsePreview = await createRes.text();
+    throw new Error(`webhook_create_failed:${createRes.status}:${responsePreview.slice(0, 300)}`);
+  }
+
+  const createdWebhook = await createRes.json();
+  return {
+    ok: true,
+    action: "created",
+    webhookId: typeof createdWebhook?.id === "string" ? createdWebhook.id : null,
+    webhookUrl,
+  } as const;
+}
+
+/**
+ * Comentário de manutenção:
+ * hoje não existe uma tabela dedicada a logs técnicos de integração por empresa.
+ * Reutilizamos `sale_integration_logs` com `sale_id = null` para manter a mesma trilha
+ * auditável já usada pelo projeto, sem criar estrutura paralela só para webhook Asaas.
+ */
+async function persistAsaasWebhookAttempt(params: {
+  supabaseAdmin: ReturnType<typeof createClient>;
+  companyId: string;
+  paymentEnvironment: PaymentEnvironment;
+  flowType: AsaasWebhookFlowType;
+  result:
+    | AsaasWebhookEnsureResult
+    | {
+      ok: false;
+      action: "failed";
+      reason: string;
+      webhookUrl?: string | null;
+      webhookId?: string | null;
+      details?: unknown;
+    };
+}) {
+  const action = params.result.ok
+    ? params.result.action
+    : params.result.action === "failed"
+      ? "failed"
+      : "skipped";
+
+  const processingStatus = params.result.ok
+    ? "success"
+    : params.result.action === "failed"
+      ? "failed"
+      : "warning";
+
+  const resultCategory = params.result.ok
+    ? "success"
+    : params.result.action === "failed"
+      ? "error"
+      : "warning";
+
+  const incidentCode = !params.result.ok
+    ? params.result.action === "failed"
+      ? "company_webhook_auto_config_failed"
+      : "company_webhook_auto_config_skipped"
+    : null;
+
+  const warningCode = !params.result.ok && params.result.action !== "failed"
+    ? params.result.reason
+    : null;
+
+  const webhookUrl = "webhookUrl" in params.result ? params.result.webhookUrl ?? null : null;
+  const webhookId = "webhookId" in params.result ? params.result.webhookId ?? null : null;
+  const reason = params.result.ok ? null : params.result.reason;
+
+  await logSaleIntegrationEvent({
+    supabaseAdmin: params.supabaseAdmin,
+    saleId: null,
+    companyId: params.companyId,
+    paymentEnvironment: params.paymentEnvironment,
+    environmentDecisionSource: "create-asaas-account",
+    environmentHostDetected: null,
+    provider: "asaas",
+    direction: "outgoing_request",
+    eventType: "company_webhook_configuration",
+    processingStatus,
+    resultCategory,
+    incidentCode,
+    warningCode,
+    message: params.result.ok
+      ? `Configuração de webhook Asaas da empresa concluída com ação=${action}`
+      : `Tentativa de configuração de webhook Asaas da empresa terminou com ação=${action}`,
+    payloadJson: {
+      flow_type: params.flowType,
+      action,
+      webhook_url: webhookUrl,
+      webhook_id: webhookId,
+      reason,
+      details: "details" in params.result ? params.result.details ?? null : null,
+    },
+    responseJson: {
+      flow_type: params.flowType,
+      action,
+      webhook_url: webhookUrl,
+      webhook_id: webhookId,
+      reason,
+    },
+  });
 }
 
 
@@ -653,6 +938,93 @@ serve(async (req) => {
       }
     }
 
+    // ====== MODE: Manually repair / ensure webhook ======
+    if (mode === "ensure_webhook") {
+      const companyApiKey = normalizeCompanyField(companyConfig[envFields.apiKey]);
+      const companyDisplayName = String(company.trade_name || company.legal_name || company.name || "Empresa");
+
+      if (!companyApiKey) {
+        const failedResult = {
+          ok: false as const,
+          action: "failed" as const,
+          reason: "missing_company_api_key_for_manual_webhook_repair",
+        };
+
+        await persistAsaasWebhookAttempt({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          flowType: "manual_repair",
+          result: failedResult,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: "A empresa não possui API Key Asaas no ambiente selecionado. Reconecte a conta antes de tentar reparar o webhook.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      try {
+        const webhookResult = await ensureAsaasWebhook({
+          companyId: company_id,
+          companyName: companyDisplayName,
+          accountEmail: normalizeCompanyField(companyConfig[envFields.accountEmail]) || company.email || null,
+          environment: paymentEnv,
+          asaasBaseUrl,
+          accessToken: companyApiKey,
+        });
+
+        await persistAsaasWebhookAttempt({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          flowType: "manual_repair",
+          result: webhookResult,
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: webhookResult.ok,
+            mode: "ensure_webhook",
+            flow_type: "manual_repair",
+            action: webhookResult.ok ? webhookResult.action : "skipped",
+            webhook_id: webhookResult.ok ? webhookResult.webhookId : null,
+            webhook_url: webhookResult.ok ? webhookResult.webhookUrl : buildAsaasWebhookUrl(),
+            reason: webhookResult.ok ? null : webhookResult.reason,
+            message: webhookResult.ok
+              ? `Webhook Asaas da empresa verificado com sucesso (${webhookResult.action}).`
+              : "Tentativa de reparo concluída sem alteração automática. Verifique a configuração de runtime do webhook.",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } catch (webhookError) {
+        const failedResult = {
+          ok: false as const,
+          action: "failed" as const,
+          reason: webhookError instanceof Error ? webhookError.message : String(webhookError),
+          webhookUrl: buildAsaasWebhookUrl(),
+        };
+
+        await persistAsaasWebhookAttempt({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          flowType: "manual_repair",
+          result: failedResult,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: "Não foi possível reconfigurar o webhook Asaas da empresa no momento.",
+            flow_type: "manual_repair",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // ====== MODE: Link existing account via API Key ======
     if (mode === "link_existing" && api_key) {
       try {
@@ -840,6 +1212,43 @@ serve(async (req) => {
             )
             .eq("id", company_id);
 
+          try {
+            const webhookResult = await ensureAsaasWebhook({
+              companyId: company_id,
+              companyName: String(company.trade_name || company.legal_name || company.name || "Empresa"),
+              accountEmail: accountData.email || company.email || null,
+              environment: paymentEnv,
+              asaasBaseUrl,
+              accessToken: api_key,
+            });
+            await persistAsaasWebhookAttempt({
+              supabaseAdmin,
+              companyId: company_id,
+              paymentEnvironment: paymentEnv,
+              flowType: "link_existing_partial",
+              result: webhookResult,
+            });
+            console.log("[create-asaas-account] link_existing partial webhook auto-config result", webhookResult);
+          } catch (webhookError) {
+            await persistAsaasWebhookAttempt({
+              supabaseAdmin,
+              companyId: company_id,
+              paymentEnvironment: paymentEnv,
+              flowType: "link_existing_partial",
+              result: {
+                ok: false,
+                action: "failed",
+                reason: webhookError instanceof Error ? webhookError.message : String(webhookError),
+                webhookUrl: buildAsaasWebhookUrl(),
+              },
+            });
+            console.warn("[create-asaas-account] link_existing partial webhook auto-config failed", {
+              company_id,
+              environment: paymentEnv,
+              message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+            });
+          }
+
           return new Response(
             JSON.stringify({
               success: true,
@@ -872,6 +1281,43 @@ serve(async (req) => {
             }),
           )
           .eq("id", company_id);
+
+        try {
+          const webhookResult = await ensureAsaasWebhook({
+            companyId: company_id,
+            companyName: String(company.trade_name || company.legal_name || company.name || "Empresa"),
+            accountEmail: accountData.email || company.email || null,
+            environment: paymentEnv,
+            asaasBaseUrl,
+            accessToken: api_key,
+          });
+          await persistAsaasWebhookAttempt({
+            supabaseAdmin,
+            companyId: company_id,
+            paymentEnvironment: paymentEnv,
+            flowType: "link_existing",
+            result: webhookResult,
+          });
+          console.log("[create-asaas-account] link_existing webhook auto-config result", webhookResult);
+        } catch (webhookError) {
+          await persistAsaasWebhookAttempt({
+            supabaseAdmin,
+            companyId: company_id,
+            paymentEnvironment: paymentEnv,
+            flowType: "link_existing",
+            result: {
+              ok: false,
+              action: "failed",
+              reason: webhookError instanceof Error ? webhookError.message : String(webhookError),
+              webhookUrl: buildAsaasWebhookUrl(),
+            },
+          });
+          console.warn("[create-asaas-account] link_existing webhook auto-config failed", {
+            company_id,
+            environment: paymentEnv,
+            message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+          });
+        }
 
         console.log("[create-asaas-account] link_existing persisted account identity", {
           company_id,
@@ -1048,6 +1494,61 @@ serve(async (req) => {
           }),
         )
         .eq("id", company_id);
+
+      if (createData.apiKey) {
+        try {
+          const webhookResult = await ensureAsaasWebhook({
+            companyId: company_id,
+            companyName: displayName || "Empresa",
+            accountEmail: company.email || null,
+            environment: paymentEnv,
+            asaasBaseUrl,
+            accessToken: createData.apiKey,
+          });
+          await persistAsaasWebhookAttempt({
+            supabaseAdmin,
+            companyId: company_id,
+            paymentEnvironment: paymentEnv,
+            flowType: "create_subaccount",
+            result: webhookResult,
+          });
+          console.log("[create-asaas-account] create_subaccount webhook auto-config result", webhookResult);
+        } catch (webhookError) {
+          await persistAsaasWebhookAttempt({
+            supabaseAdmin,
+            companyId: company_id,
+            paymentEnvironment: paymentEnv,
+            flowType: "create_subaccount",
+            result: {
+              ok: false,
+              action: "failed",
+              reason: webhookError instanceof Error ? webhookError.message : String(webhookError),
+              webhookUrl: buildAsaasWebhookUrl(),
+            },
+          });
+          console.warn("[create-asaas-account] create_subaccount webhook auto-config failed", {
+            company_id,
+            environment: paymentEnv,
+            message: webhookError instanceof Error ? webhookError.message : String(webhookError),
+          });
+        }
+      } else {
+        await persistAsaasWebhookAttempt({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          flowType: "create_subaccount",
+          result: {
+            ok: false,
+            skipped: true,
+            reason: "missing_subaccount_api_key_for_webhook_auto_config",
+          },
+        });
+        console.warn("[create-asaas-account] create_subaccount webhook auto-config skipped: missing subaccount api key", {
+          company_id,
+          environment: paymentEnv,
+        });
+      }
 
       return new Response(
         JSON.stringify({
