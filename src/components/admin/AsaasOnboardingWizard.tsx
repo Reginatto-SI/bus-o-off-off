@@ -80,13 +80,11 @@ export function AsaasOnboardingWizard({
    * Por isso somente developer pode alterar o ambiente; para os demais o fluxo nasce
    * e permanece forçado em produção também na lógica de envio para a edge function.
    */
-  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('auto');
+  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('sandbox');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
-  const effectiveTargetEnvironment: 'sandbox' | 'production' | undefined = !isDeveloper
+  const effectiveTargetEnvironment: 'sandbox' | 'production' = !isDeveloper
     ? 'production'
-    : targetEnvironment === 'auto'
-      ? undefined
-      : targetEnvironment;
+    : targetEnvironment;
 
   // Sync localCompanyData when companyData prop changes
   useEffect(() => {
