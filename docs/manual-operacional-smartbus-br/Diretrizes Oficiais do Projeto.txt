@@ -1,0 +1,351 @@
+# DIRETRIZES OFICIAIS DO PROJETO — SMARTBUS BR
+
+## 1. VISÃO DO PRODUTO
+O Smartbus BR é uma plataforma de venda de passagens e gestão de eventos de transporte.
+
+O sistema deve ser:
+- multiempresa (multi-tenant)
+- simples para o usuário final
+- robusto para operação real
+- preparado para escala
+
+O foco é:
+- conversão de vendas
+- confiabilidade operacional
+- clareza para o usuário
+
+---
+
+## 2. PRINCÍPIOS OBRIGATÓRIOS
+
+- Não criar fluxos paralelos desnecessários
+- Não inventar comportamento “inteligente”
+- Não assumir dados
+- Sempre seguir padrão existente
+- Sempre priorizar consistência
+
+**Regra de ouro:**  
+O sistema deve ser previsível, auditável e fácil de entender.
+
+---
+
+## 3. MULTIEMPRESA (CRÍTICO)
+
+- Toda entidade pertence a uma empresa
+- Toda operação respeita isolamento por empresa
+- Nunca misturar dados entre empresas
+- Toda lógica deve considerar `company_id`
+
+Cada empresa possui:
+- seus eventos
+- suas vendas
+- suas integrações
+- suas configurações
+
+---
+
+## 4. MODELO DO SISTEMA
+
+Estrutura principal:
+
+- Evento → define venda
+- Viagem → detalhe operacional
+- Embarque → ponto e horário
+- Venda → registro final
+
+Regras:
+- usuário compra passagem, não “viagem”
+- capacidade é do veículo
+- embarque define horário real
+
+---
+
+## 5. PADRÃO DE UX
+
+- Interface simples e direta
+- Evitar dropdown para decisões críticas
+- Preferir cards e seleção visual
+- Sempre mostrar contexto (vagas, horários, tipo de veículo)
+
+Admin:
+- seguir padrão da tela piloto (/admin/frota)
+- usar menu “…” para ações
+- usar modais com abas
+
+---
+
+## 6. PAGAMENTOS (ASAAS)
+
+- Asaas é o gateway oficial
+- Split de pagamento obrigatório
+- Plataforma retém comissão
+- Empresa recebe o restante
+
+Regras:
+- pagamento inicia como “reservado”
+- só vira “pago” após confirmação
+- webhook é fonte de verdade
+
+---
+
+## 7. AMBIENTES (CRÍTICO)
+
+O sistema possui **dois ambientes obrigatórios**:
+
+- Produção
+- Sandbox
+
+### Regra principal
+Os ambientes são **espelhos**.
+
+Isso significa:
+- mesma lógica
+- mesmas telas
+- mesmo fluxo
+- mesma experiência
+
+O que muda:
+- credenciais
+- endpoints
+- dados externos
+
+### Proibições
+- não criar fluxo diferente por ambiente
+- não duplicar lógica
+- não exigir troca manual de chave
+- não inferir ambiente automaticamente
+
+### Fonte de verdade
+O ambiente deve vir de:
+- configuração da empresa
+
+Nunca:
+- lógica espalhada
+- decisões implícitas
+
+### UX
+- interface deve ser igual nos dois ambientes
+- ambiente é apenas contexto, não muda a estrutura
+
+### Permissão
+- padrão: Produção
+- sandbox: restrito (developer/admin)
+
+### Isolamento
+Nunca misturar:
+- pagamentos reais com sandbox
+- webhooks
+- status
+- logs
+
+### Regra de ouro
+Ambiente é configuração, não variação do sistema.
+
+---
+
+## 8. INTEGRAÇÕES COM API
+
+Toda API deve:
+- suportar produção e sandbox
+- usar credenciais seguras
+- nunca expor chave no frontend
+- usar camada segura para chamadas
+
+Cada empresa possui:
+- sua própria configuração de API
+
+---
+
+## 9. FLUXO DE VENDA
+
+Fluxo público:
+
+1. Escolher evento
+2. Escolher veículo
+3. Escolher embarque
+4. Escolher quantidade
+5. Escolher assentos
+6. Informar passageiros
+7. Pagamento
+
+Regras:
+- sem login obrigatório
+- linguagem simples
+- CTA sempre claro
+
+---
+
+## 10. STATUS DE VENDA
+
+- reservado → criado, aguardando pagamento
+- pago → confirmado
+- cancelado → inválido
+
+Somente vendas “pago” contam:
+- faturamento
+- KPIs
+- ocupação
+
+---
+
+## 11. DADOS SENSÍVEIS
+
+- comissão da plataforma é sigilosa
+- usuário comum não vê divisão interna
+- mostrar apenas valores operacionais
+
+---
+
+## 12. PADRÃO DE IMPLEMENTAÇÃO
+
+Sempre:
+- reutilizar componentes existentes
+- manter layout padrão
+- aplicar mudanças mínimas
+- não refatorar sem necessidade
+
+Nunca:
+- criar nova arquitetura
+- quebrar padrão visual
+- duplicar lógica
+
+---
+
+## 13. PERFORMANCE
+
+- carregamento rápido
+- evitar bloqueios
+- usar carregamento assíncrono
+
+---
+
+## 14. LOGS E ERROS
+
+Sempre que houver erro:
+- informar etapa
+- informar contexto
+- informar ambiente
+- não usar mensagens genéricas
+
+---
+
+## 15. REGRA COMPORTAMENTO PROJETO
+
+Se houver dúvida:
+
+- não assumir comportamento
+- não inventar solução
+- seguir padrão existente
+- priorizar consistência
+
+**O sistema deve sempre se comportar da mesma forma, independente do cenário.**
+
+#16 🌐 Diretriz — Ambiente de Pagamentos (Sandbox vs Produção)
+
+## 🎯 Objetivo
+
+Garantir que o sistema de pagamentos (Asaas) funcione de forma **previsível, auditável e idêntica** entre os ambientes de Sandbox e Produção.
+
+---
+
+## 🧠 Princípio fundamental
+
+O sistema NÃO possui dois fluxos de pagamento.
+
+Existe apenas **UM fluxo único**, que se comporta da mesma forma, variando apenas:
+
+- credenciais (API Key)
+- endpoints externos
+- dados retornados pelo provedor
+
+---
+
+## 🏢 Modelo de operação
+
+Cada empresa possui sua própria configuração de pagamento:
+
+- `asaas_api_key`
+- `asaas_wallet_id`
+- `payment_environment` (`sandbox` ou `production`)
+
+👉 O ambiente é definido pela empresa, não pelo sistema.
+
+---
+
+## 🔌 Criação de cobrança
+
+- A cobrança SEMPRE é criada usando a API Key da empresa
+- O ambiente (sandbox ou produção) é inferido a partir dessa chave
+- O sistema NÃO deve alternar endpoints manualmente por lógica paralela
+
+---
+
+## 🔔 Webhook
+
+- O webhook deve ser configurado na conta Asaas correspondente à API utilizada
+- Ou seja:
+  - cobrança criada na conta da empresa → webhook vem da conta da empresa
+- O sistema deve possuir **um único endpoint de webhook**
+
+### Regra obrigatória:
+O webhook NÃO define o ambiente por URL ou host.
+
+O ambiente deve ser identificado com base em:
+- dados da venda (`sales.payment_environment`)
+- ou associação segura via `externalReference`
+
+---
+
+## 🔎 Identificação da venda
+
+Toda integração deve usar:
+
+- `externalReference` → referência principal da venda
+- `asaas_payment_id` → referência secundária
+- `company_id` → isolamento multiempresa
+- `payment_environment` → separação de ambiente
+
+---
+
+## 🔄 Confirmação de pagamento
+
+A confirmação pode ocorrer por:
+
+### 1. Webhook (prioritário)
+- evento recebido automaticamente
+- atualiza venda para `pago`
+
+### 2. Verificação manual (fallback)
+- função `verify-payment-status`
+- consulta direta no Asaas
+- usa MESMA lógica de finalização
+
+👉 Ambos devem convergir para:
+`finalizeConfirmedPayment(...)`
+
+---
+
+## ⚠️ Regras críticas
+
+- Nunca misturar dados de sandbox e produção
+- Nunca usar lógica paralela por ambiente
+- Nunca inferir ambiente por URL
+- Nunca depender de webhook exclusivamente
+- Nunca permitir que falhas acessórias (logs, notificações) quebrem o pagamento
+
+---
+
+## 🧪 Testabilidade
+
+O sistema deve permitir:
+
+- testar sandbox sem impactar produção
+- executar fluxo completo sem trocar código
+- validar comportamento idêntico entre ambientes
+
+---
+
+## 🧱 Regra de ouro
+
+Se houver diferença de comportamento entre sandbox e produção,
+isso é considerado BUG de implementação — não comportamento esperado.
