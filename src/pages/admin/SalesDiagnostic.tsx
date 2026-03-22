@@ -113,6 +113,28 @@ interface SaleIntegrationLog {
   created_at: string;
 }
 
+const EMPTY_UUID_FILTER = '00000000-0000-0000-0000-000000000000';
+const EXACT_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function buildCreatedAtBoundary(dateInput: string, endOfDay: boolean): string {
+  const [year, month, day] = dateInput.split('-').map(Number);
+
+  if (!year || !month || !day) {
+    throw new Error(`Data inválida para filtro: ${dateInput}`);
+  }
+
+  // Correção crítica: `new Date('YYYY-MM-DD')` interpreta a string em UTC e depois `setHours`
+  // atua no fuso local, truncando o dia em navegadores UTC-03. Montamos a data com componentes
+  // locais para que o intervalo represente exatamente o dia operacional visto pelo usuário.
+  return endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999).toISOString()
+    : new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+}
+
+function isExactUuid(value: string): boolean {
+  return EXACT_UUID_PATTERN.test(value);
+}
+
 function formatPaymentEnvironmentLabel(value?: string | null): string {
   return value === 'production' ? 'Produção' : 'Sandbox';
 }
@@ -908,9 +930,117 @@ export default function SalesDiagnostic() {
     }
 
     if (filters.search.trim()) {
-      const s = filters.search.trim();
-      // Search by name, CPF, sale ID, or event name
-      query = query.or(`customer_name.ilike.%${s}%,customer_cpf.ilike.%${s}%,id.ilike.%${s}%`);
+      const searchTerm = filters.search.trim();
+      const normalizedCpf = searchTerm.replace(/\D/g, '');
+      const matchedSaleIds = new Set<string>();
+
+      // A busca antiga tentava `ILIKE` direto em UUID e quebrava a consulta no PostgREST.
+      // Aqui resolvemos as chaves de busca em etapas explícitas e só aplicamos `id IN (...)`
+      // no resultado final, preservando previsibilidade e evitando erro técnico no backend.
+      const [nameSearchRes, cpfSearchRes] = await Promise.all([
+        (() => {
+          let salesByNameQuery = supabase
+            .from('sales')
+            .select('id')
+            .ilike('customer_name', `%${searchTerm}%`)
+            .limit(100);
+
+          if (activeCompanyId) {
+            salesByNameQuery = salesByNameQuery.eq('company_id', activeCompanyId);
+          }
+
+          return salesByNameQuery;
+        })(),
+        normalizedCpf.length > 0
+          ? (() => {
+              let salesByCpfQuery = supabase
+                .from('sales')
+                .select('id')
+                .ilike('customer_cpf', `%${normalizedCpf}%`)
+                .limit(100);
+
+              if (activeCompanyId) {
+                salesByCpfQuery = salesByCpfQuery.eq('company_id', activeCompanyId);
+              }
+
+              return salesByCpfQuery;
+            })()
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (nameSearchRes.error || cpfSearchRes.error) {
+        toast.error('Erro ao resolver a busca de vendas para diagnóstico');
+        setLoading(false);
+        return;
+      }
+
+      (nameSearchRes.data ?? []).forEach((sale) => matchedSaleIds.add(sale.id));
+      (cpfSearchRes.data ?? []).forEach((sale) => matchedSaleIds.add(sale.id));
+
+      if (isExactUuid(searchTerm)) {
+        matchedSaleIds.add(searchTerm);
+      }
+
+      // Mantemos ticket e evento como apoio mínimo à UX já prometida pelo campo de busca,
+      // sem trocar a fonte principal da grade nem introduzir nova arquitetura de consulta.
+      const [ticketSearchRes, eventSearchRes] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select('sale_id')
+          .ilike('ticket_number', `%${searchTerm}%`)
+          .limit(100),
+        (() => {
+          let eventsQuery = supabase
+            .from('events')
+            .select('id')
+            .ilike('name', `%${searchTerm}%`)
+            .limit(50);
+
+          if (activeCompanyId) {
+            eventsQuery = eventsQuery.eq('company_id', activeCompanyId);
+          }
+
+          return eventsQuery;
+        })(),
+      ]);
+
+      if (ticketSearchRes.error || eventSearchRes.error) {
+        toast.error('Erro ao resolver a busca complementar do diagnóstico');
+        setLoading(false);
+        return;
+      }
+
+      (ticketSearchRes.data ?? []).forEach((ticket) => {
+        if (ticket.sale_id) matchedSaleIds.add(ticket.sale_id);
+      });
+
+      const matchedEventIds = (eventSearchRes.data ?? []).map((event) => event.id);
+      if (matchedEventIds.length > 0) {
+        let salesByEventQuery = supabase
+          .from('sales')
+          .select('id')
+          .in('event_id', matchedEventIds)
+          .limit(100);
+
+        if (activeCompanyId) {
+          salesByEventQuery = salesByEventQuery.eq('company_id', activeCompanyId);
+        }
+
+        const { data: salesByEvent, error: salesByEventError } = await salesByEventQuery;
+
+        if (salesByEventError) {
+          toast.error('Erro ao resolver a busca por evento no diagnóstico');
+          setLoading(false);
+          return;
+        }
+
+        (salesByEvent ?? []).forEach((sale) => matchedSaleIds.add(sale.id));
+      }
+
+      const resolvedSaleIds = Array.from(matchedSaleIds);
+      query = resolvedSaleIds.length > 0
+        ? query.in('id', resolvedSaleIds)
+        : query.eq('id', EMPTY_UUID_FILTER);
     }
 
     if (filters.status !== 'all') {
@@ -922,13 +1052,11 @@ export default function SalesDiagnostic() {
     }
 
     if (filters.dateFrom) {
-      query = query.gte('created_at', new Date(filters.dateFrom).toISOString());
+      query = query.gte('created_at', buildCreatedAtBoundary(filters.dateFrom, false));
     }
 
     if (filters.dateTo) {
-      const toDate = new Date(filters.dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      query = query.lte('created_at', toDate.toISOString());
+      query = query.lte('created_at', buildCreatedAtBoundary(filters.dateTo, true));
     }
 
     const { data, error } = await query;
@@ -1137,7 +1265,7 @@ export default function SalesDiagnostic() {
       <div className="space-y-1.5">
         <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Calendar className="h-4 w-4" />
-          Data inicial
+          Data inicial da criação da venda
         </label>
         <input
           type="date"
@@ -1149,7 +1277,7 @@ export default function SalesDiagnostic() {
       <div className="space-y-1.5">
         <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Calendar className="h-4 w-4" />
-          Data final
+          Data final da criação da venda
         </label>
         <input
           type="date"
@@ -1174,7 +1302,7 @@ export default function SalesDiagnostic() {
           <FilterCard
             searchValue={filters.search}
             onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
-            searchPlaceholder="Nome, CPF, ID da venda ou evento..."
+            searchPlaceholder="Nome, CPF, ticket, ID exato da venda ou evento..."
             searchIcon={Search}
             selects={filterSelects}
             mainFilters={mainFilters}
@@ -1654,7 +1782,7 @@ export default function SalesDiagnostic() {
                           <pre className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
                             {JSON.stringify(
                               (() => {
-                                const { ...safe } = detailSale as any;
+                                const safe = { ...(detailSale as unknown as Record<string, unknown>) };
                                 // Remove sensitive/internal fields
                                 delete safe.event;
                                 delete safe.company;
