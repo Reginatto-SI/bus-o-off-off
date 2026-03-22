@@ -1887,6 +1887,11 @@ export default function CompanyPage() {
                               </AlertDescription>
                             </Alert>
                           )}
+                          {/* Comentário de manutenção:
+                              hoje a UI trata qualquer estado diferente de `connected` como jornada de conexão
+                              ainda aberta, por isso os cards de criar/vincular continuam visíveis em
+                              `partially_configured`. Antes de mudar esta renderização, validar se a pendência
+                              real está na persistência do `account_id`, no cálculo de status ou apenas na UX. */}
                           {!asaasOnboardingMode ? (
                             <div className="grid gap-3 sm:grid-cols-2">
                               <Card className="cursor-pointer hover:border-primary transition-colors" onClick={() => setAsaasOnboardingMode('create')}>

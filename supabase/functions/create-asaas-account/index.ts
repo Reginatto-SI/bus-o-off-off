@@ -106,6 +106,73 @@ function extractWalletIdFromAsaasPayload(payload: unknown): string | null {
   return read(payload);
 }
 
+type ResolvedAccountId = {
+  value: string | null;
+  source: string | null;
+};
+
+function extractAccountIdFromAsaasPayload(
+  payload: unknown,
+  options?: { allowGenericNestedId?: boolean },
+): ResolvedAccountId {
+  /**
+   * Comentário de manutenção:
+   * o `account_id` estava ficando nulo porque o vínculo por API Key aceitava apenas
+   * `myAccount.id`. Em alguns payloads reais o identificador pode aparecer aninhado
+   * em estruturas já usadas pelo fluxo atual (`account`, `owner`, `data`, `items`).
+   * Mantemos uma ordem conservadora:
+   * 1) prioriza `id` explícito do payload principal;
+   * 2) depois tenta aliases semânticos de conta;
+   * 3) por último, só quando permitido, aceita `id` genérico aninhado.
+   * Isso evita confundir walletId com accountId e reaproveita apenas fontes já lidas
+   * pelo próprio fluxo atual (`/myAccount` e fallbacks já existentes).
+   */
+  const visited = new Set<unknown>();
+
+  const read = (value: unknown, path: string, allowGenericId: boolean): ResolvedAccountId => {
+    if (!value || typeof value !== "object") return { value: null, source: null };
+    if (visited.has(value)) return { value: null, source: null };
+    visited.add(value);
+
+    const record = value as Record<string, unknown>;
+    const directCandidates: Array<{ value: unknown; source: string }> = [
+      { value: record.accountId, source: `${path}.accountId` },
+      { value: record.account_id, source: `${path}.account_id` },
+    ];
+
+    if (allowGenericId) {
+      directCandidates.unshift({ value: record.id, source: `${path}.id` });
+    }
+
+    for (const candidate of directCandidates) {
+      if (typeof candidate.value === "string" && candidate.value.trim().length > 0) {
+        return { value: candidate.value.trim(), source: candidate.source };
+      }
+    }
+
+    const nestedCandidates: Array<{ value: unknown; path: string; allowGenericId?: boolean }> = [
+      { value: record.account, path: `${path}.account`, allowGenericId: true },
+      { value: record.owner, path: `${path}.owner`, allowGenericId: true },
+      { value: record.data, path: `${path}.data`, allowGenericId: false },
+      { value: Array.isArray(record.items) ? record.items[0] : null, path: `${path}.items[0]`, allowGenericId: false },
+      { value: Array.isArray(record.data) ? record.data[0] : null, path: `${path}.data[0]`, allowGenericId: false },
+    ];
+
+    for (const candidate of nestedCandidates) {
+      const nestedResult = read(
+        candidate.value,
+        candidate.path,
+        candidate.allowGenericId ?? options?.allowGenericNestedId ?? false,
+      );
+      if (nestedResult.value) return nestedResult;
+    }
+
+    return { value: null, source: null };
+  };
+
+  return read(payload, "payload", true);
+}
+
 function buildWalletDiagnosticMessage(params: {
   environment: PaymentEnvironment;
   walletLookupAttempted: boolean;
@@ -468,6 +535,7 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
+        const resolvedRevalidateAccountId = extractAccountIdFromAsaasPayload(accountData);
         let walletIdFromResponse = extractWalletIdFromAsaasPayload(accountData);
         let walletLookupStatus: number | null = null;
         let walletLookupSummary: ReturnType<typeof summarizeAsaasPayload> | null = null;
@@ -555,6 +623,8 @@ serve(async (req) => {
           company_id,
           environment: paymentEnv,
           wallet_id_preview: maskSensitiveValue(String(walletId)),
+          account_id_preview: maskSensitiveValue(resolvedRevalidateAccountId.value),
+          account_id_source: resolvedRevalidateAccountId.source,
           account_status: accountData?.status ?? null,
         });
 
@@ -563,6 +633,8 @@ serve(async (req) => {
             success: true,
             revalidated: true,
             wallet_id: walletId,
+            account_id: resolvedRevalidateAccountId.value,
+            account_id_source: resolvedRevalidateAccountId.source,
             account_status: accountData?.status ?? null,
             account_name: accountData?.name || accountData?.tradingName || null,
           }),
@@ -628,13 +700,18 @@ serve(async (req) => {
         }
 
         const accountData = await myAccountRes.json();
+        const resolvedAccountIdFromMyAccount = extractAccountIdFromAsaasPayload(accountData);
         console.log("[create-asaas-account] link_existing myAccount payload summary", {
           company_id,
           environment: paymentEnv,
           summary: summarizeAsaasPayload(accountData),
+          account_id_preview: maskSensitiveValue(resolvedAccountIdFromMyAccount.value),
+          account_id_source: resolvedAccountIdFromMyAccount.source,
         });
 
         let walletId = extractWalletIdFromAsaasPayload(accountData);
+        let accountId = resolvedAccountIdFromMyAccount.value;
+        let accountIdSource = resolvedAccountIdFromMyAccount.source;
         let walletLookupStatus: number | null = null;
         let walletLookupSummary: ReturnType<typeof summarizeAsaasPayload> | null = null;
 
@@ -696,12 +773,27 @@ serve(async (req) => {
                 // /accounts returns { data: [...] } — pick the first match
                 const firstAccount = Array.isArray(accountsData?.data) ? accountsData.data[0] : accountsData;
                 const platformWalletId = extractWalletIdFromAsaasPayload(firstAccount);
+                const resolvedPlatformAccountId = extractAccountIdFromAsaasPayload(firstAccount);
                 if (platformWalletId) {
                   walletId = platformWalletId;
                   console.log("[create-asaas-account] walletId resolved via platform /accounts lookup", {
                     company_id,
                     environment: paymentEnv,
                     wallet_id_preview: maskSensitiveValue(walletId),
+                  });
+                }
+                if (!accountId && resolvedPlatformAccountId.value) {
+                  // Comentário de manutenção:
+                  // quando `myAccount` valida a conta mas não expõe `id` no topo, reutilizamos
+                  // o primeiro item já retornado por `/accounts` neste mesmo fluxo para
+                  // consolidar `account_id` do cadastro local sem criar endpoint novo.
+                  accountId = resolvedPlatformAccountId.value;
+                  accountIdSource = `platform_accounts_fallback:${resolvedPlatformAccountId.source}`;
+                  console.log("[create-asaas-account] accountId resolved via platform /accounts lookup", {
+                    company_id,
+                    environment: paymentEnv,
+                    account_id_preview: maskSensitiveValue(accountId),
+                    account_id_source: accountIdSource,
                   });
                 }
               } else {
@@ -741,7 +833,7 @@ serve(async (req) => {
               buildCompanyConfigWithEnvironmentUpdate({
                 [envFields.walletId]: null,
                 [envFields.apiKey]: api_key,
-                [envFields.accountId]: accountData.id || null,
+                [envFields.accountId]: accountId,
                 [envFields.accountEmail]: accountData.email || null,
                 [envFields.onboardingComplete]: false,
               }),
@@ -753,8 +845,10 @@ serve(async (req) => {
               success: true,
               partial: true,
               wallet_id: null,
+              account_id: accountId,
+              account_id_source: accountIdSource,
               account_name: accountData.name || accountData.tradingName || null,
-              warning: "API Key validada e salva, mas o walletId não foi identificado. A conta foi vinculada parcialmente.",
+              warning: `API Key validada e salva, mas o walletId não foi identificado. ${accountId ? `O accountId foi resolvido via ${accountIdSource}. ` : "O accountId também não foi identificado. "}A conta foi vinculada parcialmente.`,
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -766,17 +860,33 @@ serve(async (req) => {
             buildCompanyConfigWithEnvironmentUpdate({
               [envFields.walletId]: walletId,
               [envFields.apiKey]: api_key,
-              [envFields.accountId]: accountData.id || null,
+              // Comentário de manutenção:
+              // o `account_id` ficava nulo porque o código aceitava apenas `myAccount.id`.
+              // Agora o fluxo tenta primeiro o identificador principal de `/myAccount` e,
+              // se necessário, reutiliza o item já consultado em `/accounts` para extrair
+              // o identificador equivalente da mesma conta validada, sem mudar a semântica
+              // de status nem criar endpoints adicionais.
+              [envFields.accountId]: accountId,
               [envFields.accountEmail]: accountData.email || null,
               [envFields.onboardingComplete]: true,
             }),
           )
           .eq("id", company_id);
 
+        console.log("[create-asaas-account] link_existing persisted account identity", {
+          company_id,
+          environment: paymentEnv,
+          wallet_id_preview: maskSensitiveValue(walletId),
+          account_id_preview: maskSensitiveValue(accountId),
+          account_id_source: accountIdSource,
+        });
+
         return new Response(
           JSON.stringify({
             success: true,
             wallet_id: walletId,
+            account_id: accountId,
+            account_id_source: accountIdSource,
             account_name: accountData.name || accountData.tradingName || null,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

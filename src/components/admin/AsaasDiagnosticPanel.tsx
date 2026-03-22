@@ -111,12 +111,18 @@ export function AsaasDiagnosticPanel({
         const revalidateSuccess = data?.success === true;
         const partial = data?.partial === true;
         const walletId = data?.wallet_id;
+        const accountId = data?.account_id;
+        const accountIdSource = data?.account_id_source;
 
         steps.push({
           label: 'Validar resposta',
           status: revalidateSuccess ? 'success' : 'error',
           detail: revalidateSuccess
-            ? (partial ? 'Parcial — sem walletId' : `walletId: ${walletId ? walletId.slice(0, 8) + '...' : 'N/A'}`)
+            ? (
+              partial
+                ? `Parcial — sem walletId${accountId ? `, accountId via ${accountIdSource ?? 'fonte não informada'}` : ', sem accountId'}`
+                : `walletId: ${walletId ? walletId.slice(0, 8) + '...' : 'N/A'} · accountId: ${accountId ? `${String(accountId).slice(0, 8)}... via ${accountIdSource ?? 'fonte não informada'}` : 'N/A'}`
+            )
             : (data?.error || 'Resposta sem sucesso'),
         });
 
@@ -221,6 +227,10 @@ export function AsaasDiagnosticPanel({
           <div>
             <span className="text-muted-foreground">Wallet ID: </span>
             <span className="font-mono">{asaasSnapshot?.current.walletId ? `${asaasSnapshot.current.walletId.slice(0, 12)}...` : '—'}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Account ID: </span>
+            <span className="font-mono">{asaasSnapshot?.current.accountId ? `${asaasSnapshot.current.accountId.slice(0, 12)}...` : '—'}</span>
           </div>
         </div>
 
