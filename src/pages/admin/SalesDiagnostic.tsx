@@ -14,15 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -32,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -48,7 +40,6 @@ import {
   Clock,
   AlertTriangle,
   Ticket,
-  ChevronDown,
   Webhook,
   Code,
   FileJson,
@@ -1522,11 +1513,43 @@ export default function SalesDiagnostic() {
   );
 
   const operationalGroupTitles: Record<OperationalCategory, string> = {
-    divergencia: 'Com divergência',
-    atencao: 'Atenção',
-    saudavel: 'Saudáveis',
-    pago: 'Pagas',
-    cancelado: 'Canceladas',
+    divergencia: 'Problemas',
+    atencao: 'Pendentes',
+    saudavel: 'OK',
+    pago: 'OK',
+    cancelado: 'OK',
+  };
+
+  const getStatusToneClasses = (operational: DiagnosticOperationalView) => {
+    if (operational.category === 'divergencia') {
+      return {
+        container: 'border-destructive/30 bg-destructive/5',
+        badge: 'border-destructive/30 bg-destructive/10 text-destructive',
+        dot: 'bg-destructive',
+      };
+    }
+
+    if (operational.category === 'atencao') {
+      return {
+        container: 'border-amber-300 bg-amber-50/70',
+        badge: 'border-amber-300 bg-amber-100 text-amber-800',
+        dot: 'bg-amber-500',
+      };
+    }
+
+    if (operational.category === 'pago' || operational.category === 'saudavel') {
+      return {
+        container: 'border-emerald-200 bg-emerald-50/60',
+        badge: 'border-emerald-200 bg-emerald-100 text-emerald-800',
+        dot: 'bg-emerald-500',
+      };
+    }
+
+    return {
+      container: 'border-zinc-200 bg-zinc-50/80',
+      badge: 'border-zinc-200 bg-zinc-100 text-zinc-700',
+      dot: 'bg-zinc-400',
+    };
   };
 
   const renderSaleRow = ({ sale, operational }: { sale: DiagnosticSale; operational: DiagnosticOperationalView }) => {
@@ -1535,7 +1558,6 @@ export default function SalesDiagnostic() {
     const lockStatus = computeLockStatus(sale);
     const flowStage = computeFlowStage(sale);
     const FlowIcon = flowStage.icon;
-    const compactFlowLabel = computeCompactFlowLabel(flowStage.label);
     const createdAtLabel = format(parseISO(sale.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR });
     const createdAtRelativeLabel = formatDistanceToNowStrict(parseISO(sale.created_at), {
       addSuffix: true,
@@ -1543,6 +1565,14 @@ export default function SalesDiagnostic() {
     });
     const saleAmountLabel = formatCurrencyBRL(sale.gross_amount ?? sale.quantity * sale.unit_price);
     const paymentEnvironmentLabel = sale.payment_environment === 'production' ? 'Produção' : 'Sandbox';
+    const statusTone = getStatusToneClasses(operational);
+    const primaryStatusLabel = operational.hasGatewayDivergence ? 'Divergência' : operational.categoryLabel;
+    const secondaryStatusLabel = operational.operationalLabel;
+    const actionSummaryLabel = (() => {
+      if (operational.category === 'divergencia') return 'Revisar';
+      if (operational.category === 'atencao') return 'Acompanhar';
+      return 'Sem ação';
+    })();
 
     const actions: ActionItem[] = [
       {
@@ -1575,115 +1605,158 @@ export default function SalesDiagnostic() {
     const isNewSale = autoRefreshEnabled && newSaleIds.includes(sale.id);
 
     return (
-      <TableRow
+      <div
         key={sale.id}
         className={cn(
-          'border-l-4 transition-colors',
-          operational.category === 'divergencia' && 'border-l-destructive bg-destructive/5',
-          operational.category === 'atencao' && 'border-l-amber-400 bg-amber-50/50',
-          operational.category === 'saudavel' && 'border-l-transparent',
-          operational.category === 'pago' && 'border-l-emerald-400 bg-emerald-50/40',
-          operational.category === 'cancelado' && 'border-l-zinc-300 bg-zinc-50/40'
+          'overflow-hidden rounded-xl border bg-card shadow-sm transition-colors',
+          statusTone.container,
+          isNewSale && 'ring-2 ring-primary/20'
         )}
       >
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold uppercase tracking-tight text-foreground">
+        {/* Nova divisão em 3 blocos: informação principal, status e ação.
+            Isso reduz ruído visual e replica a leitura operacional rápida adotada nas telas piloto do admin. */}
+        <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(240px,0.9fr)_minmax(180px,0.45fr)] lg:items-start">
+          <div className="min-w-0 space-y-3">
+            <div className="space-y-1.5">
+              <p className="text-base font-semibold uppercase tracking-tight text-foreground">
                 {sale.event_name}
               </p>
               <p className="text-sm text-muted-foreground">
                 Comprador: <span className="font-medium text-foreground">{sale.customer_name}</span>
               </p>
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {createdAtLabel} • {saleAmountLabel}
-                </p>
-                <p className="text-xs font-medium text-foreground">
-                  {createdAtRelativeLabel}
-                </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>{createdAtLabel}</span>
+                <span>•</span>
+                <span className="font-medium text-foreground">{saleAmountLabel}</span>
+                <span>•</span>
+                <span>{createdAtRelativeLabel}</span>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-[11px] font-normal">
                 {gateway}
               </Badge>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-[11px] font-normal">
                 {paymentEnvironmentLabel}
               </Badge>
               {isNewSale && (
-                <Badge className="text-xs">Nova</Badge>
+                <Badge variant="outline" className="text-[11px] font-normal">
+                  Nova
+                </Badge>
               )}
             </div>
           </div>
-        </TableCell>
 
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge status={sale.status} />
-              <Badge variant={paymentStatus.variant} className="text-xs">
-                {operational.paymentStatusLabel}
+          <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            {/* Padronização de status: apenas um badge principal aparece na visão resumida.
+                Os detalhes complementares ficam em texto curto e os dados técnicos descem para o accordion. */}
+            <div className="flex items-center gap-2">
+              <span className={cn('h-2.5 w-2.5 rounded-full', statusTone.dot)} />
+              <Badge variant="outline" className={cn('text-xs font-medium', statusTone.badge)}>
+                {primaryStatusLabel}
               </Badge>
-              <Badge variant={operational.categoryVariant} className={`text-xs ${operational.categoryClassName ?? ''}`}>
-                {operational.categoryLabel}
-              </Badge>
-              {operational.hasGatewayDivergence && (
-                <Badge variant="destructive" className="text-xs">Divergência gateway</Badge>
-              )}
             </div>
-
             <div className="space-y-1">
-              <p className="text-sm font-semibold leading-tight">{operational.operationalLabel}</p>
-              <p className="text-xs text-muted-foreground">
-                Venda: {operational.saleStatusLabel} • Pagamento: {paymentStatus.detail ?? operational.paymentStatusLabel}
-              </p>
+              <p className="text-lg font-semibold leading-none text-foreground">{secondaryStatusLabel}</p>
+              <p className="text-sm text-muted-foreground">{paymentStatus.label}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
             </div>
           </div>
-        </TableCell>
 
-        <TableCell className="py-5 align-top">
-          <div className="space-y-2">
-            <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">Ação sugerida:</span> {operational.actionLabel}
-            </p>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p>{operational.timeLabel} • {operational.timeDetail}</p>
-              <p>{operational.timeSourceLabel}</p>
+          <div className="min-w-0 space-y-3 border-t border-border/60 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+            {/* A antiga coluna "Controle" saiu da visão principal porque misturava leitura operacional com detalhe técnico.
+                A ação agora é objetiva e o restante fica recolhido no accordion abaixo. */}
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ação sugerida</p>
+              <p className="text-sm font-semibold text-foreground">{actionSummaryLabel}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{operational.actionLabel}</p>
+            </div>
+            <div className="flex justify-start lg:justify-end">
+              <ActionsDropdown actions={actions} />
             </div>
           </div>
-        </TableCell>
+        </div>
 
-        <TableCell className="py-5 align-top">
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
-                {operational.lockLabel}
-              </Badge>
-              {lockStatus.detail && (
-                <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
-              )}
-            </div>
+        {/* Os dados técnicos ficam em accordion fechado por padrão para preservar leitura em 3 segundos.
+            Assim o operador vê primeiro o essencial e expande somente quando precisar auditar a venda. */}
+        <Accordion type="single" collapsible>
+          <AccordionItem value={`sale-${sale.id}`} className="border-t border-border/70 px-4">
+            <AccordionTrigger className="py-3 text-sm font-medium text-muted-foreground hover:no-underline">
+              <span>Ver detalhes técnicos e trilha operacional</span>
+            </AccordionTrigger>
+            <AccordionContent className="pb-4">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
+                <div className="space-y-2 rounded-lg border bg-background/80 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Diagnóstico completo</p>
+                  <p className="text-sm font-semibold leading-tight text-foreground">{operational.causeLabel}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{operational.operationalDetail}</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>{operational.timeLabel} • {operational.timeDetail}</p>
+                    <p>{operational.timeSourceLabel}</p>
+                  </div>
+                </div>
 
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
-              <span className={`flex items-center gap-1.5 text-sm ${flowStage.color}`}>
-                <FlowIcon className="h-3.5 w-3.5 shrink-0" />
-                <span>{compactFlowLabel}</span>
-              </span>
-            </div>
-          </div>
-        </TableCell>
+                <div className="space-y-3 rounded-lg border bg-background/80 p-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fluxo</p>
+                    <span className={`flex items-center gap-1.5 text-sm font-medium ${flowStage.color}`}>
+                      <FlowIcon className="h-4 w-4 shrink-0" />
+                      <span>{flowStage.label}</span>
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pagamento</p>
+                    <p className="text-sm text-foreground">{operational.paymentStatusLabel}</p>
+                    {paymentStatus.detail && (
+                      <p className="text-xs leading-relaxed text-muted-foreground">{paymentStatus.detail}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status da venda</p>
+                    <div className="pt-0.5"><StatusBadge status={sale.status} /></div>
+                  </div>
+                </div>
 
-        <TableCell className="py-5 align-top">
-          <ActionsDropdown actions={actions} />
-        </TableCell>
-      </TableRow>
+                <div className="space-y-3 rounded-lg border bg-background/80 p-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Bloqueio</p>
+                    <Badge variant={operational.lockVariant} className="text-xs whitespace-normal text-left">
+                      {operational.lockLabel}
+                    </Badge>
+                    {lockStatus.detail && (
+                      <p className="text-xs leading-relaxed text-muted-foreground">{lockStatus.detail}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Logs relevantes</p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Gateway: {gateway} • Ambiente: {paymentEnvironmentLabel}
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Tickets gerados: {sale.ticket_count ?? 0} • Assentos bloqueados: {sale.active_lock_count ?? 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
     );
   };
+
+  const renderSalesGroup = (entries: typeof visibleSalesWithOperationalView, title?: string) => (
+    <div className="space-y-3">
+      {title && (
+        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <Badge variant="outline" className="text-xs">{entries.length} item(ns)</Badge>
+        </div>
+      )}
+      {entries.map((entry) => renderSaleRow(entry))}
+    </div>
+  );
 
   return (
     <AdminLayout>
@@ -1695,7 +1768,7 @@ export default function SalesDiagnostic() {
 
         <Card className="mb-4">
           <CardContent className="space-y-4 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {activeCompany?.name && (
                   <Badge variant="outline" className="text-xs">
@@ -1721,7 +1794,7 @@ export default function SalesDiagnostic() {
                 </Badge>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <div className="flex items-center gap-2 rounded-md border px-3 py-2">
                   <Switch
                     checked={autoRefreshEnabled}
@@ -1742,17 +1815,21 @@ export default function SalesDiagnostic() {
                   />
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium text-foreground">Agrupar por status</p>
-                    <p className="text-xs text-muted-foreground">Mantém a ordem por data dentro do grupo</p>
+                    <p className="text-xs text-muted-foreground">Problemas, pendentes e OK</p>
                   </div>
                 </div>
 
-                <Button
-                  variant={showOnlyProblems ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setShowOnlyProblems((current) => !current)}
-                >
-                  {showOnlyProblems ? 'Mostrar todos' : 'Ver apenas problemas'}
-                </Button>
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Switch
+                    checked={showOnlyProblems}
+                    onCheckedChange={setShowOnlyProblems}
+                    aria-label="Ver apenas problemas"
+                  />
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">Ver apenas problemas</p>
+                    <p className="text-xs text-muted-foreground">Oculta vendas OK para foco operacional</p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1791,7 +1868,7 @@ export default function SalesDiagnostic() {
         </div>
 
         {!loading && visibleSalesWithOperationalView.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <StatsCard label="Total" value={visibleOperationalSummary.total} icon={Activity} />
             <StatsCard label="Pendentes saudáveis" value={visibleOperationalSummary.saudavel} icon={CheckCircle} variant="success" />
             <StatsCard label="Pendentes atenção" value={visibleOperationalSummary.atencao} icon={AlertTriangle} variant="warning" />
@@ -1818,44 +1895,11 @@ export default function SalesDiagnostic() {
             description={`Nenhuma venda encontrada para ${activeCompany?.name ?? 'a empresa ativa'} com os filtros atuais.`}
           />
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[29%] min-w-[280px]">Venda</TableHead>
-                    <TableHead className="w-[24%] min-w-[240px]">Status</TableHead>
-                    <TableHead className="w-[25%] min-w-[240px]">Diagnóstico</TableHead>
-                    <TableHead className="w-[16%] min-w-[170px]">Controle</TableHead>
-                    <TableHead className="w-[76px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                {groupByOperationalStatus ? (
-                  groupedSalesWithOperationalView.map((group) => (
-                    <TableBody key={group.category}>
-                      <TableRow className="bg-muted/40">
-                        <TableCell colSpan={5} className="py-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-foreground">
-                              {operationalGroupTitles[group.category]}
-                            </span>
-                            <Badge variant="outline" className="text-xs">
-                              {group.entries.length} item(ns)
-                            </Badge>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {group.entries.map((entry) => renderSaleRow(entry))}
-                    </TableBody>
-                  ))
-                ) : (
-                  <TableBody>
-                    {visibleSalesWithOperationalView.map((entry) => renderSaleRow(entry))}
-                  </TableBody>
-                )}
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            {groupByOperationalStatus
+              ? groupedSalesWithOperationalView.map((group) => renderSalesGroup(group.entries, operationalGroupTitles[group.category]))
+              : renderSalesGroup(visibleSalesWithOperationalView)}
+          </div>
         )}
 
         {/* Detail Modal */}
