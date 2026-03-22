@@ -367,7 +367,7 @@ export function AsaasOnboardingWizard({
         <p className="flex items-start gap-2"><Mail className="mt-0.5 h-4 w-4 text-primary" />O e-mail <strong>{localCompanyData?.email}</strong> será a referência principal da conta criada.</p>
         <p className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />A senha <strong>não é criada</strong> dentro do Smartbus BR. Após a criação, o Asaas enviará um e-mail para <strong>{localCompanyData?.email}</strong> com o link para definir a senha de acesso.</p>
         <p>Depois da vinculação, acesse o ambiente do Asaas para gerenciar a conta e os recebimentos.</p>
-        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{effectiveTargetEnvironment === 'sandbox' ? 'Sandbox (testes)' : effectiveTargetEnvironment === 'production' ? 'Produção (pagamentos reais)' : 'Automático pelo host'}</strong>.</p>
+        <p className="text-muted-foreground">Ambiente alvo selecionado: <strong>{effectiveTargetEnvironment === 'sandbox' ? 'Sandbox (testes)' : 'Produção (pagamentos reais)'}</strong>.</p>
       </div>
     </div>
   );
