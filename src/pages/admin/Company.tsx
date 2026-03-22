@@ -1948,6 +1948,17 @@ export default function CompanyPage() {
                         </div>
                       )}
                     </div>
+
+                    {isDeveloper && (
+                      <AsaasDiagnosticPanel
+                        company={company}
+                        runtimeEnvironment={runtimePaymentEnvironment}
+                        runtimeSource={runtimePaymentSource}
+                        asaasStatus={asaasStatus}
+                        editingId={editingId}
+                        asaasSnapshot={asaasSnapshot}
+                      />
+                    )}
                   </TabsContent>
 
 
