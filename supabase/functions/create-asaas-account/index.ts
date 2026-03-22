@@ -550,7 +550,36 @@ serve(async (req) => {
           );
         }
 
-    if (mode === "link_existing" && api_key) {
+        // Revalidation succeeded — wallet found
+        console.log("[ASAAS][VERIFY] Validation succeeded", {
+          company_id,
+          environment: paymentEnv,
+          wallet_id_preview: maskSensitiveValue(String(walletId)),
+          account_status: accountData?.status ?? null,
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            revalidated: true,
+            wallet_id: walletId,
+            account_status: accountData?.status ?? null,
+            account_name: accountData?.name || accountData?.tradingName || null,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (revalidateErr) {
+        console.error("[ASAAS][VERIFY] unexpected error", {
+          company_id,
+          environment: paymentEnv,
+          error: revalidateErr instanceof Error ? revalidateErr.message : String(revalidateErr),
+        });
+        return new Response(
+          JSON.stringify({ error: "Erro inesperado ao revalidar integração Asaas." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
       try {
         // Comentário de manutenção:
         // o vínculo por API Key agora é disparado apenas pelo wizard reutilizável no frontend.
