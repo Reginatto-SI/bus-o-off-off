@@ -808,7 +808,7 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
 
 // ── Component ──
 export default function SalesDiagnostic() {
-  const { isDeveloper, activeCompanyId } = useAuth();
+  const { activeCompanyId } = useAuth();
   const [sales, setSales] = useState<DiagnosticSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<DiagnosticFilters>(initialFilters);
@@ -900,8 +900,10 @@ export default function SalesDiagnostic() {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    // Developer: cross-company. Others: filter by active company.
-    if (!isDeveloper && activeCompanyId) {
+    // Correção mínima: esta tela deve seguir o mesmo contrato visual do restante do admin.
+    // Se o header mostra uma empresa ativa, a consulta precisa respeitar esse `company_id`,
+    // inclusive para developer, evitando leitura cross-company implícita nesta rota.
+    if (activeCompanyId) {
       query = query.eq('company_id', activeCompanyId);
     }
 
@@ -1021,7 +1023,8 @@ export default function SalesDiagnostic() {
       .order('date', { ascending: false })
       .limit(50);
 
-    if (!isDeveloper && activeCompanyId) {
+    // Mantemos o filtro de eventos coerente com a mesma empresa ativa usada na listagem.
+    if (activeCompanyId) {
       query = query.eq('company_id', activeCompanyId);
     }
 
@@ -1063,8 +1066,8 @@ export default function SalesDiagnostic() {
     setDetailLoading(false);
   };
 
-  useEffect(() => { fetchSales(); }, [activeCompanyId, isDeveloper, filters]);
-  useEffect(() => { fetchEvents(); }, [activeCompanyId, isDeveloper]);
+  useEffect(() => { fetchSales(); }, [activeCompanyId, filters]);
+  useEffect(() => { fetchEvents(); }, [activeCompanyId]);
 
   const filterSelects = [
     {
