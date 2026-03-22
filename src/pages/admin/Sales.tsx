@@ -183,27 +183,49 @@ const blockReasonLabels: Record<string, string> = {
   outro: 'Outro',
 };
 
-const PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES = 15;
 const MANUAL_RESERVATION_TTL_HOURS = 72;
 
-function getPendingPaymentOperationalSignal(sale: Sale): {
-  isExpired: boolean;
-  expiredMinutes: number;
-} | null {
-  if (sale.status !== 'pendente_pagamento') return null;
+type SalesOperationalSignal = {
+  label: string;
+  detail: string;
+};
 
-  const createdAt = new Date(sale.created_at);
-  if (Number.isNaN(createdAt.getTime())) return null;
+function getSalesOperationalSignal(params: {
+  sale: Sale;
+  latestLockExpiresAt?: string | null;
+}): SalesOperationalSignal | null {
+  const now = new Date();
 
-  // Comentário de manutenção: a sinalização abaixo é apenas operacional/visual
-  // para o admin. O status oficial da venda continua vindo do banco sem alteração.
-  const elapsedMinutes = differenceInMinutes(new Date(), createdAt);
-  if (elapsedMinutes <= PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES) return null;
+  // Comentário de suporte: `/admin/vendas` não pode mais inferir vencimento do checkout
+  // por `created_at`, porque a fonte oficial do fluxo público é `seat_locks.expires_at`.
+  // Se não houver lock carregado para a linha, preferimos não sinalizar expiração em vez
+  // de emitir um falso positivo visual que contradiga o backend/diagnóstico.
+  if (params.sale.status === 'pendente_pagamento') {
+    const latestLockExpiresAt = params.latestLockExpiresAt ?? null;
+    if (!latestLockExpiresAt) return null;
 
-  return {
-    isExpired: true,
-    expiredMinutes: elapsedMinutes - PENDING_PAYMENT_OPERATIONAL_WINDOW_MINUTES,
-  };
+    const expiresAt = new Date(latestLockExpiresAt);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > now.getTime()) return null;
+
+    return {
+      label: 'Limpeza operacional pendente',
+      detail: `O bloqueio temporário do checkout venceu há ${differenceInMinutes(now, expiresAt)} min, mas o status oficial permanece aguardando pagamento até o cleanup concluir o cancelamento.`,
+    };
+  }
+
+  // Reservas manuais usam validade própria em `reservation_expires_at`; seguimos a mesma
+  // regra da tela diagnóstica para não criar narrativa paralela na listagem operacional.
+  if (params.sale.status === 'reservado' && params.sale.reservation_expires_at) {
+    const expiresAt = new Date(params.sale.reservation_expires_at);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > now.getTime()) return null;
+
+    return {
+      label: 'Validade operacional vencida',
+      detail: `A validade da reserva manual venceu há ${differenceInMinutes(now, expiresAt)} min, mas o status oficial permanece reservado até o cleanup concluir o cancelamento.`,
+    };
+  }
+
+  return null;
 }
 
 // ── Helper to build TicketCardData ──
@@ -283,6 +305,7 @@ export default function Sales() {
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
   const [ticketNumbersMap, setTicketNumbersMap] = useState<Record<string, string[]>>({});
   const [boardingTimeMap, setBoardingTimeMap] = useState<Record<string, string | null>>({});
+  const [latestLockExpiryMap, setLatestLockExpiryMap] = useState<Record<string, string | null>>({});
   // Ordenação ativa (nullable): quando null, aplica o padrão da tela (Data da Compra desc).
   const [sortConfig, setSortConfig] = useState<{ field: SalesSortField; direction: SalesSortDirection } | null>(null);
   const [eventFilterOpen, setEventFilterOpen] = useState(false);
@@ -466,6 +489,7 @@ export default function Sales() {
     if (error) {
       toast.error('Erro ao carregar vendas');
       setBoardingTimeMap({});
+      setLatestLockExpiryMap({});
     } else {
       setSales((data ?? []) as unknown as Sale[]);
       setTotalSalesCount(count ?? 0);
@@ -510,12 +534,23 @@ export default function Sales() {
         .in('trip_id', tripIds)
         .in('boarding_location_id', boardingLocationIds);
 
+      let lockQuery = supabase
+        .from('seat_locks')
+        .select('sale_id, expires_at')
+        .in('sale_id', saleIds);
+
       if (activeCompanyId) {
         boardingQuery = boardingQuery.eq('company_id', activeCompanyId);
+        lockQuery = lockQuery.eq('company_id', activeCompanyId);
       }
 
-      const { data: boardingData } = await boardingQuery;
+      const [{ data: boardingData }, { data: lockData }] = await Promise.all([
+        boardingQuery,
+        lockQuery,
+      ]);
+
       const nextBoardingMap: Record<string, string | null> = {};
+      const nextLockExpiryMap: Record<string, string | null> = {};
       (boardingData ?? []).forEach((boarding: any) => {
         const key = `${boarding.event_id}::${boarding.trip_id}::${boarding.boarding_location_id}`;
         // Evita sobrescrever chaves repetidas mantendo a primeira ocorrência válida.
@@ -525,11 +560,26 @@ export default function Sales() {
       boardingKeys.forEach((key) => {
         if (!(key in nextBoardingMap)) nextBoardingMap[key] = null;
       });
+
+      (lockData ?? []).forEach((lock: any) => {
+        if (!lock.sale_id) return;
+        const currentLatest = nextLockExpiryMap[lock.sale_id];
+        if (!currentLatest || new Date(lock.expires_at).getTime() > new Date(currentLatest).getTime()) {
+          nextLockExpiryMap[lock.sale_id] = lock.expires_at;
+        }
+      });
+
+      saleIds.forEach((saleId) => {
+        if (!(saleId in nextLockExpiryMap)) nextLockExpiryMap[saleId] = null;
+      });
+
       setBoardingTimeMap(nextBoardingMap);
+      setLatestLockExpiryMap(nextLockExpiryMap);
     } else {
       setSeatLabelsMap({});
       setTicketNumbersMap({});
       setBoardingTimeMap({});
+      setLatestLockExpiryMap({});
     }
 
     setLoading(false);
@@ -1393,7 +1443,10 @@ export default function Sales() {
                     const ticketNumbers = ticketNumbersMap[sale.id] ?? [];
                     const { display: seatsDisplay, full: seatsFull } = formatSeatLabels(seatLabels ?? []);
                     const isBlock = sale.status === 'bloqueado';
-                    const pendingPaymentSignal = getPendingPaymentOperationalSignal(sale);
+                    const operationalSignal = getSalesOperationalSignal({
+                      sale,
+                      latestLockExpiresAt: latestLockExpiryMap[sale.id] ?? null,
+                    });
                     return (
                       <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
                         <TableCell className="text-sm whitespace-nowrap">
@@ -1459,17 +1512,16 @@ export default function Sales() {
                         <TableCell>
                           <div className="flex flex-col gap-0.5">
                             <StatusBadge status={sale.status} />
-                            {pendingPaymentSignal?.isExpired && (
+                            {operationalSignal && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 cursor-help">
                                     <AlertCircle className="h-3 w-3" />
-                                    Expirado operacionalmente
+                                    {operationalSignal.label}
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Janela operacional de pagamento excedida há {pendingPaymentSignal.expiredMinutes} min.
-                                  O status oficial continua como aguardando pagamento até a rotina automática concluir a limpeza/cancelamento.
+                                  {operationalSignal.detail}
                                 </TooltipContent>
                               </Tooltip>
                             )}
