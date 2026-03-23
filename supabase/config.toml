@@ -1,14 +1,5 @@
 project_id = "cdrcyjrvurrphnceromd"
 
-[functions.stripe-webhook]
-verify_jwt = false
-
-[functions.create-connect-account]
-verify_jwt = false
-
-[functions.create-checkout-session]
-verify_jwt = false
-
 [functions.verify-payment-status]
 verify_jwt = false
 
