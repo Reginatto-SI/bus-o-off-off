@@ -16,6 +16,7 @@ interface RegisterCompanyRequest {
   email: string;
   phone: string;
   password: string;
+  referral_code?: string | null;
 }
 
 serve(async (req) => {
@@ -39,6 +40,7 @@ serve(async (req) => {
       email,
       phone,
       password,
+      referral_code,
     } = body;
 
     // Validate required fields
@@ -74,6 +76,7 @@ serve(async (req) => {
     }
 
     const normalizedDocument = document_number.replace(/\D/g, "");
+    const normalizedReferralCode = referral_code?.trim().toUpperCase() || null;
     if (legal_type === "PJ" && normalizedDocument.length !== 14) {
       return new Response(
         JSON.stringify({ error: "CNPJ deve ter 14 dígitos" }),
@@ -169,6 +172,60 @@ serve(async (req) => {
     }
 
     const companyId = company.id;
+
+    // Comentário de manutenção: o vínculo oficial do referral nasce somente após a empresa
+    // indicada existir no banco. Clique, URL e sessão nunca criam o vínculo sozinhos.
+    if (normalizedReferralCode) {
+      const { data: referrerCompany, error: referrerLookupError } = await supabaseAdmin
+        .from("companies")
+        .select("id, referral_code, is_active")
+        .eq("referral_code", normalizedReferralCode)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (referrerLookupError) {
+        console.error("Error resolving referral code:", referrerLookupError);
+      } else if (!referrerCompany) {
+        console.log("[register-company] referral_code ignored because it was not found or inactive", {
+          referral_code: normalizedReferralCode,
+          referred_company_id: companyId,
+        });
+      } else if (referrerCompany.id === companyId) {
+        console.log("[register-company] direct self-referral blocked", {
+          referral_code: normalizedReferralCode,
+          referred_company_id: companyId,
+        });
+      } else {
+        // Comentário de idempotência: a constraint única em `referred_company_id` garante
+        // que a mesma empresa indicada nunca gere dois vínculos oficiais.
+        const { error: referralInsertError } = await supabaseAdmin
+          .from("company_referrals")
+          .insert({
+            company_id: referrerCompany.id,
+            referrer_company_id: referrerCompany.id,
+            referred_company_id: companyId,
+            referral_code: normalizedReferralCode,
+            status: "pendente",
+            tracking_captured_at: new Date().toISOString(),
+            activated_at: new Date().toISOString(),
+            target_platform_fee_amount: 100,
+            reward_amount: 50,
+            progress_platform_fee_amount: 0,
+          });
+
+        // Regra de resiliência do MVP: referral inválido/inconsistente nunca bloqueia o cadastro.
+        if (referralInsertError) {
+          if ((referralInsertError as { code?: string | null }).code === "23505") {
+            console.log("[register-company] referral ignored because referred company already has an official link", {
+              referral_code: normalizedReferralCode,
+              referred_company_id: companyId,
+            });
+          } else {
+            console.error("Error creating company referral:", referralInsertError);
+          }
+        }
+      }
+    }
 
     // 3. Wait for handle_new_user trigger to complete
     await new Promise((resolve) => setTimeout(resolve, 500));

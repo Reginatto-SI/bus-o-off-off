@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, Bus, CalendarCheck2, Loader2, QrCode, ShieldCheck, WalletCards } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,12 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
+import {
+  clearCompanyReferralTracking,
+  normalizeCompanyReferralCode,
+  persistCompanyReferralTracking,
+  readCompanyReferralTracking,
+} from '@/lib/companyReferral';
 
 function formatCNPJ(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 14);
@@ -70,6 +76,7 @@ const isValidCnpj = (value: string) => {
 
 export default function CompanyRegistration() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +92,7 @@ export default function CompanyRegistration() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralTrackingCode, setReferralTrackingCode] = useState<string | null>(null);
 
   // Comentário: conteúdo institucional fixo para reforçar credibilidade sem alterar fluxo do cadastro.
   const benefits = [
@@ -94,6 +102,25 @@ export default function CompanyRegistration() {
     { icon: ShieldCheck, text: 'Comissão automática para vendedores' },
     { icon: WalletCards, text: 'Estrutura pronta para pagamentos online' },
   ];
+
+  const referralCodeFromUrl = useMemo(
+    () => normalizeCompanyReferralCode(searchParams.get('ref')),
+    [searchParams]
+  );
+
+  useEffect(() => {
+    // Comentário de manutenção: regra adotada para conflito de links no MVP.
+    // O primeiro link válido da sessão é preservado, mas uma nova entrada explícita
+    // com `?ref=` substitui conscientemente o tracking ativo porque houve nova ação do usuário.
+    if (referralCodeFromUrl) {
+      persistCompanyReferralTracking(referralCodeFromUrl);
+      setReferralTrackingCode(referralCodeFromUrl);
+      return;
+    }
+
+    const existingTracking = readCompanyReferralTracking();
+    setReferralTrackingCode(existingTracking?.code ?? null);
+  }, [referralCodeFromUrl]);
 
   const validate = () => {
     const hasBaseRequired = companyName && responsibleName && email && phone && password && confirmPassword;
@@ -147,6 +174,7 @@ export default function CompanyRegistration() {
           email,
           phone: normalizePhoneForStorage(phone),
           password,
+          referral_code: referralTrackingCode,
         },
       });
 
@@ -163,6 +191,10 @@ export default function CompanyRegistration() {
         setLoading(false);
         return;
       }
+
+      // Comentário de manutenção: o tracking temporário já cumpriu seu papel
+      // quando o backend conclui a criação da empresa e decide se ativa ou não o vínculo oficial.
+      clearCompanyReferralTracking();
 
       toast({
         title: 'Bem-vindo! 🎉',
@@ -222,6 +254,13 @@ export default function CompanyRegistration() {
                 {error && (
                   <Alert variant="destructive" className="mb-4">
                     <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                {referralTrackingCode && (
+                  <Alert className="mb-4">
+                    <AlertDescription>
+                      Você está criando sua conta por um link oficial de indicação. O código será validado no cadastro, sem bloquear sua criação de conta caso esteja inválido.
+                    </AlertDescription>
                   </Alert>
                 )}
                 {/* Comentário: mantém o mesmo padrão visual e adiciona apenas os campos mínimos para PF/PJ. */}

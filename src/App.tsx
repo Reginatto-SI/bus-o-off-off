@@ -46,6 +46,7 @@ import Confirmation from "./pages/public/Confirmation";
 import TicketLookup from "./pages/public/TicketLookup";
 import SellerRedirect from "./pages/public/SellerRedirect";
 import CompanyRegistration from "./pages/public/CompanyRegistration";
+import CompanyReferralRedirect from "./pages/public/CompanyReferralRedirect";
 import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
@@ -79,6 +80,7 @@ const App = () => (
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             <Route path="/v/:code" element={<SellerRedirect />} />
             <Route path="/cadastro" element={<CompanyRegistration />} />
+            <Route path="/i/:code" element={<CompanyReferralRedirect />} />
             {/* Redirect legado para manter links antigos de onboarding público. */}
             <Route path="/cadastro-empresa" element={<Navigate to="/cadastro" replace />} />
             <Route path="/empresa/:nick" element={<PublicCompanyShowcase />} />

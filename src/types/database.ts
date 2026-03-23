@@ -32,6 +32,7 @@ export interface Company {
   accent_color: string | null;
   ticket_color: string | null;
   public_slug: string | null;
+  referral_code: string;
   slogan: string | null;
   document: string | null;
   phone: string | null;
