@@ -230,12 +230,13 @@ serve(async (req) => {
     // 3. Wait for handle_new_user trigger to complete
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // 4. Update profile to point to new company
+    // 4. Update only cadastral profile data.
+    // O vínculo multiempresa oficial é user_roles; profiles.company_id não deve
+    // voltar a ditar contexto de empresa porque isso contaminava a empresa padrão.
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
         name: responsible_name,
-        company_id: companyId,
         phone,
       })
       .eq("id", userId);
@@ -244,7 +245,8 @@ serve(async (req) => {
       console.error("Error updating profile:", profileError);
     }
 
-    // 5. Delete default company role created by trigger
+    // 5. Limpeza defensiva do legado: se existir vínculo indevido na empresa
+    // padrão para esta conta recém-criada, removemos antes de gravar user_roles.
     const defaultCompanyId = "a0000000-0000-0000-0000-000000000001";
     await supabaseAdmin
       .from("user_roles")
