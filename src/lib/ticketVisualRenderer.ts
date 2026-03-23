@@ -35,6 +35,29 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.closePath();
 }
 
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [''];
+
+  const lines: string[] = [];
+  let currentLine = words[0];
+
+  for (const word of words.slice(1)) {
+    const candidate = `${currentLine} ${word}`;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      currentLine = candidate;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = word;
+  }
+
+  lines.push(currentLine);
+  return lines;
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -121,14 +144,20 @@ export async function renderTicketVisual(
   }
 
   const headerX = cardX + 88;
+  const headerMaxWidth = cardX + cardW - 32 - headerX;
   ctx.fillStyle = '#111827';
   ctx.font = '600 32px Inter, Arial, sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillText(ticket.companyName, headerX, y + 2);
+  // Mantém o export alternativo alinhado ao template compartilhado: nome da empresa quebra linha, nunca corta.
+  const companyNameLines = wrapText(ctx, ticket.companyName, headerMaxWidth);
+  const companyNameLineHeight = 34;
+  companyNameLines.forEach((line, index) => {
+    ctx.fillText(line, headerX, y + 2 + (index * companyNameLineHeight));
+  });
 
   ctx.fillStyle = '#64748b';
   ctx.font = '400 18px Inter, Arial, sans-serif';
-  let companyMetaY = y + 40;
+  let companyMetaY = y + 8 + (companyNameLines.length * companyNameLineHeight);
 
   if (formattedCnpj) {
     ctx.fillText(`CNPJ: ${formattedCnpj}`, headerX, companyMetaY);
@@ -145,7 +174,9 @@ export async function renderTicketVisual(
     ctx.fillText(contacts, headerX, companyMetaY);
   }
 
-  y = cardY + 130;
+  const headerBottomY = contacts ? companyMetaY + 22 : companyMetaY;
+  // Reserva espaço mínimo para cabeçalhos longos sem deslocar o restante quando o nome é curto.
+  y = Math.max(cardY + 130, headerBottomY + 20);
   const qrSize = 240;
   const qrX = cardX + (cardW - qrSize) / 2;
   ctx.drawImage(sourceCanvas, qrX, y, qrSize, qrSize);
