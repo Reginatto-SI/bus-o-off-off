@@ -1,7 +1,10 @@
-# Documento Master – Como conectar a conta Stripe para começar a vender online
+# Documento legado – antigo fluxo de conexão Stripe
+
+> **Status:** descontinuado. O gateway oficial atual do Smartbus BR é **Asaas**.
+> Este documento foi preservado apenas para contexto histórico e não deve ser usado como instrução operacional vigente.
 
 ## 1. Objetivo do Processo
-Habilitar o recebimento de pagamentos online no Smartbus BR, conectando a conta da empresa ao Stripe para liberar a venda digital de passagens/eventos.
+Documento preservado apenas para registrar como funcionava o onboarding Stripe antes da migração oficial para Asaas.
 
 ## 2. Quando Utilizar
 Utilize este fluxo quando:

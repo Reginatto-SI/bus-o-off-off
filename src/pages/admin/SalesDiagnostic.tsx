@@ -356,6 +356,13 @@ function computeGateway(sale: DiagnosticSale): string {
   return 'Manual';
 }
 
+function getGatewayDisplayLabel(gateway: string): string {
+  // Comentário de suporte: Stripe foi neutralizado no runtime e aparece aqui apenas
+  // como referência histórica para vendas antigas que ainda carregam IDs legados.
+  if (gateway === 'Stripe') return 'Legado Stripe';
+  return gateway;
+}
+
 function computeLockStatus(sale: DiagnosticSale): LockStatusView {
   const gateway = computeGateway(sale);
   const expiresAt = sale.latest_lock_expires_at ?? null;
@@ -872,7 +879,7 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
   if (gateway !== 'Manual' && (sale.asaas_payment_id || sale.stripe_checkout_session_id)) {
     entries.push({
       time: format(parseISO(sale.created_at), 'HH:mm:ss', { locale: ptBR }),
-      label: `Cobrança enviada ao ${gateway}`,
+      label: `Cobrança enviada ao ${getGatewayDisplayLabel(gateway)}`,
       icon: CreditCard,
       color: 'text-blue-600',
     });
@@ -1697,7 +1704,7 @@ export default function SalesDiagnostic() {
       options: [
         { value: 'all', label: 'Todos' },
         ...(availableGateways.includes('asaas') ? [{ value: 'asaas', label: 'Asaas' }] : []),
-        ...(availableGateways.includes('stripe') ? [{ value: 'stripe', label: 'Stripe' }] : []),
+        ...(availableGateways.includes('stripe') ? [{ value: 'stripe', label: 'Legado Stripe' }] : []),
         ...(availableGateways.includes('manual') ? [{ value: 'manual', label: 'Manual' }] : []),
       ],
     },
@@ -2272,7 +2279,7 @@ export default function SalesDiagnostic() {
                         </div>
                         <div>
                           <span className="text-muted-foreground">Gateway</span>
-                          <p>{computeGateway(detailSale)}</p>
+                          <p>{getGatewayDisplayLabel(computeGateway(detailSale))}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Status da venda</span>
@@ -2342,7 +2349,7 @@ export default function SalesDiagnostic() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground">Gateway utilizado</span>
-                          <p>{computeGateway(detailSale)}</p>
+                          <p>{getGatewayDisplayLabel(computeGateway(detailSale))}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Empresa vinculada</span>
