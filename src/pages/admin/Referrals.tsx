@@ -193,10 +193,8 @@ export default function Referrals() {
         }
 
         if (referralsError) {
-          logSupabaseError('Erro ao carregar indicações da empresa', referralsError, {
-            context: { action: 'select', table: 'company_referrals', companyId: activeCompanyId, userId: user?.id },
-          });
-          toast.error(buildDebugToastMessage('Não foi possível carregar as indicações.', referralsError));
+          logSupabaseError({ label: 'Erro ao carregar indicações da empresa', error: referralsError, context: { action: 'select', table: 'company_referrals', companyId: activeCompanyId, userId: user?.id } });
+          toast.error(buildDebugToastMessage({ title: 'Não foi possível carregar as indicações.', error: referralsError }));
           setReferrals([]);
         } else {
           setReferrals((referralsData as ReferralRow[] | null) ?? []);

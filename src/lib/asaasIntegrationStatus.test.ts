@@ -54,6 +54,7 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
     social_website: null,
     is_active: true,
     created_at: '2026-01-01T00:00:00.000Z',
+    referral_code: 'TESTE123',
     updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
