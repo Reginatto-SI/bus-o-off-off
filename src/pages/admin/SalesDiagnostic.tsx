@@ -472,10 +472,16 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
   const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
   const hasGatewayDivergence = ((isPendingCheckout || isReserved) && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
 
+  // Helper local para evitar repetição: calcula operationalPriority a partir do resultado parcial.
+  const withPriority = (base: Omit<DiagnosticOperationalView, 'operationalPriority'>): DiagnosticOperationalView => ({
+    ...base,
+    operationalPriority: computeOperationalPriority(base),
+  });
+
   // A causa principal é mutuamente exclusiva: a função retorna no primeiro cenário dominante.
   // Isso evita que a linha traga duas narrativas conflitantes e preserva uma leitura operacional confiável.
   if (sale.status === 'pago') {
-    return {
+    return withPriority({
       category: 'pago',
       categoryLabel: 'Pago',
       categoryVariant: 'default',
