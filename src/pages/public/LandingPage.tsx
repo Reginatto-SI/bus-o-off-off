@@ -242,9 +242,14 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)]">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="Smartbus BR" className="h-9 object-contain brightness-0 invert" />
+        <div className="mx-auto flex min-h-[4.5rem] max-w-7xl items-center justify-between px-4 py-2 sm:min-h-[5rem] sm:px-6 lg:px-8">
+          <Link to="/" className="flex items-center gap-2 py-1">
+            {/* A logo ganha mais presença visual sem alterar a estrutura do header nem a hierarquia dos CTAs. */}
+            <img
+              src={logo}
+              alt="Smartbus BR"
+              className="h-11 object-contain brightness-0 invert sm:h-12"
+            />
           </Link>
 
           <nav className="hidden items-center gap-4 md:flex">
