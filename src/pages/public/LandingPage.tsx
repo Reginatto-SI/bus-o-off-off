@@ -28,6 +28,12 @@ import {
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -232,7 +238,7 @@ const LANDING_SOCIAL_LINKS = [
   {
     key: "facebook",
     label: "Facebook",
-    href: "https://facebook.com/smartbusbr",
+    href: "https://www.facebook.com/smartbusbroficial",
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -244,9 +250,80 @@ const LANDING_SOCIAL_LINKS = [
       </svg>
     ),
   },
+  {
+    key: "youtube",
+    label: "YouTube",
+    href: "https://www.youtube.com/@SmartBusbr",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="h-[18px] w-[18px]"
+        aria-hidden="true"
+      >
+        <path d="M23.498 6.186a2.998 2.998 0 0 0-2.11-2.12C19.533 3.563 12 3.563 12 3.563s-7.533 0-9.389.503A2.998 2.998 0 0 0 .502 6.186 31.08 31.08 0 0 0 0 12a31.08 31.08 0 0 0 .502 5.814 2.998 2.998 0 0 0 2.109 2.12c1.856.503 9.389.503 9.389.503s7.533 0 9.389-.503a2.998 2.998 0 0 0 2.11-2.12A31.08 31.08 0 0 0 24 12a31.08 31.08 0 0 0-.502-5.814ZM9.545 15.568V8.432L15.818 12l-6.273 3.568Z" />
+      </svg>
+    ),
+  },
+  {
+    key: "x",
+    label: "X",
+    href: "https://x.com/smartbusbr2026",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="h-[18px] w-[18px]"
+        aria-hidden="true"
+      >
+        <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.847h-7.406l-5.8-7.584-6.64 7.584H.473l8.6-9.828L0 1.153h7.594l5.243 6.932 6.064-6.932Zm-1.291 19.49h2.039L6.486 3.249H4.298L17.61 20.643Z" />
+      </svg>
+    ),
+  },
 ] as const;
 const socialIconLinkClass =
   "inline-flex h-9 w-9 items-center justify-center rounded-full text-white/65 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
+// FAQ comercial posicionada perto do fechamento da landing para responder objeções sem competir com a proposta principal.
+const LANDING_FAQS = [
+  {
+    question: "O sistema tem mensalidade?",
+    answer: "Não. Você paga apenas quando vender passagens pela plataforma.",
+  },
+  {
+    question: "Como funciona a taxa da plataforma?",
+    answer: "A plataforma cobra 6% sobre cada venda realizada.",
+  },
+  {
+    question: "Preciso ter conta no Asaas?",
+    answer:
+      "Não. Você pode criar sua conta durante a configuração do sistema ou conectar uma conta já existente.",
+  },
+  {
+    question: "Preciso ter CNPJ para usar o sistema?",
+    answer:
+      "Não. Você pode começar a usar mesmo sem CNPJ, conforme o seu modelo de operação.",
+  },
+  {
+    question: "Como recebo os pagamentos das vendas?",
+    answer:
+      "Os pagamentos são processados pelo Asaas e o valor é repassado conforme a configuração da sua operação.",
+  },
+  {
+    question: "Posso vender passagens sem site próprio?",
+    answer:
+      "Sim. O sistema já oferece uma página pronta para divulgação e venda das passagens.",
+  },
+  {
+    question: "Preciso de conhecimento técnico para usar?",
+    answer:
+      "Não. O sistema foi desenvolvido para ser simples, prático e fácil de operar.",
+  },
+  {
+    question: "Em quanto tempo posso começar a vender?",
+    answer:
+      "Em poucos minutos você já pode configurar sua operação e começar a vender.",
+  },
+] as const;
 const JOURNEY_OPTIONS = [
   {
     icon: Ticket,
@@ -1124,6 +1201,33 @@ export default function LandingPage() {
                   ))}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+      <section className="bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-8 text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Perguntas frequentes
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              Tire suas principais dúvidas sobre o Smartbus BR
+            </p>
+          </div>
+          <div className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+            {/* O accordion mantém a leitura leve e deixa só uma resposta aberta por vez, evitando um bloco visual pesado perto do footer. */}
+            <Accordion type="single" collapsible defaultValue="faq-0" className="w-full">
+              {LANDING_FAQS.map((item, index) => (
+                <AccordionItem key={item.question} value={`faq-${index}`} className="border-border last:border-b-0">
+                  <AccordionTrigger className="py-5 text-left text-base font-semibold text-foreground hover:no-underline">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground sm:text-base">
+                    {item.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         </div>
       </section>
