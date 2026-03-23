@@ -8,8 +8,8 @@ export default function PublicRootRedirect() {
     pathname: window.location.pathname,
   });
 
-  // Quando o domínio atual estiver vinculado a uma empresa, a home pública vira porta de entrada da vitrine.
-  // Como este componente só é usado na rota "/", não há risco de loop ao redirecionar para "/empresa/:slug".
+  // Estratégia oficial e única deste fluxo: a raiz do hostname mapeado entra pela vitrine canônica
+  // /empresa/busaooffoff. Hostnames não mapeados continuam renderizando a landing sem alteração.
   if (redirectPath) {
     return <Navigate to={redirectPath} replace />;
   }
