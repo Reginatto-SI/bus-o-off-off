@@ -59,6 +59,7 @@
 - `src/pages/public/PublicCompanyShowcase.tsx`
 - `src/components/public/EventCardFeatured.tsx`
 - `src/components/public/EventCard.tsx`
+- `src/components/public/EventsCarousel.tsx`
 
 ## Plano de correção mínima
 1. Fortalecer o hero com mensagem mais clara, selos de confiança e CTA principal mais coerente com a vitrine.
@@ -74,6 +75,7 @@
 - Seção do carrossel passou a ter subtítulo comercial e indicador simples de quantidade de eventos disponíveis.
 - Banner principal recebeu rótulo “Evento em destaque”, overlay mais forte, microcopy de apoio e CTA “Comprar agora”.
 - Cards passaram a exibir contexto curto de compra/embarque, descrição breve de decisão e CTA “Ver detalhes e comprar”.
+- Carrossel de destaque recebeu botões visíveis de navegação anterior/próximo em desktop para reduzir dependência de swipe e melhorar descoberta da interação.
 - Seção “Todos os eventos” ganhou texto de apoio para ajudar a comparação de opções.
 - Bloco “Por que viajar com a gente?” foi reorganizado com cabeçalho mais comercial, texto explicativo e benefícios reescritos para maior clareza percebida.
 
