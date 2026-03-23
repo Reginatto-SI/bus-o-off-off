@@ -221,6 +221,30 @@ const PLATFORM_DIFFERENTIALS = [
     desc: "A empresa opera com cobrança online e integração Asaas dentro da arquitetura atual da plataforma.",
   },
 ];
+// Novo argumento comercial: a landing passa a comunicar monetização além da passagem
+// usando a distinção real do produto entre parceiros da empresa e patrocinadores do evento.
+const REVENUE_OPPORTUNITIES = [
+  {
+    icon: Building2,
+    title: "Parceiros da empresa",
+    desc: "Destaque marcas parceiras na vitrine institucional da operação e fortaleça acordos comerciais recorrentes da empresa.",
+  },
+  {
+    icon: Star,
+    title: "Patrocinadores do evento",
+    desc: "Valorize apoiadores de um evento específico com apresentação mais profissional e mais argumento para novas negociações.",
+  },
+  {
+    icon: Wallet,
+    title: "Mais que passagens",
+    desc: "Sem mensalidade, a operação pode vender, organizar o embarque e abrir espaço para receita adicional com visibilidade comercial.",
+  },
+  {
+    icon: BarChart3,
+    title: "Mais valor percebido",
+    desc: "Uma apresentação mais profissional ajuda a transmitir credibilidade e aumenta o potencial de faturamento além da passagem.",
+  },
+];
 // Cards de posicionamento dual: a mesma base atende empresa estruturada e quem vende de forma independente.
 const BUSINESS_BENEFITS = [
   {
@@ -485,14 +509,14 @@ export default function LandingPage() {
   };
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)]">
-        <div className="mx-auto flex min-h-[4.5rem] max-w-7xl items-center justify-between px-4 py-2 sm:min-h-[5rem] sm:px-6 lg:px-8">
-          <Link to="/" className="flex items-center gap-2 py-1">
-            {/* A logo ganha mais presença visual sem alterar a estrutura do header nem a hierarquia dos CTAs. */}
+      <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)] shadow-[0_18px_48px_-32px_rgba(15,23,42,0.95)]">
+        <div className="mx-auto flex min-h-[4.75rem] max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:min-h-[5.5rem] sm:px-6 lg:px-8">
+          <Link to="/" className="flex items-center gap-2 py-1 pr-2 sm:pr-4">
+            {/* Aumentamos a logo com respiro extra para ganhar presença sem deixar o header pesado em desktop ou mobile. */}
             <img
               src={logo}
               alt="Smartbus BR"
-              className="h-11 object-contain brightness-0 invert sm:h-12"
+              className="h-14 w-auto max-w-[185px] object-contain brightness-0 invert sm:h-[3.9rem] sm:max-w-[220px]"
             />
           </Link>
           <nav className="hidden items-center gap-4 md:flex">
@@ -529,7 +553,7 @@ export default function LandingPage() {
             </Button>
           </nav>
           <button
-            className="rounded-lg p-2 text-white transition-colors hover:bg-white/10 md:hidden"
+            className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white shadow-sm transition-colors hover:bg-white/10 md:hidden"
             onClick={() => setMobileMenu(!mobileMenu)}
             aria-label="Menu"
           >
@@ -541,7 +565,7 @@ export default function LandingPage() {
           </button>
         </div>
         {mobileMenu && (
-          <div className="animate-fade-in space-y-1 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-4 text-white md:hidden">
+          <div className="animate-fade-in space-y-1 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-5 text-white shadow-[0_20px_40px_-30px_rgba(15,23,42,0.95)] md:hidden">
             <Link
               to="/eventos"
               className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
@@ -766,11 +790,12 @@ export default function LandingPage() {
                 tenha controle total para crescer com mais profissionalismo.
               </p>
               {/* Ajuste de conversão: a copy desta seção reduz o foco institucional em empresa e equilibra empresa + autônomo sem alterar o layout. */}
-              <div className="grid gap-3 sm:grid-cols-2">
+              {/* Refinamento visual: reduzimos a sensação de grade crua com cards mais macios, melhor espaçamento e profundidade discreta. */}
+              <div className="grid gap-4 sm:grid-cols-2">
                 {PLATFORM_PILLARS.map((benefit) => (
                   <div
                     key={benefit.title}
-                    className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+                    className="rounded-[1.6rem] border border-border/70 bg-gradient-to-br from-card to-muted/20 p-5 shadow-[0_24px_50px_-40px_rgba(15,23,42,0.35)]"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <benefit.icon className="h-5 w-5" />
@@ -849,20 +874,30 @@ export default function LandingPage() {
               Bloco de valor comercial: explicita ausência de mensalidade para reduzir objeção financeira
               e aumentar conversão sem mudar a estrutura visual predominante de cards da landing.
             */}
-            <div className="rounded-3xl border border-primary/15 bg-card p-6 shadow-sm">
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[2rem] border border-primary/15 bg-gradient-to-br from-card via-card to-primary/[0.03] p-6 shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] sm:p-7">
+              {/* Refinamento visual: reduzimos a sensação de grade crua com cards mais macios, melhor espaçamento e um painel de apoio com destaque de valor. */}
+              <div className="grid gap-3.5 sm:grid-cols-2">
                 {PRICING_POINTS.map((item) => (
                   <div
                     key={item}
-                    className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4 text-sm text-foreground"
+                    className="flex items-start gap-3 rounded-[1.35rem] border border-primary/10 bg-gradient-to-br from-white to-muted/40 p-4 text-sm text-foreground shadow-[0_20px_45px_-35px_rgba(15,23,42,0.45)] transition-transform duration-200 hover:-translate-y-0.5"
                   >
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span>{item}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-                Você entra sem risco de custo recorrente e acompanha o crescimento da operação pagando apenas quando houver venda.
+              {/* A caixa final concentra a proposta comercial para diferenciar a mensagem principal dos itens de apoio. */}
+              <div className="mt-5 rounded-[1.6rem] border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 text-sm text-muted-foreground shadow-[0_20px_40px_-35px_rgba(249,115,22,0.45)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
+                  Sem custo para começar
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">
+                  Você entra sem risco de custo recorrente e acompanha o crescimento da operação pagando apenas quando houver venda.
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Isso deixa a decisão mais leve para testar, validar demanda e crescer sem assumir mensalidade antes da primeira venda.
+                </p>
               </div>
             </div>
           </div>
@@ -1096,7 +1131,7 @@ export default function LandingPage() {
             {PLATFORM_DIFFERENTIALS.map((item) => (
               <div
                 key={item.title}
-                className="group rounded-3xl border border-border bg-card p-5 shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-md"
+                className="group rounded-3xl border border-border/70 bg-gradient-to-br from-card to-muted/20 p-5 shadow-[0_24px_50px_-40px_rgba(15,23,42,0.35)] transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_30px_65px_-42px_rgba(249,115,22,0.35)]"
               >
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <item.icon className="h-6 w-6" />
@@ -1109,6 +1144,50 @@ export default function LandingPage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+      <section className="relative overflow-hidden py-16 sm:py-20">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/5" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Nova seção comercial posicionada após os benefícios operacionais para ampliar a narrativa de valor sem criar fluxo novo. */}
+          <div className="grid gap-6 rounded-[2rem] border border-primary/15 bg-card p-6 shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] sm:p-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Wallet className="h-3.5 w-3.5" />
+                Monetização além da passagem
+              </div>
+              {/* Hierarquia de copy: reforçamos ausência de mensalidade e potencial comercial sem prometer renda garantida. */}
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Venda passagens e abra novas fontes de receita
+              </h2>
+              <p className="max-w-2xl text-muted-foreground sm:text-lg">
+                No Smartbus BR, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
+              </p>
+              <div className="rounded-[1.5rem] border border-primary/15 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-[0_20px_45px_-36px_rgba(249,115,22,0.4)]">
+                <p className="text-sm font-semibold text-foreground sm:text-base">
+                  Sem mensalidade. Sem custo fixo. E com potencial de receita além da passagem.
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  A plataforma ajuda a vender, organizar, dar visibilidade comercial às marcas apoiadoras e fortalecer a credibilidade da empresa e de cada evento.
+                </p>
+              </div>
+            </div>
+            {/* Responsividade: os blocos empilham em uma grade simples para manter leitura clara em desktop, tablet e mobile. */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {REVENUE_OPPORTUNITIES.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-[1.6rem] border border-border/70 bg-gradient-to-br from-card to-muted/25 p-5 shadow-[0_24px_50px_-40px_rgba(15,23,42,0.32)]"
+                >
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-bold text-foreground">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -1169,31 +1248,45 @@ export default function LandingPage() {
               A seção "Indique e Ganhe" reforça crescimento orgânico e adiciona incentivo simples para compartilhar a plataforma.
               Mantemos cards e CTA já conhecidos para aumentar conversão sem inventar um novo padrão visual.
             */}
-            <div className="rounded-3xl border border-primary/20 bg-card p-6 shadow-sm">
-              <div className="space-y-3">
+            <div className="rounded-[2rem] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-48px_rgba(15,23,42,0.45)] sm:p-7">
+              {/* Os passos ganham acabamento de painel comercial para destacar a recompensa sem criar uma nova linguagem visual. */}
+              <div className="rounded-[1.6rem] border border-primary/10 bg-gradient-to-br from-primary/10 via-transparent to-muted/40 p-4 sm:p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
+                  Recompensa simples e direta
+                </p>
+                <p className="mt-2 text-lg font-semibold text-foreground sm:text-xl">
+                  Indique empresas que começam a vender e receba R$50 por cada operação ativada.
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  A proposta fica mais clara: você ajuda outra empresa a profissionalizar as vendas e ainda cria uma nova fonte de receita por indicação.
+                </p>
+              </div>
+              <div className="mt-4 space-y-3">
                 {REFERRAL_STEPS.map((step, index) => (
                   <div
                     key={step}
-                    className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4"
+                    className="flex items-start gap-3 rounded-[1.35rem] border border-primary/10 bg-gradient-to-r from-white to-muted/40 p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]"
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    {/* A numeração fica mais evidente no mobile e em desktop para dar cadência comercial aos passos. */}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm shadow-primary/30">
                       {index + 1}
                     </span>
                     <span className="text-sm text-foreground">{step}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              {/* Hierarquia de CTA: reforçamos o principal e mantemos o secundário como alternativa de baixa fricção. */}
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <Link
                   to="/cadastro"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90"
                 >
                   Começar agora
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
                   to="/cadastro"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
                 >
                   Criar conta grátis
                 </Link>
