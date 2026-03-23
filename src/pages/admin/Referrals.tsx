@@ -535,6 +535,7 @@ export default function Referrals() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </AdminLayout>
   );
 }
