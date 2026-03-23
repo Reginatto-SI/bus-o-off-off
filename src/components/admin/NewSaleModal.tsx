@@ -44,6 +44,7 @@ import {
   Users,
   CreditCard,
   ChevronsUpDown,
+  ExternalLink,
   Check,
   Clock3,
   MapPin,
@@ -57,6 +58,7 @@ import { formatCurrencyBRL, formatCurrencyInputFromDigits, parseCurrencyInputBRL
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { cn } from '@/lib/utils';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -150,8 +152,15 @@ function getTripTypeLabel(tripType?: string) {
   return 'Trajeto';
 }
 
+type CreatedSaleSummary = {
+  id: string;
+  status: 'reservado' | 'bloqueado';
+  platformFeeStatus: 'pending' | 'failed' | 'paid' | 'waived' | 'not_applicable';
+  platformFeeAmount: number | null;
+};
+
 export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSaleModalProps) {
-  const { activeCompanyId, user } = useAuth();
+  const { activeCompanyId, user, isGerente } = useAuth();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<SaleTab>('manual');
@@ -200,6 +209,10 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Step 4: Confirmation
   const [confirmationData, setConfirmationData] = useState<ConfirmationTicketData[] | null>(null);
+  // Guardamos apenas o mínimo da venda recém-criada para reutilizar o checkout da taxa
+  // no comprovante final sem precisar recriar regra financeira no frontend.
+  const [createdSaleSummary, setCreatedSaleSummary] = useState<CreatedSaleSummary | null>(null);
+  const [payingPlatformFee, setPayingPlatformFee] = useState(false);
   // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [categoryPricesMap, setCategoryPricesMap] = useState<Map<string, number>>(new Map());
@@ -251,6 +264,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setUnitPrice('');
       setSelectedSellerId('');
       setConfirmationData(null);
+      setCreatedSaleSummary(null);
+      setPayingPlatformFee(false);
       // activeTicketIndex reset removido
       fetchEvents();
       fetchSellers();
@@ -733,6 +748,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       if (saleError) throw saleError;
       const saleId = saleData.id;
 
+      // Persistimos um resumo mínimo da venda recém-criada para que o comprovante final
+      // consiga oferecer 'Pagar taxa agora' usando o mesmo fluxo já existente da listagem.
+      setCreatedSaleSummary({
+        id: saleId,
+        status: isBlock ? 'bloqueado' : 'reservado',
+        platformFeeStatus: isBlock ? 'not_applicable' : (hasPlatformFee ? 'pending' : 'not_applicable'),
+        platformFeeAmount,
+      });
+
       // 2. Insert tickets
       const ticketRows = passengers.map((p) => ({
         sale_id: saleId,
@@ -842,6 +866,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     setPassengers([]);
     setObservation('');
     setConfirmationData(null);
+    setCreatedSaleSummary(null);
   };
 
   const availableCapacity = selectedVehicle ? selectedVehicle.capacity - occupiedSeatIds.length : 999;
@@ -854,8 +879,39 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const handleClose = () => {
     if (confirmationData) {
       onSuccess();
-    } else {
-      onOpenChange(false);
+      return;
+    }
+
+    onOpenChange(false);
+  };
+
+  const canPayCreatedSalePlatformFee = Boolean(
+    createdSaleSummary
+    && isGerente
+    && (createdSaleSummary.platformFeeStatus === 'pending' || createdSaleSummary.platformFeeStatus === 'failed')
+  );
+
+  const handlePayCreatedSalePlatformFee = async () => {
+    if (!createdSaleSummary || payingPlatformFee) return;
+
+    setPayingPlatformFee(true);
+    try {
+      // Prevenção de múltiplos cliques: enquanto a cobrança está sendo criada,
+      // mantemos o CTA desabilitado para evitar abrir checkout duplicado por engano.
+      const result = await startPlatformFeeCheckout({
+        saleId: createdSaleSummary.id,
+        onWaived: () => {
+          setCreatedSaleSummary((current) => current
+            ? { ...current, platformFeeStatus: 'waived' }
+            : current);
+        },
+      });
+
+      if (result.status === 'waived') {
+        return;
+      }
+    } finally {
+      setPayingPlatformFee(false);
     }
   };
 
@@ -884,7 +940,24 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               </div>
             </ScrollArea>
             <DialogFooter className="px-6 py-4 border-t">
-              <Button onClick={handleClose}>Fechar</Button>
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  {canPayCreatedSalePlatformFee
+                    ? 'A reserva continua ativa até a confirmação financeira da taxa da plataforma.'
+                    : 'A reserva continua ativa até a confirmação financeira correspondente.'}
+                </div>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <Button variant="outline" onClick={handleClose}>
+                    {canPayCreatedSalePlatformFee ? 'Fechar e pagar depois' : 'Fechar'}
+                  </Button>
+                  {canPayCreatedSalePlatformFee && (
+                    <Button onClick={handlePayCreatedSalePlatformFee} disabled={payingPlatformFee}>
+                      {payingPlatformFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+                      Pagar taxa agora
+                    </Button>
+                  )}
+                </div>
+              </div>
             </DialogFooter>
           </>
         ) : (

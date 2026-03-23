@@ -97,6 +97,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { type TicketCardData } from '@/components/public/TicketCard';
 import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
 function formatCpfMask(value: string): string {
@@ -991,33 +992,21 @@ export default function Sales() {
     fetchSales();
   };
 
-  // ── Pagar taxa da plataforma (abre Stripe Checkout na conta da plataforma) ──
+  // ── Pagar taxa da plataforma (abre checkout da taxa reutilizando o mesmo fluxo do comprovante final) ──
   const [payingFee, setPayingFee] = useState(false);
   const handlePayPlatformFee = async (sale: Sale) => {
     setPayingFee(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
-        body: { sale_id: sale.id },
+      // Comentário de suporte: a listagem e o comprovante final precisam abrir
+      // exatamente a mesma cobrança para não criar narrativas/erros diferentes.
+      const result = await startPlatformFeeCheckout({
+        saleId: sale.id,
+        onWaived: fetchSales,
       });
-      if (error) {
-        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+
+      if (result.status === 'waived') {
         return;
       }
-      // Taxa isenta automaticamente (abaixo do mínimo do gateway)
-      if (data?.waived) {
-        toast.success('Taxa da plataforma dispensada explicitamente (valor abaixo do mínimo do gateway). A venda permanece reservada até quitação válida.');
-        fetchSales();
-        return;
-      }
-      if (!data?.url) {
-        toast.error(data?.error || 'Erro ao criar checkout da taxa');
-        return;
-      }
-      // Abre o checkout da taxa em nova aba
-      window.open(data.url, '_blank');
-      toast.info('Checkout da taxa aberto em nova aba. Após o pagamento, atualize a listagem.');
-    } catch (err: any) {
-      toast.error('Erro ao iniciar pagamento da taxa');
     } finally {
       setPayingFee(false);
     }
