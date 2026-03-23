@@ -319,8 +319,8 @@ export default function Referrals() {
               </Badge>
             )}
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border bg-muted/20 p-4">
+          <CardContent className="space-y-5 p-6">
+            <div className="rounded-md border bg-muted/20 p-5">
               <div className="flex items-start gap-3">
                 <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div className="space-y-1">
