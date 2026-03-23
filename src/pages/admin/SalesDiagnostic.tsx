@@ -351,15 +351,11 @@ function getMonitoringFreshnessPresentation(freshness: MonitoringFreshness): {
 
 function computeGateway(sale: DiagnosticSale): string {
   if (sale.asaas_payment_id) return 'Asaas';
-  if (sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) return 'Stripe';
   if (sale.sale_origin === 'admin_manual' || sale.sale_origin === 'seller_manual') return 'Manual';
   return 'Manual';
 }
 
 function getGatewayDisplayLabel(gateway: string): string {
-  // Comentário de suporte: Stripe foi neutralizado no runtime e aparece aqui apenas
-  // como referência histórica para vendas antigas que ainda carregam IDs legados.
-  if (gateway === 'Stripe') return 'Legado Stripe';
   return gateway;
 }
 
@@ -455,7 +451,7 @@ function computePaymentStatus(sale: DiagnosticSale): PaymentStatusView {
     if (sale.status === 'reservado') return { label: 'Pagamento aguardando confirmação manual', detail: 'Reserva administrativa aguardando baixa manual.', variant: 'secondary' };
   }
 
-  if (sale.asaas_payment_id || sale.stripe_checkout_session_id || sale.stripe_payment_intent_id) {
+  if (sale.asaas_payment_id) {
     return { label: 'Pagamento em processamento', detail: 'Cobrança enviada ao gateway sem retorno final.', variant: 'secondary' };
   }
 
@@ -805,7 +801,7 @@ function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof C
   if (sale.status === 'pago') {
     return { label: 'Pagamento confirmado', icon: CheckCircle, color: 'text-emerald-600' };
   }
-  if (sale.asaas_payment_id || sale.stripe_checkout_session_id) {
+  if (sale.asaas_payment_id) {
     const asaasStatus = sale.asaas_payment_status;
     if (asaasStatus === 'OVERDUE') return { label: 'Cobrança expirada', icon: AlertTriangle, color: 'text-destructive' };
     return { label: 'Cobrança enviada ao gateway', icon: CreditCard, color: 'text-blue-600' };
@@ -876,7 +872,7 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
 
   // 2. Gateway charge sent
   const gateway = computeGateway(sale);
-  if (gateway !== 'Manual' && (sale.asaas_payment_id || sale.stripe_checkout_session_id)) {
+  if (gateway !== 'Manual' && sale.asaas_payment_id) {
     entries.push({
       time: format(parseISO(sale.created_at), 'HH:mm:ss', { locale: ptBR }),
       label: `Cobrança enviada ao ${getGatewayDisplayLabel(gateway)}`,
@@ -1704,7 +1700,6 @@ export default function SalesDiagnostic() {
       options: [
         { value: 'all', label: 'Todos' },
         ...(availableGateways.includes('asaas') ? [{ value: 'asaas', label: 'Asaas' }] : []),
-        ...(availableGateways.includes('stripe') ? [{ value: 'stripe', label: 'Legado Stripe' }] : []),
         ...(availableGateways.includes('manual') ? [{ value: 'manual', label: 'Manual' }] : []),
       ],
     },
@@ -2376,7 +2371,7 @@ export default function SalesDiagnostic() {
                         <div>
                           <span className="text-muted-foreground">ID da cobrança no gateway</span>
                           <p className="font-mono text-xs break-all">
-                            {detailSale.asaas_payment_id || detailSale.stripe_payment_intent_id || detailSale.stripe_checkout_session_id || '-'}
+                            {detailSale.asaas_payment_id || '-'}
                           </p>
                         </div>
                         {detailSale.asaas_payment_status && (

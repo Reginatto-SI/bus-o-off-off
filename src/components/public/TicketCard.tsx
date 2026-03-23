@@ -37,7 +37,6 @@ export interface TicketCardData {
   boardingDepartureDate: string | null;
   saleStatus: SaleStatus;
   saleId?: string;
-  stripeCheckoutSessionId?: string | null; // legacy
   asaasPaymentId?: string | null;
   companyName: string;
   companyLogoUrl: string | null;
@@ -93,7 +92,7 @@ interface TicketCardProps {
    * Mantemos `default` como comportamento legado para não afetar fluxos existentes.
    */
   reservedPresentation?: 'default' | 'receipt';
-  // Callback para verificar status de pagamento legado (Asaas atual + compatibilidade histórica).
+  // Callback para verificar status do pagamento oficial atual (Asaas).
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshing?: boolean;
 }
@@ -132,7 +131,7 @@ export function TicketCard({
     : null;
 
   // Status visual: "processando" quando reservado mas com pagamento em andamento
-  const hasPaymentPending = ticket.stripeCheckoutSessionId || ticket.asaasPaymentId;
+  const hasPaymentPending = Boolean(ticket.asaasPaymentId);
   const displayStatus = (ticket.saleStatus === 'reservado' && hasPaymentPending)
     ? 'processando'
     : ticket.saleStatus;
@@ -494,7 +493,7 @@ export function TicketCard({
             )}
           </div>
 
-          {/* Botão de atualizar status — compatibilidade com pagamentos legados sem reativar Stripe. */}
+          {/* Botão de atualizar status do fluxo oficial Asaas sem alterar a UX existente. */}
           {showRefreshButton && (
             <Button
               variant="ghost"

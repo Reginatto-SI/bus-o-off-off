@@ -374,9 +374,6 @@ export interface Sale {
   cancel_reason: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
-  // Stripe (legacy)
-  stripe_checkout_session_id: string | null;
-  stripe_payment_intent_id: string | null;
   // Asaas
   asaas_payment_id: string | null;
   asaas_payment_status: string | null;
@@ -393,7 +390,6 @@ export interface Sale {
   platform_fee_total: number | null;
   socio_fee_amount: number | null;
   platform_net_amount: number | null;
-  stripe_transfer_id: string | null;
   payment_environment: string;
   platform_fee_status: string;
   platform_fee_amount: number | null;

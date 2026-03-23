@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { DriverStatus, EventStatus, SaleStatus, SellerStatus, VehicleStatus } from '@/types/database';
 
 // "processando" é um status visual-only usado no frontend quando a venda está
-// "reservado" no banco mas existe um checkout Stripe em andamento.
+// "reservado" no banco mas existe uma cobrança online oficial em andamento.
 type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus | 'processando' | 'pendente_pagamento' | 'bloqueado';
 
 interface StatusBadgeProps {

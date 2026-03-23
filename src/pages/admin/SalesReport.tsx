@@ -537,9 +537,8 @@ export default function SalesReport() {
         total_value: s.gross_amount ?? s.quantity * s.unit_price,
         status: s.status,
         sale_id: s.id,
-        // Comentário de suporte: priorizamos o ID oficial atual do Asaas e mantemos Stripe
-        // apenas como fallback histórico para exportação retroativa.
-        payment_id: s.asaas_payment_id ?? s.stripe_payment_intent_id ?? s.stripe_checkout_session_id ?? '',
+        // Exportação alinhada ao contrato oficial atual: o identificador do pagamento vem apenas do Asaas.
+        payment_id: s.asaas_payment_id ?? '',
       };
     });
   }, [sales, seatLabelsMap, boardingTimeMap]);
