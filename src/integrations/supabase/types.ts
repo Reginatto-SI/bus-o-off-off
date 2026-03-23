@@ -330,6 +330,7 @@ export type Database = {
           primary_color: string | null
           province: string | null
           public_slug: string | null
+          referral_code: string
           slogan: string | null
           social_facebook: string | null
           social_instagram: string | null
@@ -383,6 +384,7 @@ export type Database = {
           primary_color?: string | null
           province?: string | null
           public_slug?: string | null
+          referral_code?: string
           slogan?: string | null
           social_facebook?: string | null
           social_instagram?: string | null
@@ -436,6 +438,7 @@ export type Database = {
           primary_color?: string | null
           province?: string | null
           public_slug?: string | null
+          referral_code?: string
           slogan?: string | null
           social_facebook?: string | null
           social_instagram?: string | null
@@ -454,6 +457,100 @@ export type Database = {
           whatsapp?: string | null
         }
         Relationships: []
+      }
+      company_referrals: {
+        Row: {
+          activated_at: string
+          cancel_reason: string | null
+          cancelled_by: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          eligible_at: string | null
+          id: string
+          paid_amount: number | null
+          paid_at: string | null
+          paid_by: string | null
+          payment_note: string | null
+          progress_platform_fee_amount: number
+          referral_code: string
+          referred_company_id: string
+          referrer_company_id: string
+          reward_amount: number
+          status: string
+          target_platform_fee_amount: number
+          tracking_captured_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string
+          cancel_reason?: string | null
+          cancelled_by?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          eligible_at?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          progress_platform_fee_amount?: number
+          referral_code: string
+          referred_company_id: string
+          referrer_company_id: string
+          reward_amount?: number
+          status?: string
+          target_platform_fee_amount?: number
+          tracking_captured_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string
+          cancel_reason?: string | null
+          cancelled_by?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          eligible_at?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          progress_platform_fee_amount?: number
+          referral_code?: string
+          referred_company_id?: string
+          referrer_company_id?: string
+          reward_amount?: number
+          status?: string
+          target_platform_fee_amount?: number
+          tracking_captured_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_referrals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_referrals_referred_company_id_fkey"
+            columns: ["referred_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_referrals_referrer_company_id_fkey"
+            columns: ["referrer_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       drivers: {
         Row: {
@@ -2230,6 +2327,7 @@ export type Database = {
       }
       normalize_city_name: { Args: { input: string }; Returns: string }
       normalize_public_slug: { Args: { input_slug: string }; Returns: string }
+      resolve_company_referral_code: { Args: { code: string }; Returns: string }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

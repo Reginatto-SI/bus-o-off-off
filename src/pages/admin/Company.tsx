@@ -30,6 +30,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { getFinancialSocioConfigStatus } from '@/lib/financialSocioSplitConfig';
+import { buildCompanyReferralLink } from '@/lib/companyReferral';
 import {
   getAsaasIntegrationSnapshot,
   type AsaasIntegrationStatus,
@@ -242,6 +243,9 @@ export default function CompanyPage() {
   const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
   const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
   const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
+  const referralLink = company?.referral_code
+    ? buildCompanyReferralLink('https://www.smartbusbr.com.br', company.referral_code)
+    : '';
   const canRenderShowcaseQr = normalizedPublicSlug.length > 0 && !isReservedSlug && slugAvailable === true;
 
   const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${normalizedPublicSlug || 'nick'}`;
@@ -1386,6 +1390,43 @@ export default function CompanyPage() {
                             <p className="text-xs text-muted-foreground">
                               Evite mudar depois para não quebrar links divulgados.
                             </p>
+
+                            <div className="rounded-md border border-dashed p-3 text-sm">
+                              <div className="space-y-1">
+                                <p className="font-medium">Link oficial de indicação</p>
+                                <p className="text-muted-foreground">
+                                  O link pertence à empresa e é a porta oficial do MVP de indicação.
+                                </p>
+                              </div>
+
+                              <div className="mt-3 rounded-md border bg-muted/20 p-3">
+                                <div className="flex items-start gap-2">
+                                  <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                                  <div>
+                                    <p className="font-medium break-all">{referralLink || 'Carregando link de indicação...'}</p>
+                                    {company?.referral_code && (
+                                      <p className="text-xs text-muted-foreground">Código: {company.referral_code}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!referralLink}
+                                  onClick={async () => {
+                                    await navigator.clipboard.writeText(referralLink);
+                                    toast.success('Link de indicação copiado!');
+                                  }}
+                                >
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Copiar link de indicação
+                                </Button>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="rounded-md border bg-muted/20 p-3">
