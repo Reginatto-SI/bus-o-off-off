@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { FloatingWhatsApp } from '@/components/public/FloatingWhatsApp';
 import { Link } from 'react-router-dom';
 import {
-  Search,
   MapPin,
   Calendar,
   Bus,
@@ -385,34 +384,23 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Busca enxuta e orientada à conversão: mantém a primeira dobra pronta para clique imediato. */}
-              <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-black/20 backdrop-blur-sm">
-                <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3.5">
-                    <MapPin className="h-4 w-4 shrink-0 text-primary" />
-                    <input
-                      type="text"
-                      placeholder="Origem, destino ou evento"
-                      className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/40"
-                      readOnly
-                    />
+              {/* CTA direto: removemos a busca simulada para deixar claro que a jornada principal é criar o evento e começar a vender. */}
+              <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Comece agora</p>
+                    <p className="text-sm text-white/70 sm:text-base">Crie seu evento, publique seu link de vendas e coloque a operação para rodar sem fricção.</p>
                   </div>
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3.5">
-                    <Calendar className="h-4 w-4 shrink-0 text-primary" />
-                    <input
-                      type="text"
-                      placeholder="Data da viagem"
-                      className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/40"
-                      readOnly
-                    />
+                  <div className="flex w-full flex-col items-start gap-2 lg:w-auto lg:items-center">
+                    <Link
+                      to="/cadastro"
+                      className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30 lg:min-w-[320px]"
+                    >
+                      Criar evento e começar a vender
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                    <p className="text-sm text-white/60">Leva menos de 2 minutos. Sem complicação.</p>
                   </div>
-                  <Link
-                    to="/eventos"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    <Search className="h-4 w-4" />
-                    Comprar passagens agora
-                  </Link>
                 </div>
               </div>
             </div>
