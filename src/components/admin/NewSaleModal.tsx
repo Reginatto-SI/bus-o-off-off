@@ -695,7 +695,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       // ── Cálculo da taxa da plataforma para vendas manuais ──
       // Fonte de verdade: company.platform_fee_percent (definido na empresa).
-      // Vendas online usam application_fee via Stripe Connect (platform_fee_status = 'not_applicable').
+      // Vendas online usam a cobrança do gateway oficial (platform_fee_status = 'not_applicable').
       // Vendas manuais precisam de cobrança separada da taxa (platform_fee_status = 'pending').
       // Bloqueios não representam venda real e ficam como 'not_applicable'.
       const platformFeePercent = company?.platform_fee_percent ?? 0;

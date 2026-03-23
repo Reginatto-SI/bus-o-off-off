@@ -101,7 +101,7 @@ export default function UsersPage() {
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
 
   // seller_id e driver_id conectam o usuário ao cadastro gerencial de vendedor/motorista
-  // para controle interno de comissão e operação. Não tem relação com Stripe ou pagamento.
+  // para controle interno de comissão e operação. Não têm relação com gateway de pagamento.
   const [form, setForm] = useState({
     name: '',
     email: '',

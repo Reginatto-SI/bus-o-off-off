@@ -37,7 +37,6 @@ type TicketLookupResponseTicket = {
   boardingDepartureDate: string | null;
   saleStatus?: SaleStatus;
   saleId?: string;
-  stripeCheckoutSessionId?: string | null;
   asaasPaymentId?: string | null;
   saleOrigin?: string | null;
   unitPrice?: number;
@@ -126,7 +125,6 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       purchaseConfirmedAt: ticket.purchaseConfirmedAt ?? null,
       purchaseOriginLabel: resolveTicketPurchaseOriginLabel(ticket.saleOrigin ?? null),
       saleId: ticket.saleId || undefined,
-      stripeCheckoutSessionId: ticket.stripeCheckoutSessionId || null,
       asaasPaymentId: ticket.asaasPaymentId || null,
       companyName: ticket.companyName,
       companyLogoUrl: ticket.companyLogoUrl,
@@ -193,7 +191,7 @@ export default function TicketLookup() {
   const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[]) => {
     const pendingSaleIds = [...new Set(
       cards
-        .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && (t.stripeCheckoutSessionId || t.asaasPaymentId) && t.saleId)
+        .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && t.asaasPaymentId && t.saleId)
         .map((t) => t.saleId!)
     )].slice(0, 3);
 

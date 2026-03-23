@@ -43,9 +43,6 @@ export interface Company {
   province: string | null;
   postal_code: string | null;
   notes: string | null;
-  // Stripe Connect (legacy)
-  stripe_account_id: string | null;
-  stripe_onboarding_complete: boolean;
   // Asaas: contrato oficial e único por ambiente.
   asaas_account_id_production?: string | null;
   asaas_account_email_production?: string | null;
@@ -119,7 +116,7 @@ export interface UserWithRole extends Profile {
 
 /**
  * Vendedor — cadastro 100% gerencial.
- * Não tem nenhuma relação com Stripe ou gateway de pagamento.
+ * Não tem nenhuma relação com gateway de pagamento.
  * Comissão é apurada e paga manualmente pelo gerente (Pix ou outro meio próprio).
  * O campo seller_id em user_roles vincula um usuário do sistema a este cadastro para controle interno.
  */
@@ -377,9 +374,6 @@ export interface Sale {
   cancel_reason: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
-  // Stripe (legacy)
-  stripe_checkout_session_id: string | null;
-  stripe_payment_intent_id: string | null;
   // Asaas
   asaas_payment_id: string | null;
   asaas_payment_status: string | null;
@@ -396,7 +390,6 @@ export interface Sale {
   platform_fee_total: number | null;
   socio_fee_amount: number | null;
   platform_net_amount: number | null;
-  stripe_transfer_id: string | null;
   payment_environment: string;
   platform_fee_status: string;
   platform_fee_amount: number | null;
@@ -434,9 +427,6 @@ export interface SocioSplit {
   asaas_wallet_id_production?: string | null;
   /** Step 3: wallet explícita para sandbox (uso futuro no Step 4). */
   asaas_wallet_id_sandbox?: string | null;
-  // Campos legados do Stripe — mantidos para histórico, não usados no fluxo atual.
-  stripe_account_id: string | null;
-  stripe_onboarding_complete: boolean;
   commission_percent: number;
   status: SocioSplitStatus;
   notes: string | null;

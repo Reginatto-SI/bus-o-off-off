@@ -117,7 +117,7 @@ export async function logSaleIntegrationEvent(params: {
   paymentEnvironment?: string | null;
   environmentDecisionSource?: string | null;
   environmentHostDetected?: string | null;
-  provider: "asaas" | "stripe" | "manual";
+  provider: "asaas" | "manual";
   direction: "incoming_webhook" | "outgoing_request" | "manual_sync";
   eventType?: string | null;
   paymentId?: string | null;

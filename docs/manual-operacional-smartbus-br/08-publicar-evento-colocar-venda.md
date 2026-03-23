@@ -1,5 +1,7 @@
 # Documento Master – Como publicar um evento e colocar para venda
 
+> **Observação importante:** o gateway oficial atual do produto é **Asaas**.
+
 ## 1. Objetivo do Processo
 Transformar um evento de rascunho em evento comercialmente ativo, liberando a venda de passagens nos canais habilitados.
 
@@ -13,7 +15,7 @@ Utilize este fluxo quando:
 - Evento previamente criado.
 - Viagens e embarques configurados.
 - Preço definido.
-- Conta Stripe conectada e apta.
+- Conta de pagamentos oficial da empresa configurada no Asaas.
 - Canais de venda configurados no evento.
 
 ## 4. Visão Geral do Processo
@@ -47,7 +49,7 @@ Após revisar o cadastro do evento, o usuário altera o status para **À Venda**
 
 ## 6. Pontos de Atenção
 - Publicar com dados incompletos gera ruído comercial e operacional.
-- Se Stripe estiver pendente, a publicação pode ser bloqueada.
+- Se a conta oficial de pagamentos estiver pendente, a publicação pode ser bloqueada.
 - Evite publicar antes de revisar horários e locais de embarque.
 
 ## 7. Boas Práticas

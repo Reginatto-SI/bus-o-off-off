@@ -1,5 +1,7 @@
 # Documento Master – Como criar um evento completo
 
+> **Observação importante:** o gateway oficial atual do produto é **Asaas**.
+
 ## 1. Objetivo do Processo
 Criar um evento operacionalmente completo no Smartbus BR, com dados comerciais, viagens, motoristas, veículos, locais de embarque e regras de venda.
 
@@ -11,7 +13,7 @@ Utilize este fluxo quando:
 
 ## 3. Pré-requisitos
 - Empresa cadastrada e configurada.
-- Conta Stripe conectada (requisito para avançar no fluxo comercial).
+- Conta de pagamentos oficial da empresa configurada no Asaas.
 - Frota cadastrada.
 - Motoristas cadastrados.
 - Locais de embarque cadastrados.
@@ -52,7 +54,7 @@ A criação acontece na tela **Eventos**, via modal com múltiplas abas. O proce
    - **O que deve ser conferido:** evento listado com dados completos e editáveis.
 
 ## 6. Pontos de Atenção
-- Sem Stripe válido, o sistema pode bloquear continuidade comercial.
+- Sem conta oficial de pagamentos válida, o sistema pode bloquear continuidade comercial.
 - Viagem sem veículo/motorista pode comprometer operação.
 - Embarques sem horário definido geram risco operacional.
 - Revise permissões de venda (online/vendedor) antes de publicar.

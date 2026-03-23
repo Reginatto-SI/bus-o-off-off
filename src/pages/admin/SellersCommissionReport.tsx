@@ -204,7 +204,7 @@ export default function SellersCommissionReport() {
   const selectedEventFilterLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
   const selectedSellerFilterLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
 
-  // Comissão de vendedores é 100% gerencial e independente de Stripe.
+  // Comissão de vendedores é 100% gerencial e independente do gateway.
   // A base é gross_amount quando válida; fallback para quantidade * unit_price.
   const getSaleBaseAmount = (sale: Pick<DetailedRow, 'gross_amount' | 'quantity' | 'unit_price'>) => {
     if (sale.gross_amount && sale.gross_amount > 0) return Number(sale.gross_amount);
@@ -488,7 +488,7 @@ export default function SellersCommissionReport() {
   }, [kpis.eligible_sales, kpis.total_commission]);
 
   // PDF sincronizado com KPIs da interface: os mesmos indicadores/filtros da tela são enviados ao export.
-  // Comissão é gerencial (não usa Stripe) e o bloco de resumo deve permanecer alinhado às regras atuais da UI.
+  // Comissão é gerencial e o bloco de resumo deve permanecer alinhado às regras atuais da UI.
   const summaryItemsForPdf = useMemo(() => [
     { label: 'Comissão Total', value: formatCurrencyBRL(kpis.total_commission), emphasis: 'highlight' as const },
     { label: 'Receita Elegível', value: formatCurrencyBRL(kpis.eligible_revenue) },

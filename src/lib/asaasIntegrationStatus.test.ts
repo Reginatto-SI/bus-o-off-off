@@ -29,8 +29,6 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
     province: null,
     postal_code: null,
     notes: null,
-    stripe_account_id: null,
-    stripe_onboarding_complete: false,
     asaas_account_id_production: null,
     asaas_account_email_production: null,
     asaas_wallet_id_production: null,
