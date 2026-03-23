@@ -24,6 +24,8 @@ import {
   Settings,
   Star,
   MessageCircleMore,
+  Gift,
+  Wallet,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
@@ -126,6 +128,26 @@ const QUICK_BENEFITS = [
   "Link próprio para divulgar no WhatsApp e Instagram",
   "Venda online com pagamento integrado",
   "Embarque validado por QR Code",
+];
+// Reforço comercial de preço: deixa explícito no topo que o Smartbus reduz barreira de entrada,
+// o que ajuda conversão ao comunicar risco quase zero logo na primeira dobra.
+const PRICING_HIGHLIGHTS = [
+  "Sem mensalidade",
+  "Sem custo fixo",
+  "Você só paga quando vender",
+];
+const PRICING_POINTS = [
+  "Sem mensalidade",
+  "Sem custo fixo",
+  "Sem taxa de adesão",
+  "Apenas uma pequena taxa por venda realizada",
+];
+// Bloco de indicação: aproveita o programa existente para transformar clientes em canal orgânico de crescimento
+// sem criar uma nova jornada visual fora do padrão comercial atual da landing.
+const REFERRAL_STEPS = [
+  "Indique outras empresas",
+  "Quando elas começarem a vender",
+  "Você ganha R$50 por indicação",
 ];
 const PASSENGER_STEPS = [
   {
@@ -596,6 +618,21 @@ export default function LandingPage() {
                     resultados e garantir um embarque mais organizado sem
                     estrutura complexa.
                   </p>
+                  {/*
+                    Reforçamos "sem mensalidade" ainda no hero porque este é o principal argumento de conversão:
+                    reduz objeção de custo fixo e deixa claro que a plataforma cresce junto com a venda do cliente.
+                  */}
+                  <div className="flex flex-wrap gap-2.5">
+                    {PRICING_HIGHLIGHTS.map((highlight) => (
+                      <span
+                        key={highlight}
+                        className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/12 px-3 py-2 text-sm font-semibold text-white"
+                      >
+                        <Wallet className="h-4 w-4 text-primary" />
+                        {highlight}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm text-white/80">
                   <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">
@@ -788,6 +825,44 @@ export default function LandingPage() {
                   Quero começar a vender melhor
                   <ArrowRight className="h-4 w-4" />
                 </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Wallet className="h-3.5 w-3.5" />
+                Modelo de custo simples e previsível
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Quanto custa usar o Smartbus?
+              </h2>
+              <p className="max-w-2xl text-muted-foreground sm:text-lg">
+                O Smartbus BR foi desenhado para tirar o peso do custo fixo e facilitar a decisão de começar.
+              </p>
+            </div>
+            {/*
+              Bloco de valor comercial: explicita ausência de mensalidade para reduzir objeção financeira
+              e aumentar conversão sem mudar a estrutura visual predominante de cards da landing.
+            */}
+            <div className="rounded-3xl border border-primary/15 bg-card p-6 shadow-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {PRICING_POINTS.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4 text-sm text-foreground"
+                  >
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+                Você entra sem risco de custo recorrente e acompanha o crescimento da operação pagando apenas quando houver venda.
               </div>
             </div>
           </div>
@@ -1072,6 +1147,58 @@ export default function LandingPage() {
                 </Link>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+      <section className="bg-muted/40 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Gift className="h-3.5 w-3.5" />
+                Crescimento orgânico com recompensa
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Indique o Smartbus e Ganhe
+              </h2>
+              <p className="max-w-2xl text-muted-foreground sm:text-lg">
+                Transforme sua rede de contatos em um novo canal de crescimento: indique empresas que também querem vender mais e seja recompensado quando elas começarem a operar.
+              </p>
+            </div>
+            {/*
+              A seção "Indique e Ganhe" reforça crescimento orgânico e adiciona incentivo simples para compartilhar a plataforma.
+              Mantemos cards e CTA já conhecidos para aumentar conversão sem inventar um novo padrão visual.
+            */}
+            <div className="rounded-3xl border border-primary/20 bg-card p-6 shadow-sm">
+              <div className="space-y-3">
+                {REFERRAL_STEPS.map((step, index) => (
+                  <div
+                    key={step}
+                    className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                      {index + 1}
+                    </span>
+                    <span className="text-sm text-foreground">{step}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  to="/cadastro"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Começar agora
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  to="/cadastro"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  Criar conta grátis
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
