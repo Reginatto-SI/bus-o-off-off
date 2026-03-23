@@ -288,6 +288,7 @@ export default function Referrals() {
 
   return (
     <AdminLayout>
+      <div className="page-container">
       <PageHeader
         title="Indicações"
         description="Acompanhe empresas indicadas e o progresso da recompensa da sua empresa."
@@ -300,7 +301,7 @@ export default function Referrals() {
         }
       />
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         <Card>
           <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
