@@ -221,6 +221,30 @@ const PLATFORM_DIFFERENTIALS = [
     desc: "A empresa opera com cobrança online e integração Asaas dentro da arquitetura atual da plataforma.",
   },
 ];
+// Novo argumento comercial: a landing passa a comunicar monetização além da passagem
+// usando a distinção real do produto entre parceiros da empresa e patrocinadores do evento.
+const REVENUE_OPPORTUNITIES = [
+  {
+    icon: Building2,
+    title: "Parceiros da empresa",
+    desc: "Destaque marcas parceiras na vitrine institucional da operação e fortaleça acordos comerciais recorrentes da empresa.",
+  },
+  {
+    icon: Star,
+    title: "Patrocinadores do evento",
+    desc: "Valorize apoiadores de um evento específico com apresentação mais profissional e mais argumento para novas negociações.",
+  },
+  {
+    icon: Wallet,
+    title: "Mais que passagens",
+    desc: "Sem mensalidade, a operação pode vender, organizar o embarque e abrir espaço para receita adicional com visibilidade comercial.",
+  },
+  {
+    icon: BarChart3,
+    title: "Mais valor percebido",
+    desc: "Uma apresentação mais profissional ajuda a transmitir credibilidade e aumenta o potencial de faturamento além da passagem.",
+  },
+];
 // Cards de posicionamento dual: a mesma base atende empresa estruturada e quem vende de forma independente.
 const BUSINESS_BENEFITS = [
   {
@@ -1120,6 +1144,50 @@ export default function LandingPage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+      <section className="relative overflow-hidden py-16 sm:py-20">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/5" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Nova seção comercial posicionada após os benefícios operacionais para ampliar a narrativa de valor sem criar fluxo novo. */}
+          <div className="grid gap-6 rounded-[2rem] border border-primary/15 bg-card p-6 shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] sm:p-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Wallet className="h-3.5 w-3.5" />
+                Monetização além da passagem
+              </div>
+              {/* Hierarquia de copy: reforçamos ausência de mensalidade e potencial comercial sem prometer renda garantida. */}
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Venda passagens e abra novas fontes de receita
+              </h2>
+              <p className="max-w-2xl text-muted-foreground sm:text-lg">
+                No Smartbus BR, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
+              </p>
+              <div className="rounded-[1.5rem] border border-primary/15 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-[0_20px_45px_-36px_rgba(249,115,22,0.4)]">
+                <p className="text-sm font-semibold text-foreground sm:text-base">
+                  Sem mensalidade. Sem custo fixo. E com potencial de receita além da passagem.
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  A plataforma ajuda a vender, organizar, dar visibilidade comercial às marcas apoiadoras e fortalecer a credibilidade da empresa e de cada evento.
+                </p>
+              </div>
+            </div>
+            {/* Responsividade: os blocos empilham em uma grade simples para manter leitura clara em desktop, tablet e mobile. */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {REVENUE_OPPORTUNITIES.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-[1.6rem] border border-border/70 bg-gradient-to-br from-card to-muted/25 p-5 shadow-[0_24px_50px_-40px_rgba(15,23,42,0.32)]"
+                >
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-bold text-foreground">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
