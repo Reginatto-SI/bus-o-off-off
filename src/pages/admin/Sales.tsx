@@ -741,7 +741,10 @@ export default function Sales() {
     const reservasEmAberto = commercialSales.filter((s) => s.status === 'reservado').length;
     const canceladas = commercialSales.filter((s) => s.status === 'cancelado').length;
     const bloqueadas = sales.filter((s) => s.status === 'bloqueado').length;
-    const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? 0), 0);
+    // Comentário de suporte: vendas manuais antigas podem ter ficado só com `platform_fee_amount`
+    // antes da consolidação preencher `platform_fee_total`. O fallback evita KPI zerado enquanto
+    // o dado consolidado é saneado no banco e mantém /admin/vendas alinhado ao relatório oficial.
+    const totalPlatformFee = paidSales.reduce((sum, s) => sum + (s.platform_fee_total ?? s.platform_fee_amount ?? 0), 0);
     const totalSellersCommission = paidSales.reduce((sum, sale) => {
       const saleGross = sale.gross_amount ?? sale.quantity * sale.unit_price;
       const sellerCommissionPercent = sale.seller?.commission_percent ?? 0;

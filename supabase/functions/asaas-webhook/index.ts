@@ -637,7 +637,7 @@ async function processPlatformFeeWebhook(
 
   const { data: sale, error: saleError } = await supabaseAdmin
     .from("sales")
-    .select("id, company_id, status, platform_fee_status")
+    .select("id, company_id, status, platform_fee_status, platform_fee_amount, platform_fee_total")
     .eq("id", saleId)
     .maybeSingle();
 
@@ -661,12 +661,20 @@ async function processPlatformFeeWebhook(
   const confirmedAt = resolveAsaasConfirmedAt(payment, webhookCreatedAt);
 
   if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {
+    // Comentário de manutenção: a taxa de venda manual nasce em `platform_fee_amount`,
+    // mas os consolidadores oficiais (/admin/vendas, relatórios e PDF) leem `platform_fee_total`.
+    // Quando a taxa separada é quitada via webhook, espelhamos o valor consolidado aqui para
+    // manter a mesma fonte de verdade financeira dos demais fluxos pagos.
+    const consolidatedPlatformFeeTotal =
+      sale.platform_fee_total ?? sale.platform_fee_amount ?? 0;
+
     const { error: updateError } = await supabaseAdmin
       .from("sales")
       .update({
         platform_fee_status: "paid",
         platform_fee_paid_at: confirmedAt,
         platform_fee_payment_id: payment.id,
+        platform_fee_total: consolidatedPlatformFeeTotal,
         status: sale.status === "reservado" ? "pago" : sale.status,
         payment_confirmed_at: confirmedAt,
       })
