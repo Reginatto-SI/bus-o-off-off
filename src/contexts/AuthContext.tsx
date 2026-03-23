@@ -156,14 +156,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`activeCompany_${userId}`);
       }
 
-      const profileCompanyId = (profileData as any)?.company_id ?? null;
-      const profileActiveCompanyId =
-        uniqueCompanies.find((company) => company.id === profileCompanyId)?.id ?? null;
+      // Correção multiempresa: profiles.company_id já foi contaminado por legado
+      // da empresa padrão. A empresa ativa precisa vir dos vínculos oficiais em
+      // user_roles, nunca do profile como fonte de verdade.
+      const firstRoleCompanyId =
+        companyIds.find((companyId) => uniqueCompanies.some((company) => company.id === companyId)) ?? null;
 
-      // Prioridade: localStorage válido > profile > primeira empresa
+      // Prioridade: localStorage válido > primeiro vínculo real em user_roles > primeira empresa ativa
       const validCompanyId = isSavedCompanyValid
         ? savedCompanyId
-        : (profileActiveCompanyId ?? uniqueCompanies[0]?.id ?? null);
+        : (firstRoleCompanyId ?? uniqueCompanies[0]?.id ?? null);
 
       if (validCompanyId) {
         setActiveCompanyId(validCompanyId);

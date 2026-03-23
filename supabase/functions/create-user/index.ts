@@ -24,6 +24,7 @@ interface CreateUserResponse {
   user_id?: string;
   result?: "created" | "linked_existing";
   warnings?: string[];
+  runtime_version?: string;
 }
 
 serve(async (req) => {
@@ -90,6 +91,7 @@ serve(async (req) => {
     // Parse request body
     const body: CreateUserRequest = await req.json();
     const { email, name, role, status, notes, seller_id, driver_id, company_id } = body;
+    const runtimeVersion = "2026-03-23-users-multiempresa-v2";
 
     // Validate required fields
     if (!email || !name || !role || !company_id) {
@@ -162,6 +164,7 @@ serve(async (req) => {
           message: "Usuário existente vinculado à empresa",
           user_id: existingUser.id,
           result: "linked_existing",
+          runtime_version: runtimeVersion,
         } satisfies CreateUserResponse),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -205,14 +208,13 @@ serve(async (req) => {
         name,
         status,
         notes,
-        company_id,
       })
       .eq("id", newUser.user.id);
 
     if (profileUpdateError) {
       console.error("Error updating profile:", profileUpdateError);
-      // O profile mínimo já foi criado pelo trigger. Registramos aviso explícito
-      // para o front em vez de esconder uma sincronização parcial.
+      // O vínculo multiempresa oficial fica em user_roles. Se o profile não puder
+      // ser enriquecido, não devemos contaminar a empresa por fallback implícito.
       warnings.push("Perfil criado, mas não foi possível sincronizar todos os dados complementares.");
     }
 
@@ -277,6 +279,7 @@ serve(async (req) => {
         user_id: newUser.user.id,
         result: "created",
         warnings,
+        runtime_version: runtimeVersion,
       } satisfies CreateUserResponse),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -78,6 +78,7 @@ interface CreateUserFunctionResponse {
   user_id?: string;
   result?: 'created' | 'linked_existing';
   warnings?: string[];
+  runtime_version?: string;
 }
 
 const initialFilters: UserFilters = {
@@ -467,6 +468,13 @@ export default function UsersPage() {
         // de e-mail. Por isso a UI comunica apenas o que o backend confirma:
         // criação/vínculo do acesso na empresa atual e eventuais avisos operacionais.
         toast.success(getCreateUserSuccessMessage(data ?? {}));
+
+        // Se o runtime publicado não devolver a assinatura mínima esperada,
+        // registramos aviso porque isso indica deploy antigo e risco de legado.
+        if (!data?.runtime_version) {
+          console.warn('[UsersPage] Runtime do create-user sem versão auditável. Verifique deploy da edge function.');
+          toast.warning('Ambiente de cadastro sem assinatura de versão. Verifique se a edge function create-user foi publicada.');
+        }
 
         if (data?.warnings?.length) {
           toast.warning(data.warnings.join(' '));
