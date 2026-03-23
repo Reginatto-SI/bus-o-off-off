@@ -185,10 +185,8 @@ export default function Referrals() {
         ]);
 
         if (companyError) {
-          logSupabaseError('Erro ao carregar link oficial de indicação', companyError, {
-            context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id },
-          });
-          toast.error(buildDebugToastMessage('Não foi possível carregar o link de indicação.', companyError));
+          logSupabaseError({ label: 'Erro ao carregar link oficial de indicação', error: companyError, context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id } });
+          toast.error(buildDebugToastMessage({ title: 'Não foi possível carregar o link de indicação.', error: companyError }));
           setCompanySummary(null);
         } else {
           setCompanySummary((companyData as CompanySummary | null) ?? null);
