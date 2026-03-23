@@ -181,9 +181,13 @@ export function TicketCard({
                 />
               )}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-base truncate">{ticket.companyName}</p>
+                {/*
+                  Cabeçalho compartilhado da passagem: removemos o truncate para que o nome da empresa
+                  possa quebrar linha no mesmo template usado em tela e no PDF, evitando corte visual.
+                */}
+                <p className="font-semibold text-base leading-tight break-words whitespace-normal">{ticket.companyName}</p>
                 {formattedCnpj && (
-                  <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>
+                  <p className="text-xs text-muted-foreground mt-1">CNPJ: {formattedCnpj}</p>
                 )}
                 {companyLoc && (
                   <p className="text-xs text-muted-foreground">{companyLoc}</p>
