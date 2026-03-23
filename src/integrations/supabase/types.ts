@@ -384,7 +384,7 @@ export type Database = {
           primary_color?: string | null
           province?: string | null
           public_slug?: string | null
-          referral_code?: string
+          referral_code: string
           slogan?: string | null
           social_facebook?: string | null
           social_instagram?: string | null
@@ -2327,6 +2327,10 @@ export type Database = {
       }
       normalize_city_name: { Args: { input: string }; Returns: string }
       normalize_public_slug: { Args: { input_slug: string }; Returns: string }
+      refresh_company_referral_progress: {
+        Args: { p_referred_company_id?: string }
+        Returns: number
+      }
       resolve_company_referral_code: { Args: { code: string }; Returns: string }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
