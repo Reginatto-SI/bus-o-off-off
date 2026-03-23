@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { FloatingWhatsApp } from "@/components/public/FloatingWhatsApp";
 import { Link } from "react-router-dom";
 import {
@@ -23,11 +23,22 @@ import {
   Building2,
   Settings,
   Star,
+  MessageCircleMore,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
-
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
 const FEATURED_TRIPS = [
@@ -104,14 +115,12 @@ const FEATURED_TRIPS = [
     status: "Saída confirmada",
   },
 ];
-
 // Copy de apoio da dobra inicial com foco em simplicidade comercial para empresas e vendedores independentes.
 const QUICK_BENEFITS = [
   "Link próprio para divulgar no WhatsApp e Instagram",
   "Venda online com pagamento integrado",
   "Embarque validado por QR Code",
 ];
-
 const PASSENGER_STEPS = [
   {
     icon: Calendar,
@@ -129,7 +138,6 @@ const PASSENGER_STEPS = [
     desc: "A equipe confere presença com mais agilidade e reduz filas no embarque.",
   },
 ];
-
 // Pilar comercial principal: reforça benefícios concretos da operação sem expor linguagem interna de produto.
 const PLATFORM_PILLARS = [
   {
@@ -153,7 +161,6 @@ const PLATFORM_PILLARS = [
     desc: "Use lista de embarque, validação de presença e app operacional para sair com mais organização e menos confusão no dia da viagem.",
   },
 ];
-
 const PLATFORM_DIFFERENTIALS = [
   {
     icon: Link2,
@@ -186,7 +193,6 @@ const PLATFORM_DIFFERENTIALS = [
     desc: "A empresa opera com cobrança online e integração Asaas dentro da arquitetura atual da plataforma.",
   },
 ];
-
 // Cards de posicionamento dual: a mesma base atende empresa estruturada e quem vende de forma independente.
 const BUSINESS_BENEFITS = [
   {
@@ -205,9 +211,7 @@ const BUSINESS_BENEFITS = [
     desc: "Use lista de embarque, validação de passageiros e apoio operacional no celular da equipe.",
   },
 ];
-
 // Opções finais de jornada: mantemos a estrutura existente, mas com CTAs mais comerciais.
-
 const LANDING_SOCIAL_LINKS = [
   // Centralizamos as URLs em um único ponto para facilitar futura configuração via CMS/env sem espalhar links pela landing.
   {
@@ -241,10 +245,8 @@ const LANDING_SOCIAL_LINKS = [
     ),
   },
 ] as const;
-
 const socialIconLinkClass =
   "inline-flex h-9 w-9 items-center justify-center rounded-full text-white/65 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
-
 const JOURNEY_OPTIONS = [
   {
     icon: Ticket,
@@ -263,7 +265,20 @@ const JOURNEY_OPTIONS = [
     style: "bg-primary/5 border-primary/20 hover:border-primary/40",
   },
 ];
-
+const LANDING_CONTACT_EMAIL = "comercial@smartbusbr.com.br";
+interface LandingContactFormState {
+  name: string;
+  email: string;
+  phone: string;
+  message: string;
+}
+const INITIAL_CONTACT_FORM: LandingContactFormState = {
+  name: "",
+  email: "",
+  phone: "",
+  message: "",
+};
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const FloatingWhatsAppIcon = () => (
   <span className="inline-flex scale-[0.7] items-center justify-center">
     <span className="sr-only">WhatsApp</span>
@@ -275,9 +290,11 @@ const FloatingWhatsAppIcon = () => (
     </span>
   </span>
 );
-
 export default function LandingPage() {
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactForm, setContactForm] = useState<LandingContactFormState>(INITIAL_CONTACT_FORM);
+  const [contactErrors, setContactErrors] = useState<Partial<Record<keyof LandingContactFormState, string>>>({});
   // CTA comercial unificado para a landing e para o botão flutuante, evitando números divergentes.
   const salesWhatsappUrl =
     buildWhatsappWaMeLink({
@@ -299,7 +316,45 @@ export default function LandingPage() {
       icon: <FloatingWhatsAppIcon />,
     },
   ];
-
+  const contactWhatsappUrl = useMemo(
+    () =>
+      buildWhatsappWaMeLink({
+        phone: "(31) 99207-4309",
+        message: [
+          "Olá! Quero falar com a equipe da Smartbus BR.",
+          "",
+          `Nome: ${contactForm.name.trim()}`,
+          `E-mail: ${contactForm.email.trim()}`,
+          `Telefone/WhatsApp: ${contactForm.phone.trim()}`,
+          "",
+          `Mensagem: ${contactForm.message.trim()}`,
+        ].join("\n"),
+      }) ?? salesWhatsappUrl,
+    [contactForm.email, contactForm.message, contactForm.name, contactForm.phone, salesWhatsappUrl],
+  );
+  const updateContactField = (field: keyof LandingContactFormState, value: string) => {
+    setContactForm((current) => ({ ...current, [field]: value }));
+    setContactErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+  const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextErrors: Partial<Record<keyof LandingContactFormState, string>> = {};
+    if (!contactForm.name.trim()) nextErrors.name = "Informe seu nome.";
+    if (!contactForm.email.trim()) nextErrors.email = "Informe seu e-mail.";
+    else if (!isValidEmail(contactForm.email)) nextErrors.email = "Informe um e-mail válido.";
+    if (!contactForm.phone.trim()) nextErrors.phone = "Informe seu telefone ou WhatsApp.";
+    if (!contactForm.message.trim()) nextErrors.message = "Escreva uma mensagem curta.";
+    setContactErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    window.open(contactWhatsappUrl, "_blank", "noopener,noreferrer");
+    setContactModalOpen(false);
+    setContactForm(INITIAL_CONTACT_FORM);
+  };
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)]">
@@ -312,7 +367,6 @@ export default function LandingPage() {
               className="h-11 object-contain brightness-0 invert sm:h-12"
             />
           </Link>
-
           <nav className="hidden items-center gap-4 md:flex">
             {/* Mantemos a navegação pública solta e com bom respiro entre itens para parecer premium. */}
             <div className="flex items-center gap-1.5">
@@ -346,7 +400,6 @@ export default function LandingPage() {
               </Link>
             </Button>
           </nav>
-
           <button
             className="rounded-lg p-2 text-white transition-colors hover:bg-white/10 md:hidden"
             onClick={() => setMobileMenu(!mobileMenu)}
@@ -359,7 +412,6 @@ export default function LandingPage() {
             )}
           </button>
         </div>
-
         {mobileMenu && (
           <div className="animate-fade-in space-y-1 border-b border-white/10 bg-[hsl(222_47%_11%)] px-4 pb-4 text-white md:hidden">
             <Link
@@ -399,7 +451,6 @@ export default function LandingPage() {
           </div>
         )}
       </header>
-
       <section className="relative overflow-hidden bg-[hsl(222_47%_11%)]">
         <div className="absolute inset-0">
           <div className="absolute right-[-10%] top-[-20%] h-[680px] w-[680px] rounded-full bg-primary/10 blur-3xl" />
@@ -413,7 +464,6 @@ export default function LandingPage() {
             }}
           />
         </div>
-
         <div className="relative z-10 mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 lg:px-8 lg:pb-20 lg:pt-16">
           <div className="grid items-center gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-12">
             <div className="space-y-8">
@@ -424,7 +474,6 @@ export default function LandingPage() {
                   <Star className="h-3.5 w-3.5 text-primary" />
                   Venda, divulgação e embarque em uma só plataforma
                 </div>
-
                 <div className="space-y-4">
                   <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
                     Venda passagens online, divulgue seus eventos e organize o
@@ -442,7 +491,6 @@ export default function LandingPage() {
                     estrutura complexa.
                   </p>
                 </div>
-
                 <div className="flex flex-wrap gap-3 text-sm text-white/80">
                   <div className="rounded-full border border-white/10 bg-white/5 px-3 py-2 font-medium">
                     Venda online e embarque no mesmo fluxo
@@ -454,7 +502,6 @@ export default function LandingPage() {
                     Mais controle para crescer sem complicação
                   </div>
                 </div>
-
                 <div className="flex flex-wrap gap-3">
                   {QUICK_BENEFITS.map((benefit) => (
                     <span
@@ -467,7 +514,6 @@ export default function LandingPage() {
                   ))}
                 </div>
               </div>
-
               {/* CTA direto: removemos a busca simulada para deixar claro que a jornada principal é criar o evento e começar a vender. */}
               <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -495,7 +541,6 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-
             {/* Coluna lateral reaproveita os cards flutuantes para deixar claros os dois públicos,
                 mas agora priorizando o valor comercial que a empresa ganha ao entrar na plataforma. */}
             <div className="grid gap-4 lg:pl-4">
@@ -525,7 +570,6 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-
               <div className="rounded-3xl border border-primary/20 bg-primary/10 p-5 text-white backdrop-blur-sm">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
@@ -560,7 +604,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
@@ -599,7 +642,6 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-
             <div className="rounded-3xl border border-primary/15 bg-[hsl(222_47%_11%)] p-6 text-white shadow-xl shadow-primary/5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -645,7 +687,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="bg-muted/30 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 max-w-3xl">
@@ -664,7 +705,6 @@ export default function LandingPage() {
               vender com mais controle e garantir um embarque mais organizado.
             </p>
           </div>
-
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
@@ -692,7 +732,6 @@ export default function LandingPage() {
                 </li>
               </ul>
             </div>
-
             <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
                 Vendedores independentes
@@ -724,7 +763,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="bg-muted/40 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -750,7 +788,6 @@ export default function LandingPage() {
               <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
-
           <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {FEATURED_TRIPS.map((trip) => (
               <Link
@@ -765,7 +802,6 @@ export default function LandingPage() {
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
                   />
-
                   <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
                   <div className="absolute left-4 top-4 flex flex-wrap gap-2">
                     <span
@@ -791,7 +827,6 @@ export default function LandingPage() {
                     </span>
                   </div>
                 </div>
-
                 <div className="space-y-4 p-5">
                   <div>
                     <h3 className="text-xl font-bold text-foreground transition-colors group-hover:text-primary">
@@ -802,7 +837,6 @@ export default function LandingPage() {
                       <span>{trip.city}</span>
                     </div>
                   </div>
-
                   <div className="grid gap-2 rounded-2xl bg-muted/60 p-3 text-sm text-foreground">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-primary" />
@@ -813,7 +847,6 @@ export default function LandingPage() {
                       <span>Pagamento online e confirmação imediata</span>
                     </div>
                   </div>
-
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-sm text-muted-foreground">
                       Embarque sem fila com QR Code
@@ -829,7 +862,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
@@ -842,7 +874,6 @@ export default function LandingPage() {
               validar o embarque com segurança.
             </p>
           </div>
-
           <div className="grid gap-5 lg:grid-cols-3">
             {PASSENGER_STEPS.map((step, index) => (
               <div
@@ -866,7 +897,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -881,7 +911,6 @@ export default function LandingPage() {
               </p>
             </div>
           </div>
-
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {PLATFORM_DIFFERENTIALS.map((item) => (
               <div
@@ -902,7 +931,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="bg-muted/40 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
@@ -914,7 +942,6 @@ export default function LandingPage() {
               ou começar a vender com mais organização.
             </p>
           </div>
-
           <div className="grid gap-5 lg:grid-cols-2">
             {JOURNEY_OPTIONS.map((option) => (
               <div
@@ -942,11 +969,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <section className="relative overflow-hidden py-16 sm:py-20">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
         <div className="absolute right-0 top-0 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
-
         <div className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-[2rem] border border-primary/15 bg-card p-8 text-center shadow-xl sm:p-10">
             {/* CTA final reforçado para conversão B2B sem remover a alternativa do passageiro. */}
@@ -992,6 +1017,88 @@ export default function LandingPage() {
                 validação no celular
               </span>
             </div>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+              <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/80 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                  >
+                    <MessageCircleMore className="h-4 w-4 text-primary" />
+                    Falar com a gente
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-xl">
+                  <DialogHeader>
+                    <DialogTitle>Fale com a equipe da Smartbus BR</DialogTitle>
+                    <DialogDescription>
+                      Fale com a nossa equipe para tirar dúvidas sobre implantação, uso do sistema ou parceria comercial.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form className="space-y-4" onSubmit={handleContactSubmit}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="landing-contact-name">Nome</Label>
+                        <Input
+                          id="landing-contact-name"
+                          value={contactForm.name}
+                          onChange={(event) => updateContactField("name", event.target.value)}
+                          placeholder="Seu nome"
+                        />
+                        {contactErrors.name && <p className="text-sm text-destructive">{contactErrors.name}</p>}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="landing-contact-email">E-mail</Label>
+                        <Input
+                          id="landing-contact-email"
+                          type="email"
+                          value={contactForm.email}
+                          onChange={(event) => updateContactField("email", event.target.value)}
+                          placeholder={LANDING_CONTACT_EMAIL}
+                        />
+                        {contactErrors.email && <p className="text-sm text-destructive">{contactErrors.email}</p>}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="landing-contact-phone">Telefone ou WhatsApp</Label>
+                      <Input
+                        id="landing-contact-phone"
+                        value={contactForm.phone}
+                        onChange={(event) => updateContactField("phone", event.target.value)}
+                        placeholder="(00) 00000-0000"
+                      />
+                      {contactErrors.phone && <p className="text-sm text-destructive">{contactErrors.phone}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="landing-contact-message">Mensagem</Label>
+                      <Textarea
+                        id="landing-contact-message"
+                        value={contactForm.message}
+                        onChange={(event) => updateContactField("message", event.target.value)}
+                        placeholder="Conte rapidamente como podemos ajudar."
+                        rows={5}
+                      />
+                      {contactErrors.message && <p className="text-sm text-destructive">{contactErrors.message}</p>}
+                    </div>
+                    <div className="rounded-2xl border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
+                      Nesta etapa, o envio reutiliza o canal comercial já existente da landing para manter o fluxo simples, previsível e sem criar uma nova integração de backend.
+                    </div>
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                      <Button type="button" variant="outline" onClick={() => setContactModalOpen(false)}>
+                        Fechar
+                      </Button>
+                      <Button type="submit">Enviar contato</Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+              <a
+                href={`mailto:${LANDING_CONTACT_EMAIL}`}
+                className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {LANDING_CONTACT_EMAIL}
+              </a>
+            </div>
             <div className="mt-8 space-y-3">
               <p className="text-sm text-muted-foreground">
                 Acompanhe nossos conteúdos e novidades
@@ -1020,7 +1127,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
       <footer className="border-t border-white/5 bg-[hsl(222_47%_11%)]">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
@@ -1034,6 +1140,14 @@ export default function LandingPage() {
                 Plataforma para empresas de viagens, eventos e excursões
                 venderem, divulgarem e operarem com mais controle.
               </p>
+              <button
+                type="button"
+                onClick={() => setContactModalOpen(true)}
+                className="inline-flex items-center gap-2 text-sm font-medium text-white/65 transition-colors hover:text-white"
+              >
+                <MessageCircleMore className="h-4 w-4 text-primary" />
+                Contato comercial
+              </button>
               <div className="flex items-center gap-1">
                 {landingSocialLinks.map((item) => (
                   <a
@@ -1050,7 +1164,6 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-
             <div>
               <h4 className="mb-4 text-sm font-semibold text-white">
                 Para passageiros
@@ -1114,7 +1227,6 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-
         <div className="border-t border-white/5 py-5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <p className="text-center text-xs text-white/30">
