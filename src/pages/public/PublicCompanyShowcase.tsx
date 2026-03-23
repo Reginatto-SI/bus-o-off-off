@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { Bus, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Search, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Search, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { Company, CommercialPartner, EventWithCompany } from '@/types/database';
@@ -141,6 +141,7 @@ export default function PublicCompanyShowcase() {
 
   const companyDisplayName = company?.trade_name || company?.name;
   const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
+  const featuredEvent = filteredEvents[0] ?? null;
   const showcaseSlug = normalizePublicSlug(company?.public_slug || normalizedNick);
   const showcaseShortLink = showcaseSlug ? `${window.location.origin}/${showcaseSlug}` : '';
   const canRenderShowcaseQr = showcaseSlug.length > 0;
@@ -396,8 +397,31 @@ export default function PublicCompanyShowcase() {
                 <p className={`text-sm sm:text-base max-w-lg mx-auto ${
                   hasCover ? 'text-white/80' : 'text-muted-foreground'
                 }`}>
-                  Confira os próximos eventos e garanta sua passagem com segurança.
+                  Compre sua passagem para eventos, excursões e viagens organizadas com embarque claro, suporte da empresa e compra segura.
                 </p>
+                {/* Comentário de suporte: selos curtos reforçam confiança comercial sem inventar métricas ou alterar fluxo. */}
+                {!loading && (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {[
+                      { icon: Ticket, label: 'Passagens para eventos' },
+                      { icon: MapPin, label: 'Embarque organizado' },
+                      { icon: ShieldCheck, label: 'Compra segura' },
+                      ...(companyWhatsappLink ? [{ icon: MessageCircle, label: 'Atendimento rápido' }] : []),
+                    ].map(({ icon: Icon, label }) => (
+                      <span
+                        key={label}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                          hasCover
+                            ? 'border-white/20 bg-white/10 text-white backdrop-blur-sm'
+                            : 'border-border bg-background/80 text-foreground'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {/* CTAs: scroll para eventos + WhatsApp (condicional) */}
                 {!loading && (
                   <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-1">
@@ -410,7 +434,7 @@ export default function PublicCompanyShowcase() {
                       onClick={() => document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })}
                     >
                       <ChevronDown className="h-4 w-4" />
-                      Ver eventos disponíveis
+                      Ver viagens disponíveis
                     </Button>
                     {companyWhatsappLink && (() => {
                       const normalized = normalizeWhatsappForWaMe(company?.whatsapp);
@@ -519,14 +543,38 @@ export default function PublicCompanyShowcase() {
 
               {/* Carrossel de destaques (top 5 eventos) */}
               {!loading && filteredEvents.length > 0 && (
-                <section>
+                <section className="space-y-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                        Destaque principal
+                      </span>
+                      <h2 className="text-xl sm:text-2xl font-semibold text-foreground">
+                        Escolha sua próxima viagem com mais clareza
+                      </h2>
+                      <p className="text-sm text-muted-foreground max-w-2xl">
+                        Veja o evento em evidência e avance para a compra com data, local e valor bem visíveis.
+                      </p>
+                    </div>
+                    {featuredEvent && (
+                      <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-xs text-muted-foreground w-fit">
+                        <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                        {filteredEvents.length} {filteredEvents.length === 1 ? 'evento disponível' : 'eventos disponíveis'}
+                      </div>
+                    )}
+                  </div>
                   <EventsCarousel events={filteredEvents.slice(0, 5)} sellerRef={sellerRef} />
                 </section>
               )}
 
                {/* Grid de todos os eventos */}
                <section id="todos-eventos" className="space-y-4 scroll-mt-4">
-                 <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
+                 <div className="space-y-1">
+                   <h2 className="text-lg sm:text-xl font-semibold text-foreground">Todos os eventos</h2>
+                   <p className="text-sm text-muted-foreground">
+                     Compare destinos, datas e valores para escolher a melhor opção da {companyDisplayName || 'empresa'}.
+                   </p>
+                 </div>
 
                  <div className="relative">
                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -634,20 +682,28 @@ export default function PublicCompanyShowcase() {
 
                {/* Seção de confiança — mini-site */}
                {!loading && company && (
-                 <section className="space-y-4">
-                   <h2 className="text-lg sm:text-xl font-semibold text-foreground text-center">
-                     Por que viajar com a gente?
-                   </h2>
+                 <section className="space-y-4 rounded-2xl border bg-card/70 p-4 sm:p-6">
+                   <div className="space-y-2 text-center max-w-2xl mx-auto">
+                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                       Confiança para comprar
+                     </span>
+                     <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+                       Por que viajar com a gente?
+                     </h2>
+                     <p className="text-sm text-muted-foreground">
+                       A vitrine foi organizada para você encontrar sua viagem, entender o embarque e comprar com mais segurança.
+                     </p>
+                   </div>
                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                      {[
-                       { icon: Bus, label: 'Ônibus confortável e revisado' },
-                       { icon: UserCheck, label: 'Motoristas experientes' },
-                       { icon: ClipboardCheck, label: 'Embarque organizado por lista' },
-                       { icon: ShieldCheck, label: 'Compra segura pelo sistema' },
+                       { icon: Bus, label: 'Viagens organizadas com operação mais confortável' },
+                       { icon: UserCheck, label: 'Equipe preparada para conduzir o embarque' },
+                       { icon: ClipboardCheck, label: 'Informações do embarque apresentadas com clareza' },
+                       { icon: ShieldCheck, label: 'Compra segura com confirmação pelo sistema' },
                        ...(company?.whatsapp
-                         ? [{ icon: HeadsetIcon, label: 'Suporte rápido via WhatsApp' }]
+                         ? [{ icon: HeadsetIcon, label: 'Atendimento rápido para tirar dúvidas no WhatsApp' }]
                          : []),
-                       { icon: MapPin, label: 'Informações claras do embarque' },
+                       { icon: MapPin, label: 'Locais e destinos destacados para facilitar a escolha' },
                      ].map(({ icon: Icon, label }) => (
                        <div
                          key={label}

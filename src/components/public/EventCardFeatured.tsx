@@ -33,7 +33,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   });
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
       <Link to={linkTo} className="block">
         <AspectRatio ratio={16 / 9}>
           <div className="relative w-full h-full">
@@ -49,7 +49,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
               className="relative w-full h-full object-contain z-10"
             />
             {/* Overlay escuro */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20" />
+            {/* Comentário de suporte: overlay mais forte para reforçar leitura comercial do destaque sem mudar a estrutura do banner. */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
           </div>
         </AspectRatio>
 
@@ -65,6 +66,9 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
         {/* Conteúdo sobre o banner */}
         <div className="absolute bottom-0 left-0 right-0 p-4 pr-40 z-30 space-y-3">
+          <div className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
+            Evento em destaque
+          </div>
           {/* Nome, Data Badge e Preço */}
           <div className="flex gap-3 items-start">
             <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
@@ -72,6 +76,9 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
               <h3 className="text-xl font-bold text-white line-clamp-2">
                 {event.name}
               </h3>
+              <p className="text-sm text-white/80 mt-1">
+                Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
+              </p>
               <p className="text-2xl font-bold text-primary mt-1">
                 {formatCurrencyBRL(event.unit_price)}
               </p>
@@ -131,7 +138,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           {isSoldOut ? (
             <span>Esgotado</span>
           ) : (
-            <Link to={linkTo}>Comprar passagem</Link>
+            <Link to={linkTo}>Comprar agora</Link>
           )}
         </Button>
       </div>
