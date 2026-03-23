@@ -31,6 +31,7 @@ import { buildCompanyReferralLink, resolveCompanyReferralOrigin } from '@/lib/co
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { toast } from 'sonner';
 import {
+  Banknote,
   CheckCircle2,
   Copy,
   Gift,
@@ -39,6 +40,7 @@ import {
   Rocket,
   SearchX,
   Share2,
+  Wallet,
 } from 'lucide-react';
 
 type ReferralStatus = 'pendente' | 'em_progresso' | 'elegivel' | 'paga' | 'cancelada';
@@ -120,6 +122,10 @@ const getReferralCompanyName = (referral: ReferralRow) => {
 
 const formatCurrency = (value: number) => currencyFormatter.format(Number(value || 0));
 const formatDateTime = (value: string | null) => (value ? dateFormatter.format(new Date(value)) : '-');
+const formatRemainingRewardText = (remainingAmount: number, rewardAmount: number) => {
+  if (remainingAmount <= 0) return `Recompensa de ${formatCurrency(rewardAmount)} liberada`;
+  return `Faltam ${formatCurrency(remainingAmount)} para liberar ${formatCurrency(rewardAmount)}`;
+};
 
 export default function Referrals() {
   const { activeCompanyId, activeCompany, user } = useAuth();
@@ -235,9 +241,16 @@ export default function Referrals() {
         if (referral.status === 'em_progresso') acc.emProgresso += 1;
         if (referral.status === 'elegivel') acc.elegiveis += 1;
         if (referral.status === 'paga') acc.pagas += 1;
+
+        // Comentário de manutenção: os KPIs financeiros apenas somam valores já persistidos no backend,
+        // sem recalcular regra de negócio nem alterar a elegibilidade oficial da indicação.
+        if (referral.status === 'paga') acc.ganhosRecebidos += referral.reward_amount || 0;
+        if (referral.status === 'elegivel' || referral.status === 'em_progresso' || referral.status === 'pendente') {
+          acc.ganhosPendentes += referral.reward_amount || 0;
+        }
         return acc;
       },
-      { total: 0, emProgresso: 0, elegiveis: 0, pagas: 0 },
+      { total: 0, emProgresso: 0, elegiveis: 0, pagas: 0, ganhosRecebidos: 0, ganhosPendentes: 0 },
     );
   }, [referrals]);
 
@@ -285,17 +298,17 @@ export default function Referrals() {
   return (
     <AdminLayout>
       <div className="page-container">
-      <PageHeader
-        title="Indicações"
-        description="Acompanhe empresas indicadas e o progresso da recompensa da sua empresa."
-        metadata={activeCompany ? <p className="text-sm text-muted-foreground">Empresa ativa: <strong>{activeCompany.name}</strong></p> : null}
-        actions={
-          <Button variant="outline" onClick={handleCopyReferralLink} disabled={!referralLink}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copiar link
-          </Button>
-        }
-      />
+        <PageHeader
+          title="Indicações"
+          description="Acompanhe quanto você já ganhou, o que ainda pode receber e o progresso de cada indicação."
+          metadata={activeCompany ? <p className="text-sm text-muted-foreground">Empresa ativa: <strong>{activeCompany.name}</strong></p> : null}
+          actions={
+            <Button variant="outline" onClick={handleCopyReferralLink} disabled={!referralLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar link
+            </Button>
+          }
+        />
 
       <div className="space-y-8">
         <Card>
@@ -306,7 +319,7 @@ export default function Referrals() {
                 Link oficial de indicação
               </CardTitle>
               <CardDescription>
-                Compartilhe este link com outras empresas. A recompensa é liberada quando a empresa indicada atingir a meta definida.
+                Compartilhe este link e ganhe R$50 por cada empresa que começar a vender.
               </CardDescription>
             </div>
             {companySummary?.referral_code && (
@@ -316,6 +329,11 @@ export default function Referrals() {
             )}
           </CardHeader>
           <CardContent className="space-y-5 p-6">
+            <div className="rounded-lg border border-success/20 bg-success/5 px-4 py-3">
+              <p className="text-base font-semibold text-success sm:text-lg">💰 Ganhe R$50 por cada empresa que começar a vender</p>
+              <p className="mt-1 text-sm text-muted-foreground">Quanto mais empresas ativas com o seu link, maior o seu ganho acumulado.</p>
+            </div>
+
             <div className="rounded-md border bg-muted/20 p-5">
               <div className="flex items-start gap-3">
                 <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
@@ -345,11 +363,13 @@ export default function Referrals() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-6">
           <StatsCard label="Total de indicações" value={stats.total} icon={Share2} />
           <StatsCard label="Em progresso" value={stats.emProgresso} icon={Rocket} variant="warning" />
           <StatsCard label="Elegíveis" value={stats.elegiveis} icon={CheckCircle2} variant="success" />
           <StatsCard label="Pagas" value={stats.pagas} icon={Gift} />
+          <StatsCard label="Ganhos recebidos" value={formatCurrency(stats.ganhosRecebidos)} icon={Banknote} variant="success" />
+          <StatsCard label="Ganhos pendentes" value={formatCurrency(stats.ganhosPendentes)} icon={Wallet} variant="warning" />
         </div>
 
         <FilterCard
@@ -396,8 +416,8 @@ export default function Referrals() {
         ) : referrals.length === 0 ? (
           <EmptyState
             icon={<Share2 className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhuma indicação registrada"
-            description="Quando uma empresa concluir o cadastro usando o seu link, ela aparecerá aqui para acompanhamento do progresso."
+            title="Você ainda não fez nenhuma indicação"
+            description="Você ainda não fez nenhuma indicação. Indique empresas e ganhe R$50 por cada uma que começar a vender."
             action={
               <Button onClick={handleCopyReferralLink} disabled={!referralLink}>
                 <Copy className="mr-2 h-4 w-4" />
@@ -436,6 +456,10 @@ export default function Referrals() {
                   {filteredReferrals.map((referral) => {
                     const progressPercentage = getProgressPercentage(referral);
                     const statusVisual = statusConfig[referral.status];
+                    const remainingAmount = Math.max(
+                      (referral.target_platform_fee_amount || 0) - (referral.progress_platform_fee_amount || 0),
+                      0,
+                    );
 
                     return (
                       <TableRow key={referral.id}>
@@ -450,7 +474,7 @@ export default function Referrals() {
                             {statusVisual.label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="min-w-[220px]">
+                        <TableCell className="min-w-[260px]">
                           <div className="space-y-2">
                             <div className="flex items-center justify-between gap-3 text-sm">
                               <span className="font-medium">{formatCurrency(referral.progress_platform_fee_amount)}</span>
@@ -459,6 +483,9 @@ export default function Referrals() {
                             {/* Comentário de manutenção: o progresso exibido usa apenas o valor já calculado e persistido no backend.
                                 A tela não recalcula financeiro para evitar divergência com a regra oficial de elegibilidade. */}
                             <Progress value={progressPercentage} className="h-2" />
+                            <p className="text-xs text-muted-foreground">
+                              {formatRemainingRewardText(remainingAmount, referral.reward_amount)}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>{formatCurrency(referral.target_platform_fee_amount)}</TableCell>
@@ -503,6 +530,12 @@ export default function Referrals() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Progresso atual</p>
                   <p className="font-medium">{formatCurrency(selectedReferral.progress_platform_fee_amount)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatRemainingRewardText(
+                      Math.max((selectedReferral.target_platform_fee_amount || 0) - (selectedReferral.progress_platform_fee_amount || 0), 0),
+                      selectedReferral.reward_amount,
+                    )}
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Meta de taxa</p>
