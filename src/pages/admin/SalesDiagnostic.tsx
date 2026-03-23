@@ -472,10 +472,16 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
   const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
   const hasGatewayDivergence = ((isPendingCheckout || isReserved) && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
 
+  // Helper local para evitar repetição: calcula operationalPriority a partir do resultado parcial.
+  const withPriority = (base: Omit<DiagnosticOperationalView, 'operationalPriority'>): DiagnosticOperationalView => ({
+    ...base,
+    operationalPriority: computeOperationalPriority(base),
+  });
+
   // A causa principal é mutuamente exclusiva: a função retorna no primeiro cenário dominante.
   // Isso evita que a linha traga duas narrativas conflitantes e preserva uma leitura operacional confiável.
   if (sale.status === 'pago') {
-    return {
+    return withPriority({
       category: 'pago',
       categoryLabel: 'Pago',
       categoryVariant: 'default',
@@ -492,12 +498,12 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence,
-    };
+    });
   }
 
   if (sale.status === 'cancelado') {
     const cancelledByExpiry = (sale.cancel_reason ?? '').toLowerCase().includes('expir');
-    return {
+    return withPriority({
       category: 'cancelado',
       categoryLabel: 'Cancelado',
       categoryVariant: 'outline',
@@ -521,11 +527,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence,
-    };
+    });
   }
 
   if (hasGatewayDivergence) {
-    return {
+    return withPriority({
       category: 'divergencia',
       categoryLabel: 'Divergência',
       categoryVariant: 'destructive',
@@ -542,11 +548,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: true,
-    };
+    });
   }
 
   if (paymentStatus.label === 'Pagamento expirado' || paymentStatus.label === 'Pagamento cancelado' || paymentStatus.label === 'Pagamento estornado') {
-    return {
+    return withPriority({
       category: 'divergencia',
       categoryLabel: 'Divergência',
       categoryVariant: 'destructive',
@@ -563,12 +569,12 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-    };
+    });
   }
 
   if (isPendingCheckout) {
     if (lockStatus.isExpired) {
-      return {
+      return withPriority({
         category: 'divergencia',
         categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
@@ -585,11 +591,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
     if (lockStatus.isMissing) {
-      return {
+      return withPriority({
         category: 'divergencia',
         categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
@@ -606,11 +612,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
     if (lockStatus.isPartial) {
-      return {
+      return withPriority({
         category: 'atencao',
         categoryLabel: 'Atenção',
         categoryVariant: 'secondary',
@@ -627,10 +633,10 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
-    return {
+    return withPriority({
       category: 'saudavel',
       categoryLabel: 'Saudável',
       categoryVariant: 'default',
@@ -647,7 +653,7 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-    };
+    });
   }
 
   if (isReserved) {
@@ -656,7 +662,7 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
     // ou quando surgem sinais concretos de inconsistência entre pagamento e banco.
     if (isManualReservation) {
       if (manualReservationExpired) {
-        return {
+        return withPriority({
           category: 'divergencia',
           categoryLabel: 'Divergência',
           categoryVariant: 'destructive',
@@ -673,10 +679,10 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
           lockLabel: lockStatus.label,
           lockVariant: lockStatus.variant,
           hasGatewayDivergence: false,
-        };
+        });
       }
 
-      return {
+      return withPriority({
         category: 'saudavel',
         categoryLabel: 'Saudável',
         categoryVariant: 'default',
@@ -693,11 +699,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
     if (lockStatus.isExpired) {
-      return {
+      return withPriority({
         category: 'divergencia',
         categoryLabel: 'Divergência',
         categoryVariant: 'destructive',
@@ -714,11 +720,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
     if (lockStatus.isMissing) {
-      return {
+      return withPriority({
         category: 'atencao',
         categoryLabel: 'Atenção',
         categoryVariant: 'secondary',
@@ -735,10 +741,10 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
         lockLabel: lockStatus.label,
         lockVariant: lockStatus.variant,
         hasGatewayDivergence: false,
-      };
+      });
     }
 
-    return {
+    return withPriority({
       category: 'atencao',
       categoryLabel: 'Atenção',
       categoryVariant: 'secondary',
@@ -755,10 +761,10 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       lockLabel: lockStatus.label,
       lockVariant: lockStatus.variant,
       hasGatewayDivergence: false,
-    };
+    });
   }
 
-  return {
+  return withPriority({
     category: 'atencao',
     categoryLabel: 'Atenção',
     categoryVariant: 'secondary',
@@ -775,7 +781,7 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
     lockLabel: lockStatus.label,
     lockVariant: lockStatus.variant,
     hasGatewayDivergence: false,
-  };
+  });
 }
 
 function computeFlowStage(sale: DiagnosticSale): { label: string; icon: typeof CheckCircle; color: string } {
@@ -1028,10 +1034,7 @@ export default function SalesDiagnostic() {
 
         return {
           sale,
-          operational: {
-            ...operational,
-            operationalPriority: computeOperationalPriority(operational),
-          },
+          operational,
           freshness: computeMonitoringFreshness(sale, isNewInSession),
         };
       })
