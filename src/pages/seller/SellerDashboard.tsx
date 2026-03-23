@@ -1,6 +1,6 @@
 /**
  * Tela do vendedor: apenas visualização de vendas rastreadas via ref.
- * Sem integração com Stripe. Comissão de vendedor é apurada manualmente pelo gerente.
+ * Sem integração com gateway de pagamento. Comissão de vendedor é apurada manualmente pelo gerente.
  *
  * Mobile-first: cards empilháveis, filtros colapsáveis, botão fixo de compartilhar.
  */

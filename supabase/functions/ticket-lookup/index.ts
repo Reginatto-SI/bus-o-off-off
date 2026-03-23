@@ -157,7 +157,6 @@ serve(async (req) => {
         ticketId: t.id,
         ticketNumber: t.ticket_number || null,
         saleId: t.sale_id,
-        stripeCheckoutSessionId: t.sale?.stripe_checkout_session_id || null,
         qrCodeToken: t.qr_code_token,
         passengerName: t.passenger_name,
         passengerCpf: t.passenger_cpf,

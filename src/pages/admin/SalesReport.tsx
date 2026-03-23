@@ -537,7 +537,7 @@ export default function SalesReport() {
         total_value: s.gross_amount ?? s.quantity * s.unit_price,
         status: s.status,
         sale_id: s.id,
-        payment_id: s.stripe_payment_intent_id ?? '',
+        payment_id: s.asaas_payment_id ?? '',
       };
     });
   }, [sales, seatLabelsMap, boardingTimeMap]);

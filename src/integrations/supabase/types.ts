@@ -340,8 +340,6 @@ export type Database = {
           social_youtube: string | null
           socio_split_percent: number
           state: string | null
-          stripe_account_id: string | null
-          stripe_onboarding_complete: boolean
           ticket_color: string | null
           trade_name: string | null
           updated_at: string
@@ -395,8 +393,6 @@ export type Database = {
           social_youtube?: string | null
           socio_split_percent?: number
           state?: string | null
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
@@ -450,8 +446,6 @@ export type Database = {
           social_youtube?: string | null
           socio_split_percent?: number
           state?: string | null
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
@@ -1133,9 +1127,6 @@ export type Database = {
           seller_id: string | null
           socio_fee_amount: number | null
           status: Database["public"]["Enums"]["sale_status"]
-          stripe_checkout_session_id: string | null
-          stripe_payment_intent_id: string | null
-          stripe_transfer_id: string | null
           trip_id: string
           unit_price: number
           updated_at: string
@@ -1174,9 +1165,6 @@ export type Database = {
           seller_id?: string | null
           socio_fee_amount?: number | null
           status?: Database["public"]["Enums"]["sale_status"]
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_transfer_id?: string | null
           trip_id: string
           unit_price?: number
           updated_at?: string
@@ -1215,9 +1203,6 @@ export type Database = {
           seller_id?: string | null
           socio_fee_amount?: number | null
           status?: Database["public"]["Enums"]["sale_status"]
-          stripe_checkout_session_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_transfer_id?: string | null
           trip_id?: string
           unit_price?: number
           updated_at?: string
@@ -1441,8 +1426,6 @@ export type Database = {
           name: string
           notes: string | null
           status: string
-          stripe_account_id: string | null
-          stripe_onboarding_complete: boolean
           updated_at: string
         }
         Insert: {
@@ -1456,8 +1439,6 @@ export type Database = {
           name: string
           notes?: string | null
           status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           updated_at?: string
         }
         Update: {
@@ -1471,8 +1452,6 @@ export type Database = {
           name?: string
           notes?: string | null
           status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           updated_at?: string
         }
         Relationships: [

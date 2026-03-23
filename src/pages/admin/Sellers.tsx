@@ -1,12 +1,12 @@
 /**
  * VENDEDORES — Módulo 100% gerencial.
  *
- * Vendedores NÃO têm nenhuma relação com Stripe, gateway de pagamento ou qualquer integração financeira.
+ * Vendedores NÃO têm nenhuma relação com gateway de pagamento ou qualquer integração financeira.
  * O vendedor é um cadastro interno para:
  *   - Controle de comissão manual (apurada e paga pelo gerente via Pix ou outro meio próprio)
  *   - Rastreamento de vendas via link de referência (?ref=vendedorId)
  *
- * O Stripe lida apenas com o pagamento do cliente final e eventual repasse ao sócio financeiro.
+ * O pagamento do cliente final e o eventual repasse ao sócio financeiro ficam fora deste módulo.
  * Vendedores não participam desse fluxo.
  */
 import { useState, useEffect, useMemo } from 'react';
