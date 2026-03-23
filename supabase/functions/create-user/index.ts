@@ -17,6 +17,15 @@ interface CreateUserRequest {
   company_id: string;
 }
 
+interface CreateUserResponse {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  user_id?: string;
+  result?: "created" | "linked_existing";
+  warnings?: string[];
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -151,8 +160,9 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           message: "Usuário existente vinculado à empresa",
-          user_id: existingUser.id 
-        }),
+          user_id: existingUser.id,
+          result: "linked_existing",
+        } satisfies CreateUserResponse),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -187,6 +197,8 @@ serve(async (req) => {
     // Wait a bit for the trigger to complete
     await new Promise(resolve => setTimeout(resolve, 500));
 
+    const warnings: string[] = [];
+
     const { error: profileUpdateError } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -199,35 +211,43 @@ serve(async (req) => {
 
     if (profileUpdateError) {
       console.error("Error updating profile:", profileUpdateError);
-      // Don't fail the request, profile was created by trigger
+      // O profile mínimo já foi criado pelo trigger. Registramos aviso explícito
+      // para o front em vez de esconder uma sincronização parcial.
+      warnings.push("Perfil criado, mas não foi possível sincronizar todos os dados complementares.");
     }
 
-    // Update the user_role created by trigger with the correct role and links
-    const { error: roleUpdateError } = await supabaseAdmin
+    // Proteção contra cadastro parcial invisível: o trigger atual não cria mais
+    // user_roles. Por isso o vínculo com a empresa precisa ser explícito e
+    // idempotente aqui, sem depender do comportamento legado do trigger.
+    const { error: roleUpsertError } = await supabaseAdmin
       .from("user_roles")
-      .update({
+      .upsert({
+        user_id: newUser.user.id,
+        company_id,
         role,
         seller_id: role === "vendedor" ? seller_id : null,
         driver_id: role === "motorista" ? driver_id : null,
-      })
-      .eq("user_id", newUser.user.id)
-      .eq("company_id", company_id);
+      }, {
+        onConflict: "user_id,company_id",
+      });
 
-    if (roleUpdateError) {
-      console.error("Error updating role:", roleUpdateError);
-      // Try to insert if update failed (trigger might not have created it)
-      await supabaseAdmin
-        .from("user_roles")
-        .insert({
-          user_id: newUser.user.id,
-          company_id,
-          role,
-          seller_id: role === "vendedor" ? seller_id : null,
-          driver_id: role === "motorista" ? driver_id : null,
-        });
+    if (roleUpsertError) {
+      console.error("Error upserting role:", roleUpsertError);
+
+      // Sem user_roles o usuário não aparece na empresa ativa. Reverter a criação
+      // evita deixar Auth/Profile órfãos quando o vínculo obrigatório falha.
+      await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+
+      return new Response(
+        JSON.stringify({
+          error: "Falha ao vincular o usuário à empresa. A criação foi revertida.",
+        } satisfies CreateUserResponse),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Send password reset email so user can set their own password
+    // Mantemos a geração de links legada para não alterar o onboarding nesta tarefa.
+    // Porém isso não é tratado como prova auditável de entrega de e-mail no front.
     const { error: resetError } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email,
@@ -235,21 +255,29 @@ serve(async (req) => {
 
     if (resetError) {
       console.error("Error sending reset email:", resetError);
-      // Don't fail, user can use forgot password later
+      warnings.push("Não foi possível confirmar a geração do link de recuperação.");
     }
 
-    // Alternatively, send magic link for first login
-    await supabaseAdmin.auth.admin.generateLink({
+    // Alternativa legada para primeiro acesso. Falha aqui não deve mascarar que o
+    // usuário foi criado e vinculado; por isso tratamos como aviso operacional.
+    const { error: magicLinkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email,
     });
 
+    if (magicLinkError) {
+      console.error("Error generating magic link:", magicLinkError);
+      warnings.push("Não foi possível confirmar a geração do link de primeiro acesso.");
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: "Usuário criado com sucesso",
-        user_id: newUser.user.id 
-      }),
+        message: "Usuário criado e vinculado à empresa com sucesso",
+        user_id: newUser.user.id,
+        result: "created",
+        warnings,
+      } satisfies CreateUserResponse),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

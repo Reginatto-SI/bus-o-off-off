@@ -71,10 +71,31 @@ interface UserFilters {
   role: 'all' | UserRole;
 }
 
+interface CreateUserFunctionResponse {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  user_id?: string;
+  result?: 'created' | 'linked_existing';
+  warnings?: string[];
+}
+
 const initialFilters: UserFilters = {
   search: '',
   status: 'all',
   role: 'all',
+};
+
+const getCreateUserSuccessMessage = (response: CreateUserFunctionResponse): string => {
+  if (response.result === 'linked_existing') {
+    return 'Usuário existente vinculado à empresa atual com sucesso.';
+  }
+
+  if (response.result === 'created') {
+    return 'Novo usuário criado e vinculado à empresa atual com sucesso.';
+  }
+
+  return response.message || 'Usuário salvo com sucesso.';
 };
 
 // Role configuration for display
@@ -419,7 +440,7 @@ export default function UsersPage() {
         toast.success('Usuário atualizado com sucesso');
       } else {
         // Create new user via edge function
-        const { data, error } = await supabase.functions.invoke('create-user', {
+        const { data, error } = await supabase.functions.invoke<CreateUserFunctionResponse>('create-user', {
           body: {
             email: form.email.trim().toLowerCase(),
             name: form.name.trim(),
@@ -441,7 +462,15 @@ export default function UsersPage() {
         }
 
         await fetchUsers();
-        toast.success('Usuário criado! Um e-mail de confirmação foi enviado.');
+
+        // Suporte/UX: a edge function atual não devolve prova auditável de entrega
+        // de e-mail. Por isso a UI comunica apenas o que o backend confirma:
+        // criação/vínculo do acesso na empresa atual e eventuais avisos operacionais.
+        toast.success(getCreateUserSuccessMessage(data ?? {}));
+
+        if (data?.warnings?.length) {
+          toast.warning(data.warnings.join(' '));
+        }
       }
 
       setDialogOpen(false);
@@ -612,6 +641,10 @@ export default function UsersPage() {
                       <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
                         {/* Tab: Acesso */}
                         <TabsContent value="acesso" className="mt-0">
+                          <div className="mb-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                            {/* Texto discreto para reduzir ambiguidade operacional sem inventar novo onboarding. */}
+                            Este cadastro cria ou vincula o acesso do usuário à empresa atual. Para perfis de vendedor e motorista, o vínculo com o cadastro correspondente é obrigatório. Se o e-mail já existir, o sistema tentará vincular o acesso à empresa atual.
+                          </div>
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
                               <Label htmlFor="name">Nome completo</Label>
