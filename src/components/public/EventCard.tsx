@@ -34,7 +34,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
   });
 
   return (
-    <Card className="overflow-hidden rounded-xl shadow-sm hover:shadow-md transition-shadow">
+    <Card className="overflow-hidden rounded-2xl border shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
       <Link to={linkTo} className="block">
         {/* Banner com blur letterbox */}
         <div className="relative">
@@ -67,6 +67,14 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
       </Link>
 
       <CardContent className="p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em]">
+            Viagem para evento
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            Compra online e embarque organizado
+          </span>
+        </div>
         {/* Nome, Data Badge e Preço */}
         <div className="flex gap-3">
           <DateBadge date={event.date} className="flex-shrink-0" />
@@ -76,8 +84,12 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
                 {event.name}
               </h3>
             </Link>
+            {/* Comentário de suporte: o preço fica próximo do título para facilitar leitura rápida em listas comerciais. */}
             <p className="text-xl font-bold text-primary mt-1">
               {formatCurrencyBRL(event.unit_price)}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Garanta sua passagem com antecedência e veja os detalhes do embarque antes de concluir.
             </p>
           </div>
         </div>
@@ -136,7 +148,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           {isSoldOut ? (
             <span>Esgotado</span>
           ) : (
-            <Link to={linkTo}>Comprar passagem</Link>
+            <Link to={linkTo}>Ver detalhes e comprar</Link>
           )}
         </Button>
       </CardContent>
