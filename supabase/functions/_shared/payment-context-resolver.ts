@@ -127,6 +127,8 @@ export function resolveSocioWalletByEnvironment(
   return socio.asaas_wallet_id_sandbox ?? socio.asaas_wallet_id ?? null;
 }
 
+// Comentário de suporte: `stripe` permanece apenas para leitura/compatibilidade histórica
+// enquanto o schema legado ainda existir. O runtime oficial atual aceita somente Asaas.
 export type FinancialSocioValidationProvider = "asaas" | "stripe";
 
 export type FinancialSocioValidationResult =
