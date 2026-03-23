@@ -30,6 +30,7 @@ import CommercialPartners from "./pages/admin/CommercialPartners";
 import SalesDiagnostic from "./pages/admin/SalesDiagnostic";
 import BoardingManifestReport from "./pages/admin/BoardingManifestReport";
 import EventReport from "./pages/admin/EventReport";
+import Referrals from "./pages/admin/Referrals";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
@@ -110,6 +111,7 @@ const App = () => (
             <Route path="/admin/vendas" element={<Sales />} />
             <Route path="/admin/usuarios" element={<UsersPage />} />
             <Route path="/admin/empresa" element={<CompanyPage />} />
+            <Route path="/admin/indicacoes" element={<Referrals />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
             <Route path="/admin/socios" element={<SociosSplit />} />

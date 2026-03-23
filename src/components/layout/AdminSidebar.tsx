@@ -29,6 +29,7 @@ import {
   Wrench,
   Activity,
   ClipboardList,
+  Share2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -165,6 +166,10 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Building2
+  }, {
+    name: 'Indicações',
+    href: '/admin/indicacoes',
+    icon: Share2
   }]
 }, {
   id: 'sistema',
