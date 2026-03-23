@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getPersistedTripId, getPersistedPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG } from '@/lib/driverPhaseConfig';
 import type { OperationalPhase } from '@/lib/driverTripStorage';
+import { buildEventOperationalEndMap, isOperationallyVisible } from '@/lib/eventOperationalWindow';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -82,12 +83,25 @@ export default function DriverBoarding() {
     if (persistedTripId) {
       const { data } = await supabase
         .from('trips')
-        .select('id, events!inner(status)')
+        .select('id, events!inner(id, date, status)')
         .eq('id', persistedTripId)
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .limit(1);
-      if (data && data.length > 0) tripId = data[0].id;
+      if (data && data.length > 0) {
+        const eventRows = data.map((row: any) => ({ id: row.events.id, date: row.events.date }));
+        const { data: boardings } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventRows.map((event) => event.id))
+          .eq('company_id', activeCompanyId)
+          .not('departure_date', 'is', null);
+
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+        if (isOperationallyVisible(data[0].events.id, operationalEndMap)) {
+          tripId = data[0].id;
+        }
+      }
     }
 
     if (!tripId) {
@@ -104,25 +118,36 @@ export default function DriverBoarding() {
       if (driverId) {
         const { data } = await supabase
           .from('trips')
-          .select('id, events!inner(status)')
+          .select('id, events!inner(id, date, status)')
           .eq('company_id', activeCompanyId)
           .eq('events.status', 'a_venda')
           .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
-          .limit(1);
+          .order('events(date)', { ascending: true });
         trips = data;
       }
 
       if (!trips || trips.length === 0) {
         const { data } = await supabase
           .from('trips')
-          .select('id, events!inner(status)')
+          .select('id, events!inner(id, date, status)')
           .eq('company_id', activeCompanyId)
           .eq('events.status', 'a_venda')
-          .limit(1);
+          .order('events(date)', { ascending: true });
         trips = data;
       }
 
-      tripId = trips?.[0]?.id ?? null;
+      if (trips && trips.length > 0) {
+        const eventRows = trips.map((row: any) => ({ id: row.events.id, date: row.events.date }));
+        const { data: boardings } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventRows.map((event) => event.id))
+          .eq('company_id', activeCompanyId)
+          .not('departure_date', 'is', null);
+
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+        tripId = trips.find((row: any) => isOperationallyVisible(row.events.id, operationalEndMap))?.id ?? null;
+      }
     }
 
     if (!tripId) {

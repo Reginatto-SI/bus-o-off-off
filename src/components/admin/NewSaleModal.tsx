@@ -50,6 +50,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 import { format } from 'date-fns';
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
@@ -283,7 +284,20 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       .neq('status', 'encerrado')
       .eq('is_archived', false)
       .order('date', { ascending: false });
-    setEvents((data ?? []) as Event[]);
+    const eventRows = (data ?? []) as Event[];
+    if (eventRows.length > 0) {
+      const { data: boardings } = await supabase
+        .from('event_boarding_locations')
+        .select('event_id, departure_date, departure_time')
+        .in('event_id', eventRows.map((event) => event.id))
+        .eq('company_id', activeCompanyId)
+        .not('departure_date', 'is', null);
+
+      const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+      setEvents(filterOperationallyVisibleEvents(eventRows, operationalEndMap) as Event[]);
+    } else {
+      setEvents([]);
+    }
     setLoadingEvents(false);
   };
 

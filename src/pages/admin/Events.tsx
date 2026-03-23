@@ -105,6 +105,7 @@ import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { buildEventOperationalEndMap, isOperationallyVisible } from '@/lib/eventOperationalWindow';
 // Types
 interface EventFilters {
   search: string;
@@ -236,6 +237,7 @@ export default function Events() {
   const { activeCompanyId, user } = useAuth();
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
+  const [operationalEndMap, setOperationalEndMap] = useState<Map<string, Date | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -832,6 +834,13 @@ export default function Events() {
 
   // Filtered events
   const filteredEvents = useMemo(() => {
+    const shouldApplyDefaultOperationalVisibility =
+      filters.archiveState === 'active' &&
+      filters.status === 'all' &&
+      filters.startDate === '' &&
+      filters.endDate === '' &&
+      filters.monthYear === 'all';
+
     return events.filter((event) => {
       // Evita parse UTC de date-only (YYYY-MM-DD) que causa -1 dia em fuso BR.
       const eventDate = event.date ? parseDateOnlyAsLocal(event.date) : null;
@@ -847,6 +856,10 @@ export default function Events() {
       // Arquivamento é controle administrativo separado do status operacional.
       const shouldShowArchived = filters.archiveState === 'archived';
       if (event.is_archived !== shouldShowArchived) return false;
+
+      if (shouldApplyDefaultOperationalVisibility && !isOperationallyVisible(event.id, operationalEndMap)) {
+        return false;
+      }
 
       if (filters.status !== 'all' && event.status !== filters.status) {
         return false;
@@ -909,7 +922,7 @@ export default function Events() {
 
       return true;
     });
-  }, [events, filters, vehiclesById]);
+  }, [events, filters, vehiclesById, operationalEndMap]);
 
   const sortedEvents = useMemo(() => {
     // Sequência obrigatória da listagem: primeiro filtra, depois ordena.
@@ -1012,6 +1025,7 @@ export default function Events() {
       .order('date', { ascending: false });
 
     if (error) {
+      setOperationalEndMap(new Map());
       logSupabaseError({
         label: 'Erro ao carregar eventos (events.select)',
         error,
@@ -1025,7 +1039,21 @@ export default function Events() {
         })
       );
     } else {
-      setEvents(data as EventWithTrips[]);
+      const eventRows = data as EventWithTrips[];
+      setEvents(eventRows);
+
+      if (eventRows.length > 0) {
+        const { data: boardings } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventRows.map((event) => event.id))
+          .eq('company_id', activeCompanyId)
+          .not('departure_date', 'is', null);
+
+        setOperationalEndMap(buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]));
+      } else {
+        setOperationalEndMap(new Map());
+      }
     }
     setLoading(false);
   };
@@ -2424,6 +2452,13 @@ export default function Events() {
             </Button>
           }
         />
+
+        <Alert className="mb-6">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            A visão padrão mostra somente eventos ainda dentro da janela operacional. Eventos finalizados continuam acessíveis ao aplicar filtros de histórico.
+          </AlertDescription>
+        </Alert>
 
         {/* Stats Cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
