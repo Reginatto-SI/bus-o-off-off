@@ -29,7 +29,6 @@
     "https://deno.land/std@0.190.0/http/server.ts": "1b23463b5b36e4eebc495417f6af47a6f7d52e3294827a1226d2a1aab23d9d20",
     "https://esm.sh/@supabase/supabase-js@2.39.0": "f51aeb2dbf8f67c8fa396628af45793e3513067d45705f1ea158f5c678bb0cea",
     "https://esm.sh/@supabase/supabase-js@2.99.0": "031b04cf2d1feffda7d07c6810776b1e24157e733e8e227b2f2bdaf7c6641868",
-    "https://esm.sh/stripe@18.5.0": "da8bd0bec3e31938500a0f96624f2d8372a1566cd6595d2bfdbbab22d3164e04"
   },
   "workspace": {
     "packageJson": {

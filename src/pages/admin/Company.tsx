@@ -193,7 +193,7 @@ export default function CompanyPage() {
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
-  // stripeConnecting removed — replaced by asaasConnecting
+  // Estado dedicado ao fluxo oficial atual de conexão Asaas.
   const [form, setForm] = useState({
     legal_type: 'PJ' as 'PF' | 'PJ',
     full_name: '',

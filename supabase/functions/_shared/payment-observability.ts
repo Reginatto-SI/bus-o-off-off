@@ -117,8 +117,8 @@ export async function logSaleIntegrationEvent(params: {
   paymentEnvironment?: string | null;
   environmentDecisionSource?: string | null;
   environmentHostDetected?: string | null;
-  // `stripe` permanece apenas para consulta de trilhas históricas já persistidas.
-  provider: "asaas" | "stripe" | "manual";
+  // Contrato alinhado ao runtime oficial atual: apenas Asaas e fluxo manual administrativo.
+  provider: "asaas" | "manual";
   direction: "incoming_webhook" | "outgoing_request" | "manual_sync";
   eventType?: string | null;
   paymentId?: string | null;

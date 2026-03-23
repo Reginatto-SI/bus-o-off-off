@@ -303,7 +303,6 @@ export default function Confirmation() {
       }),
       purchaseOriginLabel: resolveTicketPurchaseOriginLabel(sale?.sale_origin),
       saleId: sale?.id,
-      stripeCheckoutSessionId: sale?.stripe_checkout_session_id || null,
       asaasPaymentId: (sale as any)?.asaas_payment_id || null,
       companyName: companyDisplayName,
       companyLogoUrl: company?.logo_url || null,
