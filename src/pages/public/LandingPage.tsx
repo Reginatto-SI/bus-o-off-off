@@ -324,6 +324,35 @@ const LANDING_FAQS = [
       "Em poucos minutos você já pode configurar sua operação e começar a vender.",
   },
 ] as const;
+// Nova seção comercial antes da FAQ: mostra que começar a vender é um processo simples,
+// visual e rápido, sem transformar a landing em tutorial técnico.
+const GET_STARTED_STEPS = [
+  {
+    icon: Calendar,
+    title: "Cadastre seu evento",
+    desc: "Crie o evento que será vendido na sua vitrine e apresente sua próxima saída com clareza.",
+  },
+  {
+    icon: MapPin,
+    title: "Defina locais e horários de embarque",
+    desc: "Organize os pontos de saída de forma clara para o passageiro saber onde e quando embarcar.",
+  },
+  {
+    icon: CreditCard,
+    title: "Conecte sua conta de recebimento",
+    desc: "Vincule sua conta Asaas para receber os pagamentos de forma simples e organizada.",
+  },
+  {
+    icon: Link2,
+    title: "Publique e compartilhe o link",
+    desc: "Divulgue sua página de vendas no WhatsApp, nas redes sociais ou no seu próprio site.",
+  },
+  {
+    icon: BarChart3,
+    title: "Comece a vender passagens",
+    desc: "Acompanhe sua operação e suas vendas em um só lugar, com mais visibilidade para crescer.",
+  },
+] as const;
 const JOURNEY_OPTIONS = [
   {
     icon: Ticket,
@@ -1201,6 +1230,58 @@ export default function LandingPage() {
                   ))}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+      <section className="py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Nova seção inserida imediatamente antes da FAQ para reduzir objeção inicial
+              e mostrar que começar a vender no Smartbus BR é rápido e organizado. */}
+          <div className="mb-10 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Comece com clareza e sem complicação
+            </div>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Como começar a vender com a Smartbus BR
+            </h2>
+            <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
+              Configure sua operação, publique seu evento e compartilhe o link de vendas.
+            </p>
+          </div>
+          {/* Bloco de steps: usa cards numerados no padrão visual já existente da landing
+              para manter leitura rápida em desktop e empilhamento elegante no mobile. */}
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
+            {GET_STARTED_STEPS.map((step, index) => (
+              <div
+                key={step.title}
+                className="relative rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-md"
+              >
+                <span className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                  {index + 1}
+                </span>
+                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <step.icon className="h-6 w-6" />
+                </div>
+                <h3 className="max-w-[85%] text-lg font-bold text-foreground">
+                  {step.title}
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {step.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+          {/* CTA da nova seção: reaproveita o mesmo padrão de botão primário já usado
+              em outros pontos da landing para manter consistência visual e comercial. */}
+          <div className="mt-10 flex justify-center">
+            <Link
+              to="/cadastro"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Criar meu primeiro evento
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
       </section>
