@@ -349,7 +349,7 @@ export default function Referrals() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           <StatsCard label="Total de indicações" value={stats.total} icon={Share2} />
           <StatsCard label="Em progresso" value={stats.emProgresso} icon={Rocket} variant="warning" />
           <StatsCard label="Elegíveis" value={stats.elegiveis} icon={CheckCircle2} variant="success" />
