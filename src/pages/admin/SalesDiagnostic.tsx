@@ -1034,10 +1034,7 @@ export default function SalesDiagnostic() {
 
         return {
           sale,
-          operational: {
-            ...operational,
-            operationalPriority: computeOperationalPriority(operational),
-          },
+          operational,
           freshness: computeMonitoringFreshness(sale, isNewInSession),
         };
       })
