@@ -30,7 +30,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { getFinancialSocioConfigStatus } from '@/lib/financialSocioSplitConfig';
-import { buildCompanyReferralLink } from '@/lib/companyReferral';
+import { buildCompanyReferralLink, resolveCompanyReferralOrigin } from '@/lib/companyReferral';
 import {
   getAsaasIntegrationSnapshot,
   type AsaasIntegrationStatus,
@@ -244,7 +244,7 @@ export default function CompanyPage() {
   const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
   const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
   const referralLink = company?.referral_code
-    ? buildCompanyReferralLink('https://www.smartbusbr.com.br', company.referral_code)
+    ? buildCompanyReferralLink(resolveCompanyReferralOrigin(), company.referral_code)
     : '';
   const canRenderShowcaseQr = normalizedPublicSlug.length > 0 && !isReservedSlug && slugAvailable === true;
 

@@ -8,6 +8,15 @@ export type CompanyReferralTracking = {
 export const normalizeCompanyReferralCode = (value: string | null | undefined) =>
   (value ?? '').trim().toUpperCase();
 
+// Comentário de manutenção: o resolvedor de origem prioriza uma URL pública explícita quando existir
+// e cai para a origem atual do browser no admin. O fallback final evita link vazio em renderizações sem `window`.
+export const resolveCompanyReferralOrigin = () => {
+  const envOrigin = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim();
+  if (envOrigin) return envOrigin.replace(/\/$/, '');
+  if (typeof window !== 'undefined' && window.location.origin) return window.location.origin.replace(/\/$/, '');
+  return 'https://www.smartbusbr.com.br';
+};
+
 export const buildCompanyReferralLink = (origin: string, code: string) => {
   const normalizedCode = normalizeCompanyReferralCode(code);
   if (!normalizedCode) return '';
