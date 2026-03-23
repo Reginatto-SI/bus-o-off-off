@@ -93,7 +93,7 @@ interface TicketCardProps {
    * Mantemos `default` como comportamento legado para não afetar fluxos existentes.
    */
   reservedPresentation?: 'default' | 'receipt';
-  // Callback para verificar status de pagamento no Stripe (on-demand)
+  // Callback para verificar status de pagamento legado (Asaas atual + compatibilidade histórica).
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshing?: boolean;
 }
@@ -490,7 +490,7 @@ export function TicketCard({
             )}
           </div>
 
-          {/* Botão de atualizar status — fallback para sync com Stripe */}
+          {/* Botão de atualizar status — compatibilidade com pagamentos legados sem reativar Stripe. */}
           {showRefreshButton && (
             <Button
               variant="ghost"

@@ -340,8 +340,6 @@ export type Database = {
           social_youtube: string | null
           socio_split_percent: number
           state: string | null
-          stripe_account_id: string | null
-          stripe_onboarding_complete: boolean
           ticket_color: string | null
           trade_name: string | null
           updated_at: string
@@ -395,8 +393,6 @@ export type Database = {
           social_youtube?: string | null
           socio_split_percent?: number
           state?: string | null
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
@@ -450,8 +446,6 @@ export type Database = {
           social_youtube?: string | null
           socio_split_percent?: number
           state?: string | null
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
@@ -1441,8 +1435,6 @@ export type Database = {
           name: string
           notes: string | null
           status: string
-          stripe_account_id: string | null
-          stripe_onboarding_complete: boolean
           updated_at: string
         }
         Insert: {
@@ -1456,8 +1448,6 @@ export type Database = {
           name: string
           notes?: string | null
           status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           updated_at?: string
         }
         Update: {
@@ -1471,8 +1461,6 @@ export type Database = {
           name?: string
           notes?: string | null
           status?: string
-          stripe_account_id?: string | null
-          stripe_onboarding_complete?: boolean
           updated_at?: string
         }
         Relationships: [

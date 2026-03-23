@@ -43,9 +43,6 @@ export interface Company {
   province: string | null;
   postal_code: string | null;
   notes: string | null;
-  // Stripe Connect (legacy)
-  stripe_account_id: string | null;
-  stripe_onboarding_complete: boolean;
   // Asaas: contrato oficial e único por ambiente.
   asaas_account_id_production?: string | null;
   asaas_account_email_production?: string | null;
@@ -434,9 +431,6 @@ export interface SocioSplit {
   asaas_wallet_id_production?: string | null;
   /** Step 3: wallet explícita para sandbox (uso futuro no Step 4). */
   asaas_wallet_id_sandbox?: string | null;
-  // Campos legados do Stripe — mantidos para histórico, não usados no fluxo atual.
-  stripe_account_id: string | null;
-  stripe_onboarding_complete: boolean;
   commission_percent: number;
   status: SocioSplitStatus;
   notes: string | null;
