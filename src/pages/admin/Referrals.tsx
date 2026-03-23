@@ -185,20 +185,16 @@ export default function Referrals() {
         ]);
 
         if (companyError) {
-          logSupabaseError('Erro ao carregar link oficial de indicação', companyError, {
-            context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id },
-          });
-          toast.error(buildDebugToastMessage('Não foi possível carregar o link de indicação.', companyError));
+          logSupabaseError({ label: 'Erro ao carregar link oficial de indicação', error: companyError, context: { action: 'select', table: 'companies', companyId: activeCompanyId, userId: user?.id } });
+          toast.error(buildDebugToastMessage({ title: 'Não foi possível carregar o link de indicação.', error: companyError }));
           setCompanySummary(null);
         } else {
           setCompanySummary((companyData as CompanySummary | null) ?? null);
         }
 
         if (referralsError) {
-          logSupabaseError('Erro ao carregar indicações da empresa', referralsError, {
-            context: { action: 'select', table: 'company_referrals', companyId: activeCompanyId, userId: user?.id },
-          });
-          toast.error(buildDebugToastMessage('Não foi possível carregar as indicações.', referralsError));
+          logSupabaseError({ label: 'Erro ao carregar indicações da empresa', error: referralsError, context: { action: 'select', table: 'company_referrals', companyId: activeCompanyId, userId: user?.id } });
+          toast.error(buildDebugToastMessage({ title: 'Não foi possível carregar as indicações.', error: referralsError }));
           setReferrals([]);
         } else {
           setReferrals((referralsData as ReferralRow[] | null) ?? []);
@@ -288,6 +284,7 @@ export default function Referrals() {
 
   return (
     <AdminLayout>
+      <div className="page-container">
       <PageHeader
         title="Indicações"
         description="Acompanhe empresas indicadas e o progresso da recompensa da sua empresa."
@@ -300,7 +297,7 @@ export default function Referrals() {
         }
       />
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         <Card>
           <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
@@ -318,8 +315,8 @@ export default function Referrals() {
               </Badge>
             )}
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border bg-muted/20 p-4">
+          <CardContent className="space-y-5 p-6">
+            <div className="rounded-md border bg-muted/20 p-5">
               <div className="flex items-start gap-3">
                 <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div className="space-y-1">
@@ -348,7 +345,7 @@ export default function Referrals() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           <StatsCard label="Total de indicações" value={stats.total} icon={Share2} />
           <StatsCard label="Em progresso" value={stats.emProgresso} icon={Rocket} variant="warning" />
           <StatsCard label="Elegíveis" value={stats.elegiveis} icon={CheckCircle2} variant="success" />
@@ -538,6 +535,7 @@ export default function Referrals() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </AdminLayout>
   );
 }

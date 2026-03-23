@@ -822,9 +822,13 @@ export default function CompanyPage() {
       error = response.error;
       savedCompany = (response.data as Company | null) ?? null;
     } else {
+      const insertPayload = {
+        ...payload,
+        referral_code: crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase(),
+      };
       const response = await supabase
         .from('companies')
-        .insert([payload])
+        .insert([insertPayload])
         .select('*')
         .single();
       error = response.error;
