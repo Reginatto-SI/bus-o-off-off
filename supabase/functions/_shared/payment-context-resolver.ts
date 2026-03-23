@@ -69,7 +69,6 @@ type MinimalSocio = {
   asaas_wallet_id?: string | null;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
-  stripe_account_id?: string | null;
 };
 
 function readEnvironmentCompanyConfig(
@@ -127,9 +126,9 @@ export function resolveSocioWalletByEnvironment(
   return socio.asaas_wallet_id_sandbox ?? socio.asaas_wallet_id ?? null;
 }
 
-// Comentário de suporte: `stripe` permanece apenas para leitura/compatibilidade histórica
-// enquanto o schema legado ainda existir. O runtime oficial atual aceita somente Asaas.
-export type FinancialSocioValidationProvider = "asaas" | "stripe";
+// Comentário de suporte: após a neutralização final do legado Stripe no schema,
+// o runtime oficial permanece com provider único e explícito: Asaas.
+export type FinancialSocioValidationProvider = "asaas";
 
 export type FinancialSocioValidationResult =
   | {
@@ -181,26 +180,6 @@ export function validateFinancialSocioForSplit(params: {
   }
 
   const socio = activeSocios[0];
-
-  if (params.provider === "stripe") {
-    if (!socio?.stripe_account_id) {
-      return {
-        ok: false,
-        code: "split_socio_destination_missing",
-        message: "Split inválido: sócio sem conta Stripe configurada",
-        socio,
-        walletId: null,
-      };
-    }
-
-    return {
-      ok: true,
-      code: null,
-      message: null,
-      socio,
-      walletId: socio.stripe_account_id,
-    };
-  }
 
   const walletId = resolveSocioWalletByEnvironment(socio, params.environment);
 
