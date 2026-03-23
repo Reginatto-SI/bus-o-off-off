@@ -29,6 +29,7 @@ import { getPersistedTripId, setPersistedTripId, getPersistedPhase, setPersisted
 import type { OperationalPhase } from '@/lib/driverTripStorage';
 import { PHASE_CONFIG, getApplicablePhases } from '@/lib/driverPhaseConfig';
 import { useToast } from '@/hooks/use-toast';
+import { buildEventOperationalEndMap, isOperationallyVisible } from '@/lib/eventOperationalWindow';
 
 interface TripInfo {
   tripId: string;
@@ -109,46 +110,33 @@ export default function DriverHome() {
       trips = data;
     }
 
-    const tripIds = (trips ?? []).map((t: any) => t.id);
+    const eventIds = Array.from(new Set((trips ?? []).map((trip: any) => trip.events?.id).filter(Boolean)));
+    let visibleEventIds = new Set<string>(eventIds);
 
-    // Boarding window filtering
-    let filteredTripIds = new Set<string>(tripIds);
-    if (tripIds.length > 0) {
-      const { data: eblDates } = await supabase
+    if (eventIds.length > 0) {
+      const { data: boardings } = await supabase
         .from('event_boarding_locations')
-        .select('trip_id, departure_date')
-        .in('trip_id', tripIds)
+        .select('event_id, departure_date, departure_time')
+        .in('event_id', eventIds)
+        .eq('company_id', activeCompanyId)
         .not('departure_date', 'is', null);
 
-      if (eblDates && eblDates.length > 0) {
-        const minDateByTrip = new Map<string, string>();
-        eblDates.forEach((row: any) => {
-          const cur = minDateByTrip.get(row.trip_id);
-          if (!cur || row.departure_date < cur) {
-            minDateByTrip.set(row.trip_id, row.departure_date);
-          }
-        });
+      const operationalEndMap = buildEventOperationalEndMap(
+        (trips ?? []).map((trip: any) => ({ id: trip.events.id, date: trip.events.date })),
+        (boardings ?? []).map((boarding: any) => ({
+          event_id: boarding.event_id,
+          departure_date: boarding.departure_date,
+          departure_time: boarding.departure_time,
+        })),
+      );
 
-        const now = new Date();
-        const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-        const windowEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
-        const toDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const startStr = toDateStr(windowStart);
-        const endStr = toDateStr(windowEnd);
-
-        const tripsWithDates = new Set(minDateByTrip.keys());
-        filteredTripIds = new Set(
-          tripIds.filter((id: string) => {
-            if (!tripsWithDates.has(id)) return true;
-            const minDate = minDateByTrip.get(id)!;
-            return minDate >= startStr && minDate <= endStr;
-          })
-        );
-      }
+      visibleEventIds = new Set(
+        eventIds.filter((eventId) => isOperationallyVisible(eventId, operationalEndMap))
+      );
     }
 
     const mapped: TripInfo[] = (trips ?? [])
-      .filter((trip: any) => filteredTripIds.has(trip.id))
+      .filter((trip: any) => visibleEventIds.has(trip.events.id))
       .map((trip: any) => ({
         tripId: trip.id,
         eventId: trip.events.id,

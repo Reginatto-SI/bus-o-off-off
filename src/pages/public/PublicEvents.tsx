@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Ticket } from 'lucide-react';
 import { filterEventsByTerm } from '@/lib/eventSearch';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 import { 
   EventCard, 
   EventsCarousel, 
@@ -39,7 +40,18 @@ export default function PublicEvents() {
         .eq('is_archived', false)
         .order('date', { ascending: true });
 
-      if (data) setEvents(data as EventWithCompany[]);
+      if (data) {
+        const eventRows = data as EventWithCompany[];
+        const eventIds = eventRows.map((event) => event.id);
+        const { data: boardings } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventIds)
+          .not('departure_date', 'is', null);
+
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+        setEvents(filterOperationallyVisibleEvents(eventRows, operationalEndMap) as EventWithCompany[]);
+      }
       setLoading(false);
     };
 

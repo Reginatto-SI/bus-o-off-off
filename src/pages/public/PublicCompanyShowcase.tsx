@@ -19,6 +19,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 import { filterEventsByTerm } from '@/lib/eventSearch';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
 // Tipo mínimo para patrocinadores públicos (whitelist estrita de campos)
 interface PublicSponsor {
@@ -116,7 +117,20 @@ export default function PublicCompanyShowcase() {
           .order('created_at'),
       ]);
 
-      setEvents((eventsRes.data ?? []) as EventWithCompany[]);
+      const eventRows = (eventsRes.data ?? []) as EventWithCompany[];
+      if (eventRows.length > 0) {
+        const { data: boardings } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventRows.map((event) => event.id))
+          .eq('company_id', companyData.id)
+          .not('departure_date', 'is', null);
+
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+        setEvents(filterOperationallyVisibleEvents(eventRows, operationalEndMap) as EventWithCompany[]);
+      } else {
+        setEvents([]);
+      }
       setSponsors((sponsorsRes.data ?? []) as PublicSponsor[]);
       setCommercialPartners((partnersRes.data ?? []) as CommercialPartner[]);
       setLoading(false);

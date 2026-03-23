@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { generateBoardingManifest } from '@/lib/reports/generateBoardingManifest';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
 interface EventOption {
   id: string;
@@ -46,6 +47,7 @@ export default function BoardingManifestReport() {
   const [showOldEvents, setShowOldEvents] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState('all');
   const [selectedTripId, setSelectedTripId] = useState('all');
+  const [operationallyFinishedIds, setOperationallyFinishedIds] = useState<Set<string>>(new Set());
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId) ?? null,
@@ -74,10 +76,10 @@ export default function BoardingManifestReport() {
       { value: 'all', label: 'Selecione' },
       ...filteredEvents.map((event) => ({
         value: event.id,
-        label: `${new Date(`${event.date}T00:00:00`).toLocaleDateString('pt-BR')} • ${event.name}`,
+        label: `${new Date(`${event.date}T00:00:00`).toLocaleDateString('pt-BR')} • ${event.name}${showOldEvents && operationallyFinishedIds.has(event.id) ? ' • histórico operacional' : ''}`,
       })),
     ],
-    [filteredEvents],
+    [filteredEvents, operationallyFinishedIds, showOldEvents],
   );
 
   const tripOptions = useMemo(
@@ -97,21 +99,11 @@ export default function BoardingManifestReport() {
       return;
     }
 
-    const recentCutoff = new Date();
-    recentCutoff.setDate(recentCutoff.getDate() - 30);
-    const recentCutoffIso = recentCutoff.toISOString().slice(0, 10);
-
     let query = supabase
       .from('events')
       .select('id, name, date, status, is_archived')
       .eq('company_id', activeCompanyId)
       .order('date', { ascending: false });
-
-    if (!showOldEvents) {
-      query = query
-        .eq('is_archived', false)
-        .or(`status.eq.a_venda,date.gte.${recentCutoffIso}`);
-    }
 
     const { data, error } = await query;
 
@@ -121,7 +113,28 @@ export default function BoardingManifestReport() {
       return;
     }
 
-    setEvents((data ?? []) as EventOption[]);
+    const eventRows = (data ?? []) as EventOption[];
+    const activeRows = eventRows.filter((event) => !event.is_archived);
+
+    if (activeRows.length === 0) {
+      setOperationallyFinishedIds(new Set());
+      setEvents(showOldEvents ? eventRows : []);
+      return;
+    }
+
+    const { data: boardings } = await supabase
+      .from('event_boarding_locations')
+      .select('event_id, departure_date, departure_time')
+      .in('event_id', activeRows.map((event) => event.id))
+      .eq('company_id', activeCompanyId)
+      .not('departure_date', 'is', null);
+
+    const operationalEndMap = buildEventOperationalEndMap(activeRows, (boardings ?? []) as any[]);
+    const visibleActiveRows = filterOperationallyVisibleEvents(activeRows, operationalEndMap) as EventOption[];
+    const visibleIds = new Set(visibleActiveRows.map((event) => event.id));
+    setOperationallyFinishedIds(new Set(activeRows.filter((event) => !visibleIds.has(event.id)).map((event) => event.id)));
+
+    setEvents(showOldEvents ? eventRows : visibleActiveRows);
   }, [activeCompanyId, showOldEvents]);
 
   // Carrega viagens somente quando evento é selecionado para manter UX e performance.
