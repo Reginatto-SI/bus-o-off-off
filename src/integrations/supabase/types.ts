@@ -835,6 +835,7 @@ export type Database = {
           date: string
           description: string | null
           enable_checkout_validation: boolean
+          event_category: string | null
           id: string
           image_url: string | null
           is_archived: boolean
@@ -862,6 +863,7 @@ export type Database = {
           date: string
           description?: string | null
           enable_checkout_validation?: boolean
+          event_category?: string | null
           id?: string
           image_url?: string | null
           is_archived?: boolean
@@ -889,6 +891,7 @@ export type Database = {
           date?: string
           description?: string | null
           enable_checkout_validation?: boolean
+          event_category?: string | null
           id?: string
           image_url?: string | null
           is_archived?: boolean
