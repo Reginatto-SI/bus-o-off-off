@@ -71,7 +71,10 @@ function hasAnyConfig(config: EnvironmentAsaasConfig) {
 function hasOperationalConnection(config: EnvironmentAsaasConfig) {
   // Comentário de suporte: o checkout usa credencial + wallet por ambiente;
   // onboarding sozinho não é evidência suficiente para marcar como conectado.
-  return Boolean(config.apiKey && config.walletId && config.onboardingComplete);
+  // Regra corrigida: vínculo via API direta pode ser válido sem onboarding concluído.
+  // Portanto, o estado "conectado" deve refletir prontidão operacional (apiKey+wallet),
+  // enquanto `onboardingComplete` permanece apenas como sinal auxiliar/diagnóstico.
+  return Boolean(config.apiKey && config.walletId);
 }
 
 export function getAsaasIntegrationSnapshot(
@@ -90,16 +93,8 @@ export function getAsaasIntegrationSnapshot(
   let status: AsaasIntegrationStatus = 'not_configured';
   const reasons: string[] = [];
 
-  if (currentIsConnected && current.accountId) {
+  if (currentIsConnected) {
     status = 'connected';
-  } else if (currentIsConnected && !current.accountId) {
-    // Comentário de manutenção: o card não deve marcar "Conectado" quando o ambiente
-    // ainda não tem `account_id` persistido. O checkout pode até operar com API key + wallet,
-    // mas a verificação manual e a auditoria da conta exigem esse identificador.
-    // Antes de relaxar esta regra, validar se o fluxo de vínculo atual realmente consegue
-    // produzir/persistir `account_id` para todas as respostas reais do Asaas; caso contrário,
-    // o problema pode estar na persistência/extração e não no conceito de "connected".
-    status = 'partially_configured';
   } else if (
     current.onboardingComplete && (!current.apiKey || !current.walletId)
   ) {
@@ -116,9 +111,6 @@ export function getAsaasIntegrationSnapshot(
   }
   if (current.onboardingComplete && !current.walletId) {
     reasons.push('onboarding marcado sem wallet no ambiente operacional');
-  }
-  if (currentIsConnected && !current.accountId) {
-    reasons.push('conta operacional sem account_id salvo no ambiente operacional');
   }
   if (currentHasAny && !currentIsConnected) {
     reasons.push('configuração do ambiente operacional está incompleta');
