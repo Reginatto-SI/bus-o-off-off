@@ -163,6 +163,8 @@ serve(async (req) => {
           cpfCnpj: companyDoc || undefined,
           email: companyData?.email || undefined,
           externalReference: `company_${sale.company_id}`,
+          // Evita habilitação padrão de mensageria paga (SMS) em novos customers no Asaas.
+          notificationDisabled: true,
         }),
       });
       const customerData = await createRes.json();
