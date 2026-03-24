@@ -69,12 +69,10 @@ function hasAnyConfig(config: EnvironmentAsaasConfig) {
 }
 
 function hasOperationalConnection(config: EnvironmentAsaasConfig) {
-  // Comentário de suporte: o checkout usa credencial + wallet por ambiente;
-  // onboarding sozinho não é evidência suficiente para marcar como conectado.
-  // Regra corrigida: vínculo via API direta pode ser válido sem onboarding concluído.
-  // Portanto, o estado "conectado" deve refletir prontidão operacional (apiKey+wallet),
-  // enquanto `onboardingComplete` permanece apenas como sinal auxiliar/diagnóstico.
-  return Boolean(config.apiKey && config.walletId);
+  // Comentário de suporte: no vínculo por API direta, a credencial operacional
+  // obrigatória é a API Key da empresa no ambiente ativo. Wallet/account/onboarding
+  // podem existir como metadados de auditoria, mas não podem bloquear "Conectado".
+  return Boolean(config.apiKey);
 }
 
 export function getAsaasIntegrationSnapshot(

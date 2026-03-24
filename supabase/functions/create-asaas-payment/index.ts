@@ -256,11 +256,11 @@ serve(async (req) => {
       );
     }
 
-    // Hardening Step 5: exige configuração explícita por ambiente (sem fallback legado).
-    if (
-      !paymentContext.companyWalletByEnvironment ||
-      !paymentContext.companyOnboardingCompleteByEnvironment
-    ) {
+    // Hardening Step 5 (ajuste API direta):
+    // para empresa cobrar no próprio Asaas, a credencial mandatória é API Key por ambiente.
+    // wallet/onboarding continuam úteis para diagnóstico e trilha do vínculo, mas não devem
+    // bloquear criação de cobrança quando a integração via API direta já está válida.
+    if (!paymentContext.companyApiKeyByEnvironment) {
       return jsonResponse(
         {
           error: "Empresa não possui conta Asaas configurada",

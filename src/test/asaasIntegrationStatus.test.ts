@@ -61,10 +61,10 @@ function buildCompany(overrides: Partial<Company>): Company {
 }
 
 describe('getAsaasIntegrationSnapshot', () => {
-  it('marca conectado para vínculo via API direta (apiKey + wallet), mesmo sem onboarding completo', () => {
+  it('marca conectado para vínculo via API direta apenas com API Key no ambiente ativo', () => {
     const company = buildCompany({
       asaas_api_key_production: 'key_prod_123',
-      asaas_wallet_id_production: 'wallet_prod_123',
+      asaas_wallet_id_production: null,
       asaas_onboarding_complete_production: false,
       asaas_account_id_production: null,
     });
