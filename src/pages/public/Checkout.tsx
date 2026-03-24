@@ -690,21 +690,22 @@ export default function Checkout() {
 
     const payer = passengers[payerIndex];
 
-    // Validate seller ref
+    // Captura e valida o vínculo de vendedor vindo de `?ref=` no fluxo público.
+    // Correção: usamos RPC SECURITY DEFINER para não depender de SELECT direto em `sellers`,
+    // que é bloqueado por RLS para usuários anônimos.
     let validatedSellerId: string | null = null;
     if (sellerRef) {
-      const { data: sellerData } = await supabase
-        .from("sellers")
-        .select("id, status, company_id")
-        .eq("id", sellerRef)
-        .single();
+      const { data: resolvedSellerId, error: sellerResolveError } =
+        await supabase.rpc("resolve_event_seller_ref", {
+          p_seller_id: sellerRef,
+          p_company_id: event.company_id,
+        });
 
-      if (
-        sellerData &&
-        sellerData.status === "ativo" &&
-        sellerData.company_id === event.company_id
-      ) {
-        validatedSellerId = sellerData.id;
+      if (sellerResolveError) {
+        // Suporte: manter log explícito ajuda a auditar falhas de atribuição sem quebrar a compra.
+        console.warn("Falha ao validar seller_ref no checkout:", sellerResolveError);
+      } else if (resolvedSellerId) {
+        validatedSellerId = resolvedSellerId;
       }
     }
 
