@@ -3157,47 +3157,16 @@ export default function Events() {
                       </div>
 
                       <div className="space-y-3">
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="name">Nome do Evento *</Label>
-                            <Input
-                              id="name"
-                              value={form.name}
-                              onChange={(e) => setForm({ ...form, name: e.target.value })}
-                              placeholder="Ex: Festa do Peão de Barretos 2026"
-                              required
-                              disabled={isReadOnly}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Categoria do Evento</Label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {eventCategoryOptions.map((option) => {
-                                const isSelected = form.event_category === option.value;
-                                return (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    disabled={isReadOnly}
-                                    onClick={() => handleEventCategorySelect(option.value)}
-                                    className={cn(
-                                      'relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-all',
-                                      isSelected
-                                        ? 'ring-2 ring-primary border-primary bg-primary/5'
-                                        : 'hover:border-primary/50 hover:bg-muted/50',
-                                      isReadOnly && 'opacity-60 cursor-not-allowed',
-                                    )}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-base">{option.icon}</span>
-                                      <span className="font-medium text-xs">{option.label}</span>
-                                    </div>
-                                    <p className="text-[11px] leading-relaxed text-muted-foreground">{option.description}</p>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="name">Nome do Evento *</Label>
+                          <Input
+                            id="name"
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            placeholder="Ex: Festa do Peão de Barretos 2026"
+                            required
+                            disabled={isReadOnly}
+                          />
                         </div>
                         <div className="space-y-2">
                           {/* Ajuste estrutural: categoria em linha própria para não disputar altura com o input de nome. */}
