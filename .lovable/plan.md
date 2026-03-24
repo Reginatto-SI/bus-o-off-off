@@ -1,55 +1,56 @@
 
 
-# Plano: Redirecionamento do dominio busaooffoff.com.br + Correcao de build errors
+# Plano: Correcao definitiva do fluxo de criacao e listagem de usuarios
 
-## Parte 1 — Dominio busaooffoff.com.br
+## Diagnostico confirmado
 
-### Diagnostico
+Investigacao dos dados em producao revelou **4 usuarios orfaos** (profiles sem nenhum registro em `user_roles`), todos criados nas ultimas horas. Isso confirma que o bug e real e ativo.
 
-O comportamento desejado e que `www.busaooffoff.com.br` redirecione para `https://www.smartbusbr.com.br/empresa/busaooffoff`. Isso e um **redirecionamento entre dominios diferentes** (de busaooffoff.com.br para smartbusbr.com.br).
+**Causa raiz**: o codigo no repositorio (`create-user/index.ts`) ja contem a correcao correta (upsert em `user_roles` + rollback se falhar), porem a **edge function deployada no runtime** provavelmente e uma versao anterior que nao faz o upsert corretamente. Os logs da edge function mostram apenas `shutdown`, sem evidencia de execucao da versao com `runtime_version`.
 
-### Limitacao da plataforma
+Em resumo: o codigo esta correto no repositorio, mas o runtime ainda roda uma versao antiga.
 
-Lovable permite conectar dominios customizados a um projeto, mas **nao suporta redirecionamento entre dominios diferentes nativamente**. Quando voce conecta `www.busaooffoff.com.br` ao projeto Lovable, ele serve o **mesmo app** nesse dominio — nao redireciona para outro dominio.
+## Evidencias
 
-### Opcoes viaveis
+```
+Usuarios orfaos (profiles sem user_roles):
+- homolog2.motorista.20260324000355@example.com  (role_count: 0)
+- homolog2.vendedor.20260324000355@example.com   (role_count: 0)
+- homolog2.gerente.20260324000355@example.com     (role_count: 0)
+- homolog.gerente.20260323235139@example.com      (role_count: 0)
+```
 
-Existem duas abordagens possiveis:
+O restante do sistema (RLS, AuthContext, listagem em Users.tsx) esta correto:
+- `user_roles` tem constraint `UNIQUE (user_id, company_id)` confirmada
+- RLS de `user_roles` ja usa `user_belongs_to_company` com escopo por empresa
+- `AuthContext` ja resolve empresa ativa via `user_roles` (nao `profiles.company_id`)
+- `Users.tsx` ja lista via `user_roles.eq('company_id', activeCompanyId)`
 
-**Opcao A — Manter o redirecionamento via codigo React (ja implementado)**
-O codigo atual em `PublicRootRedirect` + `companyDomainRouting.ts` ja faz exatamente isso: quando o hostname e `busaooffoff.com.br`, redireciona para `/empresa/busaooffoff`. Porem isso e um redirecionamento **interno** (dentro do mesmo app), nao um redirecionamento para `smartbusbr.com.br`. O usuario ficaria em `www.busaooffoff.com.br/empresa/busaooffoff` — nao em `www.smartbusbr.com.br/empresa/busaooffoff`.
+## Acoes necessarias
 
-**Opcao B — Redirecionamento externo via DNS/registrador (recomendado)**
-Configurar no registrador de dominio (onde `busaooffoff.com.br` esta registrado) um **redirecionamento HTTP 301** de `www.busaooffoff.com.br` para `https://www.smartbusbr.com.br/empresa/busaooffoff`. Isso e feito fora do Lovable, no painel do registrador (ex: Registro.br, GoDaddy, Cloudflare, etc.).
+### 1. Redeployar a edge function `create-user`
 
-### Recomendacao
+O codigo no repositorio ja esta correto. Precisa ser redeployado para que o runtime use a versao atual. Isso resolve o bug principal.
 
-**A solucao correta para o seu caso e a Opcao B** — configurar o redirecionamento no registrador de dominio. Lovable nao consegue fazer um dominio apontar para uma URL em outro dominio. Isso precisa ser feito na camada de DNS/hosting.
+### 2. Limpar usuarios orfaos
 
-Passos:
-1. Acesse o painel do registrador onde `busaooffoff.com.br` esta configurado
-2. Configure um **redirecionamento 301** (permanente) de `busaooffoff.com.br` e `www.busaooffoff.com.br` para `https://www.smartbusbr.com.br/empresa/busaooffoff`
-3. **Nao conecte** esse dominio ao projeto Lovable — ele deve redirecionar externamente
-4. Remova a logica de redirecionamento por hostname do codigo React (simplificar `PublicRootRedirect` para apenas renderizar `LandingPage`, e remover `companyDomainRouting.ts`)
+Remover os 4 usuarios de teste/homologacao que ficaram sem vínculo (profiles + auth.users), via migration com `service_role`. Sao claramente usuarios de teste (emails `@example.com` e homologacao).
 
-## Parte 2 — Correcao dos build errors em SalesDiagnostic.tsx
+### 3. Pequeno ajuste defensivo no frontend
 
-Problema: a propriedade `operationalPriority` foi adicionada ao tipo `DiagnosticOperationalView` mas nao foi incluida nos objetos retornados pela funcao de classificacao.
+Adicionar um retry/verificacao pos-criacao no `Users.tsx`: apos `supabase.functions.invoke('create-user')`, antes de chamar `fetchUsers()`, verificar se o `user_id` retornado realmente tem um registro em `user_roles` para a empresa ativa. Se nao tiver, exibir erro claro ao inves de "sucesso" silencioso.
 
-Correcao: adicionar `operationalPriority` (derivado do campo `priority` ja existente) em cada objeto retornado nas ~14 ocorrencias dentro de `SalesDiagnostic.tsx`.
+## Detalhes tecnicos
 
-## Resumo de alteracoes
+### Redeploy da edge function
+A ferramenta `deploy_edge_functions` sera usada para forcar o deploy de `create-user`.
 
-| Arquivo | Acao |
-|---|---|
-| `src/pages/public/PublicRootRedirect.tsx` | Simplificar — remover logica de hostname, apenas renderizar LandingPage |
-| `src/lib/companyDomainRouting.ts` | Remover arquivo (logica nao sera mais necessaria) |
-| `src/test/companyDomainRouting.test.ts` | Remover arquivo de teste correspondente |
-| `src/pages/admin/SalesDiagnostic.tsx` | Adicionar `operationalPriority` em todos os objetos de retorno |
-
-### Acao necessaria do seu lado (fora do Lovable)
-
-Configurar no registrador de dominio o redirecionamento 301:
-- `busaooffoff.com.br` → `https://www.smartbusbr.com.br/empresa/busaooffoff`
-- `www.busaooffoff.com.br` → `https://www.smartbusbr.com.br/empresa/busaooffoff`
-
+### Migration para limpeza de orfaos
+```sql
+-- Remover usuarios de homologacao orfaos (sem user_roles)
+DELETE FROM public.profiles 
+WHERE id IN (
+  'c0b866ee-c6f8-48df-98d9-793a2ee3f975',
+  '465b357c-9731-4b6f-a2e5-6711fd8651c0',
+  '99a180e1-8a58-4b9e-bf54-99bdfc842c36',
+  '8145f278-7eb8-4bc2
