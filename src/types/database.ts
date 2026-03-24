@@ -1,5 +1,6 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
+export type EventCategory = 'evento' | 'excursao' | 'bate_e_volta' | 'viagem';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type TemplateVehicleType = VehicleType | 'double_deck';
 export type VehicleStatus = 'ativo' | 'inativo';
@@ -306,6 +307,8 @@ export interface Event {
   platform_fee_terms_accepted_by: string | null;
   is_archived: boolean;
   image_url: string | null;
+  // Categoria operacional do evento (uso principal em UX/filtros; não impõe regra de negócio).
+  event_category: EventCategory | null;
   // Política comercial por evento: controla se vende trecho solto, ida obrigatória ou pacote fechado.
   transport_policy: TransportPolicy;
   // Preço diferenciado por categoria de assento

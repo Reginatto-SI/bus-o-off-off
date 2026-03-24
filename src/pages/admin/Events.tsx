@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee, TransportPolicy, Company } from '@/types/database';
+import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, TripType, TripCreationType, EventFee, TransportPolicy, Company, EventCategory } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -83,6 +83,7 @@ import {
   Rocket,
   PartyPopper,
   Star,
+  Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
@@ -110,6 +111,7 @@ import { buildEventOperationalEndMap, isOperationallyVisible } from '@/lib/event
 interface EventFilters {
   search: string;
   status: 'all' | 'rascunho' | 'a_venda' | 'encerrado';
+  eventCategory: 'all' | EventCategory;
   archiveState: 'active' | 'archived';
   startDate: string;
   endDate: string;
@@ -161,6 +163,7 @@ interface EventBoardingLocationWithDetails extends EventBoardingLocation {
 const initialFilters: EventFilters = {
   search: '',
   status: 'all',
+  eventCategory: 'all',
   archiveState: 'active',
   startDate: '',
   endDate: '',
@@ -177,6 +180,14 @@ const statusOptions = [
   { value: 'a_venda', label: 'À Venda' },
   { value: 'encerrado', label: 'Encerrado' },
 ] as const;
+
+const eventCategoryFilterOptions: Array<{ value: EventFilters['eventCategory']; label: string }> = [
+  { value: 'all', label: 'Todas' },
+  { value: 'evento', label: 'Evento' },
+  { value: 'excursao', label: 'Excursão' },
+  { value: 'bate_e_volta', label: 'Bate e volta' },
+  { value: 'viagem', label: 'Viagem' },
+];
 
 const vehicleTypeLabels: Record<Vehicle['type'], string> = {
   onibus: 'Ônibus',
@@ -223,6 +234,22 @@ const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; des
     icon: '🔀',
   },
 ];
+
+type EventCategoryOptionValue = EventCategory;
+
+const eventCategoryOptions: Array<{ value: EventCategoryOptionValue; label: string; description: string; icon: string }> = [
+  { value: 'evento', label: 'Evento', description: 'Show, festa ou ocasião pontual com rota principal definida.', icon: '🎟️' },
+  { value: 'excursao', label: 'Excursão', description: 'Viagem em grupo com ida e retorno planejados.', icon: '🚌' },
+  { value: 'bate_e_volta', label: 'Bate e volta', description: 'Operação rápida no mesmo dia com retorno vinculado.', icon: '🔁' },
+  { value: 'viagem', label: 'Viagem', description: 'Operação com mais flexibilidade entre trechos de ida e volta.', icon: '🧭' },
+];
+
+const categorySuggestedTransportPolicyMap: Record<EventCategoryOptionValue, TransportPolicy> = {
+  evento: 'ida_volta_obrigatorio',
+  excursao: 'ida_volta_obrigatorio',
+  bate_e_volta: 'ida_volta_obrigatorio',
+  viagem: 'trecho_independente',
+};
 
 const seatCategoryLabels: Record<string, string> = {
   convencional: 'Convencional',
@@ -355,6 +382,8 @@ export default function Events() {
   // Main form
   const [form, setForm] = useState({
     name: '',
+    // Campo de UX: categoria ajuda a aplicar sugestão inicial de política de transporte.
+    event_category: null as EventCategoryOptionValue | null,
     date: '',
     city: '',
     // Tolerância opcional em minutos para regras operacionais da passagem.
@@ -380,6 +409,7 @@ export default function Events() {
     transport_policy: 'ida_volta_obrigatorio' as TransportPolicy,
     use_category_pricing: false,
   });
+  const [transportPolicyAutoHintVisible, setTransportPolicyAutoHintVisible] = useState(false);
 
   // Category pricing state
   const [categoryPrices, setCategoryPrices] = useState<{ category: string; price: string; seatCount: number }[]>([]);
@@ -779,6 +809,19 @@ export default function Events() {
   const isSomenteIdaPolicy = form.transport_policy === 'ida_obrigatoria_volta_opcional';
   const isFlexiblePolicy = form.transport_policy === 'trecho_independente';
 
+  const handleEventCategorySelect = (category: EventCategoryOptionValue) => {
+    const suggestedPolicy = categorySuggestedTransportPolicyMap[category];
+    // Mantemos a regra existente: se a política estiver bloqueada, só atualizamos a categoria visual.
+    if (isTransportPolicyLocked) {
+      setForm((prev) => ({ ...prev, event_category: category }));
+      setTransportPolicyAutoHintVisible(false);
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, event_category: category, transport_policy: suggestedPolicy }));
+    setTransportPolicyAutoHintVisible(true);
+  };
+
   // Stats calculations
   const stats = useMemo(() => {
     // KPIs do topo representam apenas eventos ativos para manter a leitura operacional da tela.
@@ -837,6 +880,7 @@ export default function Events() {
     const shouldApplyDefaultOperationalVisibility =
       filters.archiveState === 'active' &&
       filters.status === 'all' &&
+      filters.eventCategory === 'all' &&
       filters.startDate === '' &&
       filters.endDate === '' &&
       filters.monthYear === 'all';
@@ -862,6 +906,10 @@ export default function Events() {
       }
 
       if (filters.status !== 'all' && event.status !== filters.status) {
+        return false;
+      }
+
+      if (filters.eventCategory !== 'all' && event.event_category !== filters.eventCategory) {
         return false;
       }
 
@@ -965,6 +1013,7 @@ export default function Events() {
     return (
       filters.search !== '' ||
       filters.status !== 'all' ||
+      filters.eventCategory !== 'all' ||
       filters.archiveState !== 'active' ||
       filters.startDate !== '' ||
       filters.endDate !== '' ||
@@ -982,6 +1031,7 @@ export default function Events() {
   }, [
     filters.search,
     filters.status,
+    filters.eventCategory,
     filters.archiveState,
     filters.startDate,
     filters.endDate,
@@ -1301,6 +1351,7 @@ export default function Events() {
       boarding_tolerance_minutes: parsedBoardingTolerance,
       description: form.description || null,
       public_info: form.public_info || null,
+      event_category: form.event_category,
       status: targetStatus,
       unit_price: parseCurrencyInputBRL(form.unit_price),
       max_tickets_per_purchase: parseInt(form.max_tickets_per_purchase || '5', 10),
@@ -1551,6 +1602,8 @@ export default function Events() {
     setEditingId(event.id);
     setForm({
       name: event.name,
+      // Compatibilidade com eventos antigos: se a categoria vier nula, inferimos pela política atual.
+      event_category: (event.event_category ?? (((event as any).transport_policy ?? 'ida_volta_obrigatorio') === 'trecho_independente' ? 'viagem' : 'evento')),
       date: event.date,
       city: event.city,
       boarding_tolerance_minutes: event.boarding_tolerance_minutes != null ? event.boarding_tolerance_minutes.toString() : '',
@@ -1572,6 +1625,7 @@ export default function Events() {
       transport_policy: (event as any).transport_policy ?? 'trecho_independente',
       use_category_pricing: (event as any).use_category_pricing ?? false,
     });
+    setTransportPolicyAutoHintVisible(false);
     setActiveTab('geral');
     loadEventData(event.id);
     setPublishDecisionDialogOpen(false);
@@ -2153,6 +2207,7 @@ export default function Events() {
     setUploadingImage(false);
     setForm({
       name: '',
+      event_category: null,
       date: '',
       city: '',
       boarding_tolerance_minutes: '10',
@@ -2174,6 +2229,7 @@ export default function Events() {
       transport_policy: 'ida_volta_obrigatorio',
       use_category_pricing: false,
     });
+    setTransportPolicyAutoHintVisible(false);
     setCategoryPrices([]);
   };
 
@@ -2513,6 +2569,15 @@ export default function Events() {
                 { value: 'archived', label: 'Arquivados' },
               ],
               icon: Archive,
+            },
+            {
+              id: 'eventCategory',
+              label: 'Categoria do evento',
+              placeholder: 'Categoria',
+              value: filters.eventCategory,
+              onChange: (value) => setFilters({ ...filters, eventCategory: value as EventFilters['eventCategory'] }),
+              options: eventCategoryFilterOptions,
+              icon: Tag,
             },
             {
               id: 'sortBy',
@@ -3092,16 +3157,47 @@ export default function Events() {
                       </div>
 
                       <div className="space-y-3">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Nome do Evento *</Label>
-                          <Input
-                            id="name"
-                            value={form.name}
-                            onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            placeholder="Ex: Festa do Peão de Barretos 2026"
-                            required
-                            disabled={isReadOnly}
-                          />
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="name">Nome do Evento *</Label>
+                            <Input
+                              id="name"
+                              value={form.name}
+                              onChange={(e) => setForm({ ...form, name: e.target.value })}
+                              placeholder="Ex: Festa do Peão de Barretos 2026"
+                              required
+                              disabled={isReadOnly}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Categoria do Evento</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {eventCategoryOptions.map((option) => {
+                                const isSelected = form.event_category === option.value;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    disabled={isReadOnly}
+                                    onClick={() => handleEventCategorySelect(option.value)}
+                                    className={cn(
+                                      'relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-all',
+                                      isSelected
+                                        ? 'ring-2 ring-primary border-primary bg-primary/5'
+                                        : 'hover:border-primary/50 hover:bg-muted/50',
+                                      isReadOnly && 'opacity-60 cursor-not-allowed',
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-base">{option.icon}</span>
+                                      <span className="font-medium text-xs">{option.label}</span>
+                                    </div>
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground">{option.description}</p>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                         <div className="grid gap-4 sm:grid-cols-3">
                           <div className="space-y-2">
@@ -3161,6 +3257,11 @@ export default function Events() {
                           {transportPolicyLockMessage}
                         </p>
                       )}
+                      {transportPolicyAutoHintVisible && !transportPolicyLockMessage && (
+                        <p className="text-xs text-muted-foreground">
+                          Ajustamos automaticamente a política de transporte com base na categoria selecionada.
+                        </p>
+                      )}
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                         {transportPolicyOptions.map((option) => {
                           const isSelected = form.transport_policy === option.value;
@@ -3172,6 +3273,8 @@ export default function Events() {
                               onClick={() => {
                                 if (isTransportPolicyLocked) return;
                                 setForm({ ...form, transport_policy: option.value as TransportPolicy });
+                                // Se houve ajuste automático anterior, ao editar manualmente removemos a mensagem.
+                                setTransportPolicyAutoHintVisible(false);
                               }}
                               className={cn(
                                 'relative flex flex-col items-start gap-1.5 rounded-lg border p-4 text-left transition-all',
