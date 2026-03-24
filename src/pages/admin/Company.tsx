@@ -630,6 +630,27 @@ export default function CompanyPage() {
     ? getAsaasIntegrationSnapshot(company, runtimePaymentEnvironment)
     : null;
   const asaasStatus: AsaasIntegrationStatus = asaasSnapshot?.status ?? 'not_configured';
+
+  useEffect(() => {
+    if (!runtimePaymentEnvironment || !asaasSnapshot || !company?.id) return;
+    // Comentário de suporte:
+    // este log explicita a decisão do badge por ambiente e campos considerados.
+    // Ele facilita diagnosticar divergência entre "vinculado por API direta" e status visual.
+    console.info('[admin/empresa][asaas-status] snapshot resolvido', {
+      company_id: company.id,
+      environment: runtimePaymentEnvironment,
+      status: asaasSnapshot.status,
+      considered_fields: {
+        has_api_key: Boolean(asaasSnapshot.current.apiKey),
+        has_wallet_id: Boolean(asaasSnapshot.current.walletId),
+        has_account_id: Boolean(asaasSnapshot.current.accountId),
+        has_account_email: Boolean(asaasSnapshot.current.accountEmail),
+        onboarding_complete: asaasSnapshot.current.onboardingComplete,
+      },
+      reasons: asaasSnapshot.reasons,
+    });
+  }, [company?.id, runtimePaymentEnvironment, asaasSnapshot]);
+
   const asaasStatusBadge = {
     connected: { label: 'Conectado', className: 'bg-green-100 text-green-700 border-green-200' },
     partially_configured: { label: 'Configuração pendente', className: 'bg-amber-100 text-amber-800 border-amber-200' },
