@@ -2335,6 +2335,10 @@ export type Database = {
         Returns: number
       }
       resolve_company_referral_code: { Args: { code: string }; Returns: string }
+      resolve_event_seller_ref: {
+        Args: { p_company_id: string; p_seller_id: string }
+        Returns: string
+      }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
