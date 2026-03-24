@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Building2, LogOut, Menu, Search, Settings, Ticket, User } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
@@ -23,6 +23,7 @@ interface PublicLayoutProps {
 
 export function PublicLayout({ children, hideMyTicketsButton = false, floatingWhatsappHref }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
   const navigate = useNavigate();
 
   // Indicador de login: session check leve para exibir menu de usuário quando autenticado
@@ -56,6 +57,12 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
   ].filter(() => !hideMyTicketsButton);
 
   const ctaLink = { to: '/cadastro', label: 'Quero vender passagens' };
+
+  // Suporte de UX: ocultamos o WhatsApp flutuante em rotas de checkout público para
+  // evitar competição visual com os CTAs primários de compra/pagamento.
+  const shouldHideFloatingWhatsApp =
+    /^\/eventos\/[^/]+\/checkout(?:\/|$)/.test(location.pathname) ||
+    /^\/confirmacao(?:\/|$)/.test(location.pathname);
 
   const handleSignOut = async () => {
     await signOut();
@@ -193,7 +200,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
         {children}
       </main>
 
-      <FloatingWhatsApp href={floatingWhatsappHref} />
+      {!shouldHideFloatingWhatsApp && <FloatingWhatsApp href={floatingWhatsappHref} />}
       <TrustFooter />
     </div>
   );
