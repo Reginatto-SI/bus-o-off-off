@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2 } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,6 +41,7 @@ interface AsaasOnboardingWizardProps {
 }
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const asaasApiKeyTutorialEmbedUrl = 'https://www.youtube.com/embed/tULtfD8vEfg';
 const onlyDigits = (value: string) => (value ?? '').replace(/\D/g, '');
 
 const maskCpf = (value: string) => {
@@ -72,6 +73,7 @@ export function AsaasOnboardingWizard({
   const [mode, setMode] = useState<AsaasWizardMode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKeyTutorialModal, setShowApiKeyTutorialModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   /**
    * Comentário de manutenção:
@@ -127,6 +129,7 @@ export function AsaasOnboardingWizard({
       setMode(null);
       setSubmitting(false);
       setApiKeyInput('');
+      setShowApiKeyTutorialModal(false);
       setShowAddressModal(false);
       setTargetEnvironment('sandbox');
     }
@@ -410,6 +413,22 @@ export function AsaasOnboardingWizard({
           autoFocus
         />
       </div>
+      <div className="rounded-md border border-dashed bg-muted/20 p-3">
+        <p className="text-sm font-medium">Não sabe onde pegar sua API Key?</p>
+        <p className="text-xs text-muted-foreground">
+          Assista ao tutorial rápido para gerar sua chave no Asaas. O ambiente selecionado define qual credencial você deve usar.
+        </p>
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto px-0 pt-1 text-destructive hover:text-destructive/80"
+          aria-label="Abrir tutorial em vídeo para gerar API Key no Asaas"
+          onClick={() => setShowApiKeyTutorialModal(true)}
+        >
+          {/* Ícone ampliado para melhorar legibilidade no bloco de ajuda sem criar novo padrão de CTA. */}
+          <Youtube className="h-8 w-8" />
+        </Button>
+      </div>
       <Alert>
         <ShieldCheck className="h-4 w-4" />
         <AlertDescription>
@@ -517,6 +536,30 @@ export function AsaasOnboardingWizard({
           {renderFooter()}
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={showApiKeyTutorialModal} onOpenChange={setShowApiKeyTutorialModal}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Como gerar a API Key no Asaas</DialogTitle>
+          </DialogHeader>
+          {/* Comentário de manutenção: embed centralizado no wizard para manter o mesmo comportamento em /admin/empresa e /admin/eventos. */}
+          <div className="overflow-hidden rounded-md border bg-black">
+            <div className="aspect-video w-full">
+              <iframe
+                src={asaasApiKeyTutorialEmbedUrl}
+                title="Tutorial para gerar API Key no Asaas"
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Dica: confirme no topo do painel do Asaas se você está no ambiente correto antes de copiar a chave.
+          </p>
+        </DialogContent>
+      </Dialog>
 
       {localCompanyData && (
         <AsaasAddressModal
