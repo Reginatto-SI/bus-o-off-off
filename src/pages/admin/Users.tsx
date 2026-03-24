@@ -462,11 +462,33 @@ export default function UsersPage() {
           throw new Error(data.error);
         }
 
+        // Correção: verificação defensiva pós-criação.
+        // Mesmo que a edge function retorne sucesso, confirmamos que o vínculo
+        // em user_roles realmente existe antes de declarar sucesso ao usuário.
+        // Isso protege contra cenários de runtime desatualizado ou falha silenciosa.
+        if (data?.user_id && activeCompanyId) {
+          const { data: roleCheck, error: roleCheckError } = await supabase
+            .from('user_roles')
+            .select('id')
+            .eq('user_id', data.user_id)
+            .eq('company_id', activeCompanyId)
+            .maybeSingle();
+
+          if (roleCheckError || !roleCheck) {
+            console.error('[UsersPage] Vínculo user_roles não encontrado após criação.', {
+              user_id: data.user_id,
+              company_id: activeCompanyId,
+              roleCheckError,
+            });
+            throw new Error(
+              'O usuário foi criado no sistema de autenticação, mas o vínculo com a empresa não foi confirmado. ' +
+              'Verifique se a edge function create-user está atualizada e tente novamente.'
+            );
+          }
+        }
+
         await fetchUsers();
 
-        // Suporte/UX: a edge function atual não devolve prova auditável de entrega
-        // de e-mail. Por isso a UI comunica apenas o que o backend confirma:
-        // criação/vínculo do acesso na empresa atual e eventuais avisos operacionais.
         toast.success(getCreateUserSuccessMessage(data ?? {}));
 
         // Se o runtime publicado não devolver a assinatura mínima esperada,
