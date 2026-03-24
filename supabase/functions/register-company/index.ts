@@ -140,6 +140,9 @@ serve(async (req) => {
 
     const userId = newUser.user.id;
 
+    // Correção: gerar referral_code único para a nova empresa (campo NOT NULL obrigatório).
+    const generatedReferralCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+
     // 2. Create company
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
@@ -153,6 +156,7 @@ serve(async (req) => {
         document_number: normalizedDocument,
         phone,
         email,
+        referral_code: generatedReferralCode,
         // Padrão de comissão aplicado já na criação para evitar configuração manual.
         // Regra de negócio (2026-07): novas empresas devem iniciar com 3% / 3%.
         platform_fee_percent: 3,
