@@ -425,8 +425,8 @@ export function AsaasOnboardingWizard({
           aria-label="Abrir tutorial em vídeo para gerar API Key no Asaas"
           onClick={() => setShowApiKeyTutorialModal(true)}
         >
-          {/* Ícone mantém CTA mais visual e compacto sem alterar o fluxo do formulário. */}
-          <Youtube className="h-5 w-5" />
+          {/* Ícone ampliado para melhorar legibilidade no bloco de ajuda sem criar novo padrão de CTA. */}
+          <Youtube className="h-8 w-8" />
         </Button>
       </div>
       <Alert>
