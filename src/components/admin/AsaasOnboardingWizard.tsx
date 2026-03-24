@@ -413,22 +413,26 @@ export function AsaasOnboardingWizard({
           autoFocus
         />
       </div>
-      <div className="rounded-md border border-dashed bg-muted/20 p-3">
-        <p className="text-sm font-medium">Não sabe onde pegar sua API Key?</p>
-        <p className="text-xs text-muted-foreground">
-          Assista ao tutorial rápido para gerar sua chave no Asaas. O ambiente selecionado define qual credencial você deve usar.
-        </p>
-        <Button
-          type="button"
-          variant="link"
-          className="h-auto px-0 pt-1 text-destructive hover:text-destructive/80"
-          aria-label="Abrir tutorial em vídeo para gerar API Key no Asaas"
-          onClick={() => setShowApiKeyTutorialModal(true)}
-        >
-          {/* Ícone ampliado para melhorar legibilidade no bloco de ajuda sem criar novo padrão de CTA. */}
-          <Youtube className="h-8 w-8" />
-        </Button>
-      </div>
+      <button
+        type="button"
+        className="group relative w-full rounded-lg border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40"
+        aria-label="Abrir tutorial em vídeo para gerar API Key no Asaas"
+        onClick={() => setShowApiKeyTutorialModal(true)}
+      >
+        <div className="flex items-center gap-3">
+          {/* Miniatura visual do player — reforça que é um vídeo clicável */}
+          <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-destructive/10 transition-colors group-hover:bg-destructive/20">
+            <Youtube className="h-7 w-7 text-destructive" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Não sabe onde pegar sua API Key?</p>
+            <p className="text-xs text-muted-foreground">
+              Assista ao tutorial rápido para gerar sua chave no Asaas.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </div>
+      </button>
       <Alert>
         <ShieldCheck className="h-4 w-4" />
         <AlertDescription>
