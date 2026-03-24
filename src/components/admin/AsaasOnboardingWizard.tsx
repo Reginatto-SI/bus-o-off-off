@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2 } from 'lucide-react';
+import { CheckCircle2, Loader2, AlertTriangle, Building2, Mail, ShieldCheck, ArrowRight, Link2, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { extractAsaasErrorMessage } from '@/lib/asaasError';
 import { useAuth } from '@/contexts/AuthContext';
@@ -421,10 +421,12 @@ export function AsaasOnboardingWizard({
         <Button
           type="button"
           variant="link"
-          className="h-auto px-0 pt-1 text-xs"
+          className="h-auto px-0 pt-1 text-destructive hover:text-destructive/80"
+          aria-label="Abrir tutorial em vídeo para gerar API Key no Asaas"
           onClick={() => setShowApiKeyTutorialModal(true)}
         >
-          Ver tutorial
+          {/* Ícone mantém CTA mais visual e compacto sem alterar o fluxo do formulário. */}
+          <Youtube className="h-5 w-5" />
         </Button>
       </div>
       <Alert>
