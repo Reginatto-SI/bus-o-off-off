@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Building2, Bus, CalendarCheck2, Loader2, QrCode, ShieldCheck, WalletCards } from 'lucide-react';
+import {
+  BadgeCheck,
+  Bus,
+  CalendarCheck2,
+  CheckCircle2,
+  Loader2,
+  LockKeyhole,
+  QrCode,
+  ShieldCheck,
+  WalletCards,
+} from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,13 +104,33 @@ export default function CompanyRegistration() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [referralTrackingCode, setReferralTrackingCode] = useState<string | null>(null);
 
-  // Comentário: conteúdo institucional fixo para reforçar credibilidade sem alterar fluxo do cadastro.
+  // Comentário: bloco institucional reforçado para aproximar o visual do cadastro à linguagem comercial da landing.
   const benefits = [
-    { icon: Bus, text: 'Controle de frota por veículo' },
-    { icon: CalendarCheck2, text: 'Gestão de eventos e viagens' },
-    { icon: QrCode, text: 'Controle de embarque via QR Code' },
-    { icon: ShieldCheck, text: 'Comissão automática para vendedores' },
-    { icon: WalletCards, text: 'Estrutura pronta para pagamentos online' },
+    {
+      icon: Bus,
+      title: 'Controle de frota por veículo',
+      description: 'Visualize embarques e operação com mais previsibilidade.',
+    },
+    {
+      icon: CalendarCheck2,
+      title: 'Gestão de eventos e viagens',
+      description: 'Organize saídas, responsáveis e pontos em um fluxo único.',
+    },
+    {
+      icon: QrCode,
+      title: 'Controle de embarque via QR Code',
+      description: 'Valide presença com mais agilidade e menos filas na saída.',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Comissão automática para vendedores',
+      description: 'Acompanhe desempenho comercial sem planilhas paralelas.',
+    },
+    {
+      icon: WalletCards,
+      title: 'Estrutura pronta para pagamentos online',
+      description: 'Venda com segurança sem alterar sua operação atual.',
+    },
   ];
 
   const referralCodeFromUrl = useMemo(
@@ -212,61 +242,95 @@ export default function CompanyRegistration() {
 
   return (
     <PublicLayout>
-      <div className="py-4 px-4 md:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-5 items-stretch">
-            <aside className="hidden md:flex md:col-span-4 lg:col-span-4 rounded-2xl border border-border/60 bg-muted/20 p-4 lg:p-5">
-              <div className="flex h-full flex-col justify-between gap-4">
-                <div className="space-y-2">
-                  <h1 className="text-xl lg:text-2xl font-semibold leading-tight text-foreground/95">
-                    Venda passagens com total controle da sua operação.
-                  </h1>
-                  <p className="text-xs lg:text-sm text-muted-foreground/90">
-                    Plataforma completa para gestão de eventos, frota e embarque.
-                  </p>
+      {/* Comentário visual: fundo e composição com contraste suave para aumentar percepção premium sem alterar fluxo. */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-background to-muted/25 py-6 md:py-8">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-[radial-gradient(circle_at_top,hsla(var(--primary),0.14),transparent_62%)]" />
+
+        <div className="relative mx-auto w-full max-w-7xl px-4 md:px-6 lg:px-8">
+          <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12 lg:gap-6">
+            {/* Comentário visual: card institucional ganha hierarquia comercial semelhante à landing e ocupa melhor a lateral. */}
+            <aside className="order-2 rounded-3xl border border-border/70 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 p-6 text-slate-100 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.95)] lg:order-1 lg:col-span-5 lg:p-7">
+              <div className="flex h-full flex-col gap-6">
+                <div className="space-y-4">
+                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/95">
+                    SmartBus BR para empresas e vendedores
+                  </span>
+                  <div className="space-y-3">
+                    <h1 className="text-2xl font-semibold leading-tight text-white md:text-[2rem]">
+                      Venda passagens com total controle da sua operação.
+                    </h1>
+                    <p className="text-sm leading-relaxed text-slate-200/90 md:text-base">
+                      Estrutura completa para gestão de viagens, embarque e comercial. Configure sua conta e comece a operar em minutos.
+                    </p>
+                  </div>
                 </div>
 
-                <ul className="space-y-2.5">
-                  {benefits.map(({ icon: Icon, text }) => (
-                    <li key={text} className="flex items-start gap-2.5">
-                      <span className="mt-0.5 rounded-md border border-border/50 bg-background/80 p-1 text-muted-foreground">
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="text-sm text-foreground/80">{text}</span>
-                    </li>
+                <div className="space-y-3">
+                  {benefits.map(({ icon: Icon, title, description }) => (
+                    <div
+                      key={title}
+                      className="rounded-2xl border border-white/10 bg-white/[0.05] p-3.5 backdrop-blur-sm transition-colors duration-200 hover:bg-white/[0.09]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 rounded-lg bg-white/10 p-2 text-primary-foreground">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-white">{title}</p>
+                          <p className="text-xs leading-relaxed text-slate-200/80">{description}</p>
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
+
+                <div className="rounded-2xl border border-primary/40 bg-primary/10 p-3.5 text-sm text-primary-foreground/95">
+                  <p className="font-medium">Cadastro gratuito e sem burocracia para começar</p>
+                  <p className="mt-1 text-xs text-slate-100/80">Sem mensalidade, sem cartão e com ativação rápida para publicar as primeiras viagens.</p>
+                </div>
               </div>
             </aside>
 
-            {/* Comentário: card principal recebe maior destaque visual para manter foco no formulário (65%). */}
-            <Card className="md:col-span-8 lg:col-span-8 w-full rounded-2xl border-border/80 bg-background shadow-[0_8px_24px_-20px_rgba(2,6,23,0.45)]">
-              <CardHeader className="space-y-1 px-6 pt-5 md:px-8 md:pt-5">
-                <div className="mx-auto bg-primary/10 rounded-full p-3 w-fit md:hidden">
-                  <Building2 className="h-8 w-8 text-primary" />
+            {/* Comentário: card principal recebe destaque visual com respiro e seções para reduzir sensação de formulário cru. */}
+            <Card className="order-1 w-full rounded-3xl border-border/70 bg-background/95 shadow-[0_28px_60px_-45px_rgba(15,23,42,0.75)] backdrop-blur-sm lg:order-2 lg:col-span-7">
+              <CardHeader className="space-y-4 border-b border-border/70 px-5 pb-5 pt-6 md:px-8">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                    Cadastro gratuito
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1 text-xs text-muted-foreground">
+                    <LockKeyhole className="h-3.5 w-3.5" />
+                    Ambiente seguro
+                  </span>
                 </div>
-                <CardTitle className="text-xl md:text-2xl leading-tight">Comece a vender passagens em minutos</CardTitle>
-                <CardDescription className="text-sm md:text-base text-muted-foreground/85">
-                  Configure sua empresa e publique suas primeiras viagens rapidamente.
-                </CardDescription>
+                <div className="space-y-2">
+                  <CardTitle className="text-2xl leading-tight md:text-[2rem]">Comece a vender passagens em minutos</CardTitle>
+                  <CardDescription className="text-sm leading-relaxed text-muted-foreground md:text-base">
+                    Cadastre sua empresa ou atue como vendedor com uma operação pronta para gestão de eventos, pagamentos e embarque.
+                  </CardDescription>
+                </div>
               </CardHeader>
-              <CardContent className="px-6 pb-5 md:px-8 md:pb-5">
+
+              <CardContent className="space-y-5 px-5 pb-6 pt-5 md:px-8 md:pb-8">
                 {error && (
-                  <Alert variant="destructive" className="mb-4">
+                  <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 )}
+
                 {referralTrackingCode && (
-                  <Alert className="mb-4">
+                  <Alert>
                     <AlertDescription>
                       Você está criando sua conta por um link oficial de indicação. O código será validado no cadastro, sem bloquear sua criação de conta caso esteja inválido.
                     </AlertDescription>
                   </Alert>
                 )}
-                {/* Comentário: mantém o mesmo padrão visual e adiciona apenas os campos mínimos para PF/PJ. */}
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label>Tipo de cadastro *</Label>
+
+                {/* Comentário: mantém o mesmo padrão funcional e adiciona agrupamentos visuais para facilitar leitura dos campos. */}
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <Label className="text-foreground">Tipo de cadastro *</Label>
                     <RadioGroup
                       value={legalType}
                       onValueChange={(value: 'PF' | 'PJ') => {
@@ -280,21 +344,37 @@ export default function CompanyRegistration() {
                           setCpf('');
                         }
                       }}
-                      className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                      className="grid grid-cols-1 gap-3 md:grid-cols-2"
                     >
-                      <div className="flex items-center space-x-2 rounded-md border p-3">
+                      <div
+                        className={`flex items-center space-x-2 rounded-xl border p-3 transition-colors ${
+                          legalType === 'PJ'
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border bg-background text-foreground'
+                        }`}
+                      >
                         <RadioGroupItem value="PJ" id="register_legal_type_pj" />
-                        <Label htmlFor="register_legal_type_pj" className="cursor-pointer">Pessoa Jurídica (CNPJ)</Label>
+                        <Label htmlFor="register_legal_type_pj" className="cursor-pointer">
+                          Pessoa Jurídica (CNPJ)
+                        </Label>
                       </div>
-                      <div className="flex items-center space-x-2 rounded-md border p-3">
+                      <div
+                        className={`flex items-center space-x-2 rounded-xl border p-3 transition-colors ${
+                          legalType === 'PF'
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border bg-background text-foreground'
+                        }`}
+                      >
                         <RadioGroupItem value="PF" id="register_legal_type_pf" />
-                        <Label htmlFor="register_legal_type_pf" className="cursor-pointer">Pessoa Física (CPF)</Label>
+                        <Label htmlFor="register_legal_type_pf" className="cursor-pointer">
+                          Pessoa Física (CPF)
+                        </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
                       <Label htmlFor="companyName">Nome de exibição *</Label>
                       <Input
                         id="companyName"
@@ -302,11 +382,11 @@ export default function CompanyRegistration() {
                         onChange={(e) => setCompanyName(e.target.value)}
                         placeholder="Ex: Viação Rápida"
                         maxLength={100}
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
                     {legalType === 'PJ' ? (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <Label htmlFor="cnpj">CNPJ *</Label>
                         <Input
                           id="cnpj"
@@ -314,11 +394,11 @@ export default function CompanyRegistration() {
                           onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
                           placeholder="00.000.000/0000-00"
                           maxLength={18}
-                          className="h-9"
+                          className="h-10"
                         />
                       </div>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <Label htmlFor="cpf">CPF *</Label>
                         <Input
                           id="cpf"
@@ -326,11 +406,11 @@ export default function CompanyRegistration() {
                           onChange={(e) => setCpf(formatCPF(e.target.value))}
                           placeholder="000.000.000-00"
                           maxLength={14}
-                          className="h-9"
+                          className="h-10"
                         />
                       </div>
                     )}
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="responsibleName">Nome do responsável *</Label>
                       <Input
                         id="responsibleName"
@@ -338,10 +418,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setResponsibleName(e.target.value)}
                         placeholder="Seu nome completo"
                         maxLength={100}
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="phone">Telefone *</Label>
                       <Input
                         id="phone"
@@ -349,48 +429,48 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
                         placeholder="(00) 00000-0000"
                         maxLength={15}
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
                   </div>
 
                   {legalType === 'PJ' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
                         <Label htmlFor="legalName">Razão Social *</Label>
                         <Input
                           id="legalName"
                           value={legalName}
                           onChange={(e) => setLegalName(e.target.value)}
                           placeholder="Empresa Exemplo LTDA"
-                          className="h-9"
+                          className="h-10"
                         />
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <Label htmlFor="tradeName">Nome Fantasia *</Label>
                         <Input
                           id="tradeName"
                           value={tradeName}
                           onChange={(e) => setTradeName(e.target.value)}
                           placeholder="Empresa Exemplo"
-                          className="h-9"
+                          className="h-10"
                         />
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="tradeName">Nome público/Apelido (opcional)</Label>
                       <Input
                         id="tradeName"
                         value={tradeName}
                         onChange={(e) => setTradeName(e.target.value)}
                         placeholder="Como deseja aparecer na vitrine"
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
                   )}
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <Label htmlFor="email">Email *</Label>
                     <Input
                       id="email"
@@ -399,12 +479,12 @@ export default function CompanyRegistration() {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="email@suaempresa.com"
                       maxLength={255}
-                      className="h-9"
+                      className="h-10"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
                       <Label htmlFor="password">Senha *</Label>
                       <Input
                         id="password"
@@ -413,10 +493,10 @@ export default function CompanyRegistration() {
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Mínimo 6 caracteres"
                         maxLength={72}
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <Label htmlFor="confirmPassword">Confirmar senha *</Label>
                       <Input
                         id="confirmPassword"
@@ -425,36 +505,50 @@ export default function CompanyRegistration() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Repita a senha"
                         maxLength={72}
-                        className="h-9"
+                        className="h-10"
                       />
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground/90 text-center md:text-left">Leva menos de 1 minuto para começar.</p>
-                  <Button
-                    type="submit"
-                    className="w-full rounded-xl transition-all duration-200 hover:opacity-95"
-                    size="lg"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Criando sua conta...
-                      </>
-                    ) : (
-                      'Criar conta gratuita'
-                    )}
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Sem cartão de crédito · Sem cobrança · Seus dados protegidos
-                  </p>
+                  {/* Comentário visual: bloco de confiança melhora destaque do CTA e reduz percepção de burocracia. */}
+                  <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                    <p className="text-sm text-muted-foreground">Leva menos de 1 minuto para começar.</p>
+                    <Button
+                      type="submit"
+                      className="h-11 w-full rounded-xl text-base font-medium shadow-[0_12px_24px_-14px_hsla(var(--primary),0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:opacity-95"
+                      size="lg"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Criando sua conta...
+                        </>
+                      ) : (
+                        'Criar conta gratuita'
+                      )}
+                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground md:justify-start">
+                      <span className="inline-flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Sem cartão de crédito
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Sem cobrança inicial
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Seus dados protegidos
+                      </span>
+                    </div>
+                  </div>
                 </form>
               </CardContent>
             </Card>
           </div>
         </div>
-      </div>
+      </section>
     </PublicLayout>
   );
 }
