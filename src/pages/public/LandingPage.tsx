@@ -50,6 +50,7 @@ import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 // Ajuste de UX: usamos nomes atemporais e status de data genéricos para evitar percepção de desatualização na vitrine pública.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
+// Associação semântica, explícita e exclusiva de imagens por evento: elimina repetição visual entre cards diferentes.
 const FEATURED_TRIPS = [
   {
     id: "1",
@@ -57,7 +58,7 @@ const FEATURED_TRIPS = [
     city: "Pratigi - BA",
     date: "Saída em breve",
     price: 89.9,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/pratigi.jpg",
     urgency: "Últimas vagas",
     urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
     reservedLabel: "126 passagens já vendidas",
@@ -69,7 +70,7 @@ const FEATURED_TRIPS = [
     city: "Morro de São Paulo - BA",
     date: "Saída em breve",
     price: 120,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/morro-sao-paulo.jpg",
     urgency: "Quase lotado",
     urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
     reservedLabel: "94 pessoas já garantiram a vaga",
@@ -81,7 +82,7 @@ const FEATURED_TRIPS = [
     city: "Salvador - BA",
     date: "Saída em breve",
     price: 75,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/salvador.jpg",
     urgency: "Últimas vagas",
     urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
     reservedLabel: "148 passagens já emitidas",
@@ -93,7 +94,7 @@ const FEATURED_TRIPS = [
     city: "Ilhéus - BA",
     date: "Saída em breve",
     price: 65,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/evento-praia.jpg",
     urgency: "Quase lotado",
     urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
     reservedLabel: "81 passagens já vendidas",
@@ -105,7 +106,7 @@ const FEATURED_TRIPS = [
     city: "Feira de Santana - BA",
     date: "Saída em breve",
     price: 55,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/evento-regional.jpg",
     urgency: "Últimas vagas",
     urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
     reservedLabel: "67 pessoas já compraram",
@@ -117,7 +118,7 @@ const FEATURED_TRIPS = [
     city: "Caruaru - PE",
     date: "Saída em breve",
     price: 95,
-    image: "/assets/vitrine/Img_padrao_vitrine.png",
+    image: "/landingpage/eventos_img/festival-cultural.jpg",
     urgency: "Quase lotado",
     urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
     reservedLabel: "109 pessoas já garantiram a vaga",
