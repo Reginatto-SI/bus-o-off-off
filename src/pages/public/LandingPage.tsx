@@ -10,6 +10,7 @@ import {
   BarChart3,
   CreditCard,
   ChevronRight,
+  ChevronLeft,
   Ticket,
   ClipboardCheck,
   ArrowRight,
