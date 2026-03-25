@@ -1172,7 +1172,7 @@ export default function LandingPage() {
 
             <div
               id="landing-events-scroll"
-              className="flex gap-5 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-hide"
+              className="grid grid-flow-col grid-rows-2 gap-5 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-hide"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {FEATURED_TRIPS.map((trip) => (
