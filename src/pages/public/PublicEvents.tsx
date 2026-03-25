@@ -15,6 +15,25 @@ import {
   EventCardSkeletonGrid 
 } from '@/components/public';
 
+// Embaralhamento leve e determinístico: intercala metades da lista sem alterar dados.
+// Ajuda a evitar blocos visuais muito parecidos (ex.: praia com praia) lado a lado.
+function interleaveEventCards<T>(items: T[]): T[] {
+  if (items.length <= 2) return items;
+
+  const middleIndex = Math.ceil(items.length / 2);
+  const firstHalf = items.slice(0, middleIndex);
+  const secondHalf = items.slice(middleIndex);
+  const interleaved: T[] = [];
+
+  // Comentário de suporte: ordem base continua estável, apenas alternamos a vitrine para aumentar variedade.
+  for (let index = 0; index < middleIndex; index += 1) {
+    if (firstHalf[index]) interleaved.push(firstHalf[index]);
+    if (secondHalf[index]) interleaved.push(secondHalf[index]);
+  }
+
+  return interleaved;
+}
+
 export default function PublicEvents() {
   const [events, setEvents] = useState<EventWithCompany[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,6 +79,7 @@ export default function PublicEvents() {
 
   // Busca instantânea client-side para experiência de vitrine rápida, sem recarregar página.
   const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
+  const visuallyBalancedEvents = useMemo(() => interleaveEventCards(filteredEvents), [filteredEvents]);
 
   return (
     <PublicLayout>
@@ -78,7 +98,7 @@ export default function PublicEvents() {
         {!loading && filteredEvents.length > 0 && (
           <section>
             <EventsCarousel 
-              events={filteredEvents.slice(0, 5)} 
+              events={visuallyBalancedEvents.slice(0, 5)} 
               sellerRef={sellerRef} 
             />
           </section>
@@ -122,7 +142,7 @@ export default function PublicEvents() {
             />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredEvents.map((event) => (
+              {visuallyBalancedEvents.map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
