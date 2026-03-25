@@ -152,6 +152,10 @@ export default function Checkout() {
   const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(
     null,
   );
+  const [companyPixStatus, setCompanyPixStatus] = useState<{
+    productionReady: boolean;
+    sandboxReady: boolean;
+  } | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
@@ -163,6 +167,12 @@ export default function Checkout() {
     environment: runtimePaymentEnvironment,
     source: runtimePaymentEnvironmentSource,
   } = useRuntimePaymentEnvironment();
+  const isPixReadyForCurrentEnvironment =
+    runtimePaymentEnvironment === "production"
+      ? Boolean(companyPixStatus?.productionReady)
+      : runtimePaymentEnvironment === "sandbox"
+        ? Boolean(companyPixStatus?.sandboxReady)
+        : false;
 
   // Helper: get price for a seat based on category pricing
   const getSeatPrice = (seatId: string): number => {
@@ -191,6 +201,13 @@ export default function Checkout() {
       ),
     [selectedSeats, seats],
   );
+
+  useEffect(() => {
+    if (paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
+      // Comentário de suporte: evita que o comprador descubra indisponibilidade do Pix apenas no fim.
+      setPaymentMethod("credit_card");
+    }
+  }, [paymentMethod, runtimePaymentEnvironment, isPixReadyForCurrentEnvironment]);
 
   // Comentário de suporte: consolidamos os números do resumo em um único memo para evitar
   // divergência visual entre as etapas sem alterar as regras atuais de cálculo.
@@ -334,7 +351,7 @@ export default function Checkout() {
         const [eventRes, tripRes, locationRes] = await Promise.all([
           supabase
             .from("events")
-            .select("*, company:companies(name, trade_name)")
+            .select("*, company:companies(name, trade_name, asaas_pix_ready_production, asaas_pix_ready_sandbox, asaas_pix_last_error_production, asaas_pix_last_error_sandbox)")
             .eq("id", id)
             .single(),
           supabase
@@ -363,7 +380,7 @@ export default function Checkout() {
           // Fonte de verdade: taxa da empresa dona do evento (sem fallback silencioso).
           const { data: companyData, error: companyError } = await supabase
             .from("companies")
-            .select("platform_fee_percent")
+            .select("platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox")
             .eq("id", eventData.company_id)
             .single();
 
@@ -375,6 +392,10 @@ export default function Checkout() {
             return;
           }
           setPlatformFeePercent(Number(companyData.platform_fee_percent));
+          setCompanyPixStatus({
+            productionReady: Boolean(companyData.asaas_pix_ready_production),
+            sandboxReady: Boolean(companyData.asaas_pix_ready_sandbox),
+          });
 
           // Fetch event fees
           const { data: feesData } = await supabase
@@ -647,6 +668,14 @@ export default function Checkout() {
 
     if (!intermediationAccepted) {
       toast.error(CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE);
+      return;
+    }
+
+    if (paymentMethod === "pix" && runtimePaymentEnvironment && !isPixReadyForCurrentEnvironment) {
+      toast.error(
+        "Pix indisponível para esta empresa no momento. Escolha cartão de crédito para concluir a compra.",
+      );
+      setPaymentMethod("credit_card");
       return;
     }
 
@@ -1390,12 +1419,18 @@ export default function Checkout() {
               }
               className="grid gap-3 md:grid-cols-2"
             >
-              <label className="flex items-start gap-3 p-4 rounded-lg border bg-card cursor-pointer hover:bg-muted/30 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
-                <RadioGroupItem value="pix" className="mt-1" />
+              <label className={`flex items-start gap-3 p-4 rounded-lg border bg-card transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20 ${isPixReadyForCurrentEnvironment ? "cursor-pointer hover:bg-muted/30" : "cursor-not-allowed opacity-60"}`}>
+                <RadioGroupItem
+                  value="pix"
+                  className="mt-1"
+                  disabled={!isPixReadyForCurrentEnvironment}
+                />
                 <div className="space-y-1">
                   <p className="font-semibold">Pix</p>
                   <p className="text-sm text-muted-foreground">
-                    Pagamento instantâneo via Pix.
+                    {isPixReadyForCurrentEnvironment
+                      ? "Pagamento instantâneo via Pix."
+                      : "Indisponível no momento para a empresa deste evento."}
                   </p>
                 </div>
               </label>
@@ -1410,6 +1445,11 @@ export default function Checkout() {
                 </div>
               </label>
             </RadioGroup>
+            {!isPixReadyForCurrentEnvironment && runtimePaymentEnvironment && (
+              <p className="text-xs text-amber-700">
+                O Pix foi temporariamente desabilitado para este evento porque a conta da empresa ainda não está pronta para recebimento no ambiente atual.
+              </p>
+            )}
 
             {/* Aceite explícito obrigatório: reforça transparência sobre papel da plataforma e responsabilidade operacional da organizadora. */}
             <div

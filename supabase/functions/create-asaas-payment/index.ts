@@ -147,7 +147,7 @@ serve(async (req) => {
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select(
-        "name, asaas_wallet_id_production, asaas_api_key_production, asaas_onboarding_complete_production, asaas_wallet_id_sandbox, asaas_api_key_sandbox, asaas_onboarding_complete_sandbox, platform_fee_percent, socio_split_percent",
+        "name, asaas_wallet_id_production, asaas_api_key_production, asaas_onboarding_complete_production, asaas_pix_ready_production, asaas_wallet_id_sandbox, asaas_api_key_sandbox, asaas_onboarding_complete_sandbox, asaas_pix_ready_sandbox, platform_fee_percent, socio_split_percent",
       )
       .eq("id", sale.company_id)
       .single();
@@ -275,6 +275,9 @@ serve(async (req) => {
     const splitEnabled = paymentContext.splitPolicy.enabled;
     const companyApiKey = paymentContext.apiKey;
     const apiKeySource = paymentContext.apiKeySource;
+    const companyPixReadyByEnvironment = paymentEnv === "production"
+      ? company.asaas_pix_ready_production === true
+      : company.asaas_pix_ready_sandbox === true;
 
     // Etapa 4: trilha operacional mínima por sale_id para criação de pagamento.
     await logSaleOperationalEvent({
@@ -458,6 +461,43 @@ serve(async (req) => {
         responseJson,
       });
     };
+
+    if (billingType === "PIX" && !companyPixReadyByEnvironment) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentEnv,
+        errorCode: "pix_not_ready",
+        detail: "company_pix_readiness_flag_false",
+      });
+
+      await insertIntegrationLog(
+        "failed",
+        "Cobrança Pix bloqueada por readiness local da empresa",
+        {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentEnv,
+          company_pix_ready: companyPixReadyByEnvironment,
+        },
+        null,
+        null,
+        "pix_not_ready",
+      );
+
+      return jsonResponse(
+        {
+          error:
+            "Pix indisponível para esta empresa no momento. Tente novamente mais tarde ou utilize cartão.",
+          error_code: "pix_not_ready",
+        },
+        409,
+      );
+    }
 
     // 5. Buscar sócio ativo para split (espelhado em sandbox/produção)
     let activeSocioWalletId: string | null = null;
