@@ -51,11 +51,17 @@ export interface Company {
   asaas_wallet_id_production?: string | null;
   asaas_api_key_production?: string | null;
   asaas_onboarding_complete_production?: boolean;
+  asaas_pix_ready_production?: boolean;
+  asaas_pix_last_checked_at_production?: string | null;
+  asaas_pix_last_error_production?: string | null;
   asaas_account_id_sandbox?: string | null;
   asaas_account_email_sandbox?: string | null;
   asaas_wallet_id_sandbox?: string | null;
   asaas_api_key_sandbox?: string | null;
   asaas_onboarding_complete_sandbox?: boolean;
+  asaas_pix_ready_sandbox?: boolean;
+  asaas_pix_last_checked_at_sandbox?: string | null;
+  asaas_pix_last_error_sandbox?: string | null;
   // Comissionamento variável
   platform_fee_percent: number;
   socio_split_percent: number;

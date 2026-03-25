@@ -73,6 +73,10 @@ type AsaasIntegrationCheckResponse = {
     account_id_matches: boolean;
     wallet_id_matches: boolean;
     onboarding_complete: boolean;
+    pix_ready: boolean;
+    pix_readiness_action?: string;
+    pix_last_checked_at?: string;
+    pix_last_error?: string | null;
     asaas_http_status?: number;
     error_type?: string;
   };
@@ -442,10 +446,16 @@ export default function CompanyPage() {
 
   const [asaasRevalidating, setAsaasRevalidating] = useState(false);
   const [asaasDisconnecting, setAsaasDisconnecting] = useState(false);
+  const [lastAsaasCheck, setLastAsaasCheck] = useState<AsaasIntegrationCheckResponse | null>(null);
   const [disconnectAsaasDialogOpen, setDisconnectAsaasDialogOpen] = useState(false);
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
   const [asaasWizardOpen, setAsaasWizardOpen] = useState(false);
+
+  useEffect(() => {
+    // Comentário de suporte: evita exibir resultado de verificação Pix de outra empresa/ambiente.
+    setLastAsaasCheck(null);
+  }, [editingId, runtimePaymentEnvironment]);
 
   const getAsaasWizardCompanyData = (): AsaasOnboardingCompanyData | null => {
     if (!editingId) return null;
@@ -520,6 +530,7 @@ export default function CompanyPage() {
       if (!response?.message) {
         throw new Error('Resposta inválida ao verificar integração com o Asaas.');
       }
+      setLastAsaasCheck(response);
 
       // Comentário de suporte:
       // tratamos o payload estruturado do backend sem cair em toast genérico quando a
@@ -657,6 +668,24 @@ export default function CompanyPage() {
     inconsistent: { label: 'Inconsistente', className: 'bg-destructive/10 text-destructive border-destructive/20' },
     not_configured: { label: 'Não conectado', className: '' },
   }[asaasStatus];
+
+  const persistedPixReady = runtimePaymentEnvironment === 'production'
+    ? Boolean(company?.asaas_pix_ready_production)
+    : runtimePaymentEnvironment === 'sandbox'
+      ? Boolean(company?.asaas_pix_ready_sandbox)
+      : false;
+  const persistedPixLastError = runtimePaymentEnvironment === 'production'
+    ? (company?.asaas_pix_last_error_production as string | null | undefined)
+    : runtimePaymentEnvironment === 'sandbox'
+      ? (company?.asaas_pix_last_error_sandbox as string | null | undefined)
+      : null;
+  const pixReadyFromCheck = lastAsaasCheck?.environment === runtimePaymentEnvironment
+    ? lastAsaasCheck.details.pix_ready
+    : null;
+  const pixReadyEffective = pixReadyFromCheck ?? persistedPixReady;
+  const pixLastErrorEffective = lastAsaasCheck?.environment === runtimePaymentEnvironment
+    ? lastAsaasCheck.details.pix_last_error ?? null
+    : persistedPixLastError ?? null;
 
   const normalizePercentInput = (value: string) => value.replace(',', '.').trim();
 
@@ -1897,6 +1926,19 @@ export default function CompanyPage() {
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
                               A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3) + (company?.socio_split_percent ?? 3)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
+                            <p className={`text-xs ${pixReadyEffective ? 'text-green-700' : 'text-amber-700'}`}>
+                              Readiness Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>.
+                              {!pixReadyEffective && (
+                                <>
+                                  {' '}Sem chave Pix ativa, o checkout público desabilita Pix até regularização.
+                                </>
+                              )}
+                            </p>
+                            {!pixReadyEffective && pixLastErrorEffective && (
+                              <p className="text-xs text-amber-700">
+                                Último retorno de readiness Pix: {pixLastErrorEffective}
+                              </p>
+                            )}
                             <p className="text-xs text-green-700">
                               {/* Comentário de suporte: exibimos fallback explícito quando o e-mail
                                   ainda não foi retornado/salvo na vinculação da conta Asaas. */}
@@ -1942,6 +1984,14 @@ export default function CompanyPage() {
                                 </p>
                                 <div className="text-xs">
                                   <p>Ambiente operacional atual: <strong>{runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox'}</strong></p>
+                                  <p className="mt-1">
+                                    Readiness Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>
+                                  </p>
+                                  {!pixReadyEffective && pixLastErrorEffective && (
+                                    <p className="mt-1 text-amber-700">
+                                      Último retorno de readiness Pix: {pixLastErrorEffective}
+                                    </p>
+                                  )}
                                   {asaasSnapshot.reasons.length > 0 && (
                                     <ul className="mt-1 list-disc pl-5">
                                       {asaasSnapshot.reasons.map((reason) => (

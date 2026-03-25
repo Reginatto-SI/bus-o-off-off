@@ -5,6 +5,8 @@ import {
   type PaymentEnvironment,
   resolveEnvironmentFromHost,
 } from "../_shared/runtime-env.ts";
+import { logSaleIntegrationEvent } from "../_shared/payment-observability.ts";
+import { ensurePixReadiness } from "../_shared/asaas-pix-readiness.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,6 +44,10 @@ type CheckResponse = {
     account_id_matches: boolean;
     wallet_id_matches: boolean;
     onboarding_complete: boolean;
+    pix_ready: boolean;
+    pix_readiness_action?: string;
+    pix_last_checked_at?: string;
+    pix_last_error?: string | null;
     asaas_http_status?: number;
     error_type?: string;
   };
@@ -67,6 +73,9 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
       accountId: "asaas_account_id_production",
       accountEmail: "asaas_account_email_production",
       onboardingComplete: "asaas_onboarding_complete_production",
+      pixReady: "asaas_pix_ready_production",
+      pixLastCheckedAt: "asaas_pix_last_checked_at_production",
+      pixLastError: "asaas_pix_last_error_production",
     } as const;
   }
 
@@ -76,6 +85,9 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
     accountId: "asaas_account_id_sandbox",
     accountEmail: "asaas_account_email_sandbox",
     onboardingComplete: "asaas_onboarding_complete_sandbox",
+    pixReady: "asaas_pix_ready_sandbox",
+    pixLastCheckedAt: "asaas_pix_last_checked_at_sandbox",
+    pixLastError: "asaas_pix_last_error_sandbox",
   } as const;
 }
 
@@ -99,11 +111,78 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
     account_id_matches: false,
     wallet_id_matches: false,
     onboarding_complete: companyConfig[envFields.onboardingComplete] === true,
+    pix_ready: companyConfig[envFields.pixReady] === true,
+    pix_readiness_action: "not_checked",
+    pix_last_checked_at: typeof companyConfig[envFields.pixLastCheckedAt] === "string"
+      ? String(companyConfig[envFields.pixLastCheckedAt])
+      : undefined,
+    pix_last_error: typeof companyConfig[envFields.pixLastError] === "string"
+      ? String(companyConfig[envFields.pixLastError])
+      : null,
   };
 }
 
 function logCheck(level: "log" | "warn" | "error", message: string, payload: Record<string, unknown>) {
   console[level](message, payload);
+}
+
+async function persistPixReadinessStatus(params: {
+  supabaseAdmin: ReturnType<typeof createClient>;
+  companyId: string;
+  paymentEnv: PaymentEnvironment;
+  envFields: ReturnType<typeof getEnvironmentCompanyFields>;
+  readiness: Awaited<ReturnType<typeof ensurePixReadiness>>;
+}) {
+  const checkedAt = new Date().toISOString();
+
+  await params.supabaseAdmin
+    .from("companies")
+    .update({
+      [params.envFields.pixReady]: params.readiness.ready,
+      [params.envFields.pixLastCheckedAt]: checkedAt,
+      [params.envFields.pixLastError]: params.readiness.ready
+        ? null
+        : `${params.readiness.errorCode ?? "pix_not_ready"}:${params.readiness.errorMessage ?? "unknown"}`,
+    })
+    .eq("id", params.companyId);
+
+  await logSaleIntegrationEvent({
+    supabaseAdmin: params.supabaseAdmin,
+    saleId: null,
+    companyId: params.companyId,
+    paymentEnvironment: params.paymentEnv,
+    environmentDecisionSource: "check-asaas-integration",
+    environmentHostDetected: null,
+    provider: "asaas",
+    direction: "outgoing_request",
+    eventType: "company_pix_readiness",
+    processingStatus: params.readiness.ready
+      ? "success"
+      : params.readiness.action === "evp_creation_failed" || params.readiness.action === "query_failed"
+        ? "failed"
+        : "warning",
+    resultCategory: params.readiness.ready ? "success" : "error",
+    incidentCode: params.readiness.ready ? null : params.readiness.errorCode ?? "pix_readiness_failed",
+    warningCode: null,
+    message: params.readiness.ready
+      ? `Readiness Pix validado via check-asaas-integration (action=${params.readiness.action})`
+      : `Readiness Pix não validado via check-asaas-integration (action=${params.readiness.action})`,
+    payloadJson: {
+      action: params.readiness.action,
+      queried: params.readiness.queried,
+      auto_create_attempted: params.readiness.autoCreateAttempted,
+      active_key_count: params.readiness.activeKeyCount,
+      keys_sample: params.readiness.keysSample,
+    },
+    responseJson: {
+      ready: params.readiness.ready,
+      error_code: params.readiness.errorCode ?? null,
+      error_message: params.readiness.errorMessage ?? null,
+      http_status_list: params.readiness.httpStatusList ?? null,
+      http_status_create: params.readiness.httpStatusCreate ?? null,
+      checked_at: checkedAt,
+    },
+  });
 }
 
 serve(async (req) => {
@@ -176,6 +255,9 @@ serve(async (req) => {
           account_id_matches: false,
           wallet_id_matches: false,
           onboarding_complete: false,
+          pix_ready: false,
+          pix_readiness_action: "not_checked",
+          pix_last_error: null,
           error_type: !companyId ? "company_context_missing" : "invalid_target_environment",
         },
         message: invalidInputMessage,
@@ -227,6 +309,9 @@ serve(async (req) => {
       envFields.accountId,
       envFields.accountEmail,
       envFields.onboardingComplete,
+      envFields.pixReady,
+      envFields.pixLastCheckedAt,
+      envFields.pixLastError,
     ].join(", ");
 
     const { data: company, error: companyError } = await supabaseAdmin
@@ -252,6 +337,9 @@ serve(async (req) => {
           account_id_matches: false,
           wallet_id_matches: false,
           onboarding_complete: false,
+          pix_ready: false,
+          pix_readiness_action: "not_checked",
+          pix_last_error: null,
           error_type: "company_lookup_error",
         },
         message: "Erro interno ao consultar empresa para verificar a integração Asaas.",
@@ -292,6 +380,9 @@ serve(async (req) => {
           account_id_matches: false,
           wallet_id_matches: false,
           onboarding_complete: false,
+          pix_ready: false,
+          pix_readiness_action: "not_checked",
+          pix_last_error: null,
           error_type: "company_not_found",
         },
           message: "Empresa atual não localizada para validar a integração.",
@@ -518,6 +609,21 @@ serve(async (req) => {
         return jsonResponse(walletMismatchResponse, 200);
       }
 
+      const pixReadiness = await ensurePixReadiness({
+        asaasBaseUrl,
+        accessToken: apiKey!,
+        environment: paymentEnv,
+        allowAutoCreateEvp: true,
+      });
+
+      await persistPixReadinessStatus({
+        supabaseAdmin,
+        companyId,
+        paymentEnv,
+        envFields,
+        readiness: pixReadiness,
+      });
+
       if (!onboardingComplete) {
         const pendingResponse: CheckResponse = {
           status: "error",
@@ -531,9 +637,15 @@ serve(async (req) => {
             wallet_found: walletFound,
             account_id_matches: accountIdMatches,
             wallet_id_matches: walletIdMatches,
+            pix_ready: pixReadiness.ready,
+            pix_readiness_action: pixReadiness.action,
+            pix_last_checked_at: new Date().toISOString(),
+            pix_last_error: pixReadiness.errorMessage ?? null,
             error_type: "onboarding_pending",
           },
-          message: "Conta Asaas encontrada e credenciais válidas, mas o onboarding ainda está pendente no cadastro da empresa.",
+          message: pixReadiness.ready
+            ? "Conta Asaas encontrada e credenciais válidas, mas o onboarding ainda está pendente no cadastro da empresa."
+            : "Conta Asaas encontrada, porém o Pix ainda não está pronto para recebimento. Finalize o onboarding e valide a chave Pix da conta.",
         };
 
         logCheck("warn", "[check-asaas-integration] onboarding pending after Asaas validation", {
@@ -560,8 +672,14 @@ serve(async (req) => {
           wallet_found: walletFound,
           account_id_matches: accountIdMatches,
           wallet_id_matches: walletIdMatches,
+          pix_ready: pixReadiness.ready,
+          pix_readiness_action: pixReadiness.action,
+          pix_last_checked_at: new Date().toISOString(),
+          pix_last_error: pixReadiness.errorMessage ?? null,
         },
-        message: "Integração Asaas validada com sucesso.",
+        message: pixReadiness.ready
+          ? "Integração Asaas validada com sucesso."
+          : "Integração Asaas válida, mas o Pix ainda não está pronto. A plataforma tentou criar uma chave EVP automaticamente e registrou o resultado.",
       };
 
       logCheck("log", "[check-asaas-integration] Asaas integration validated successfully", {

@@ -11,6 +11,7 @@ import {
   logPaymentTrace,
   logSaleIntegrationEvent,
 } from "../_shared/payment-observability.ts";
+import { ensurePixReadiness, type PixReadinessResult } from "../_shared/asaas-pix-readiness.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -471,6 +472,127 @@ async function persistAsaasWebhookAttempt(params: {
   });
 }
 
+async function persistCompanyPixReadinessAttempt(params: {
+  supabaseAdmin: ReturnType<typeof createClient>;
+  companyId: string;
+  paymentEnvironment: PaymentEnvironment;
+  flowType: string;
+  result: PixReadinessResult;
+}) {
+  const processingStatus = params.result.ready
+    ? "success"
+    : params.result.action === "query_failed" || params.result.action === "evp_creation_failed"
+      ? "failed"
+      : "warning";
+
+  const resultCategory = params.result.ready
+    ? "success"
+    : processingStatus === "failed"
+      ? "error"
+      : "warning";
+
+  await logSaleIntegrationEvent({
+    supabaseAdmin: params.supabaseAdmin,
+    saleId: null,
+    companyId: params.companyId,
+    paymentEnvironment: params.paymentEnvironment,
+    environmentDecisionSource: "create-asaas-account",
+    environmentHostDetected: null,
+    provider: "asaas",
+    direction: "outgoing_request",
+    eventType: "company_pix_readiness",
+    processingStatus,
+    resultCategory,
+    incidentCode: params.result.ready ? null : params.result.errorCode ?? "pix_readiness_failed",
+    warningCode: null,
+    message: params.result.ready
+      ? `Readiness Pix validado com sucesso (flow=${params.flowType};action=${params.result.action})`
+      : `Readiness Pix não confirmado (flow=${params.flowType};action=${params.result.action})`,
+    payloadJson: {
+      flow_type: params.flowType,
+      action: params.result.action,
+      queried: params.result.queried,
+      auto_create_attempted: params.result.autoCreateAttempted,
+      active_key_count: params.result.activeKeyCount,
+      keys_sample: params.result.keysSample,
+    },
+    responseJson: {
+      ready: params.result.ready,
+      action: params.result.action,
+      http_status_list: params.result.httpStatusList ?? null,
+      http_status_create: params.result.httpStatusCreate ?? null,
+      error_code: params.result.errorCode ?? null,
+      error_message: params.result.errorMessage ?? null,
+    },
+  });
+}
+
+async function syncCompanyPixReadiness(params: {
+  supabaseAdmin: ReturnType<typeof createClient>;
+  companyId: string;
+  paymentEnvironment: PaymentEnvironment;
+  asaasBaseUrl: string;
+  apiKey: string | null;
+  flowType: string;
+}) {
+  const envFields = getEnvironmentCompanyFields(params.paymentEnvironment);
+  const checkedAtIso = new Date().toISOString();
+
+  if (!params.apiKey) {
+    await params.supabaseAdmin
+      .from("companies")
+      .update(
+        buildCompanyConfigWithEnvironmentUpdate({
+          [envFields.pixReady]: false,
+          [envFields.pixLastCheckedAt]: checkedAtIso,
+          [envFields.pixLastError]: "missing_company_api_key",
+        }),
+      )
+      .eq("id", params.companyId);
+
+    return {
+      ready: false,
+      action: "query_failed",
+      queried: false,
+      autoCreateAttempted: false,
+      activeKeyCount: 0,
+      keysSample: [],
+      errorCode: "missing_company_api_key",
+      errorMessage: "Empresa sem API Key Asaas para validar readiness Pix.",
+    } as PixReadinessResult;
+  }
+
+  const readiness = await ensurePixReadiness({
+    asaasBaseUrl: params.asaasBaseUrl,
+    accessToken: params.apiKey,
+    environment: params.paymentEnvironment,
+    allowAutoCreateEvp: true,
+  });
+
+  await params.supabaseAdmin
+    .from("companies")
+    .update(
+      buildCompanyConfigWithEnvironmentUpdate({
+        [envFields.pixReady]: readiness.ready,
+        [envFields.pixLastCheckedAt]: checkedAtIso,
+        [envFields.pixLastError]: readiness.ready
+          ? null
+          : `${readiness.errorCode ?? "pix_not_ready"}:${readiness.errorMessage ?? "unknown"}`,
+      }),
+    )
+    .eq("id", params.companyId);
+
+  await persistCompanyPixReadinessAttempt({
+    supabaseAdmin: params.supabaseAdmin,
+    companyId: params.companyId,
+    paymentEnvironment: params.paymentEnvironment,
+    flowType: params.flowType,
+    result: readiness,
+  });
+
+  return readiness;
+}
+
 
 function resolveTargetEnvironment(params: { requestedEnv?: string | null; hostEnv: PaymentEnvironment }): PaymentEnvironment {
   if (params.requestedEnv === "production" || params.requestedEnv === "sandbox") {
@@ -487,6 +609,9 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
       accountId: "asaas_account_id_production",
       accountEmail: "asaas_account_email_production",
       onboardingComplete: "asaas_onboarding_complete_production",
+      pixReady: "asaas_pix_ready_production",
+      pixLastCheckedAt: "asaas_pix_last_checked_at_production",
+      pixLastError: "asaas_pix_last_error_production",
     } as const;
   }
 
@@ -496,6 +621,9 @@ function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
     accountId: "asaas_account_id_sandbox",
     accountEmail: "asaas_account_email_sandbox",
     onboardingComplete: "asaas_onboarding_complete_sandbox",
+    pixReady: "asaas_pix_ready_sandbox",
+    pixLastCheckedAt: "asaas_pix_last_checked_at_sandbox",
+    pixLastError: "asaas_pix_last_error_sandbox",
   } as const;
 }
 
@@ -617,7 +745,7 @@ serve(async (req) => {
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       // Comentário de manutenção: onboarding/revalidate/disconnect só devem ler o contrato por ambiente.
-      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox")
+      .select("id, name, legal_type, legal_name, trade_name, document_number, cnpj, email, phone, address, address_number, province, postal_code, city, state, asaas_api_key_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_production, asaas_onboarding_complete_production, asaas_pix_ready_production, asaas_pix_last_checked_at_production, asaas_pix_last_error_production, asaas_api_key_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox, asaas_account_email_sandbox, asaas_onboarding_complete_sandbox, asaas_pix_ready_sandbox, asaas_pix_last_checked_at_sandbox, asaas_pix_last_error_sandbox")
       .eq("id", company_id)
       .maybeSingle();
 
@@ -703,6 +831,9 @@ serve(async (req) => {
             [envFields.accountId]: null,
             [envFields.accountEmail]: null,
             [envFields.onboardingComplete]: false,
+            [envFields.pixReady]: false,
+            [envFields.pixLastCheckedAt]: new Date().toISOString(),
+            [envFields.pixLastError]: "integration_disconnected",
           }),
         )
         .eq("id", company_id);
@@ -913,6 +1044,15 @@ serve(async (req) => {
           account_status: accountData?.status ?? null,
         });
 
+        const revalidatePixReadiness = await syncCompanyPixReadiness({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          asaasBaseUrl,
+          apiKey: typeof environmentApiKey === "string" ? environmentApiKey : null,
+          flowType: "revalidate",
+        });
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -922,6 +1062,9 @@ serve(async (req) => {
             account_id_source: resolvedRevalidateAccountId.source,
             account_status: accountData?.status ?? null,
             account_name: accountData?.name || accountData?.tradingName || null,
+            pix_ready: revalidatePixReadiness.ready,
+            pix_readiness_action: revalidatePixReadiness.action,
+            pix_last_error: revalidatePixReadiness.errorMessage ?? null,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -1249,6 +1392,15 @@ serve(async (req) => {
             });
           }
 
+          const partialPixReadiness = await syncCompanyPixReadiness({
+            supabaseAdmin,
+            companyId: company_id,
+            paymentEnvironment: paymentEnv,
+            asaasBaseUrl,
+            apiKey: api_key,
+            flowType: "link_existing_partial",
+          });
+
           return new Response(
             JSON.stringify({
               success: true,
@@ -1257,6 +1409,9 @@ serve(async (req) => {
               account_id: accountId,
               account_id_source: accountIdSource,
               account_name: accountData.name || accountData.tradingName || null,
+              pix_ready: partialPixReadiness.ready,
+              pix_readiness_action: partialPixReadiness.action,
+              pix_last_error: partialPixReadiness.errorMessage ?? null,
               warning: `API Key validada e salva, mas o walletId não foi identificado. ${accountId ? `O accountId foi resolvido via ${accountIdSource}. ` : "O accountId também não foi identificado. "}A conta foi vinculada parcialmente.`,
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1327,6 +1482,15 @@ serve(async (req) => {
           account_id_source: accountIdSource,
         });
 
+        const linkedPixReadiness = await syncCompanyPixReadiness({
+          supabaseAdmin,
+          companyId: company_id,
+          paymentEnvironment: paymentEnv,
+          asaasBaseUrl,
+          apiKey: api_key,
+          flowType: "link_existing",
+        });
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -1334,6 +1498,9 @@ serve(async (req) => {
             account_id: accountId,
             account_id_source: accountIdSource,
             account_name: accountData.name || accountData.tradingName || null,
+            pix_ready: linkedPixReadiness.ready,
+            pix_readiness_action: linkedPixReadiness.action,
+            pix_last_error: linkedPixReadiness.errorMessage ?? null,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -1550,11 +1717,23 @@ serve(async (req) => {
         });
       }
 
+      const createdPixReadiness = await syncCompanyPixReadiness({
+        supabaseAdmin,
+        companyId: company_id,
+        paymentEnvironment: paymentEnv,
+        asaasBaseUrl,
+        apiKey: typeof createData.apiKey === "string" ? createData.apiKey : null,
+        flowType: "create_subaccount",
+      });
+
       return new Response(
         JSON.stringify({
           success: true,
           wallet_id: walletId,
           account_id: accountId,
+          pix_ready: createdPixReadiness.ready,
+          pix_readiness_action: createdPixReadiness.action,
+          pix_last_error: createdPixReadiness.errorMessage ?? null,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
