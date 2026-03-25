@@ -48,13 +48,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
+// Ajuste de UX: usamos nomes atemporais e status de data genéricos para evitar percepção de desatualização na vitrine pública.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
 const FEATURED_TRIPS = [
   {
     id: "1",
-    name: "Universo Paralello",
+    name: "Excursão para Pratigi",
     city: "Pratigi - BA",
-    date: "27 Dez",
+    date: "Saída em breve",
     price: 89.9,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Últimas vagas",
@@ -64,9 +65,9 @@ const FEATURED_TRIPS = [
   },
   {
     id: "2",
-    name: "Réveillon Morro de SP",
+    name: "Viagem para Morro de São Paulo",
     city: "Morro de São Paulo - BA",
-    date: "30 Dez",
+    date: "Saída em breve",
     price: 120,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Quase lotado",
@@ -76,9 +77,9 @@ const FEATURED_TRIPS = [
   },
   {
     id: "3",
-    name: "Carnaval Salvador 2026",
+    name: "Excursão para Salvador",
     city: "Salvador - BA",
-    date: "14 Fev",
+    date: "Saída em breve",
     price: 75,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Últimas vagas",
@@ -88,9 +89,9 @@ const FEATURED_TRIPS = [
   },
   {
     id: "4",
-    name: "Festival de Verão",
+    name: "Evento na Praia",
     city: "Ilhéus - BA",
-    date: "20 Jan",
+    date: "Saída em breve",
     price: 65,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Quase lotado",
@@ -100,9 +101,9 @@ const FEATURED_TRIPS = [
   },
   {
     id: "5",
-    name: "Micareta Feira",
+    name: "Evento Regional",
     city: "Feira de Santana - BA",
-    date: "18 Abr",
+    date: "Saída em breve",
     price: 55,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Últimas vagas",
@@ -112,9 +113,9 @@ const FEATURED_TRIPS = [
   },
   {
     id: "6",
-    name: "São João de Caruaru",
+    name: "Festival Cultural",
     city: "Caruaru - PE",
-    date: "22 Jun",
+    date: "Saída em breve",
     price: 95,
     image: "/assets/vitrine/Img_padrao_vitrine.png",
     urgency: "Quase lotado",
