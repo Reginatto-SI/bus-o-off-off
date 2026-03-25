@@ -264,3 +264,7 @@
 .animate-subtle-pulse {
   animation: heartbeat-pulse 2s ease-in-out infinite;
 }
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

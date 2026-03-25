@@ -10,6 +10,7 @@ import {
   BarChart3,
   CreditCard,
   ChevronRight,
+  ChevronLeft,
   Ticket,
   ClipboardCheck,
   ArrowRight,
@@ -78,6 +79,42 @@ const FEATURED_TRIPS = [
   },
   {
     id: "3",
+    name: "Show em Goiânia – Turnê Nacional",
+    city: "Goiânia - GO",
+    date: "Saída em breve",
+    price: 135,
+    image: "/landingpage/eventos_img/show-goiania.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "210 ingressos emitidos",
+    status: "Saída confirmada",
+  },
+  {
+    id: "4",
+    name: "Excursão para Chapada dos Guimarães",
+    city: "Chapada dos Guimarães - MT",
+    date: "Saída em breve",
+    price: 165,
+    image: "/landingpage/eventos_img/chapada-guimaraes.jpg",
+    urgency: "Quase lotado",
+    urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
+    reservedLabel: "52 aventureiros confirmados",
+    status: "Saída confirmada",
+  },
+  {
+    id: "5",
+    name: "Romaria para Aparecida do Norte",
+    city: "Aparecida - SP",
+    date: "Saída em breve",
+    price: 95,
+    image: "/landingpage/eventos_img/romaria-aparecida.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "187 peregrinos confirmados",
+    status: "Saída confirmada",
+  },
+  {
+    id: "6",
     name: "Excursão para Salvador",
     city: "Salvador - BA",
     date: "Saída em breve",
@@ -89,8 +126,8 @@ const FEATURED_TRIPS = [
     status: "Saída confirmada",
   },
   {
-    id: "4",
-    name: "Evento na Praia",
+    id: "7",
+    name: "Festival de Verão em Ilhéus",
     city: "Ilhéus - BA",
     date: "Saída em breve",
     price: 65,
@@ -101,8 +138,44 @@ const FEATURED_TRIPS = [
     status: "Saída confirmada",
   },
   {
-    id: "5",
-    name: "Evento Regional",
+    id: "8",
+    name: "Turismo Histórico em Ouro Preto",
+    city: "Ouro Preto - MG",
+    date: "Saída em breve",
+    price: 110,
+    image: "/landingpage/eventos_img/ouro-preto.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "73 viajantes confirmados",
+    status: "Saída confirmada",
+  },
+  {
+    id: "9",
+    name: "Bate-volta para Bonito",
+    city: "Bonito - MS",
+    date: "Saída em breve",
+    price: 180,
+    image: "/landingpage/eventos_img/bonito-ms.jpg",
+    urgency: "Quase lotado",
+    urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
+    reservedLabel: "44 reservas confirmadas",
+    status: "Saída confirmada",
+  },
+  {
+    id: "10",
+    name: "Festa Noturna – Edição Especial",
+    city: "Cuiabá - MT",
+    date: "Saída em breve",
+    price: 55,
+    image: "/landingpage/eventos_img/balada-noturna.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "132 ingressos vendidos",
+    status: "Saída confirmada",
+  },
+  {
+    id: "11",
+    name: "Rodeio Regional – Feira de Santana",
     city: "Feira de Santana - BA",
     date: "Saída em breve",
     price: 55,
@@ -113,15 +186,75 @@ const FEATURED_TRIPS = [
     status: "Saída confirmada",
   },
   {
-    id: "6",
-    name: "Festival Cultural",
+    id: "12",
+    name: "Excursão para Porto Seguro",
+    city: "Porto Seguro - BA",
+    date: "Saída em breve",
+    price: 145,
+    image: "/landingpage/eventos_img/porto-seguro.jpg",
+    urgency: "Quase lotado",
+    urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
+    reservedLabel: "98 passageiros confirmados",
+    status: "Saída confirmada",
+  },
+  {
+    id: "13",
+    name: "São João de Caruaru",
     city: "Caruaru - PE",
     date: "Saída em breve",
-    price: 95,
-    image: "/landingpage/eventos_img/festival-cultural.jpg",
+    price: 85,
+    image: "/landingpage/eventos_img/sao-joao.jpg",
+    urgency: "Quase lotado",
+    urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
+    reservedLabel: "156 pessoas já garantiram a vaga",
+    status: "Saída confirmada",
+  },
+  {
+    id: "14",
+    name: "Viagem para Gramado",
+    city: "Gramado - RS",
+    date: "Saída em breve",
+    price: 175,
+    image: "/landingpage/eventos_img/gramado.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "61 viajantes confirmados",
+    status: "Saída confirmada",
+  },
+  {
+    id: "15",
+    name: "Festival Gastronômico",
+    city: "Florianópolis - SC",
+    date: "Saída em breve",
+    price: 48,
+    image: "/landingpage/eventos_img/festival-gastronomico.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "89 pessoas já compraram",
+    status: "Saída confirmada",
+  },
+  {
+    id: "16",
+    name: "Excursão Floripa – Praias do Sul",
+    city: "Florianópolis - SC",
+    date: "Saída em breve",
+    price: 155,
+    image: "/landingpage/eventos_img/florianopolis.jpg",
     urgency: "Quase lotado",
     urgencyTone: "bg-rose-500/15 text-rose-200 border-rose-400/30",
     reservedLabel: "109 pessoas já garantiram a vaga",
+    status: "Saída confirmada",
+  },
+  {
+    id: "17",
+    name: "Festival Cultural do Recôncavo",
+    city: "Cachoeira - BA",
+    date: "Saída em breve",
+    price: 60,
+    image: "/landingpage/eventos_img/festival-cultural.jpg",
+    urgency: "Últimas vagas",
+    urgencyTone: "bg-amber-500/15 text-amber-200 border-amber-400/30",
+    reservedLabel: "74 ingressos emitidos",
     status: "Saída confirmada",
   },
 ];
@@ -1006,77 +1139,115 @@ export default function LandingPage() {
               <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {FEATURED_TRIPS.map((trip) => (
-              <Link
-                key={trip.id}
-                to="/eventos"
-                className="group overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
+          <div className="relative">
+            {/* Setas de navegação - desktop */}
+            <div className="pointer-events-none absolute inset-y-0 -left-4 -right-4 z-10 hidden items-center justify-between sm:flex">
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="pointer-events-auto h-10 w-10 rounded-full shadow-md"
+                onClick={() => {
+                  const el = document.getElementById('landing-events-scroll');
+                  if (el) el.scrollBy({ left: -340, behavior: 'smooth' });
+                }}
+                aria-label="Ver eventos anteriores"
               >
-                <div className="relative h-52 overflow-hidden">
-                  <img
-                    src={trip.image}
-                    alt={trip.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                  <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-[11px] font-bold ${trip.urgencyTone}`}
-                    >
-                      {trip.urgency}
-                    </span>
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-bold text-emerald-100">
-                      {trip.status}
-                    </span>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="pointer-events-auto h-10 w-10 rounded-full shadow-md"
+                onClick={() => {
+                  const el = document.getElementById('landing-events-scroll');
+                  if (el) el.scrollBy({ left: 340, behavior: 'smooth' });
+                }}
+                aria-label="Ver próximos eventos"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div
+              id="landing-events-scroll"
+              className="flex gap-5 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-hide"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {FEATURED_TRIPS.map((trip) => (
+                <Link
+                  key={trip.id}
+                  to="/eventos"
+                  className="group flex-shrink-0 w-[300px] sm:w-[340px] snap-start overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
+                >
+                  <div className="relative h-52 overflow-hidden">
+                    <img
+                      src={trip.image}
+                      alt={trip.name}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                      width={800}
+                      height={512}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                    <div className="absolute left-4 top-4 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-[11px] font-bold ${trip.urgencyTone}`}
+                      >
+                        {trip.urgency}
+                      </span>
+                      <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-bold text-emerald-100">
+                        {trip.status}
+                      </span>
+                    </div>
+                    <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+                          A partir de
+                        </p>
+                        <p className="text-3xl font-extrabold text-white">
+                          R$ {trip.price.toFixed(2).replace(".", ",")}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+                        {trip.date}
+                      </span>
+                    </div>
                   </div>
-                  <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
+                  <div className="space-y-4 p-5">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
-                        A partir de
-                      </p>
-                      <p className="text-3xl font-extrabold text-white">
-                        R$ {trip.price.toFixed(2).replace(".", ",")}
-                      </p>
+                      <h3 className="text-lg font-bold text-foreground transition-colors group-hover:text-primary line-clamp-2">
+                        {trip.name}
+                      </h3>
+                      <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        <span>{trip.city}</span>
+                      </div>
                     </div>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-                      {trip.date}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4 p-5">
-                  <div>
-                    <h3 className="text-xl font-bold text-foreground transition-colors group-hover:text-primary">
-                      {trip.name}
-                    </h3>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      <span>{trip.city}</span>
+                    <div className="grid gap-2 rounded-2xl bg-muted/60 p-3 text-sm text-foreground">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-primary" />
+                        <span>{trip.reservedLabel}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                        <span>Pagamento online e confirmação imediata</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid gap-2 rounded-2xl bg-muted/60 p-3 text-sm text-foreground">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-primary" />
-                      <span>{trip.reservedLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
-                      <span>Pagamento online e confirmação imediata</span>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="text-sm text-muted-foreground">
+                        Embarque sem fila com QR Code
+                      </div>
+                      <span className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors group-hover:bg-primary/90">
+                        Ver detalhes
+                        <ChevronRight className="h-4 w-4" />
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-sm text-muted-foreground">
-                      Embarque sem fila com QR Code
-                    </div>
-                    <span className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors group-hover:bg-primary/90">
-                      Ver detalhes
-                      <ChevronRight className="h-4 w-4" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </section>
