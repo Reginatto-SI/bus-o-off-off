@@ -85,6 +85,23 @@ interface PassengerData {
 
 type PaymentMethod = "pix" | "credit_card";
 
+type PaymentCheckoutStatus = "idle" | "preparing" | "popup_blocked" | "error";
+
+function renderPaymentPreparingTab(tab: Window) {
+  // Comentário de suporte: evita aba "about:blank" sem contexto enquanto aguardamos a URL final do Asaas.
+  tab.document.title = "Preparando cobrança...";
+  tab.document.body.innerHTML = `
+    <div style="min-height:100vh;margin:0;display:flex;align-items:center;justify-content:center;background:#f5f5f5;color:#475569;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;text-align:center;padding:24px;">
+      <div>
+        <div style="width:44px;height:44px;margin:0 auto 14px;border:4px solid #e2e8f0;border-top-color:#f97316;border-radius:9999px;animation:smartbus-spin 0.9s linear infinite;"></div>
+        <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;">Preparando sua cobrança</h1>
+        <p style="margin:0;font-size:15px;line-height:1.5;">Estamos carregando a fatura do Asaas.<br />Isso pode levar alguns segundos. Não feche esta aba.</p>
+      </div>
+    </div>
+    <style>@keyframes smartbus-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }</style>
+  `;
+}
+
 function isPassengerComplete(p: PassengerData): boolean {
   const rawCpf = p.cpf.replace(/\D/g, "");
   return (
@@ -124,6 +141,11 @@ export default function Checkout() {
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [paymentCheckoutStatus, setPaymentCheckoutStatus] =
+    useState<PaymentCheckoutStatus>("idle");
+  const [manualCheckoutUrl, setManualCheckoutUrl] = useState<string | null>(
+    null,
+  );
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
@@ -631,8 +653,13 @@ export default function Checkout() {
     // Comentário de suporte: abrimos a aba de pagamento ainda no clique do usuário
     // para evitar bloqueio de pop-up após as etapas assíncronas do checkout.
     const preOpenedPaymentTab = window.open("", "_blank");
+    if (preOpenedPaymentTab) {
+      renderPaymentPreparingTab(preOpenedPaymentTab);
+    }
 
     setSubmitting(true);
+    setPaymentCheckoutStatus("preparing");
+    setManualCheckoutUrl(null);
 
     // Revalidate seats before creating sale
     const seatsValid = await revalidateSeats();
@@ -641,6 +668,7 @@ export default function Checkout() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -658,6 +686,7 @@ export default function Checkout() {
       );
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -667,6 +696,7 @@ export default function Checkout() {
       toast.error("Este evento exige ida e volta. Volte e selecione a volta.");
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -684,6 +714,7 @@ export default function Checkout() {
         );
         preOpenedPaymentTab?.close();
         setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
         return;
       }
     }
@@ -703,7 +734,10 @@ export default function Checkout() {
 
       if (sellerResolveError) {
         // Suporte: manter log explícito ajuda a auditar falhas de atribuição sem quebrar a compra.
-        console.warn("Falha ao validar seller_ref no checkout:", sellerResolveError);
+        console.warn(
+          "Falha ao validar seller_ref no checkout:",
+          sellerResolveError,
+        );
       } else if (resolvedSellerId) {
         validatedSellerId = resolvedSellerId;
       }
@@ -714,6 +748,7 @@ export default function Checkout() {
       toast.error("Taxa da plataforma da empresa indisponível.");
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -761,6 +796,7 @@ export default function Checkout() {
       }
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -807,6 +843,7 @@ export default function Checkout() {
       toast.error(msg);
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -859,6 +896,7 @@ export default function Checkout() {
       toast.error("Erro ao registrar dados dos passageiros. Tente novamente.");
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       return;
     }
 
@@ -874,12 +912,32 @@ export default function Checkout() {
         });
 
       if (!checkoutError && checkoutData?.url) {
+        console.info(
+          "Checkout público: cobrança Asaas gerada, iniciando abertura da fatura",
+          {
+            saleId: sale.id,
+            paymentMethod,
+            hasPreOpenedPaymentTab: Boolean(preOpenedPaymentTab),
+          },
+        );
         // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up.
         if (preOpenedPaymentTab) {
           preOpenedPaymentTab.location.href = checkoutData.url;
         } else {
-          window.open(checkoutData.url, "_blank");
+          const openedTab = window.open(checkoutData.url, "_blank");
+          if (!openedTab) {
+            // Comentário de suporte: fallback manual para quando o navegador bloquear a abertura automática.
+            setManualCheckoutUrl(checkoutData.url);
+            setPaymentCheckoutStatus("popup_blocked");
+            setSubmitting(false);
+            toast.error(
+              "Não conseguimos abrir a cobrança automaticamente. Toque em 'Abrir cobrança agora'.",
+            );
+            return;
+          }
         }
+        setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
         // Navigate to waiting/confirmation screen in current tab
         navigate(`/confirmacao/${sale.id}`);
         return;
@@ -902,6 +960,8 @@ export default function Checkout() {
         // Company has no Asaas — fallback to reservation (keep as pendente)
         console.log("Asaas not configured, falling back to confirmation");
         preOpenedPaymentTab?.close();
+        setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
         navigate(`/confirmacao/${sale.id}`);
         return;
       }
@@ -915,6 +975,7 @@ export default function Checkout() {
       await supabase.from("sales").delete().eq("id", sale.id);
       preOpenedPaymentTab?.close();
       setSubmitting(false);
+      setPaymentCheckoutStatus("error");
       return;
     } catch (err) {
       // Network error or edge function unavailable — fallback to confirmation
@@ -923,6 +984,8 @@ export default function Checkout() {
         err,
       );
       preOpenedPaymentTab?.close();
+      setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
       navigate(`/confirmacao/${sale.id}`);
     }
   };
@@ -1382,6 +1445,40 @@ export default function Checkout() {
                 </div>
               </div>
             </div>
+
+            {submitting && (
+              <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 space-y-1">
+                <p className="font-medium">
+                  Estamos preparando os detalhes da sua cobrança
+                </p>
+                <p>Isso pode levar alguns segundos. Não feche esta tela.</p>
+              </div>
+            )}
+
+            {paymentCheckoutStatus === "popup_blocked" && manualCheckoutUrl && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900 space-y-2">
+                <p className="font-medium">
+                  A abertura automática foi bloqueada no navegador.
+                </p>
+                <p>Toque no botão abaixo para abrir a cobrança manualmente.</p>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const openedTab = window.open(manualCheckoutUrl, "_blank");
+                    if (!openedTab) {
+                      toast.error(
+                        "Ainda não foi possível abrir a cobrança. Verifique o bloqueio de pop-ups e tente novamente.",
+                      );
+                      return;
+                    }
+                    setManualCheckoutUrl(null);
+                    setPaymentCheckoutStatus("idle");
+                  }}
+                >
+                  Abrir cobrança agora
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
