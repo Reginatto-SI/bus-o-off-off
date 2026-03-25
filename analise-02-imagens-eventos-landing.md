@@ -30,3 +30,9 @@ A vitrine da landing estava com associação de imagens por posição (índice) 
 ## Impacto
 - Mudança mínima e localizada, sem alterar layout/estrutura/componentes.
 - Associação clara, auditável e previsível para manutenção.
+
+
+## Estrutura de arquivos criada
+- Pasta criada: `public/landingpage/eventos_img/`.
+- Mantido apenas o caminho (sem JPEG no Git) para evitar erro de PR com binários.
+- Guia de substituição e nomes esperados em: `public/landingpage/eventos_img/README.md`.
