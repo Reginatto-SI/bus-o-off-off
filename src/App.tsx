@@ -15,6 +15,7 @@ import Events from "./pages/admin/Events";
 import EventDetail from "./pages/admin/EventDetail";
 import Fleet from "./pages/admin/Fleet";
 import Drivers from "./pages/admin/Drivers";
+import BoardingAssistants from "./pages/admin/BoardingAssistants";
 import BoardingLocations from "./pages/admin/BoardingLocations";
 import Sellers from "./pages/admin/Sellers";
 import Sales from "./pages/admin/Sales";
@@ -106,6 +107,7 @@ const App = () => (
             <Route path="/admin/eventos/:id" element={<EventDetail />} />
             <Route path="/admin/frota" element={<Fleet />} />
             <Route path="/admin/motoristas" element={<Drivers />} />
+            <Route path="/admin/auxiliares-embarque" element={<BoardingAssistants />} />
             <Route path="/admin/locais" element={<BoardingLocations />} />
             <Route path="/admin/vendedores" element={<Sellers />} />
             <Route path="/admin/vendas" element={<Sales />} />
