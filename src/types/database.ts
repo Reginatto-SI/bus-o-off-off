@@ -110,6 +110,8 @@ export interface UserRoleRecord {
   role: UserRole;
   seller_id: string | null;
   driver_id: string | null;
+  // Identificação operacional complementar para role técnica "motorista".
+  operational_role: 'motorista' | 'auxiliar_embarque' | null;
   company_id: string;
 }
 
@@ -117,6 +119,8 @@ export interface UserWithRole extends Profile {
   role?: UserRole;
   seller_id?: string | null;
   driver_id?: string | null;
+  // Campo visual/cadastral; permissões continuam ancoradas em `role`.
+  operational_role?: 'motorista' | 'auxiliar_embarque' | null;
   seller?: Seller | null;
   driver?: Driver | null;
   user_role_id?: string;
