@@ -428,7 +428,7 @@ export default function PublicCompanyShowcase() {
                     <Button
                       size="lg"
                       className={hasCover
-                        ? 'bg-white/90 text-foreground hover:bg-white shadow-lg w-full sm:w-auto'
+                        ? 'bg-white text-foreground hover:bg-white shadow-lg w-full sm:w-auto'
                         : 'w-full sm:w-auto'
                       }
                       onClick={() => document.getElementById('todos-eventos')?.scrollIntoView({ behavior: 'smooth' })}
