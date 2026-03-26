@@ -99,6 +99,31 @@ const getCreateUserSuccessMessage = (response: CreateUserFunctionResponse): stri
   return response.message || 'Usuário salvo com sucesso.';
 };
 
+type MotoristaOperationalRole = 'motorista' | 'auxiliar_embarque';
+type AccessProfileOption = UserRole | 'auxiliar_embarque';
+
+const motoristaOperationalRoleConfig: Record<MotoristaOperationalRole, string> = {
+  motorista: 'Motorista',
+  auxiliar_embarque: 'Auxiliar de Embarque',
+};
+
+const getOperationalLabel = (role?: UserRole, operationalRole?: string | null): string => {
+  if (role !== 'motorista') {
+    return role ? roleConfig[role]?.label ?? role : '-';
+  }
+
+  // Compatibilidade retroativa: registros antigos sem o campo explícito
+  // continuam sendo tratados visualmente como "Motorista".
+  const resolvedOperationalRole: MotoristaOperationalRole =
+    operationalRole === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista';
+  return motoristaOperationalRoleConfig[resolvedOperationalRole];
+};
+
+const getAccessProfileOption = (role: UserRole, operationalRole: MotoristaOperationalRole): AccessProfileOption => {
+  if (role !== 'motorista') return role;
+  return operationalRole === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista';
+};
+
 // Role configuration for display
 const roleConfig: Record<UserRole, { label: string; bgColor: string; textColor: string }> = {
   gerente: { label: 'Gerente', bgColor: 'bg-purple-100', textColor: 'text-purple-800' },
@@ -131,8 +156,31 @@ export default function UsersPage() {
     status: 'ativo' as ProfileStatus,
     seller_id: '',
     driver_id: '',
+    operational_role: 'motorista' as MotoristaOperationalRole,
     notes: '',
   });
+
+  const handleAccessProfileChange = (value: AccessProfileOption) => {
+    // O select exibe "Auxiliar de Embarque", mas a role técnica permanece motorista.
+    if (value === 'auxiliar_embarque') {
+      setForm({
+        ...form,
+        role: 'motorista',
+        seller_id: '',
+        driver_id: '',
+        operational_role: 'auxiliar_embarque',
+      });
+      return;
+    }
+
+    setForm({
+      ...form,
+      role: value,
+      seller_id: '',
+      driver_id: '',
+      operational_role: 'motorista',
+    });
+  };
 
   // Export columns configuration - must be before any conditional returns
   const exportColumns: ExportColumn[] = useMemo(() => [
@@ -201,6 +249,7 @@ export default function UsersPage() {
         role,
         seller_id,
         driver_id,
+        operational_role,
         company_id
       `)
       .eq('company_id', activeCompanyId);
@@ -281,6 +330,7 @@ export default function UsersPage() {
         role: role.role as UserRole,
         seller_id: role.seller_id,
         driver_id: role.driver_id,
+        operational_role: role.operational_role,
         seller: role.seller_id ? sellersMap[role.seller_id] : null,
         driver: role.driver_id ? driversMap[role.driver_id] : null,
         user_role_id: role.id,
@@ -396,6 +446,8 @@ export default function UsersPage() {
               role: form.role,
               seller_id: form.role === 'vendedor' ? form.seller_id : null,
               driver_id: form.role === 'motorista' ? form.driver_id : null,
+              // Mantém uma identificação operacional separada sem criar nova role técnica.
+              operational_role: form.role === 'motorista' ? form.operational_role : null,
             })
             .eq('id', editingUserRoleId);
 
@@ -405,7 +457,7 @@ export default function UsersPage() {
 
           const { data: updatedRole, error: roleFetchError } = await supabase
             .from('user_roles')
-            .select('seller_id, driver_id, role')
+            .select('seller_id, driver_id, role, operational_role')
             .eq('id', editingUserRoleId)
             .maybeSingle();
 
@@ -420,7 +472,8 @@ export default function UsersPage() {
           if (
             updatedRole.role !== form.role ||
             (form.role === 'vendedor' && updatedRole.seller_id !== form.seller_id) ||
-            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id)
+            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id) ||
+            (form.role === 'motorista' && updatedRole.operational_role !== form.operational_role)
           ) {
             throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
           }
@@ -428,7 +481,8 @@ export default function UsersPage() {
           if (
             updatedRole.role !== form.role ||
             (form.role === 'vendedor' && updatedRole.seller_id !== form.seller_id) ||
-            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id)
+            (form.role === 'motorista' && updatedRole.driver_id !== form.driver_id) ||
+            (form.role === 'motorista' && updatedRole.operational_role !== form.operational_role)
           ) {
             throw new Error('Não foi possível confirmar o vínculo salvo. Tente novamente.');
           }
@@ -450,6 +504,8 @@ export default function UsersPage() {
             notes: form.notes || null,
             seller_id: form.role === 'vendedor' ? form.seller_id : null,
             driver_id: form.role === 'motorista' ? form.driver_id : null,
+            // A role técnica continua "motorista"; este campo só diferencia a identificação exibida.
+            operational_role: form.role === 'motorista' ? form.operational_role : null,
             company_id: activeCompanyId,
           },
         });
@@ -522,6 +578,10 @@ export default function UsersPage() {
       status: userToEdit.status,
       seller_id: userToEdit.seller_id ?? '',
       driver_id: userToEdit.driver_id ?? '',
+      operational_role:
+        userToEdit.role === 'motorista' && userToEdit.operational_role === 'auxiliar_embarque'
+          ? 'auxiliar_embarque'
+          : 'motorista',
       notes: userToEdit.notes ?? '',
     };
 
@@ -530,7 +590,7 @@ export default function UsersPage() {
     if (userToEdit.user_role_id) {
       const { data: roleData, error } = await supabase
         .from('user_roles')
-        .select('role, seller_id, driver_id')
+        .select('role, seller_id, driver_id, operational_role')
         .eq('id', userToEdit.user_role_id)
         .maybeSingle();
 
@@ -547,6 +607,10 @@ export default function UsersPage() {
       baseForm.role = (roleData.role as UserRole) ?? baseForm.role;
       baseForm.seller_id = roleData.seller_id ?? '';
       baseForm.driver_id = roleData.driver_id ?? '';
+      baseForm.operational_role =
+        roleData.role === 'motorista' && roleData.operational_role === 'auxiliar_embarque'
+          ? 'auxiliar_embarque'
+          : 'motorista';
     }
 
     setEditingId(userToEdit.id);
@@ -585,6 +649,7 @@ export default function UsersPage() {
       status: 'ativo',
       seller_id: '',
       driver_id: '',
+      operational_role: 'motorista',
       notes: '',
     });
   };
@@ -706,8 +771,8 @@ export default function UsersPage() {
                             <div className="space-y-2">
                               <Label>Perfil de acesso</Label>
                               <Select
-                                value={form.role}
-                                onValueChange={(value: UserRole) => setForm({ ...form, role: value, seller_id: '', driver_id: '' })}
+                                value={getAccessProfileOption(form.role, form.operational_role)}
+                                onValueChange={(value: AccessProfileOption) => handleAccessProfileChange(value)}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -717,8 +782,14 @@ export default function UsersPage() {
                                   <SelectItem value="operador">Operador</SelectItem>
                                   <SelectItem value="vendedor">Vendedor</SelectItem>
                                   <SelectItem value="motorista">Motorista</SelectItem>
+                                  <SelectItem value="auxiliar_embarque">Auxiliar de Embarque</SelectItem>
                                 </SelectContent>
                               </Select>
+                              {form.role === 'motorista' && (
+                                <p className="text-xs text-muted-foreground">
+                                  A role técnica permanece <strong>motorista</strong>; abaixo você escolhe apenas a identificação operacional exibida.
+                                </p>
+                              )}
                             </div>
                             <div className="space-y-2">
                               <Label>Status</Label>
@@ -795,6 +866,24 @@ export default function UsersPage() {
                                       Nenhum motorista cadastrado. Cadastre motoristas na tela de Motoristas.
                                     </p>
                                   )}
+                                </div>
+                                <div className="mt-4 space-y-2">
+                                  <Label>Identificação operacional</Label>
+                                  <Select
+                                    value={form.operational_role}
+                                    onValueChange={(value: MotoristaOperationalRole) => setForm({ ...form, operational_role: value })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="motorista">Motorista</SelectItem>
+                                      <SelectItem value="auxiliar_embarque">Auxiliar de Embarque</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-xs text-muted-foreground">
+                                    Essa escolha não altera permissões, RLS ou acesso ao app operacional.
+                                  </p>
                                 </div>
                               </div>
                             </div>
@@ -986,7 +1075,7 @@ export default function UsersPage() {
                             roleConfig[u.role]?.bgColor,
                             roleConfig[u.role]?.textColor
                           )}>
-                            {roleConfig[u.role]?.label}
+                            {getOperationalLabel(u.role, u.operational_role)}
                           </span>
                         )}
                       </TableCell>
