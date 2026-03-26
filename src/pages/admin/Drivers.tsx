@@ -184,6 +184,7 @@ export default function Drivers() {
       .from('drivers')
       .select('*')
       .eq('company_id', activeCompanyId)
+      .eq('operational_role', 'motorista')
       .order('name');
 
     if (error) {
@@ -263,6 +264,7 @@ export default function Drivers() {
       cnh_expires_at: form.cnh_expires_at || null,
       notes: form.notes.trim() || null,
       status: form.status,
+      operational_role: 'motorista',
       company_id: activeCompanyId,
     };
 
