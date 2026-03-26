@@ -100,6 +100,7 @@ const getCreateUserSuccessMessage = (response: CreateUserFunctionResponse): stri
 };
 
 type MotoristaOperationalRole = 'motorista' | 'auxiliar_embarque';
+type AccessProfileOption = UserRole | 'auxiliar_embarque';
 
 const motoristaOperationalRoleConfig: Record<MotoristaOperationalRole, string> = {
   motorista: 'Motorista',
@@ -116,6 +117,11 @@ const getOperationalLabel = (role?: UserRole, operationalRole?: string | null): 
   const resolvedOperationalRole: MotoristaOperationalRole =
     operationalRole === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista';
   return motoristaOperationalRoleConfig[resolvedOperationalRole];
+};
+
+const getAccessProfileOption = (role: UserRole, operationalRole: MotoristaOperationalRole): AccessProfileOption => {
+  if (role !== 'motorista') return role;
+  return operationalRole === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista';
 };
 
 // Role configuration for display
@@ -153,6 +159,28 @@ export default function UsersPage() {
     operational_role: 'motorista' as MotoristaOperationalRole,
     notes: '',
   });
+
+  const handleAccessProfileChange = (value: AccessProfileOption) => {
+    // O select exibe "Auxiliar de Embarque", mas a role técnica permanece motorista.
+    if (value === 'auxiliar_embarque') {
+      setForm({
+        ...form,
+        role: 'motorista',
+        seller_id: '',
+        driver_id: '',
+        operational_role: 'auxiliar_embarque',
+      });
+      return;
+    }
+
+    setForm({
+      ...form,
+      role: value,
+      seller_id: '',
+      driver_id: '',
+      operational_role: 'motorista',
+    });
+  };
 
   // Export columns configuration - must be before any conditional returns
   const exportColumns: ExportColumn[] = useMemo(() => [
@@ -302,7 +330,7 @@ export default function UsersPage() {
         role: role.role as UserRole,
         seller_id: role.seller_id,
         driver_id: role.driver_id,
-        operational_role: (role.operational_role === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista') as MotoristaOperationalRole,
+        operational_role: role.operational_role,
         seller: role.seller_id ? sellersMap[role.seller_id] : null,
         driver: role.driver_id ? driversMap[role.driver_id] : null,
         user_role_id: role.id,
@@ -557,11 +585,10 @@ export default function UsersPage() {
       status: userToEdit.status,
       seller_id: userToEdit.seller_id ?? '',
       driver_id: userToEdit.driver_id ?? '',
-      operational_role: (
+      operational_role:
         userToEdit.role === 'motorista' && userToEdit.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista'
-      ) as MotoristaOperationalRole,
+          : 'motorista',
       notes: userToEdit.notes ?? '',
     };
 
@@ -587,11 +614,10 @@ export default function UsersPage() {
       baseForm.role = (roleData.role as UserRole) ?? baseForm.role;
       baseForm.seller_id = roleData.seller_id ?? '';
       baseForm.driver_id = roleData.driver_id ?? '';
-      baseForm.operational_role = (
+      baseForm.operational_role =
         roleData.role === 'motorista' && roleData.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista'
-      ) as MotoristaOperationalRole;
+          : 'motorista';
     }
 
     setEditingId(userToEdit.id);
@@ -752,17 +778,8 @@ export default function UsersPage() {
                             <div className="space-y-2">
                               <Label>Perfil de acesso</Label>
                               <Select
-                                value={form.role}
-                                onValueChange={(value: UserRole) =>
-                                  setForm({
-                                    ...form,
-                                    role: value,
-                                    seller_id: '',
-                                    driver_id: '',
-                                    // Evita carregar estado antigo ao alternar perfis.
-                                    operational_role: 'motorista',
-                                  })
-                                }
+                                value={getAccessProfileOption(form.role, form.operational_role)}
+                                onValueChange={(value: AccessProfileOption) => handleAccessProfileChange(value)}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
@@ -772,6 +789,7 @@ export default function UsersPage() {
                                   <SelectItem value="operador">Operador</SelectItem>
                                   <SelectItem value="vendedor">Vendedor</SelectItem>
                                   <SelectItem value="motorista">Motorista</SelectItem>
+                                  <SelectItem value="auxiliar_embarque">Auxiliar de Embarque</SelectItem>
                                 </SelectContent>
                               </Select>
                               {form.role === 'motorista' && (
