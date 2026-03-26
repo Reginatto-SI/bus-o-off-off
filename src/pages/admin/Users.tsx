@@ -302,7 +302,7 @@ export default function UsersPage() {
         role: role.role as UserRole,
         seller_id: role.seller_id,
         driver_id: role.driver_id,
-        operational_role: role.operational_role,
+        operational_role: (role.operational_role === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista') as MotoristaOperationalRole,
         seller: role.seller_id ? sellersMap[role.seller_id] : null,
         driver: role.driver_id ? driversMap[role.driver_id] : null,
         user_role_id: role.id,
@@ -550,10 +550,11 @@ export default function UsersPage() {
       status: userToEdit.status,
       seller_id: userToEdit.seller_id ?? '',
       driver_id: userToEdit.driver_id ?? '',
-      operational_role:
+      operational_role: (
         userToEdit.role === 'motorista' && userToEdit.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista',
+          : 'motorista'
+      ) as MotoristaOperationalRole,
       notes: userToEdit.notes ?? '',
     };
 
@@ -579,10 +580,11 @@ export default function UsersPage() {
       baseForm.role = (roleData.role as UserRole) ?? baseForm.role;
       baseForm.seller_id = roleData.seller_id ?? '';
       baseForm.driver_id = roleData.driver_id ?? '';
-      baseForm.operational_role =
+      baseForm.operational_role = (
         roleData.role === 'motorista' && roleData.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista';
+          : 'motorista'
+      ) as MotoristaOperationalRole;
     }
 
     setEditingId(userToEdit.id);
