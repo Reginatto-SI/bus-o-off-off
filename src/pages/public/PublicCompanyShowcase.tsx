@@ -381,11 +381,11 @@ export default function PublicCompanyShowcase() {
               )}
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-5 w-full">
                 {company?.logo_url && (
-                  <div className="inline-block bg-white rounded-xl p-2 shadow-md">
+                  <div className="hidden sm:inline-block bg-white rounded-xl p-2 shadow-md">
                     <img
                       src={company.logo_url}
                       alt={`Logo ${companyDisplayName || ''}`}
-                      className="h-16 sm:h-20 w-auto object-contain"
+                      className="h-20 w-auto object-contain"
                     />
                   </div>
                 )}
