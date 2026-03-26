@@ -442,7 +442,7 @@ export default function PublicCompanyShowcase() {
                       return (
                         <Button
                           size="lg"
-                          className="bg-[#25D366] text-white hover:bg-[#1DA851] shadow-md hover:shadow-lg transition-all animate-subtle-pulse w-full sm:w-auto"
+                          className="hidden sm:inline-flex bg-[#25D366] text-white hover:bg-[#1DA851] shadow-md hover:shadow-lg transition-all animate-subtle-pulse w-full sm:w-auto"
                           asChild
                         >
                           <a href={companyWhatsappLink} target="_blank" rel="noopener noreferrer">

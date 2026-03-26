@@ -94,7 +94,11 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
             {/* Empresa organizadora */}
             {event.company && (
-              <div className="flex items-center gap-1.5 min-w-0">
+              <Link
+                to={event.company && (event.company as any).public_slug ? `/empresa/${(event.company as any).public_slug}` : '#'}
+                className="flex items-center gap-1.5 min-w-0 hover:opacity-80 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {event.company.logo_url ? (
                   <img
                     src={event.company.logo_url}
@@ -108,8 +112,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
                     </span>
                   </div>
                 )}
-                <span className="text-xs text-white/85 truncate">{event.company.name}</span>
-              </div>
+                <span className="text-xs text-white/85 truncate hover:text-white transition-colors">{event.company.name}</span>
+              </Link>
             )}
 
             {whatsappHelpLink && (
