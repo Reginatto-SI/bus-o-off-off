@@ -104,7 +104,11 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
 
         {/* Empresa organizadora */}
         {event.company && (
-          <div className="flex items-center gap-2">
+          <Link
+            to={event.company && (event.company as any).public_slug ? `/empresa/${(event.company as any).public_slug}` : '#'}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
             {event.company.logo_url ? (
               <img
                 src={event.company.logo_url}
@@ -118,10 +122,10 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
                 </span>
               </div>
             )}
-            <span className="text-xs text-muted-foreground truncate">
+            <span className="text-xs text-muted-foreground truncate hover:text-primary transition-colors">
               {event.company.name}
             </span>
-          </div>
+          </Link>
         )}
 
         {/* CTA secundário de suporte sem competir com o botão principal de compra. */}
