@@ -1,31 +1,25 @@
 project_id = "cdrcyjrvurrphnceromd"
 
-[functions.verify-payment-status]
-verify_jwt = false
-
-[functions.create-user]
-verify_jwt = false
-
-[functions.register-company]
-verify_jwt = false
-
-[functions.create-platform-fee-checkout]
-verify_jwt = false
-
-[functions.create-asaas-account]
-verify_jwt = false
-
-[functions.create-asaas-payment]
-verify_jwt = false
-
-[functions.asaas-webhook]
-verify_jwt = false
-
-[functions.ticket-lookup]
-verify_jwt = false
-
-[functions.cleanup-expired-locks]
-verify_jwt = false
-
-[functions.process-email-queue]
-verify_jwt = true
+[functions]
+  [functions.asaas-webhook]
+    verify_jwt = false
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.cleanup-expired-locks]
+    verify_jwt = false
+  [functions.create-asaas-account]
+    verify_jwt = false
+  [functions.create-asaas-payment]
+    verify_jwt = false
+  [functions.create-platform-fee-checkout]
+    verify_jwt = false
+  [functions.create-user]
+    verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = true
+  [functions.register-company]
+    verify_jwt = false
+  [functions.ticket-lookup]
+    verify_jwt = false
+  [functions.verify-payment-status]
+    verify_jwt = false
