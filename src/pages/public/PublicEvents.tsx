@@ -51,7 +51,8 @@ export default function PublicEvents() {
             id,
             name,
             logo_url,
-            whatsapp
+            whatsapp,
+            public_slug
           )
         `)
         .eq('status', 'a_venda')
