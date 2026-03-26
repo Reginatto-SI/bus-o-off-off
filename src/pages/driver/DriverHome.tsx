@@ -68,6 +68,7 @@ export default function DriverHome() {
   const [nextBoarding, setNextBoarding] = useState<NextBoardingInfo | null>(null);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [loadingKpis, setLoadingKpis] = useState(false);
+  const [operationalRoleLabel, setOperationalRoleLabel] = useState('Motorista');
 
   const activeTrip = allTrips.find(t => t.tripId === selectedTripId) ?? null;
   const applicablePhases = activeTrip ? getApplicablePhases(activeTrip.transportPolicy) : ['ida'] as OperationalPhase[];
@@ -80,12 +81,14 @@ export default function DriverHome() {
 
     const { data: roleData } = await supabase
       .from('user_roles')
-      .select('driver_id, role')
+      .select('driver_id, role, operational_role')
       .eq('user_id', user.id)
       .eq('company_id', activeCompanyId)
       .single();
 
     const driverId = roleData?.driver_id;
+    // A identificação operacional é visual; as permissões continuam sendo da role técnica.
+    setOperationalRoleLabel(roleData?.operational_role === 'auxiliar_embarque' ? 'Auxiliar de Embarque' : 'Motorista');
 
     let trips: any[] | null = null;
 
@@ -334,7 +337,10 @@ export default function DriverHome() {
         </div>
 
         {/* Greeting */}
-        <p className="text-sm text-muted-foreground">Olá, {firstName}.</p>
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">Olá, {firstName}.</p>
+          <p className="text-xs text-muted-foreground">Perfil operacional: {operationalRoleLabel}</p>
+        </div>
 
         {/* Event Selector (only for 2+ trips) */}
         {!loadingTrips && allTrips.length > 1 && (

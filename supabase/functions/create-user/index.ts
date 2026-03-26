@@ -14,6 +14,7 @@ interface CreateUserRequest {
   notes: string | null;
   seller_id: string | null;
   driver_id: string | null;
+  operational_role?: "motorista" | "auxiliar_embarque" | null;
   company_id: string;
 }
 
@@ -90,7 +91,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: CreateUserRequest = await req.json();
-    const { email, name, role, status, notes, seller_id, driver_id, company_id } = body;
+    const { email, name, role, status, notes, seller_id, driver_id, operational_role, company_id } = body;
     const runtimeVersion = "2026-03-23-users-multiempresa-v2";
 
     // Validate required fields
@@ -100,6 +101,13 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Compatibilidade retroativa: se não vier identificação explícita para role motorista,
+    // assumimos "motorista" para preservar comportamento legado.
+    const resolvedOperationalRole =
+      role === "motorista"
+        ? (operational_role === "auxiliar_embarque" ? "auxiliar_embarque" : "motorista")
+        : null;
 
     // Verify company_id is one of the requesting user's companies (developer bypasses)
     const isDev = roles.some((r: any) => r.role === "developer");
@@ -148,6 +156,7 @@ serve(async (req) => {
           role,
           seller_id: role === "vendedor" ? seller_id : null,
           driver_id: role === "motorista" ? driver_id : null,
+          operational_role: resolvedOperationalRole,
         });
 
       if (roleInsertError) {
@@ -229,6 +238,7 @@ serve(async (req) => {
         role,
         seller_id: role === "vendedor" ? seller_id : null,
         driver_id: role === "motorista" ? driver_id : null,
+        operational_role: resolvedOperationalRole,
       }, {
         onConflict: "user_id,company_id",
       });

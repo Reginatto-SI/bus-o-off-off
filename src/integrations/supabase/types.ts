@@ -2048,6 +2048,7 @@ export type Database = {
           company_id: string
           driver_id: string | null
           id: string
+          operational_role: string | null
           role: Database["public"]["Enums"]["user_role"]
           seller_id: string | null
           user_id: string
@@ -2056,6 +2057,7 @@ export type Database = {
           company_id: string
           driver_id?: string | null
           id?: string
+          operational_role?: string | null
           role: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
           user_id: string
@@ -2064,6 +2066,7 @@ export type Database = {
           company_id?: string
           driver_id?: string | null
           id?: string
+          operational_role?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           seller_id?: string | null
           user_id?: string
