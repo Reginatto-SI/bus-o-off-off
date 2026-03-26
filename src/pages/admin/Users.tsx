@@ -550,10 +550,11 @@ export default function UsersPage() {
       status: userToEdit.status,
       seller_id: userToEdit.seller_id ?? '',
       driver_id: userToEdit.driver_id ?? '',
-      operational_role:
+      operational_role: (
         userToEdit.role === 'motorista' && userToEdit.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista',
+          : 'motorista'
+      ) as MotoristaOperationalRole,
       notes: userToEdit.notes ?? '',
     };
 
