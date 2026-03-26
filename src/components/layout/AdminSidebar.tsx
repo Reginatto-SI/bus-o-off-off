@@ -30,6 +30,7 @@ import {
   Activity,
   ClipboardList,
   Share2,
+  UserRoundCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,6 +102,10 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Motoristas',
     href: '/admin/motoristas',
     icon: Users
+  }, {
+    name: 'Auxiliares de Embarque',
+    href: '/admin/auxiliares-embarque',
+    icon: UserRoundCheck
   }, {
     name: 'Locais de Embarque',
     href: '/admin/locais',

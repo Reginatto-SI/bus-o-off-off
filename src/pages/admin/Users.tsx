@@ -374,6 +374,13 @@ export default function UsersPage() {
     fetchSellersAndDrivers();
   }, [activeCompanyId]);
 
+  const availableDriversForOperationalRole = useMemo(() => {
+    if (form.operational_role === 'auxiliar_embarque') {
+      return drivers.filter((driver) => driver.operational_role === 'auxiliar_embarque');
+    }
+    return drivers.filter((driver) => driver.operational_role !== 'auxiliar_embarque');
+  }, [drivers, form.operational_role]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -845,25 +852,35 @@ export default function UsersPage() {
                               <div className="rounded-lg border p-4">
                                 <h4 className="mb-4 font-medium">Vincular Motorista</h4>
                                 <div className="space-y-2">
-                                  <Label>Selecione um motorista</Label>
+                                  <Label>
+                                    Selecione um {form.operational_role === 'auxiliar_embarque' ? 'auxiliar de embarque' : 'motorista'}
+                                  </Label>
                                   <Select
                                     value={form.driver_id}
                                     onValueChange={(value) => setForm({ ...form, driver_id: value })}
                                   >
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Selecione um motorista..." />
+                                      <SelectValue
+                                        placeholder={
+                                          form.operational_role === 'auxiliar_embarque'
+                                            ? 'Selecione um auxiliar de embarque...'
+                                            : 'Selecione um motorista...'
+                                        }
+                                      />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {drivers.map((driver) => (
+                                      {availableDriversForOperationalRole.map((driver) => (
                                         <SelectItem key={driver.id} value={driver.id}>
-                                          {driver.name} - CNH: {driver.cnh}
+                                          {driver.name}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  {drivers.length === 0 && (
+                                  {availableDriversForOperationalRole.length === 0 && (
                                     <p className="text-sm text-muted-foreground">
-                                      Nenhum motorista cadastrado. Cadastre motoristas na tela de Motoristas.
+                                      {form.operational_role === 'auxiliar_embarque'
+                                        ? 'Nenhum auxiliar de embarque cadastrado. Cadastre auxiliares na tela de Auxiliares de Embarque.'
+                                        : 'Nenhum motorista cadastrado. Cadastre motoristas na tela de Motoristas.'}
                                     </p>
                                   )}
                                 </div>
