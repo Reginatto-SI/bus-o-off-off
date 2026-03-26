@@ -1801,6 +1801,16 @@ export default function LandingPage() {
                     Política de intermediação
                   </Link>
                 </li>
+                <li>
+                  {/* Link direto para o zip público da marca, mantendo o download discreto no rodapé sem competir com os CTAs principais. */}
+                  <a
+                    href="/Logo_Smartbusbr_.zip"
+                    download
+                    className="text-sm text-white/40 transition-colors hover:text-white"
+                  >
+                    Baixar kit de marca
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
