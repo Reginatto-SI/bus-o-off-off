@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import {
   BenefitProgram,
@@ -54,12 +55,15 @@ import {
   CircleDollarSign,
   FileSpreadsheet,
   FileText,
+  FileUp,
   Gift,
   List,
   Loader2,
+  Pencil,
   Plus,
   Power,
   Search,
+  Trash2,
   User,
   Users,
 } from 'lucide-react';
@@ -112,6 +116,56 @@ function parseBulkCpfs(text: string): string[] {
   return Array.from(new Set(parsed));
 }
 
+type EligibleCpfDraft = Pick<
+  BenefitProgramEligibleCpf,
+  'cpf' | 'full_name' | 'status' | 'valid_from' | 'valid_until' | 'notes'
+>;
+
+type ImportSummary = {
+  totalLidas: number;
+  validas: number;
+  invalidas: number;
+  duplicadasNoArquivo: number;
+  jaExistentesNoPrograma: number;
+  importadasComSucesso: number;
+  erros: string[];
+};
+
+const IMPORT_EXPECTED_COLUMNS = ['CPF', 'Nome', 'Status', 'VigenciaInicial', 'VigenciaFinal', 'Observacao'] as const;
+
+const normalizeHeader = (header: string) =>
+  header
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '');
+
+const toIsoDateOrEmpty = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return '';
+    const month = String(parsed.m).padStart(2, '0');
+    const day = String(parsed.d).padStart(2, '0');
+    return `${parsed.y}-${month}-${day}`;
+  }
+  const text = String(value).trim();
+  if (!text) return '';
+  const isoLike = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoLike) return `${isoLike[1]}-${isoLike[2]}-${isoLike[3]}`;
+  const brLike = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brLike) return `${brLike[3]}-${brLike[2]}-${brLike[1]}`;
+  return '';
+};
+
+const normalizeStatus = (value: unknown): BenefitProgramStatus => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  return normalized === 'inativo' ? 'inativo' : 'ativo';
+};
+
 export default function BenefitPrograms() {
   const { isGerente, isDeveloper, user, activeCompanyId, activeCompany } = useAuth();
 
@@ -126,8 +180,12 @@ export default function BenefitPrograms() {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [cpfSaving, setCpfSaving] = useState(false);
+  const [importingCpfFile, setImportingCpfFile] = useState(false);
+  const [editingCpfId, setEditingCpfId] = useState<string | null>(null);
   const [bulkCpfText, setBulkCpfText] = useState('');
-  const [pendingCpfs, setPendingCpfs] = useState<string[]>([]);
+  const [cpfListSearch, setCpfListSearch] = useState('');
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [pendingCpfs, setPendingCpfs] = useState<EligibleCpfDraft[]>([]);
 
   const [form, setForm] = useState({
     name: '',
@@ -151,6 +209,39 @@ export default function BenefitPrograms() {
   });
 
   const canAccess = isGerente || isDeveloper;
+  const activeEditingProgram = useMemo(
+    () => programs.find((program) => program.id === editingId) ?? null,
+    [editingId, programs]
+  );
+  const eligibleCpfRows = useMemo(() => {
+    if (editingId) return activeEditingProgram?.eligible_cpf ?? [];
+    return pendingCpfs.map((item, index) => ({
+      id: `pending-${index}`,
+      company_id: activeCompanyId ?? '',
+      benefit_program_id: editingId ?? '',
+      cpf: item.cpf,
+      full_name: item.full_name,
+      status: item.status,
+      valid_from: item.valid_from,
+      valid_until: item.valid_until,
+      notes: item.notes,
+      created_at: '',
+      updated_at: '',
+    }));
+  }, [activeCompanyId, activeEditingProgram?.eligible_cpf, editingId, pendingCpfs]);
+
+  const filteredEligibleCpfRows = useMemo(() => {
+    const term = cpfListSearch.trim().toLowerCase();
+    if (!term) return eligibleCpfRows;
+    return eligibleCpfRows.filter((record) => {
+      const maskedCpf = formatCpfMask(record.cpf);
+      return (
+        record.cpf.includes(term.replace(/\D/g, '')) ||
+        maskedCpf.toLowerCase().includes(term) ||
+        (record.full_name ?? '').toLowerCase().includes(term)
+      );
+    });
+  }, [cpfListSearch, eligibleCpfRows]);
 
   const filteredPrograms = useMemo(() => {
     return programs.filter((program) => {
@@ -291,8 +382,11 @@ export default function BenefitPrograms() {
     });
     setSelectedEventIds([]);
     setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
+    setEditingCpfId(null);
     setBulkCpfText('');
     setPendingCpfs([]);
+    setCpfListSearch('');
+    setImportSummary(null);
   };
 
   const handleEdit = (program: BenefitProgramWithRelations, tab: string = 'dados') => {
@@ -309,6 +403,9 @@ export default function BenefitPrograms() {
       applies_to_all_events: program.applies_to_all_events,
     });
     setSelectedEventIds(program.event_links.map((link) => link.event_id));
+    setEditingCpfId(null);
+    setCpfListSearch('');
+    setImportSummary(null);
     setDialogOpen(true);
   };
 
@@ -422,11 +519,15 @@ export default function BenefitPrograms() {
     // No cadastro inicial, permitimos montar uma fila de CPFs antes do primeiro save.
     // Após obter o programId, persistimos em lote para manter fluxo simples e auditável.
     if (!editingId && pendingCpfs.length > 0) {
-      const cpfPayload = pendingCpfs.map((cpf) => ({
+      const cpfPayload = pendingCpfs.map((cpfRecord) => ({
         company_id: activeCompanyId,
         benefit_program_id: programId,
-        cpf,
-        status: 'ativo' as BenefitProgramStatus,
+        cpf: cpfRecord.cpf,
+        full_name: cpfRecord.full_name || null,
+        status: cpfRecord.status,
+        valid_from: cpfRecord.valid_from || null,
+        valid_until: cpfRecord.valid_until || null,
+        notes: cpfRecord.notes || null,
       }));
       const { error: cpfInsertError } = await supabase.from('benefit_program_eligible_cpf').insert(cpfPayload);
       if (cpfInsertError) {
@@ -473,28 +574,46 @@ export default function BenefitPrograms() {
     }
 
     if (!editingId) {
-      if (pendingCpfs.includes(normalizedCpf)) {
+      if (pendingCpfs.some((pendingItem) => pendingItem.cpf === normalizedCpf)) {
         toast.error('Este CPF já foi adicionado na lista pendente.');
         return;
       }
-      setPendingCpfs((prev) => [...prev, normalizedCpf]);
-      setCpfForm({ ...cpfForm, cpf: '' });
+      setPendingCpfs((prev) => [
+        ...prev,
+        {
+          cpf: normalizedCpf,
+          full_name: cpfForm.full_name.trim() || null,
+          status: cpfForm.status,
+          valid_from: cpfForm.valid_from || null,
+          valid_until: cpfForm.valid_until || null,
+          notes: cpfForm.notes.trim() || null,
+        },
+      ]);
+      setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
+      setEditingCpfId(null);
+      toast.success('CPF adicionado na lista pendente.');
       return;
     }
 
     setCpfSaving(true);
-    const { error } = await supabase.from('benefit_program_eligible_cpf').insert([
-      {
-        company_id: activeCompanyId,
-        benefit_program_id: editingId,
-        cpf: normalizedCpf,
-        full_name: cpfForm.full_name.trim() || null,
-        status: cpfForm.status,
-        valid_from: cpfForm.valid_from || null,
-        valid_until: cpfForm.valid_until || null,
-        notes: cpfForm.notes.trim() || null,
-      },
-    ]);
+    const payload = {
+      company_id: activeCompanyId,
+      benefit_program_id: editingId,
+      cpf: normalizedCpf,
+      full_name: cpfForm.full_name.trim() || null,
+      status: cpfForm.status,
+      valid_from: cpfForm.valid_from || null,
+      valid_until: cpfForm.valid_until || null,
+      notes: cpfForm.notes.trim() || null,
+    };
+
+    const { error } = editingCpfId
+      ? await supabase
+          .from('benefit_program_eligible_cpf')
+          .update(payload)
+          .eq('id', editingCpfId)
+          .eq('company_id', activeCompanyId)
+      : await supabase.from('benefit_program_eligible_cpf').insert([payload]);
 
     setCpfSaving(false);
 
@@ -505,7 +624,8 @@ export default function BenefitPrograms() {
     }
 
     setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
-    toast.success('CPF elegível adicionado com sucesso.');
+    setEditingCpfId(null);
+    toast.success(editingCpfId ? 'CPF elegível atualizado com sucesso.' : 'CPF elegível adicionado com sucesso.');
     fetchPrograms();
   };
 
@@ -519,7 +639,21 @@ export default function BenefitPrograms() {
     }
 
     if (!editingId) {
-      const next = Array.from(new Set([...pendingCpfs, ...cpfs]));
+      const pendingCpfSet = new Set(pendingCpfs.map((item) => item.cpf));
+      const next = [...pendingCpfs];
+      cpfs.forEach((cpf) => {
+        if (!pendingCpfSet.has(cpf)) {
+          next.push({
+            cpf,
+            full_name: null,
+            status: 'ativo',
+            valid_from: null,
+            valid_until: null,
+            notes: null,
+          });
+          pendingCpfSet.add(cpf);
+        }
+      });
       setPendingCpfs(next);
       setBulkCpfText('');
       toast.success(`${cpfs.length} CPF(s) adicionados na lista pendente.`);
@@ -544,6 +678,217 @@ export default function BenefitPrograms() {
 
     setBulkCpfText('');
     toast.success('Lista de CPFs importada com sucesso.');
+    fetchPrograms();
+  };
+
+  const handleDownloadCpfTemplate = () => {
+    // Modelo objetivo para operação em Excel: colunas fixas, sem assistente/mapeador.
+    const ws = XLSX.utils.aoa_to_sheet([
+      [...IMPORT_EXPECTED_COLUMNS],
+      ['12345678909', 'Nome opcional', 'ativo', '2026-01-01', '2026-12-31', 'Observação opcional'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'ModeloCPFs');
+    XLSX.writeFile(wb, 'modelo-cpfs-elegiveis.xlsx');
+  };
+
+  const applyImportedCpfRows = async (rows: EligibleCpfDraft[], summary: ImportSummary) => {
+    if (rows.length === 0) {
+      setImportSummary(summary);
+      toast.error('Nenhum CPF válido para importar.');
+      return;
+    }
+
+    if (!editingId) {
+      const pendingSet = new Set(pendingCpfs.map((item) => item.cpf));
+      let imported = 0;
+      const next = [...pendingCpfs];
+      rows.forEach((row) => {
+        if (!pendingSet.has(row.cpf)) {
+          next.push(row);
+          pendingSet.add(row.cpf);
+          imported += 1;
+        } else {
+          summary.jaExistentesNoPrograma += 1;
+        }
+      });
+      summary.importadasComSucesso = imported;
+      setPendingCpfs(next);
+      setImportSummary(summary);
+      toast.success(`${imported} CPF(s) adicionados na lista pendente.`);
+      return;
+    }
+
+    const payload = rows.map((row) => ({
+      company_id: activeCompanyId!,
+      benefit_program_id: editingId,
+      cpf: row.cpf,
+      full_name: row.full_name || null,
+      status: row.status,
+      valid_from: row.valid_from || null,
+      valid_until: row.valid_until || null,
+      notes: row.notes || null,
+    }));
+
+    const { error } = await supabase
+      .from('benefit_program_eligible_cpf')
+      .upsert(payload, { onConflict: 'benefit_program_id,cpf', ignoreDuplicates: true });
+
+    if (error) {
+      toast.error('Não foi possível importar o arquivo de CPFs.');
+      return;
+    }
+
+    summary.importadasComSucesso = rows.length;
+    setImportSummary(summary);
+    toast.success(`${rows.length} CPF(s) importados com sucesso.`);
+    fetchPrograms();
+  };
+
+  const handleCpfFileImport = async (file: File | null) => {
+    if (!file || !activeCompanyId) return;
+
+    setImportingCpfFile(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      // Mesmo parser para CSV/XLSX para manter regra única de leitura e validação.
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        toast.error('Arquivo sem conteúdo válido.');
+        setImportingCpfFile(false);
+        return;
+      }
+
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' });
+      if (rawRows.length === 0) {
+        toast.error('Arquivo sem linhas para importação.');
+        setImportingCpfFile(false);
+        return;
+      }
+
+      const firstRowHeaders = Object.keys(rawRows[0]);
+      const headerMap = new Map(firstRowHeaders.map((key) => [normalizeHeader(key), key]));
+      const cpfKey = headerMap.get(normalizeHeader('CPF'));
+      if (!cpfKey) {
+        toast.error('Coluna CPF obrigatória não encontrada no arquivo.');
+        setImportingCpfFile(false);
+        return;
+      }
+
+      const summary: ImportSummary = {
+        totalLidas: rawRows.length,
+        validas: 0,
+        invalidas: 0,
+        duplicadasNoArquivo: 0,
+        jaExistentesNoPrograma: 0,
+        importadasComSucesso: 0,
+        erros: [],
+      };
+
+      const existingCpfSet = new Set(eligibleCpfRows.map((item) => item.cpf));
+      const seenFileCpf = new Set<string>();
+      const parsedRows: EligibleCpfDraft[] = [];
+
+      // Regras determinísticas: ignorar vazias, validar CPF e datas, e rejeitar duplicidades.
+      rawRows.forEach((row, index) => {
+        const rowNumber = index + 2;
+        const cpfRaw = String(row[cpfKey] ?? '').trim();
+        const normalizedCpf = normalizeCpfDigits(cpfRaw);
+        const nameKey = headerMap.get(normalizeHeader('Nome'));
+        const statusKey = headerMap.get(normalizeHeader('Status'));
+        const startKey = headerMap.get(normalizeHeader('VigenciaInicial'));
+        const endKey = headerMap.get(normalizeHeader('VigenciaFinal'));
+        const notesKey = headerMap.get(normalizeHeader('Observacao'));
+
+        const fullName = String((nameKey ? row[nameKey] : '') ?? '').trim();
+        const validFrom = toIsoDateOrEmpty(startKey ? row[startKey] : '');
+        const validUntil = toIsoDateOrEmpty(endKey ? row[endKey] : '');
+        const notes = String((notesKey ? row[notesKey] : '') ?? '').trim();
+        const hasAnyValue =
+          cpfRaw || fullName || String(statusKey ? row[statusKey] : '').trim() || validFrom || validUntil || notes;
+
+        if (!hasAnyValue) {
+          summary.totalLidas -= 1;
+          return;
+        }
+
+        if (!isValidCpfDigits(normalizedCpf)) {
+          summary.invalidas += 1;
+          summary.erros.push(`Linha ${rowNumber}: CPF inválido.`);
+          return;
+        }
+
+        if (validFrom && validUntil && validUntil < validFrom) {
+          summary.invalidas += 1;
+          summary.erros.push(`Linha ${rowNumber}: Vigência final menor que inicial.`);
+          return;
+        }
+
+        if (seenFileCpf.has(normalizedCpf)) {
+          summary.duplicadasNoArquivo += 1;
+          return;
+        }
+        seenFileCpf.add(normalizedCpf);
+
+        if (existingCpfSet.has(normalizedCpf)) {
+          summary.jaExistentesNoPrograma += 1;
+          return;
+        }
+
+        parsedRows.push({
+          cpf: normalizedCpf,
+          full_name: fullName || null,
+          status: normalizeStatus(statusKey ? row[statusKey] : ''),
+          valid_from: validFrom || null,
+          valid_until: validUntil || null,
+          notes: notes || null,
+        });
+        summary.validas += 1;
+      });
+
+      await applyImportedCpfRows(parsedRows, summary);
+    } catch {
+      toast.error('Falha ao ler o arquivo. Verifique se está em formato CSV ou XLSX.');
+    } finally {
+      setImportingCpfFile(false);
+    }
+  };
+
+  const handleEditCpfRecord = (record: BenefitProgramEligibleCpf) => {
+    setCpfForm({
+      cpf: formatCpfMask(record.cpf),
+      full_name: record.full_name ?? '',
+      status: record.status,
+      valid_from: record.valid_from ?? '',
+      valid_until: record.valid_until ?? '',
+      notes: record.notes ?? '',
+    });
+    setEditingCpfId(record.id);
+  };
+
+  const handleRemoveCpfRecord = async (record: BenefitProgramEligibleCpf) => {
+    if (!activeCompanyId) return;
+
+    if (!editingId) {
+      setPendingCpfs((prev) => prev.filter((item) => item.cpf !== record.cpf));
+      toast.success('CPF removido da lista pendente.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('benefit_program_eligible_cpf')
+      .delete()
+      .eq('id', record.id)
+      .eq('company_id', activeCompanyId);
+
+    if (error) {
+      toast.error('Não foi possível remover o CPF elegível.');
+      return;
+    }
+
+    toast.success('CPF elegível removido.');
     fetchPrograms();
   };
 
@@ -786,11 +1131,12 @@ export default function BenefitPrograms() {
                         </TabsContent>
 
                         <TabsContent value="cpfs" className="mt-0 space-y-4">
+                          {/* Reorganização em 3 blocos: cadastro manual, importação e listagem operacional. */}
                           <Card>
                             <CardContent className="p-4 space-y-4">
                               <p className="text-sm font-medium">Adicionar CPF elegível</p>
-                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                <div className="space-y-1">
+                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                                <div className="space-y-1 sm:col-span-2 lg:col-span-2">
                                   <Label>CPF</Label>
                                   <Input
                                     placeholder="000.000.000-00"
@@ -798,14 +1144,14 @@ export default function BenefitPrograms() {
                                     onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })}
                                   />
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1 sm:col-span-2 lg:col-span-2">
                                   <Label>Nome (opcional)</Label>
                                   <Input
                                     value={cpfForm.full_name}
                                     onChange={(e) => setCpfForm({ ...cpfForm, full_name: e.target.value })}
                                   />
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1 sm:col-span-2 lg:col-span-2">
                                   <Label>Status</Label>
                                   <Select
                                     value={cpfForm.status}
@@ -822,7 +1168,7 @@ export default function BenefitPrograms() {
                                     </SelectContent>
                                   </Select>
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1 sm:col-span-1 lg:col-span-2">
                                   <Label>Vigência inicial</Label>
                                   <Input
                                     type="date"
@@ -830,7 +1176,7 @@ export default function BenefitPrograms() {
                                     onChange={(e) => setCpfForm({ ...cpfForm, valid_from: e.target.value })}
                                   />
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-1 sm:col-span-1 lg:col-span-2">
                                   <Label>Vigência final</Label>
                                   <Input
                                     type="date"
@@ -838,7 +1184,7 @@ export default function BenefitPrograms() {
                                     onChange={(e) => setCpfForm({ ...cpfForm, valid_until: e.target.value })}
                                   />
                                 </div>
-                                <div className="space-y-1 lg:col-span-3">
+                                <div className="space-y-1 sm:col-span-2 lg:col-span-6">
                                   <Label>Observação</Label>
                                   <Textarea
                                     rows={2}
@@ -847,95 +1193,186 @@ export default function BenefitPrograms() {
                                   />
                                 </div>
                               </div>
-                              <Button type="button" onClick={handleAddCpf} disabled={cpfSaving}>
-                                {cpfSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                                Adicionar CPF
-                              </Button>
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" onClick={handleAddCpf} disabled={cpfSaving}>
+                                  {cpfSaving ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : editingCpfId ? (
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                  ) : (
+                                    <Plus className="h-4 w-4 mr-2" />
+                                  )}
+                                  {editingCpfId ? 'Salvar edição do CPF' : 'Adicionar CPF'}
+                                </Button>
+                                {editingCpfId && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setEditingCpfId(null);
+                                      setCpfForm({
+                                        cpf: '',
+                                        full_name: '',
+                                        status: 'ativo',
+                                        valid_from: '',
+                                        valid_until: '',
+                                        notes: '',
+                                      });
+                                    }}
+                                  >
+                                    Cancelar edição
+                                  </Button>
+                                )}
+                              </div>
                             </CardContent>
                           </Card>
 
                           <Card>
                             <CardContent className="p-4 space-y-3">
-                              <p className="text-sm font-medium">Importação rápida por colagem (CSV futuro)</p>
+                              <p className="text-sm font-medium">Importação em massa (CSV/XLSX)</p>
                               <p className="text-xs text-muted-foreground">
-                                Cole uma lista de CPFs separados por quebra de linha, vírgula ou ponto e vírgula.
-                                Nesta primeira etapa, a importação por arquivo CSV fica preparada para evolução futura.
+                                Baixe o modelo padrão, preencha no Excel e importe. O sistema valida CPF, vigência e
+                                duplicidades de forma determinística.
                               </p>
-                              <Textarea
-                                rows={4}
-                                value={bulkCpfText}
-                                onChange={(e) => setBulkCpfText(e.target.value)}
-                                placeholder={'00000000000\n11111111111'}
-                              />
-                              <Button type="button" variant="outline" onClick={handleBulkCpfAdd}>
-                                Importar lista de CPFs
-                              </Button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button type="button" variant="outline" onClick={handleDownloadCpfTemplate}>
+                                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                  Baixar modelo
+                                </Button>
+                                <Input
+                                  type="file"
+                                  accept=".csv,.xlsx"
+                                  disabled={importingCpfFile}
+                                  onChange={(event) => {
+                                    const selectedFile = event.target.files?.[0] ?? null;
+                                    void handleCpfFileImport(selectedFile);
+                                    event.currentTarget.value = '';
+                                  }}
+                                  className="max-w-xs"
+                                />
+                                {importingCpfFile && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                              </div>
+                              {importSummary && (
+                                <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                                  <p className="font-medium">Resumo da importação</p>
+                                  <p>Total de linhas lidas: {importSummary.totalLidas}</p>
+                                  <p>Válidas: {importSummary.validas}</p>
+                                  <p>Inválidas: {importSummary.invalidas}</p>
+                                  <p>Duplicadas no arquivo: {importSummary.duplicadasNoArquivo}</p>
+                                  <p>Já existentes no programa: {importSummary.jaExistentesNoPrograma}</p>
+                                  <p>Importadas com sucesso: {importSummary.importadasComSucesso}</p>
+                                  {importSummary.erros.length > 0 && (
+                                    <p className="text-destructive">
+                                      Exemplo de erro: {importSummary.erros[0]}
+                                      {importSummary.erros.length > 1 ? ` (+${importSummary.erros.length - 1})` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              <div className="rounded-md border p-3">
+                                <p className="text-xs font-medium">Colagem rápida (alternativa)</p>
+                                <p className="text-xs text-muted-foreground mb-2">
+                                  Recurso secundário para listas curtas de CPF separados por quebra de linha, vírgula
+                                  ou ponto e vírgula.
+                                </p>
+                                <Textarea
+                                  rows={3}
+                                  value={bulkCpfText}
+                                  onChange={(e) => setBulkCpfText(e.target.value)}
+                                  placeholder={'00000000000\n11111111111'}
+                                />
+                                <Button type="button" variant="outline" onClick={handleBulkCpfAdd} className="mt-2">
+                                  <FileUp className="h-4 w-4 mr-2" />
+                                  Importar por colagem
+                                </Button>
+                              </div>
                             </CardContent>
                           </Card>
 
-                          {!editingId && pendingCpfs.length > 0 && (
-                            <Card>
-                              <CardContent className="p-4 space-y-2">
-                                <p className="text-sm font-medium">CPFs pendentes (serão salvos ao criar o programa)</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {pendingCpfs.map((cpf) => (
-                                    <span key={cpf} className="rounded-full border px-2 py-1 text-xs">
-                                      {formatCpfMask(cpf)}
-                                    </span>
-                                  ))}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-
-                          {editingId && (
-                            <Card>
-                              <CardContent className="p-4">
+                          <Card>
+                            <CardContent className="p-4 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-medium">
+                                  {editingId ? 'CPFs cadastrados no programa' : 'CPFs pendentes para salvar no programa'}
+                                </p>
+                                <Input
+                                  className="w-full sm:w-72"
+                                  placeholder="Buscar por CPF ou nome..."
+                                  value={cpfListSearch}
+                                  onChange={(e) => setCpfListSearch(e.target.value)}
+                                />
+                              </div>
+                              <div className="max-h-72 overflow-auto rounded-md border">
                                 <Table>
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead>CPF</TableHead>
                                       <TableHead>Nome</TableHead>
-                                      <TableHead>Vigência</TableHead>
                                       <TableHead>Status</TableHead>
+                                      <TableHead>Vigência</TableHead>
+                                      <TableHead>Observação</TableHead>
                                       <TableHead className="w-[80px]">Ações</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
-                                    {(programs.find((program) => program.id === editingId)?.eligible_cpf ?? []).map((record) => (
-                                      <TableRow key={record.id}>
-                                        <TableCell>{formatCpfMask(record.cpf)}</TableCell>
-                                        <TableCell>{record.full_name ?? '—'}</TableCell>
-                                        <TableCell>
-                                          {record.valid_from || record.valid_until
-                                            ? `${record.valid_from ? new Date(record.valid_from).toLocaleDateString('pt-BR') : '—'} até ${record.valid_until ? new Date(record.valid_until).toLocaleDateString('pt-BR') : '—'}`
-                                            : 'Sem vigência'}
-                                        </TableCell>
-                                        <TableCell>
-                                          <StatusBadge
-                                            status={record.status === 'ativo' ? 'active' : 'inactive'}
-                                            customLabel={record.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                                          />
-                                        </TableCell>
-                                        <TableCell>
-                                          <ActionsDropdown
-                                            actions={[
-                                              {
-                                                label: record.status === 'ativo' ? 'Inativar' : 'Ativar',
-                                                icon: Power,
-                                                onClick: () => handleToggleCpfStatus(record),
-                                                variant: record.status === 'ativo' ? 'destructive' : 'default',
-                                              },
-                                            ]}
-                                          />
+                                    {filteredEligibleCpfRows.length === 0 ? (
+                                      <TableRow>
+                                        <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                                          Nenhum CPF encontrado para os filtros informados.
                                         </TableCell>
                                       </TableRow>
-                                    ))}
+                                    ) : (
+                                      filteredEligibleCpfRows.map((record) => {
+                                        const rowActions: ActionItem[] = [
+                                          { label: 'Editar', icon: Pencil, onClick: () => handleEditCpfRecord(record) },
+                                          {
+                                            label: record.status === 'ativo' ? 'Inativar' : 'Ativar',
+                                            icon: Power,
+                                            onClick: () => void handleToggleCpfStatus(record),
+                                            variant: record.status === 'ativo' ? 'destructive' : 'default',
+                                          },
+                                          {
+                                            label: 'Remover',
+                                            icon: Trash2,
+                                            onClick: () => void handleRemoveCpfRecord(record),
+                                            variant: 'destructive',
+                                          },
+                                        ];
+
+                                        if (!editingId) {
+                                          rowActions.splice(1, 1);
+                                        }
+
+                                        return (
+                                          <TableRow key={record.id}>
+                                            <TableCell>{formatCpfMask(record.cpf)}</TableCell>
+                                            <TableCell>{record.full_name ?? '—'}</TableCell>
+                                            <TableCell>
+                                              <StatusBadge
+                                                status={record.status === 'ativo' ? 'active' : 'inactive'}
+                                                customLabel={record.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              {record.valid_from || record.valid_until
+                                                ? `${record.valid_from ? new Date(record.valid_from).toLocaleDateString('pt-BR') : '—'} até ${record.valid_until ? new Date(record.valid_until).toLocaleDateString('pt-BR') : '—'}`
+                                                : 'Sem vigência'}
+                                            </TableCell>
+                                            <TableCell className="max-w-[220px] truncate">
+                                              {record.notes?.trim() ? record.notes : '—'}
+                                            </TableCell>
+                                            <TableCell>
+                                              <ActionsDropdown actions={rowActions} />
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })
+                                    )}
                                   </TableBody>
                                 </Table>
-                              </CardContent>
-                            </Card>
-                          )}
+                              </div>
+                            </CardContent>
+                          </Card>
                         </TabsContent>
                       </div>
                     </Tabs>
