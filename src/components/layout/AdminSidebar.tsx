@@ -31,6 +31,7 @@ import {
   ClipboardList,
   Share2,
   UserRoundCheck,
+  Gift,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -124,6 +125,11 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/parceiros',
     icon: Briefcase,
     roles: ['gerente']
+  }, {
+    name: 'Programas de Benefício',
+    href: '/admin/programas-beneficio',
+    icon: Gift,
+    roles: ['gerente', 'developer']
   }, {
     name: 'Sócios',
     href: '/admin/socios',

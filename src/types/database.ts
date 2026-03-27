@@ -18,6 +18,47 @@ export type CommercialPartnerTier = 'basico' | 'destaque' | 'premium';
 
 export type CompanyLegalType = 'PF' | 'PJ';
 
+
+export type BenefitProgramStatus = 'ativo' | 'inativo';
+export type BenefitType = 'percentual' | 'valor_fixo' | 'preco_final';
+
+export interface BenefitProgram {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  status: BenefitProgramStatus;
+  benefit_type: BenefitType;
+  benefit_value: number;
+  valid_from: string | null;
+  valid_until: string | null;
+  applies_to_all_events: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BenefitProgramEligibleCpf {
+  id: string;
+  company_id: string;
+  benefit_program_id: string;
+  cpf: string;
+  full_name: string | null;
+  status: BenefitProgramStatus;
+  valid_from: string | null;
+  valid_until: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BenefitProgramEventLink {
+  id: string;
+  company_id: string;
+  benefit_program_id: string;
+  event_id: string;
+  created_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;

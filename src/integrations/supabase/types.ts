@@ -186,6 +186,176 @@ export type Database = {
           },
         ]
       }
+      benefit_program_eligible_cpf: {
+        Row: {
+          benefit_program_id: string
+          company_id: string
+          cpf: string
+          created_at: string
+          full_name: string | null
+          id: string
+          notes: string | null
+          status: string
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          benefit_program_id: string
+          company_id: string
+          cpf: string
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          benefit_program_id?: string
+          company_id?: string
+          cpf?: string
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benefit_program_eligible_cpf_benefit_program_id_company_id_fkey"
+            columns: ["benefit_program_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "benefit_program_eligible_cpf_benefit_program_id_fkey"
+            columns: ["benefit_program_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_program_eligible_cpf_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      benefit_program_event_links: {
+        Row: {
+          benefit_program_id: string
+          company_id: string
+          created_at: string
+          event_id: string
+          id: string
+        }
+        Insert: {
+          benefit_program_id: string
+          company_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+        }
+        Update: {
+          benefit_program_id?: string
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benefit_program_event_links_benefit_program_id_company_id_fkey"
+            columns: ["benefit_program_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "benefit_program_event_links_benefit_program_id_fkey"
+            columns: ["benefit_program_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_program_event_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_program_event_links_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      benefit_programs: {
+        Row: {
+          applies_to_all_events: boolean
+          benefit_type: string
+          benefit_value: number
+          company_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          applies_to_all_events?: boolean
+          benefit_type: string
+          benefit_value: number
+          company_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          applies_to_all_events?: boolean
+          benefit_type?: string
+          benefit_value?: number
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benefit_programs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cities: {
         Row: {
           created_at: string
