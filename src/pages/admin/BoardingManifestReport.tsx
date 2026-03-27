@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Bus, Calendar, FileText, Loader2, Route } from 'lucide-react';
+import { Bus, Calendar, Eye, FileText, Loader2, Route, Users } from 'lucide-react';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PageHeader } from '@/components/admin/PageHeader';
@@ -9,10 +9,11 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { generateBoardingManifest } from '@/lib/reports/generateBoardingManifest';
+import { fetchBoardingManifestRows, generateBoardingManifest, ManifestRow } from '@/lib/reports/generateBoardingManifest';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
 interface EventOption {
@@ -28,6 +29,12 @@ interface TripOption {
   trip_type: string;
   departure_time: string | null;
   vehicle?: { plate?: string | null; type?: string | null } | null;
+}
+
+interface BoardingOperationalWindowRow {
+  event_id: string;
+  departure_date: string | null;
+  departure_time: string | null;
 }
 
 const formatTripLabel = (trip: TripOption) => {
@@ -48,6 +55,8 @@ export default function BoardingManifestReport() {
   const [selectedEventId, setSelectedEventId] = useState('all');
   const [selectedTripId, setSelectedTripId] = useState('all');
   const [operationallyFinishedIds, setOperationallyFinishedIds] = useState<Set<string>>(new Set());
+  const [previewRows, setPreviewRows] = useState<ManifestRow[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId) ?? null,
@@ -70,6 +79,36 @@ export default function BoardingManifestReport() {
     if (!normalizedSearch) return trips;
     return trips.filter((trip) => formatTripLabel(trip).toLowerCase().includes(normalizedSearch));
   }, [trips, normalizedSearch]);
+
+  const previewSummary = useMemo(() => {
+    if (!selectedEvent || previewRows.length === 0) {
+      return null;
+    }
+
+    const grouped = new Map<string, { id: string; name: string; time: string; passengers: number }>();
+    for (const row of previewRows) {
+      if (!grouped.has(row.boarding_location_id)) {
+        grouped.set(row.boarding_location_id, {
+          id: row.boarding_location_id,
+          name: row.boarding_location_name,
+          time: row.departure_time ? row.departure_time.slice(0, 5) : '--:--',
+          passengers: 0,
+        });
+      }
+
+      const point = grouped.get(row.boarding_location_id);
+      if (point) point.passengers += 1;
+    }
+
+    const boardingPoints = Array.from(grouped.values()).sort((a, b) => a.time.localeCompare(b.time));
+
+    return {
+      eventName: selectedEvent.name,
+      eventDate: new Date(`${selectedEvent.date}T00:00:00`).toLocaleDateString('pt-BR'),
+      totalPassengers: previewRows.length,
+      boardingPoints,
+    };
+  }, [previewRows, selectedEvent]);
 
   const eventOptions = useMemo(
     () => [
@@ -99,7 +138,7 @@ export default function BoardingManifestReport() {
       return;
     }
 
-    let query = supabase
+    const query = supabase
       .from('events')
       .select('id, name, date, status, is_archived')
       .eq('company_id', activeCompanyId)
@@ -129,7 +168,10 @@ export default function BoardingManifestReport() {
       .eq('company_id', activeCompanyId)
       .not('departure_date', 'is', null);
 
-    const operationalEndMap = buildEventOperationalEndMap(activeRows, (boardings ?? []) as any[]);
+    const operationalEndMap = buildEventOperationalEndMap(
+      activeRows,
+      (boardings ?? []) as BoardingOperationalWindowRow[],
+    );
     const visibleActiveRows = filterOperationallyVisibleEvents(activeRows, operationalEndMap) as EventOption[];
     const visibleIds = new Set(visibleActiveRows.map((event) => event.id));
     setOperationallyFinishedIds(new Set(activeRows.filter((event) => !visibleIds.has(event.id)).map((event) => event.id)));
@@ -175,6 +217,33 @@ export default function BoardingManifestReport() {
     fetchTrips(selectedEventId);
   }, [selectedEventId, fetchTrips]);
 
+  useEffect(() => {
+    const loadPreview = async () => {
+      if (!activeCompanyId || selectedEventId === 'all') {
+        setPreviewRows([]);
+        return;
+      }
+
+      setLoadingPreview(true);
+      try {
+        const rows = await fetchBoardingManifestRows({
+          companyId: activeCompanyId,
+          eventId: selectedEventId,
+          tripId: selectedTripId === 'all' ? null : selectedTripId,
+        });
+        setPreviewRows(rows);
+      } catch (error) {
+        console.error('Erro ao carregar preview da lista de embarque:', error);
+        toast.error('Não foi possível carregar a pré-visualização da lista de embarque.');
+        setPreviewRows([]);
+      } finally {
+        setLoadingPreview(false);
+      }
+    };
+
+    // Comentário de suporte: o preview usa os mesmos filtros do PDF para transmitir confiança operacional.
+    loadPreview();
+  }, [activeCompanyId, selectedEventId, selectedTripId]);
 
   useEffect(() => {
     // Comentário de suporte: evita estado inválido quando o operador alterna entre eventos ativos/históricos.
@@ -228,7 +297,8 @@ export default function BoardingManifestReport() {
           }
         />
 
-        <div className="mb-6">
+        {/* Ajuste de layout: fluxo visual linear (Filtros -> Preview) para reduzir carga cognitiva operacional. */}
+        <div className="mb-6 space-y-6">
           <FilterCard
             title="Seleção do Relatório"
             searchLabel="Busca"
@@ -271,6 +341,97 @@ export default function BoardingManifestReport() {
               },
             ]}
           />
+          <Card>
+            <CardContent className="p-0">
+              {selectedEventId === 'all' ? (
+                <EmptyState
+                  icon={<Eye className="h-8 w-8 text-muted-foreground" />}
+                  title="Confira os dados antes de gerar a lista de embarque"
+                  description="Selecione um evento para visualizar a lista de embarque antes de gerar o PDF."
+                />
+              ) : loadingPreview ? (
+                <EmptyState
+                  icon={<Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />}
+                  title="Carregando pré-visualização"
+                  description="Estamos consolidando os passageiros por ponto de embarque."
+                />
+              ) : previewSummary ? (
+                <div className="p-6 space-y-5">
+                  <div className="space-y-2">
+                    <h3 className="text-base font-semibold text-foreground">Confira os dados antes de gerar a lista de embarque</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Evento: <span className="font-medium text-foreground">{previewSummary.eventName}</span>
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <p className="text-muted-foreground">Data: <span className="font-medium text-foreground">{previewSummary.eventDate}</span></p>
+                      <p className="text-muted-foreground">Total de passageiros: <span className="font-medium text-foreground">{previewSummary.totalPassengers}</span></p>
+                      <p className="text-muted-foreground">Pontos de embarque: <span className="font-medium text-foreground">{previewSummary.boardingPoints.length}</span></p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {previewSummary.boardingPoints.map((point) => (
+                      <p key={point.id} className="text-sm text-muted-foreground">
+                        • <span className="font-medium text-foreground">{point.name}</span> — {point.time} ({point.passengers} passageiros)
+                      </p>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">
+                          <Users className="h-4 w-4 mr-2" />
+                          Ver detalhes
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-3xl">
+                        <DialogHeader>
+                          <DialogTitle>Pré-visualização detalhada da Lista de Embarque</DialogTitle>
+                        </DialogHeader>
+                        <div className="max-h-[65vh] overflow-y-auto pr-2 space-y-4">
+                          {previewSummary.boardingPoints.map((point) => {
+                            const passengers = previewRows.filter((row) => row.boarding_location_id === point.id);
+                            return (
+                              <div key={point.id} className="rounded-md border p-3">
+                                <p className="text-sm font-semibold text-foreground">{point.name}</p>
+                                <p className="text-xs text-muted-foreground mb-2">
+                                  Horário: {point.time} • Passageiros: {passengers.length}
+                                </p>
+                                <div className="space-y-1">
+                                  {passengers.map((passenger) => (
+                                    <p key={passenger.ticket_id ?? passenger.sale_id} className="text-sm text-muted-foreground">
+                                      • {passenger.seat_label} — <span className="text-foreground">{passenger.passenger_name}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Button onClick={handleGeneratePdf} disabled={loading || generating || selectedEventId === 'all'}>
+                      {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                      Gerar PDF
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={<Bus className="h-8 w-8 text-muted-foreground" />}
+                  title="Confira os dados antes de gerar a lista de embarque"
+                  description="Nenhum passageiro pago foi encontrado para os filtros selecionados."
+                  action={
+                    <Button onClick={handleGeneratePdf} disabled>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Gerar PDF
+                    </Button>
+                  }
+                />
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Bloco de orientação com estilo de apoio para reduzir sensação de tela solta no estado inicial. */}
@@ -288,22 +449,6 @@ export default function BoardingManifestReport() {
           </CardContent>
         </Card>
 
-        {/* Estado inicial guiado para manter acabamento visual e evitar área vazia sem contexto. */}
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              icon={<FileText className="h-8 w-8 text-muted-foreground" />}
-              title="Relatório pronto para geração"
-              description="Selecione o evento e, se necessário, uma viagem específica. Em seguida, clique em Gerar PDF para baixar a Lista de Embarque operacional."
-              action={
-                <Button onClick={handleGeneratePdf} disabled={loading || generating || selectedEventId === 'all'}>
-                  {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                  Gerar PDF agora
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
       </div>
     </AdminLayout>
   );
