@@ -145,6 +145,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUserRoleId, setEditingUserRoleId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'acesso' | 'vinculos' | 'observacoes'>('acesso');
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
 
   // seller_id e driver_id conectam o usuário ao cadastro gerencial de vendedor/motorista
@@ -414,13 +415,18 @@ export default function UsersPage() {
 
     // Validate link for vendedor/motorista
     if (form.role === 'vendedor' && !form.seller_id) {
+      // UX: direciona para a aba correta quando faltar vínculo obrigatório.
+      setActiveTab('vinculos');
       toast.error('Selecione um vendedor para vincular');
       setSaving(false);
       return;
     }
 
     if (form.role === 'motorista' && !form.driver_id) {
-      toast.error('Selecione um motorista para vincular');
+      // Mensagem contextual: mantém regra técnica idêntica, muda apenas o texto exibido.
+      const roleLabel = form.operational_role === 'auxiliar_embarque' ? 'auxiliar de embarque' : 'motorista';
+      setActiveTab('vinculos');
+      toast.error(`Selecione um ${roleLabel} para vincular`);
       setSaving(false);
       return;
     }
@@ -623,6 +629,7 @@ export default function UsersPage() {
     setEditingId(userToEdit.id);
     setEditingUserRoleId(userToEdit.user_role_id ?? null);
     setForm(baseForm);
+    setActiveTab('acesso');
     setDialogOpen(true);
   };
 
@@ -649,6 +656,7 @@ export default function UsersPage() {
   const resetForm = () => {
     setEditingId(null);
     setEditingUserRoleId(null);
+    setActiveTab('acesso');
     setForm({
       name: '',
       email: '',
@@ -660,6 +668,9 @@ export default function UsersPage() {
       notes: '',
     });
   };
+
+  const motoristaVinculoLabel = form.operational_role === 'auxiliar_embarque' ? 'Auxiliar de Embarque' : 'Motorista';
+  const motoristaVinculoLabelLower = form.operational_role === 'auxiliar_embarque' ? 'auxiliar de embarque' : 'motorista';
 
   const getUserActions = (u: UserWithRole): ActionItem[] => [
     {
@@ -715,7 +726,7 @@ export default function UsersPage() {
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Usuário</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                    <Tabs defaultValue="acesso" className="flex h-full flex-col">
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'acesso' | 'vinculos' | 'observacoes')} className="flex h-full flex-col">
                       <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
                         <TabsTrigger
                           value="acesso"
@@ -794,7 +805,7 @@ export default function UsersPage() {
                               </Select>
                               {form.role === 'motorista' && (
                                 <p className="text-xs text-muted-foreground">
-                                  A role técnica permanece <strong>motorista</strong>; abaixo você escolhe apenas a identificação operacional exibida.
+                                  A role técnica permanece <strong>motorista</strong>; o perfil escolhido acima define a identificação exibida no sistema.
                                 </p>
                               )}
                             </div>
@@ -850,23 +861,15 @@ export default function UsersPage() {
                           ) : form.role === 'motorista' ? (
                             <div className="space-y-4">
                               <div className="rounded-lg border p-4">
-                                <h4 className="mb-4 font-medium">Vincular Motorista</h4>
+                                <h4 className="mb-4 font-medium">Vincular {motoristaVinculoLabel}</h4>
                                 <div className="space-y-2">
-                                  <Label>
-                                    Selecione um {form.operational_role === 'auxiliar_embarque' ? 'auxiliar de embarque' : 'motorista'}
-                                  </Label>
+                                  <Label>Selecione um {motoristaVinculoLabelLower}</Label>
                                   <Select
                                     value={form.driver_id}
                                     onValueChange={(value) => setForm({ ...form, driver_id: value })}
                                   >
                                     <SelectTrigger>
-                                      <SelectValue
-                                        placeholder={
-                                          form.operational_role === 'auxiliar_embarque'
-                                            ? 'Selecione um auxiliar de embarque...'
-                                            : 'Selecione um motorista...'
-                                        }
-                                      />
+                                      <SelectValue placeholder={`Selecione um ${motoristaVinculoLabelLower}...`} />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {availableDriversForOperationalRole.map((driver) => (
@@ -878,9 +881,7 @@ export default function UsersPage() {
                                   </Select>
                                   {availableDriversForOperationalRole.length === 0 && (
                                     <p className="text-sm text-muted-foreground">
-                                      {form.operational_role === 'auxiliar_embarque'
-                                        ? 'Nenhum auxiliar de embarque cadastrado. Cadastre auxiliares na tela de Auxiliares de Embarque.'
-                                        : 'Nenhum motorista cadastrado. Cadastre motoristas na tela de Motoristas.'}
+                                      Nenhum {motoristaVinculoLabelLower} cadastrado. Cadastre {form.operational_role === 'auxiliar_embarque' ? 'auxiliares' : 'motoristas'} na tela de Motoristas.
                                     </p>
                                   )}
                                 </div>
