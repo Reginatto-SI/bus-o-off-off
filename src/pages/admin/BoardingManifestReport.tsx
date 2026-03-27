@@ -300,6 +300,7 @@ export default function BoardingManifestReport() {
         {/* Ajuste de layout: fluxo visual linear (Filtros -> Preview) para reduzir carga cognitiva operacional. */}
         <div className="mb-6 space-y-6">
           <FilterCard
+            className="xl:col-span-5"
             title="Seleção do Relatório"
             searchLabel="Busca"
             searchPlaceholder="Buscar por nome do evento, data ou viagem..."
