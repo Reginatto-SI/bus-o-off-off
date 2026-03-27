@@ -1,56 +1,54 @@
 
 
-# Plano: Correcao definitiva do fluxo de criacao e listagem de usuarios
+# Plano: Padronizar Templates de E-mail + Corrigir Build Errors
 
-## Diagnostico confirmado
+## Parte 1: Corrigir Build Errors em Users.tsx
 
-Investigacao dos dados em producao revelou **4 usuarios orfaos** (profiles sem nenhum registro em `user_roles`), todos criados nas ultimas horas. Isso confirma que o bug e real e ativo.
+Dois erros de tipo onde `operational_role` (string do banco) precisa ser castado para `MotoristaOperationalRole`:
 
-**Causa raiz**: o codigo no repositorio (`create-user/index.ts`) ja contem a correcao correta (upsert em `user_roles` + rollback se falhar), porem a **edge function deployada no runtime** provavelmente e uma versao anterior que nao faz o upsert corretamente. Os logs da edge function mostram apenas `shutdown`, sem evidencia de execucao da versao com `runtime_version`.
+**Arquivo:** `src/pages/admin/Users.tsx`
 
-Em resumo: o codigo esta correto no repositorio, mas o runtime ainda roda uma versao antiga.
+1. **Linha 334** — No mapeamento de dados, castar `role.operational_role`:
+   ```typescript
+   operational_role: (role.operational_role === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista') as MotoristaOperationalRole,
+   ```
 
-## Evidencias
+2. **Linha 623-626** — No `handleEditUser`, o cast já existe mas o `setForm` na linha 631 recebe tipo `string`. Garantir que `baseForm.operational_role` tenha o tipo correto com cast explícito.
 
-```
-Usuarios orfaos (profiles sem user_roles):
-- homolog2.motorista.20260324000355@example.com  (role_count: 0)
-- homolog2.vendedor.20260324000355@example.com   (role_count: 0)
-- homolog2.gerente.20260324000355@example.com     (role_count: 0)
-- homolog.gerente.20260323235139@example.com      (role_count: 0)
-```
+---
 
-O restante do sistema (RLS, AuthContext, listagem em Users.tsx) esta correto:
-- `user_roles` tem constraint `UNIQUE (user_id, company_id)` confirmada
-- RLS de `user_roles` ja usa `user_belongs_to_company` com escopo por empresa
-- `AuthContext` ja resolve empresa ativa via `user_roles` (nao `profiles.company_id`)
-- `Users.tsx` ja lista via `user_roles.eq('company_id', activeCompanyId)`
+## Parte 2: Padronizar Templates de E-mail de Autenticação
 
-## Acoes necessarias
+Alterar apenas textos nos 6 templates existentes em `supabase/functions/_shared/email-templates/`. Sem mudança de layout, cores ou estrutura.
 
-### 1. Redeployar a edge function `create-user`
+### Mudancas em todos os templates:
 
-O codigo no repositorio ja esta correto. Precisa ser redeployado para que o runtime use a versao atual. Isso resolve o bug principal.
+- Substituir qualquer referencia a `{siteName}` nos textos por constante hardcoded **"SmartBus BR"** (o siteName vem do sistema e pode conter nomes errados como "busaooofoof")
+- Padronizar rodape em todos:
+  ```
+  SmartBus BR — Plataforma de venda de passagens e gestao de viagens.
+  Este e um e-mail automatico. Se voce nao reconhece esta acao, ignore com seguranca.
+  ```
+- Melhorar CTAs conforme solicitado
 
-### 2. Limpar usuarios orfaos
+### Template por template:
 
-Remover os 4 usuarios de teste/homologacao que ficaram sem vínculo (profiles + auth.users), via migration com `service_role`. Sao claramente usuarios de teste (emails `@example.com` e homologacao).
+| Template | Subject | CTA | Ajuste de corpo |
+|---|---|---|---|
+| `signup.tsx` | "Confirme seu e-mail — SmartBus BR" | "Confirmar meu e-mail" | Texto mais direto sobre conta criada |
+| `recovery.tsx` | "Criar nova senha — SmartBus BR" | "Criar nova senha" | Contexto: "Recebemos uma solicitacao..." |
+| `invite.tsx` | "Voce foi convidado — SmartBus BR" | "Aceitar convite" | Contexto sobre acesso a plataforma |
+| `magic-link.tsx` | "Seu link de acesso — SmartBus BR" | "Acessar minha conta" | Texto direto |
+| `email-change.tsx` | "Confirmacao de alteracao de e-mail — SmartBus BR" | "Confirmar alteracao" | Manter clareza |
+| `reauthentication.tsx` | sem botao (codigo) | N/A | Padronizar rodape |
 
-### 3. Pequeno ajuste defensivo no frontend
+### O que NAO sera alterado:
+- Cores (laranja #f07d00 mantida)
+- Layout/estrutura HTML
+- Logica do auth-email-hook
+- Sistema de envio
+- Nenhum outro arquivo
 
-Adicionar um retry/verificacao pos-criacao no `Users.tsx`: apos `supabase.functions.invoke('create-user')`, antes de chamar `fetchUsers()`, verificar se o `user_id` retornado realmente tem um registro em `user_roles` para a empresa ativa. Se nao tiver, exibir erro claro ao inves de "sucesso" silencioso.
+### Deploy
+Apos editar os templates, redeploy de `auth-email-hook` para que as mudancas entrem em vigor.
 
-## Detalhes tecnicos
-
-### Redeploy da edge function
-A ferramenta `deploy_edge_functions` sera usada para forcar o deploy de `create-user`.
-
-### Migration para limpeza de orfaos
-```sql
--- Remover usuarios de homologacao orfaos (sem user_roles)
-DELETE FROM public.profiles 
-WHERE id IN (
-  'c0b866ee-c6f8-48df-98d9-793a2ee3f975',
-  '465b357c-9731-4b6f-a2e5-6711fd8651c0',
-  '99a180e1-8a58-4b9e-bf54-99bdfc842c36',
-  '8145f278-7eb8-4bc2
