@@ -11,7 +11,7 @@ import {
   loadImageAsBase64,
 } from '@/lib/pdfUtils';
 
-interface ManifestRow {
+export interface ManifestRow {
   sale_id: string;
   ticket_id: string | null;
   event_id: string;
@@ -35,6 +35,12 @@ interface GenerateBoardingManifestParams {
   tripId?: string | null;
   companyId: string;
   company: Company | null;
+}
+
+interface FetchBoardingManifestRowsParams {
+  eventId: string;
+  tripId?: string | null;
+  companyId: string;
 }
 
 interface GroupedManifest {
@@ -149,15 +155,13 @@ const buildCompanyHeaderLines = (company: Company | null) => {
 };
 
 /**
- * Gera o PDF operacional da Lista de Embarque agrupando passageiros por ponto.
- * Comentário de suporte: usamos RPC única para reduzir round-trips e evitar divergência de ordenação.
+ * Reaproveita a mesma RPC do PDF para manter consistência entre preview e documento final.
  */
-export async function generateBoardingManifest({
+export async function fetchBoardingManifestRows({
   eventId,
   tripId = null,
   companyId,
-  company,
-}: GenerateBoardingManifestParams) {
+}: FetchBoardingManifestRowsParams): Promise<ManifestRow[]> {
   const { data, error } = await supabase.rpc('get_boarding_manifest_rows', {
     p_company_id: companyId,
     p_event_id: eventId,
@@ -168,7 +172,20 @@ export async function generateBoardingManifest({
     throw new Error(error.message || 'Não foi possível carregar os dados do manifesto.');
   }
 
-  const rows = (data ?? []) as ManifestRow[];
+  return (data ?? []) as ManifestRow[];
+}
+
+/**
+ * Gera o PDF operacional da Lista de Embarque agrupando passageiros por ponto.
+ * Comentário de suporte: usamos RPC única para reduzir round-trips e evitar divergência de ordenação.
+ */
+export async function generateBoardingManifest({
+  eventId,
+  tripId = null,
+  companyId,
+  company,
+}: GenerateBoardingManifestParams) {
+  const rows = await fetchBoardingManifestRows({ eventId, tripId, companyId });
   if (rows.length === 0) {
     throw new Error('Nenhum passageiro pago encontrado para os filtros selecionados.');
   }
