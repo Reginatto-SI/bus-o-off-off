@@ -22,36 +22,33 @@ interface EmailChangeEmailProps {
 }
 
 export const EmailChangeEmail = ({
-  siteName,
   email,
   newEmail,
   confirmationUrl,
 }: EmailChangeEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Confirme a alteração de e-mail no {siteName}</Preview>
+    <Preview>Confirmação de alteração de e-mail — SmartBus BR</Preview>
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Confirme a alteração de e-mail</Heading>
         <Text style={text}>
-          Você solicitou a alteração do seu e-mail no {siteName} de{' '}
-          <Link href={`mailto:${email}`} style={link}>
-            {email}
-          </Link>{' '}
+          Você solicitou a alteração do seu e-mail no SmartBus BR de{' '}
+          <Link href={`mailto:${email}`} style={link}>{email}</Link>{' '}
           para{' '}
-          <Link href={`mailto:${newEmail}`} style={link}>
-            {newEmail}
-          </Link>
-          .
+          <Link href={`mailto:${newEmail}`} style={link}>{newEmail}</Link>.
         </Text>
         <Text style={text}>
           Clique no botão abaixo para confirmar esta alteração:
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Confirmar Alteração
+          Confirmar alteração
         </Button>
-        <Text style={footer}>
-          Se você não solicitou esta alteração, proteja sua conta imediatamente.
+        <Text style={footerText}>
+          SmartBus BR — Plataforma de venda de passagens e gestão de viagens.
+        </Text>
+        <Text style={footerText}>
+          Este é um e-mail automático do SmartBus BR. Se você não reconhece esta ação, ignore esta mensagem com segurança.
         </Text>
       </Container>
     </Body>
@@ -83,4 +80,4 @@ const button = {
   padding: '12px 20px',
   textDecoration: 'none',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footerText = { fontSize: '12px', color: '#999999', margin: '20px 0 0', lineHeight: '1.5' }

@@ -19,25 +19,25 @@ interface RecoveryEmailProps {
 }
 
 export const RecoveryEmail = ({
-  siteName,
   confirmationUrl,
 }: RecoveryEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Redefinir sua senha no {siteName}</Preview>
+    <Preview>Criar nova senha — SmartBus BR</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Redefinir sua senha</Heading>
+        <Heading style={h1}>Criar nova senha</Heading>
         <Text style={text}>
-          Recebemos uma solicitação para redefinir a senha da sua conta no {siteName}.
-          Clique no botão abaixo para criar uma nova senha.
+          Recebemos uma solicitação para redefinir a senha da sua conta no SmartBus BR. Clique no botão abaixo para criar uma nova senha:
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Redefinir Senha
+          Criar nova senha
         </Button>
-        <Text style={footer}>
-          Se você não solicitou a redefinição de senha, pode ignorar este e-mail.
-          Sua senha não será alterada.
+        <Text style={footerText}>
+          SmartBus BR — Plataforma de venda de passagens e gestão de viagens.
+        </Text>
+        <Text style={footerText}>
+          Este é um e-mail automático do SmartBus BR. Se você não reconhece esta ação, ignore esta mensagem com segurança.
         </Text>
       </Container>
     </Body>
@@ -68,4 +68,4 @@ const button = {
   padding: '12px 20px',
   textDecoration: 'none',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footerText = { fontSize: '12px', color: '#999999', margin: '20px 0 0', lineHeight: '1.5' }

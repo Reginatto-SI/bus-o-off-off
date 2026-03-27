@@ -573,85 +573,85 @@ export type Database = {
       drivers: {
         Row: {
           birth_date: string | null
+          cep: string | null
+          city: string | null
           cnh: string
           cnh_category: string | null
           cnh_expires_at: string | null
-          cep: string | null
-          city: string | null
           company_id: string
           complement: string | null
           cpf: string | null
           created_at: string
+          email: string | null
           emergency_contact_name: string | null
           emergency_contact_phone: string | null
-          email: string | null
           id: string
-          neighborhood: string | null
           name: string
-          number: string | null
+          neighborhood: string | null
           notes: string | null
-          operational_role: string | null
+          number: string | null
+          operational_role: string
           phone: string
           rg: string | null
           state: string | null
-          street: string | null
           status: string
+          street: string | null
           updated_at: string
           whatsapp: string | null
         }
         Insert: {
           birth_date?: string | null
+          cep?: string | null
+          city?: string | null
           cnh: string
           cnh_category?: string | null
           cnh_expires_at?: string | null
-          cep?: string | null
-          city?: string | null
           company_id: string
           complement?: string | null
           cpf?: string | null
           created_at?: string
+          email?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
-          email?: string | null
           id?: string
-          neighborhood?: string | null
           name: string
-          number?: string | null
+          neighborhood?: string | null
           notes?: string | null
-          operational_role?: string | null
+          number?: string | null
+          operational_role?: string
           phone: string
           rg?: string | null
           state?: string | null
-          street?: string | null
           status?: string
+          street?: string | null
           updated_at?: string
           whatsapp?: string | null
         }
         Update: {
           birth_date?: string | null
+          cep?: string | null
+          city?: string | null
           cnh?: string
           cnh_category?: string | null
           cnh_expires_at?: string | null
-          cep?: string | null
-          city?: string | null
           company_id?: string
           complement?: string | null
           cpf?: string | null
           created_at?: string
+          email?: string | null
           emergency_contact_name?: string | null
           emergency_contact_phone?: string | null
-          email?: string | null
           id?: string
-          neighborhood?: string | null
           name?: string
-          number?: string | null
+          neighborhood?: string | null
           notes?: string | null
-          operational_role?: string | null
+          number?: string | null
+          operational_role?: string
           phone?: string
           rg?: string | null
           state?: string | null
-          street?: string | null
           status?: string
+          street?: string | null
           updated_at?: string
           whatsapp?: string | null
         }
