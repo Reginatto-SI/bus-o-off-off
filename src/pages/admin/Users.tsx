@@ -620,10 +620,11 @@ export default function UsersPage() {
       baseForm.role = (roleData.role as UserRole) ?? baseForm.role;
       baseForm.seller_id = roleData.seller_id ?? '';
       baseForm.driver_id = roleData.driver_id ?? '';
-      baseForm.operational_role =
+      baseForm.operational_role = (
         roleData.role === 'motorista' && roleData.operational_role === 'auxiliar_embarque'
           ? 'auxiliar_embarque'
-          : 'motorista';
+          : 'motorista'
+      ) as MotoristaOperationalRole;
     }
 
     setEditingId(userToEdit.id);
