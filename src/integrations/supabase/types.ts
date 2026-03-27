@@ -136,56 +136,6 @@ export type Database = {
           },
         ]
       }
-      boarding_locations: {
-        Row: {
-          address: string
-          city: string | null
-          company_id: string
-          created_at: string
-          id: string
-          maps_url: string | null
-          name: string
-          notes: string | null
-          state: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          address: string
-          city?: string | null
-          company_id: string
-          created_at?: string
-          id?: string
-          maps_url?: string | null
-          name: string
-          notes?: string | null
-          state?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          address?: string
-          city?: string | null
-          company_id?: string
-          created_at?: string
-          id?: string
-          maps_url?: string | null
-          name?: string
-          notes?: string | null
-          state?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "boarding_locations_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       benefit_program_eligible_cpf: {
         Row: {
           benefit_program_id: string
@@ -228,13 +178,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "benefit_program_eligible_cpf_benefit_program_id_company_id_fkey"
-            columns: ["benefit_program_id", "company_id"]
-            isOneToOne: false
-            referencedRelation: "benefit_programs"
-            referencedColumns: ["id", "company_id"]
-          },
-          {
             foreignKeyName: "benefit_program_eligible_cpf_benefit_program_id_fkey"
             columns: ["benefit_program_id"]
             isOneToOne: false
@@ -247,6 +190,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_program_eligible_cpf_company_match_fk"
+            columns: ["benefit_program_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id", "company_id"]
           },
         ]
       }
@@ -274,13 +224,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "benefit_program_event_links_benefit_program_id_company_id_fkey"
-            columns: ["benefit_program_id", "company_id"]
-            isOneToOne: false
-            referencedRelation: "benefit_programs"
-            referencedColumns: ["id", "company_id"]
-          },
-          {
             foreignKeyName: "benefit_program_event_links_benefit_program_id_fkey"
             columns: ["benefit_program_id"]
             isOneToOne: false
@@ -293,6 +236,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "benefit_program_event_links_company_match_fk"
+            columns: ["benefit_program_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id", "company_id"]
           },
           {
             foreignKeyName: "benefit_program_event_links_event_id_fkey"
@@ -349,6 +299,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "benefit_programs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boarding_locations: {
+        Row: {
+          address: string
+          city: string | null
+          company_id: string
+          created_at: string
+          id: string
+          maps_url: string | null
+          name: string
+          notes: string | null
+          state: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          city?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          maps_url?: string | null
+          name: string
+          notes?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          city?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          maps_url?: string | null
+          name?: string
+          notes?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boarding_locations_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
