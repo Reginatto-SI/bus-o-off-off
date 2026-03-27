@@ -269,6 +269,14 @@ export async function generateBoardingManifest({
 
     const companyDetailsHeight = companyHeaderLines.length * 3.5;
     cursorY += Math.max(24, 11 + companyDetailsHeight);
+
+    // Comentário de suporte: reforça separação visual entre bloco institucional e dados operacionais do evento.
+    doc.setDrawColor(232, 232, 232);
+    doc.setLineWidth(0.4);
+    doc.line(margin, cursorY + 1, pageWidth - margin, cursorY + 1);
+
+    // Comentário de suporte: respiro extra para evitar sensação de conteúdo "grudado" após incluir dados comerciais.
+    cursorY += 6;
     doc.setFontSize(10);
     doc.setTextColor(20, 20, 20);
     doc.text(`Evento: ${firstRow.event_name}`, margin, cursorY);
