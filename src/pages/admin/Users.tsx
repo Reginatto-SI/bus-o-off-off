@@ -331,7 +331,7 @@ export default function UsersPage() {
         role: role.role as UserRole,
         seller_id: role.seller_id,
         driver_id: role.driver_id,
-        operational_role: role.operational_role,
+        operational_role: (role.operational_role === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista') as MotoristaOperationalRole,
         seller: role.seller_id ? sellersMap[role.seller_id] : null,
         driver: role.driver_id ? driversMap[role.driver_id] : null,
         user_role_id: role.id,
