@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import {
+  formatCnpj,
   getCompanyDisplayName,
   getCompanyPrimaryColor,
   getLogoBase64,
@@ -100,6 +101,54 @@ const formatPhoneForPrint = (value: string | null) => {
 };
 
 /**
+ * Monta linhas institucionais/comerciais para o cabeçalho do manifesto.
+ * Comentário de suporte: somente campos comerciais públicos; ausência de dados não quebra o layout.
+ */
+const buildCompanyHeaderLines = (company: Company | null) => {
+  if (!company) return [];
+
+  const lines: string[] = [];
+  const displayName = getCompanyDisplayName(company);
+  const legalName = company.legal_name?.trim();
+
+  if (legalName && legalName.toLowerCase() !== displayName.toLowerCase()) {
+    lines.push(`Razão social: ${legalName}`);
+  }
+
+  const formattedCnpj = formatCnpj(company.cnpj || company.document_number || null);
+  if (formattedCnpj) {
+    lines.push(`CNPJ: ${formattedCnpj}`);
+  }
+
+  const addressParts = [company.address, company.address_number, company.province]
+    .map((part) => part?.trim())
+    .filter(Boolean);
+  if (addressParts.length > 0) {
+    lines.push(`Endereço: ${addressParts.join(', ')}`);
+  }
+
+  const cityState = [company.city, company.state]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' / ');
+  if (cityState) {
+    lines.push(`Cidade/UF: ${cityState}`);
+  }
+
+  const formattedPhone = formatPhoneForPrint(company.phone || null);
+  if (formattedPhone !== '-') {
+    lines.push(`Telefone: ${formattedPhone}`);
+  }
+
+  const email = company.email?.trim();
+  if (email) {
+    lines.push(`E-mail: ${email}`);
+  }
+
+  return lines;
+};
+
+/**
  * Gera o PDF operacional da Lista de Embarque agrupando passageiros por ponto.
  * Comentário de suporte: usamos RPC única para reduzir round-trips e evitar divergência de ordenação.
  */
@@ -188,6 +237,7 @@ export async function generateBoardingManifest({
 
   const drawDocumentHeader = () => {
     let cursorY = margin;
+    const companyHeaderLines = buildCompanyHeaderLines(company);
 
     if (logoBase64) {
       doc.addImage(logoBase64, 'PNG', margin, cursorY, 18, 18);
@@ -199,6 +249,16 @@ export async function generateBoardingManifest({
     doc.setTextColor(40, 40, 40);
     doc.text(getCompanyDisplayName(company), leftX, cursorY + 6);
 
+    if (companyHeaderLines.length > 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.2);
+      doc.setTextColor(70, 70, 70);
+      doc.text(companyHeaderLines, leftX, cursorY + 10.5, {
+        maxWidth: pageWidth - margin * 2 - 82,
+        lineHeightFactor: 1.18,
+      });
+    }
+
     doc.setFontSize(17);
     doc.setTextColor(primaryColor.r, primaryColor.g, primaryColor.b);
     doc.text('LISTA DE EMBARQUE', pageWidth - margin, cursorY + 7, { align: 'right' });
@@ -207,7 +267,8 @@ export async function generateBoardingManifest({
     doc.setTextColor(90, 90, 90);
     doc.text('Manifesto de Passageiros', pageWidth - margin, cursorY + 13, { align: 'right' });
 
-    cursorY += 24;
+    const companyDetailsHeight = companyHeaderLines.length * 3.5;
+    cursorY += Math.max(24, 11 + companyDetailsHeight);
     doc.setFontSize(10);
     doc.setTextColor(20, 20, 20);
     doc.text(`Evento: ${firstRow.event_name}`, margin, cursorY);
