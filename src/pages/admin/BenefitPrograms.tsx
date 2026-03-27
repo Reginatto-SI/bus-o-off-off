@@ -1021,7 +1021,7 @@ export default function BenefitPrograms() {
               <div className="p-6 text-sm text-muted-foreground">Carregando programas de benefício...</div>
             ) : filteredPrograms.length === 0 ? (
               <EmptyState
-                icon={Gift}
+                icon={<Gift className="w-8 h-8 text-muted-foreground" />}
                 title="Nenhum programa de benefício encontrado"
                 description="Crie o primeiro programa para começar a vincular benefícios por CPF."
               />
