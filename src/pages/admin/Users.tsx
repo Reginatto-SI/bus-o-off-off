@@ -375,6 +375,13 @@ export default function UsersPage() {
     fetchSellersAndDrivers();
   }, [activeCompanyId]);
 
+  const availableDriversForOperationalRole = useMemo(() => {
+    if (form.operational_role === 'auxiliar_embarque') {
+      return drivers.filter((driver) => driver.operational_role === 'auxiliar_embarque');
+    }
+    return drivers.filter((driver) => driver.operational_role !== 'auxiliar_embarque');
+  }, [drivers, form.operational_role]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -865,18 +872,36 @@ export default function UsersPage() {
                                       <SelectValue placeholder={`Selecione um ${motoristaVinculoLabelLower}...`} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {drivers.map((driver) => (
+                                      {availableDriversForOperationalRole.map((driver) => (
                                         <SelectItem key={driver.id} value={driver.id}>
-                                          {driver.name} - CNH: {driver.cnh}
+                                          {driver.name}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                  {drivers.length === 0 && (
+                                  {availableDriversForOperationalRole.length === 0 && (
                                     <p className="text-sm text-muted-foreground">
                                       Nenhum {motoristaVinculoLabelLower} cadastrado. Cadastre {form.operational_role === 'auxiliar_embarque' ? 'auxiliares' : 'motoristas'} na tela de Motoristas.
                                     </p>
                                   )}
+                                </div>
+                                <div className="mt-4 space-y-2">
+                                  <Label>Identificação operacional</Label>
+                                  <Select
+                                    value={form.operational_role}
+                                    onValueChange={(value: MotoristaOperationalRole) => setForm({ ...form, operational_role: value })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="motorista">Motorista</SelectItem>
+                                      <SelectItem value="auxiliar_embarque">Auxiliar de Embarque</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-xs text-muted-foreground">
+                                    Essa escolha não altera permissões, RLS ou acesso ao app operacional.
+                                  </p>
                                 </div>
                               </div>
                             </div>

@@ -868,10 +868,12 @@ export default function Events() {
   const driverOptions = useMemo(() => {
     return [
       { value: 'all', label: 'Todos' },
-      ...drivers.map((driver) => ({
+      ...drivers
+        .filter((driver) => driver.operational_role !== 'auxiliar_embarque')
+        .map((driver) => ({
         value: driver.id,
         label: driver.name,
-      })),
+        })),
     ];
   }, [drivers]);
 
@@ -4796,11 +4798,13 @@ export default function Events() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {drivers.map((driver) => (
+                      {drivers
+                        .filter((driver) => driver.operational_role !== 'auxiliar_embarque')
+                        .map((driver) => (
                         <SelectItem key={driver.id} value={driver.id}>
                           {driver.name}
                         </SelectItem>
-                      ))}
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
