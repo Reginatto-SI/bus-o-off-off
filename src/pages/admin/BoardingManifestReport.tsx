@@ -297,7 +297,8 @@ export default function BoardingManifestReport() {
           }
         />
 
-        <div className="mb-6 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        {/* Ajuste de layout: fluxo visual linear (Filtros -> Preview) para reduzir carga cognitiva operacional. */}
+        <div className="mb-6 space-y-6">
           <FilterCard
             className="xl:col-span-5"
             title="Seleção do Relatório"
@@ -341,7 +342,7 @@ export default function BoardingManifestReport() {
               },
             ]}
           />
-          <Card className="xl:col-span-7">
+          <Card>
             <CardContent className="p-0">
               {selectedEventId === 'all' ? (
                 <EmptyState
