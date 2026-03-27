@@ -19,23 +19,25 @@ interface MagicLinkEmailProps {
 }
 
 export const MagicLinkEmail = ({
-  siteName,
   confirmationUrl,
 }: MagicLinkEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Seu link de acesso ao {siteName}</Preview>
+    <Preview>Seu link de acesso — SmartBus BR</Preview>
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Seu link de acesso</Heading>
         <Text style={text}>
-          Clique no botão abaixo para acessar o {siteName}. Este link expira em alguns minutos.
+          Use o botão abaixo para acessar sua conta no SmartBus BR. Este link expira em alguns minutos.
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Acessar
+          Acessar minha conta
         </Button>
-        <Text style={footer}>
-          Se você não solicitou este link, pode ignorar este e-mail com segurança.
+        <Text style={footerText}>
+          SmartBus BR — Plataforma de venda de passagens e gestão de viagens.
+        </Text>
+        <Text style={footerText}>
+          Este é um e-mail automático do SmartBus BR. Se você não reconhece esta ação, ignore esta mensagem com segurança.
         </Text>
       </Container>
     </Body>
@@ -66,4 +68,4 @@ const button = {
   padding: '12px 20px',
   textDecoration: 'none',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footerText = { fontSize: '12px', color: '#999999', margin: '20px 0 0', lineHeight: '1.5' }

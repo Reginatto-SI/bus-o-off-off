@@ -19,14 +19,18 @@ interface ReauthenticationEmailProps {
 export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Seu código de verificação</Preview>
+    <Preview>Seu código de verificação — SmartBus BR</Preview>
     <Body style={main}>
       <Container style={container}>
         <Heading style={h1}>Confirme sua identidade</Heading>
-        <Text style={text}>Use o código abaixo para confirmar sua identidade:</Text>
+        <Text style={text}>Use o código abaixo para confirmar sua identidade no SmartBus BR:</Text>
         <Text style={codeStyle}>{token}</Text>
-        <Text style={footer}>
-          Este código expira em poucos minutos. Se você não solicitou, pode ignorar este e-mail.
+        <Text style={text}>Este código expira em poucos minutos.</Text>
+        <Text style={footerText}>
+          SmartBus BR — Plataforma de venda de passagens e gestão de viagens.
+        </Text>
+        <Text style={footerText}>
+          Este é um e-mail automático do SmartBus BR. Se você não reconhece esta ação, ignore esta mensagem com segurança.
         </Text>
       </Container>
     </Body>
@@ -56,4 +60,4 @@ const codeStyle = {
   color: '#f07d00',
   margin: '0 0 30px',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footerText = { fontSize: '12px', color: '#999999', margin: '20px 0 0', lineHeight: '1.5' }
