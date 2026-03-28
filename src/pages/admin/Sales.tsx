@@ -91,6 +91,7 @@ import { differenceInMinutes, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
 import { cn, formatBoardingLocationLabel } from '@/lib/utils';
+import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -327,7 +328,9 @@ export default function Sales() {
   // Edit passenger modal
   const [editingTicket, setEditingTicket] = useState<TicketRecord | null>(null);
   const [editPassengerName, setEditPassengerName] = useState('');
+  const [editPassengerPhone, setEditPassengerPhone] = useState('');
   const [editPassengerCpf, setEditPassengerCpf] = useState('');
+  const [cpfCorrectionReason, setCpfCorrectionReason] = useState('');
   const [savingPassenger, setSavingPassenger] = useState(false);
 
   // Cancel modal
@@ -823,13 +826,49 @@ export default function Sales() {
 
   // ── Edit passenger ──
   const openEditPassenger = (ticket: TicketRecord) => {
+    const blockReason = getPassengerEditBlockReason(detailSale, ticket);
+    if (blockReason) {
+      toast.error(blockReason);
+      return;
+    }
     setEditingTicket(ticket);
     setEditPassengerName(ticket.passenger_name);
+    setEditPassengerPhone(formatPhoneBR(ticket.passenger_phone ?? ''));
     setEditPassengerCpf(formatCpfMask(ticket.passenger_cpf));
+    setCpfCorrectionReason('');
+  };
+
+  const getPassengerEditBlockReason = (sale: Sale | null, ticket: TicketRecord): string | null => {
+    if (!sale) return 'Venda indisponível para edição no momento.';
+
+    // Formalização Fase 1: correção cadastral só é permitida em reservado
+    // ou em pago antes de qualquer status operacional de uso da passagem.
+    if (sale.status === 'cancelado') {
+      return 'Edição bloqueada: a venda está cancelada.';
+    }
+    if (sale.status !== 'reservado' && sale.status !== 'pago') {
+      return `Edição bloqueada para vendas com status ${statusLabels[sale.status] ?? sale.status}.`;
+    }
+    if (ticket.boarding_status !== 'pendente') {
+      return `Edição bloqueada: passagem já utilizada no embarque (${ticket.boarding_status}).`;
+    }
+
+    return null;
   };
 
   const handleSavePassenger = async () => {
     if (!editingTicket || !detailSale) return;
+    // Hardening de auditoria: sem contexto de usuário/empresa não existe trilha rastreável.
+    // Nessa condição bloqueamos a operação antes de qualquer UPDATE em tickets.
+    if (!user || !activeCompanyId) {
+      toast.error('Não foi possível validar contexto de auditoria (usuário/empresa).');
+      return;
+    }
+    const blockReason = getPassengerEditBlockReason(detailSale, editingTicket);
+    if (blockReason) {
+      toast.error(blockReason);
+      return;
+    }
     if (!editPassengerName.trim()) {
       toast.error('Informe o nome do passageiro');
       return;
@@ -839,33 +878,95 @@ export default function Sales() {
       toast.error('CPF inválido (11 dígitos)');
       return;
     }
+    const phoneClean = normalizePhoneForStorage(editPassengerPhone);
+    if (editPassengerPhone.trim().length > 0 && phoneClean.length !== 10 && phoneClean.length !== 11) {
+      toast.error('Telefone inválido (DDD + número)');
+      return;
+    }
 
     setSavingPassenger(true);
     const oldName = editingTicket.passenger_name;
+    const oldPhone = editingTicket.passenger_phone ?? '';
     const oldCpf = editingTicket.passenger_cpf;
+    const hasCpfChanged = oldCpf !== cpfClean;
+    const hasNameChanged = oldName !== editPassengerName.trim();
+    const hasPhoneChanged = oldPhone !== (phoneClean || '');
 
-    const { error } = await supabase
+    if (!hasNameChanged && !hasPhoneChanged && !hasCpfChanged) {
+      toast.info('Nenhuma alteração detectada.');
+      setSavingPassenger(false);
+      return;
+    }
+
+    // CPF é sensível: quando mudar, exigimos motivo explícito para trilha auditável.
+    if (hasCpfChanged && !cpfCorrectionReason.trim()) {
+      toast.error('Informe o motivo da correção de CPF');
+      setSavingPassenger(false);
+      return;
+    }
+
+    const { error: ticketUpdateError } = await supabase
       .from('tickets')
-      .update({ passenger_name: editPassengerName.trim(), passenger_cpf: cpfClean })
-      .eq('id', editingTicket.id);
+      .update({
+        passenger_name: editPassengerName.trim(),
+        passenger_phone: phoneClean || null,
+        passenger_cpf: cpfClean,
+      })
+      .eq('id', editingTicket.id)
+      .eq('company_id', activeCompanyId);
 
-    if (error) {
+    if (ticketUpdateError) {
       toast.error('Erro ao atualizar passageiro');
     } else {
-      if (activeCompanyId && user) {
-        const changes: string[] = [];
-        if (oldName !== editPassengerName.trim()) changes.push(`Nome: ${oldName} → ${editPassengerName.trim()}`);
-        if (oldCpf !== cpfClean) changes.push(`CPF: ${oldCpf} → ${cpfClean}`);
-        await supabase.from('sale_logs').insert({
-          sale_id: detailSale.id,
-          action: 'passageiro_editado',
-          description: `Passageiro editado (Assento ${editingTicket.seat_label}): ${changes.join(', ')}`,
-          old_value: `${oldName} / ${oldCpf}`,
-          new_value: `${editPassengerName.trim()} / ${cpfClean}`,
-          performed_by: user.id,
-          company_id: activeCompanyId,
-        });
+      const changes: string[] = [];
+      if (hasNameChanged) changes.push(`Nome: ${oldName} → ${editPassengerName.trim()}`);
+      if (hasPhoneChanged) {
+        changes.push(`Telefone: ${oldPhone || '—'} → ${phoneClean || '—'}`);
       }
+      if (hasCpfChanged) changes.push(`CPF: ${oldCpf} → ${cpfClean}`);
+      const logAction = hasCpfChanged ? 'cpf_corrigido' : 'passageiro_editado';
+      const logDescription = hasCpfChanged
+        ? `Correção formal de CPF (Assento ${editingTicket.seat_label})${changes.length > 0 ? `: ${changes.join(', ')}` : ''}. Motivo: ${cpfCorrectionReason.trim()}`
+        : `Dados do passageiro atualizados (Assento ${editingTicket.seat_label}): ${changes.join(', ')}`;
+
+      // Garantia mínima sem mudar arquitetura: se o log falhar após update, aplicamos rollback compensatório.
+      // Limitação explícita: não é transação SQL atômica; porém evita sucesso sem trilha de auditoria.
+      const { error: logError } = await supabase.from('sale_logs').insert({
+        sale_id: detailSale.id,
+        action: logAction,
+        description: logDescription,
+        old_value: `nome=${oldName}; telefone=${oldPhone || 'null'}; cpf=${oldCpf}${hasCpfChanged ? `; motivo_cpf=${cpfCorrectionReason.trim()}` : ''}`,
+        new_value: `nome=${editPassengerName.trim()}; telefone=${phoneClean || 'null'}; cpf=${cpfClean}`,
+        performed_by: user.id,
+        company_id: activeCompanyId,
+      });
+
+      if (logError) {
+        const { error: rollbackError } = await supabase
+          .from('tickets')
+          .update({
+            passenger_name: oldName,
+            passenger_phone: oldPhone || null,
+            passenger_cpf: oldCpf,
+          })
+          .eq('id', editingTicket.id)
+          .eq('company_id', activeCompanyId);
+
+        if (rollbackError) {
+          console.error('Falha ao registrar auditoria e ao reverter alteração de passageiro.', {
+            saleId: detailSale.id,
+            ticketId: editingTicket.id,
+            logError,
+            rollbackError,
+          });
+          toast.error('Falha crítica de auditoria. Alteração não pôde ser confirmada com segurança.');
+        } else {
+          toast.error('Falha ao registrar auditoria. Alteração revertida para manter rastreabilidade.');
+        }
+        setSavingPassenger(false);
+        return;
+      }
+
       toast.success('Passageiro atualizado');
       setEditingTicket(null);
       openDetail(detailSale);
@@ -1839,6 +1940,9 @@ export default function Sales() {
 
                       {/* Tab: Passageiros */}
                       <TabsContent value="passageiros" className="mt-0">
+                        <p className="mb-3 text-xs text-muted-foreground">
+                          Correção oficial de dados cadastrais do passageiro (nome, telefone e CPF com motivo obrigatório).
+                        </p>
                         {detailTickets.length === 0 ? (
                           <p className="text-sm text-muted-foreground py-8 text-center">
                             Nenhum passageiro vinculado
@@ -1855,30 +1959,35 @@ export default function Sales() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {detailTickets.map((ticket) => (
-                                <TableRow key={ticket.id}>
-                                  <TableCell className="font-medium">{ticket.seat_label}</TableCell>
-                                  <TableCell>{ticket.passenger_name}</TableCell>
-                                  <TableCell>{ticket.passenger_cpf}</TableCell>
-                                  <TableCell>
-                                    <span className={`text-xs font-medium ${ticket.boarding_status === 'pendente' ? 'text-muted-foreground' : 'text-success'}`}>
-                                      {ticket.boarding_status}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    {detailSale.status !== 'cancelado' && (
+                              {detailTickets.map((ticket) => {
+                                const editBlockReason = getPassengerEditBlockReason(detailSale, ticket);
+                                const isEditDisabled = Boolean(editBlockReason);
+
+                                return (
+                                  <TableRow key={ticket.id}>
+                                    <TableCell className="font-medium">{ticket.seat_label}</TableCell>
+                                    <TableCell>{ticket.passenger_name}</TableCell>
+                                    <TableCell>{ticket.passenger_cpf}</TableCell>
+                                    <TableCell>
+                                      <span className={`text-xs font-medium ${ticket.boarding_status === 'pendente' ? 'text-muted-foreground' : 'text-success'}`}>
+                                        {ticket.boarding_status}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
                                       <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8"
                                         onClick={() => openEditPassenger(ticket)}
+                                        disabled={isEditDisabled}
+                                        title={editBlockReason ?? 'Corrigir dados do passageiro'}
                                       >
                                         <Pencil className="h-4 w-4" />
                                       </Button>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                             </TableBody>
                           </Table>
                         )}
@@ -1917,7 +2026,7 @@ export default function Sales() {
         <Dialog open={!!editingTicket} onOpenChange={(open) => { if (!open) setEditingTicket(null); }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Editar Passageiro — Assento {editingTicket?.seat_label}</DialogTitle>
+              <DialogTitle>Correção de Dados do Passageiro — Assento {editingTicket?.seat_label}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -1925,9 +2034,35 @@ export default function Sales() {
                 <Input value={editPassengerName} onChange={(e) => setEditPassengerName(e.target.value)} />
               </div>
               <div className="space-y-2">
+                <Label>Telefone</Label>
+                <Input
+                  value={editPassengerPhone}
+                  onChange={(e) => setEditPassengerPhone(formatPhoneBR(e.target.value))}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>CPF</Label>
                 <Input value={editPassengerCpf} onChange={(e) => setEditPassengerCpf(formatCpfMask(e.target.value))} maxLength={14} />
               </div>
+              {editingTicket && editingTicket.passenger_cpf !== editPassengerCpf.replace(/\D/g, '') && (
+                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+                  {/* CPF é sensível: a fase 1 exige justificativa obrigatória para correção formal auditável. */}
+                  <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                    <AlertCircle className="h-4 w-4" />
+                    <p className="text-xs font-semibold">Correção formal de CPF</p>
+                  </div>
+                  <p className="text-xs text-amber-900/90 dark:text-amber-200/90">
+                    Ao alterar o CPF, informe o motivo. A ação será registrada no histórico da venda.
+                  </p>
+                  <Textarea
+                    value={cpfCorrectionReason}
+                    onChange={(e) => setCpfCorrectionReason(e.target.value)}
+                    placeholder="Motivo obrigatório para correção de CPF"
+                    rows={3}
+                  />
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingTicket(null)}>Cancelar</Button>
