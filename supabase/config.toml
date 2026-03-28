@@ -3,6 +3,8 @@ project_id = "cdrcyjrvurrphnceromd"
 [functions]
   [functions.asaas-webhook]
     verify_jwt = false
+  [functions.admin-user-auth-support]
+    verify_jwt = true
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.cleanup-expired-locks]
