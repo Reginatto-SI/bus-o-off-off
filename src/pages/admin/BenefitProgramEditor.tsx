@@ -157,6 +157,7 @@ export default function BenefitProgramEditor() {
   const [cpfListSearch, setCpfListSearch] = useState('');
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [pendingCpfs, setPendingCpfs] = useState<EligibleCpfDraft[]>([]);
+  const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const eventsRef = useRef<HTMLDivElement | null>(null);
   const cpfsRef = useRef<HTMLDivElement | null>(null);
@@ -343,6 +344,7 @@ export default function BenefitProgramEditor() {
     if (!activeCompanyId) return;
     if (!validateProgramForm()) return;
 
+    setSaveFeedback(null);
     setSaving(true);
 
     // Comentário: payload preserva regras existentes; migração é apenas de UX/navegação, não de regra de negócio.
@@ -369,6 +371,8 @@ export default function BenefitProgramEditor() {
 
       if (error || !data) {
         toast.error('Não foi possível salvar o programa de benefício.');
+        // Comentário: reforça feedback persistente no topo para dar sensação de controle após tentativa de salvamento.
+        setSaveFeedback({ type: 'error', message: 'Falha ao salvar. Revise os dados e tente novamente.' });
         setSaving(false);
         return;
       }
@@ -384,6 +388,8 @@ export default function BenefitProgramEditor() {
 
       if (error) {
         toast.error('Não foi possível salvar o programa de benefício.');
+        // Comentário: mantém o erro visível além do toast para reduzir incerteza operacional no desktop.
+        setSaveFeedback({ type: 'error', message: 'Falha ao salvar. Revise os dados e tente novamente.' });
         setSaving(false);
         return;
       }
@@ -392,6 +398,7 @@ export default function BenefitProgramEditor() {
     const { error: eventLinkError } = await syncProgramEvents(programId!);
     if (eventLinkError) {
       toast.error('Não foi possível atualizar os eventos vinculados do programa.');
+      setSaveFeedback({ type: 'error', message: 'Programa salvo parcialmente. Não foi possível atualizar os eventos vinculados.' });
       setSaving(false);
       return;
     }
@@ -414,6 +421,8 @@ export default function BenefitProgramEditor() {
     }
 
     toast.success(isNew ? 'Programa criado com sucesso.' : 'Programa atualizado com sucesso.');
+    // Comentário: confirmação visual fixa no contexto da tela dedicada para complementar o toast efêmero.
+    setSaveFeedback({ type: 'success', message: isNew ? 'Programa criado com sucesso.' : 'Alterações salvas com sucesso.' });
     setSaving(false);
 
     // Comentário: após criar, o fluxo segue na rota dedicada de edição para evitar retorno ao modal antigo.
@@ -830,7 +839,7 @@ export default function BenefitProgramEditor() {
       <div className="page-container space-y-6">
         <PageHeader
           title={isNew ? 'Novo Programa de Benefício' : program?.name || 'Editar Programa de Benefício'}
-          description={isNew ? 'Cadastre um novo programa e configure eventos e CPFs elegíveis.' : 'Gerencie dados, vínculos de eventos e elegibilidade por CPF.'}
+          description={isNew ? 'Criação de programa: defina regras, eventos e elegibilidade por CPF.' : 'Edição de programa: ajuste dados, eventos e elegibilidade com controle centralizado.'}
           actions={
             <>
               <Button asChild variant="outline" size="sm">
@@ -847,11 +856,36 @@ export default function BenefitProgramEditor() {
               )}
               <Button size="sm" onClick={() => void submitProgram()} disabled={saving || loadingProgram}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Salvar
+                {saving ? 'Salvando...' : 'Salvar alterações'}
               </Button>
             </>
           }
         />
+        {/* Comentário: bloco compacto de contexto para reforçar modo (criação/edição), status e confiança no salvamento. */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Modo:</span>
+              <span className="font-medium">{isNew ? 'Criação' : 'Edição'}</span>
+              {!isNew && program && (
+                <>
+                  <span className="text-muted-foreground">• Status:</span>
+                  <StatusBadge status={program.status === 'ativo' ? 'ativo' : 'inativo'} />
+                </>
+              )}
+              {!isNew && program?.updated_at && (
+                <span className="text-muted-foreground">
+                  • Última atualização: {new Date(program.updated_at).toLocaleString('pt-BR')}
+                </span>
+              )}
+            </div>
+            {saveFeedback && (
+              <p className={`text-xs font-medium ${saveFeedback.type === 'success' ? 'text-emerald-600' : 'text-destructive'}`}>
+                {saveFeedback.message}
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {(loadingProgram && !isNew) ? (
           <Card>
@@ -870,9 +904,10 @@ export default function BenefitProgramEditor() {
           }} className="space-y-4">
             {/* Comentário: tabs com tratamento de container de página (sem estética de modal) para reforçar hierarquia da tela dedicada. */}
             <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-lg border bg-muted/20 p-2">
-              <TabsTrigger value="dados">Dados do programa</TabsTrigger>
-              <TabsTrigger value="eventos">Eventos</TabsTrigger>
-              <TabsTrigger value="cpfs">CPFs elegíveis</TabsTrigger>
+              {/* Comentário: contraste e espaçamento das tabs ajustados para leitura rápida no desktop administrativo. */}
+              <TabsTrigger value="dados" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Dados do programa</TabsTrigger>
+              <TabsTrigger value="eventos" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">Eventos</TabsTrigger>
+              <TabsTrigger value="cpfs" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">CPFs elegíveis</TabsTrigger>
             </TabsList>
 
             <TabsContent value="dados" className="space-y-4 mt-0">
@@ -1043,6 +1078,13 @@ export default function BenefitProgramEditor() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Comentário: micro-resumo operacional para orientar rapidamente manutenção manual, importação e consulta. */}
+                  <div className="grid gap-2 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground md:grid-cols-3">
+                    <p><strong className="text-foreground">Cadastro manual:</strong> use para incluir ou editar um CPF individual.</p>
+                    <p><strong className="text-foreground">Importação:</strong> use CSV/XLSX ou colagem rápida para lote.</p>
+                    <p><strong className="text-foreground">Consulta:</strong> pesquise por CPF/nome e gerencie status na tabela.</p>
+                  </div>
+
                   <div className="grid gap-4 xl:grid-cols-2">
                     <div className="space-y-3 rounded-md border p-4">
                       <p className="text-sm font-medium">Cadastro manual</p>
