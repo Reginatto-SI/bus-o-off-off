@@ -81,6 +81,8 @@ export async function renderTicketVisual(
   // Dynamic height: base + extra for fees
   const hasFees = ticket.fees && ticket.fees.length > 0;
   const feeRows = hasFees ? ticket.fees!.length + (ticket.unitPrice != null ? 1 : 0) + (ticket.totalPaid != null ? 1 : 0) : 0;
+  const hasBenefitInfo = Boolean(ticket.benefitApplied && (ticket.benefitProgramName || Number(ticket.benefitDiscountAmount ?? 0) > 0));
+  const benefitRows = hasBenefitInfo ? 3 : 0;
   const hasVehicleInfo = !!(ticket.vehicleType || ticket.vehiclePlate || ticket.driverName);
   const vehicleInfoHeight = hasVehicleInfo ? 130 : 0;
   const hasSeatMeta = !!(ticket.seatCategory && ticket.seatCategory !== 'convencional') || !!(ticket.vehicleFloors && ticket.vehicleFloors > 1 && ticket.seatFloor);
@@ -94,7 +96,7 @@ export async function renderTicketVisual(
   const partnersBlockHeight = partnersCount > 0 ? 40 + partnersRows * 56 : 0;
   const sponsorsBlockHeight = sponsorsCount > 0 ? 40 + sponsorsRows * 56 : 0;
 
-  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight;
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + (benefitRows * 22) + (hasBenefitInfo ? 28 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -426,6 +428,33 @@ export async function renderTicketVisual(
   ctx.fillText('• É obrigatório apresentar documento oficial com foto no momento do embarque.', cardX + 34, y);
   y += 26;
   ctx.fillText('• Recomenda-se chegar com antecedência mínima de 10 minutos.', cardX + 34, y);
+
+  if (hasBenefitInfo) {
+    y += 14;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 30, y);
+    ctx.lineTo(cardX + cardW - 30, y);
+    ctx.stroke();
+    y += 18;
+
+    // Mantém no PDF o mesmo sinal operacional do ticket virtual sem expor detalhes administrativos.
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 20px Inter, Arial, sans-serif';
+    ctx.fillText('Benefício aplicado', cardX + 34, y);
+    y += 28;
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '400 18px Inter, Arial, sans-serif';
+    if (ticket.benefitProgramName) {
+      ctx.fillText(`Benefício: ${ticket.benefitProgramName}`, cardX + 34, y);
+      y += 24;
+    }
+    if (Number(ticket.benefitDiscountAmount ?? 0) > 0) {
+      ctx.fillText(`Desconto: - ${formatCurrencyBRL(Number(ticket.benefitDiscountAmount ?? 0))}`, cardX + 34, y);
+    }
+  }
 
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {

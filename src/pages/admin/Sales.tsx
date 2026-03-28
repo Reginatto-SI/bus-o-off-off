@@ -283,6 +283,9 @@ function buildTicketCardData(
     driverName: (sale.trip as any)?.driver?.name || null,
     fees,
     totalPaid,
+    benefitApplied: ticket.benefit_applied,
+    benefitProgramName: ticket.benefit_program_name,
+    benefitDiscountAmount: ticket.discount_amount,
     commercialPartners,
     eventSponsors,
   };
