@@ -69,22 +69,40 @@ const normalizeHeader = (header: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, '');
 
+const toIsoDateFromParts = (year: number, month: number, day: number): string => {
+  // Comentário: valida calendário para impedir datas inválidas (ex.: 31/02/2026) na importação.
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() + 1 !== month ||
+    candidate.getUTCDate() !== day
+  ) {
+    return '';
+  }
+  const normalizedMonth = String(month).padStart(2, '0');
+  const normalizedDay = String(day).padStart(2, '0');
+  return `${year}-${normalizedMonth}-${normalizedDay}`;
+};
+
 const toIsoDateOrEmpty = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   if (typeof value === 'number') {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed) return '';
-    const month = String(parsed.m).padStart(2, '0');
-    const day = String(parsed.d).padStart(2, '0');
-    return `${parsed.y}-${month}-${day}`;
+    return toIsoDateFromParts(parsed.y, parsed.m, parsed.d);
   }
   const text = String(value).trim();
   if (!text) return '';
-  const isoLike = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoLike) return `${isoLike[1]}-${isoLike[2]}-${isoLike[3]}`;
-  const brLike = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (brLike) return `${brLike[3]}-${brLike[2]}-${brLike[1]}`;
+  const isoLike = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (isoLike) {
+    return toIsoDateFromParts(Number(isoLike[1]), Number(isoLike[2]), Number(isoLike[3]));
+  }
+  const brLike = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (brLike) {
+    // Comentário: no formato com ano no final, assumimos padrão brasileiro (DD/MM/AAAA).
+    return toIsoDateFromParts(Number(brLike[3]), Number(brLike[2]), Number(brLike[1]));
+  }
   return '';
 };
 
@@ -634,7 +652,8 @@ export default function BenefitProgramEditor() {
   const handleDownloadCpfTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       [...IMPORT_EXPECTED_COLUMNS],
-      ['12345678909', 'Nome opcional', 'ativo', '2026-01-01', '2026-12-31', 'Observação opcional'],
+      // Comentário: exemplo no padrão brasileiro para guiar o preenchimento no Excel (DD/MM/AAAA).
+      ['12345678909', 'Nome opcional', 'ativo', '28/03/2026', '31/12/2026', 'Observação opcional'],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'ModeloCPFs');
