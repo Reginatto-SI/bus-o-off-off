@@ -77,6 +77,35 @@ function jsonResponse(payload: Record<string, unknown>, status: number) {
   });
 }
 
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function calculatePlatformFee(unitPrice: number, feePercent: number): number {
+  return roundCurrency(unitPrice * (feePercent / 100));
+}
+
+function calculateFeesTotal(params: {
+  unitPrice: number;
+  eventFees: Array<{ fee_type: string; value: number; is_active: boolean }>;
+  passPlatformFeeToCustomer: boolean;
+  platformFeePercent: number;
+  quantity: number;
+}) {
+  const activeFees = params.eventFees.filter((fee) => fee.is_active);
+  const fixedAndPercentTotal = activeFees.reduce((sum, fee) => {
+    if (fee.fee_type === "percent") {
+      return sum + roundCurrency(params.unitPrice * (Number(fee.value) / 100));
+    }
+    return sum + roundCurrency(Number(fee.value) || 0);
+  }, 0);
+
+  const platformFee = params.passPlatformFeeToCustomer
+    ? calculatePlatformFee(params.unitPrice, params.platformFeePercent)
+    : 0;
+  return roundCurrency((fixedAndPercentTotal + platformFee) * params.quantity);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -417,6 +446,153 @@ serve(async (req) => {
           error_code: "invalid_gross_amount",
         },
         400,
+      );
+    }
+
+    // Regra de integridade da fase 1:
+    // soma dos final_price dos passageiros + taxas oficiais = sales.gross_amount.
+    const { data: passengerSnapshots, error: passengersError } = await supabaseAdmin
+      .from("sale_passengers")
+      .select("trip_id, final_price, original_price, discount_amount")
+      .eq("sale_id", sale.id)
+      .order("sort_order", { ascending: true });
+
+    if (passengersError) {
+      console.error("[create-asaas-payment] erro ao carregar snapshot de passageiros", {
+        sale_id: sale.id,
+        error: passengersError,
+      });
+      return jsonResponse(
+        {
+          error: "Não foi possível validar os benefícios dos passageiros.",
+          error_code: "passenger_snapshot_unavailable",
+        },
+        500,
+      );
+    }
+
+    if (!passengerSnapshots || passengerSnapshots.length === 0) {
+      return jsonResponse(
+        {
+          error: "Não foi possível validar os benefícios dos passageiros.",
+          error_code: "passenger_snapshot_missing",
+        },
+        409,
+      );
+    }
+
+    const passengerFinalSum = roundCurrency(
+      passengerSnapshots.reduce(
+        (sum, passenger) =>
+          passenger.trip_id === sale.trip_id
+            ? sum + Number(passenger.final_price ?? 0)
+            : sum,
+        0,
+      ),
+    );
+    const passengerDiscountSum = roundCurrency(
+      passengerSnapshots.reduce(
+        (sum, passenger) =>
+          passenger.trip_id === sale.trip_id
+            ? sum + Number(passenger.discount_amount ?? 0)
+            : sum,
+        0,
+      ),
+    );
+
+    const quantityFromSnapshot = passengerSnapshots.filter(
+      (passenger) => passenger.trip_id === sale.trip_id,
+    ).length;
+    if (quantityFromSnapshot <= 0) {
+      return jsonResponse(
+        {
+          error: "Não foi possível validar os benefícios dos passageiros.",
+          error_code: "passenger_snapshot_without_primary_trip",
+        },
+        409,
+      );
+    }
+    const avgFinalPrice = quantityFromSnapshot > 0
+      ? roundCurrency(passengerFinalSum / quantityFromSnapshot)
+      : 0;
+
+    const { data: eventFees, error: eventFeesError } = await supabaseAdmin
+      .from("event_fees")
+      .select("fee_type, value, is_active")
+      .eq("event_id", sale.event_id)
+      .eq("is_active", true)
+      .order("sort_order");
+
+    if (eventFeesError) {
+      console.error("[create-asaas-payment] erro ao carregar taxas do evento", {
+        sale_id: sale.id,
+        error: eventFeesError,
+      });
+      return jsonResponse(
+        {
+          error:
+            "Foi detectada divergência entre o snapshot financeiro e o total da cobrança.",
+          error_code: "event_fees_unavailable_for_integrity_check",
+        },
+        500,
+      );
+    }
+
+    const feesTotal = calculateFeesTotal({
+      unitPrice: avgFinalPrice,
+      eventFees: (eventFees ?? []) as Array<{
+        fee_type: string;
+        value: number;
+        is_active: boolean;
+      }>,
+      passPlatformFeeToCustomer: Boolean(sale.event?.pass_platform_fee_to_customer),
+      platformFeePercent: platformFeePercent,
+      quantity: quantityFromSnapshot,
+    });
+
+    const expectedGrossFromSnapshot = roundCurrency(passengerFinalSum + feesTotal);
+    if (Math.abs(roundCurrency(grossAmount) - expectedGrossFromSnapshot) > 0.01) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: "sale_total_inconsistent_with_passenger_snapshot",
+        detail: `gross_amount=${grossAmount};expected=${expectedGrossFromSnapshot};passenger_final_sum=${passengerFinalSum};fees_total=${feesTotal}`,
+      });
+
+      return jsonResponse(
+        {
+          error: "O total da venda está inconsistente com os valores dos passageiros.",
+          error_code: "sale_total_inconsistent_with_passenger_snapshot",
+        },
+        409,
+      );
+    }
+
+    if (Math.abs(Number(sale.benefit_total_discount ?? 0) - passengerDiscountSum) > 0.01) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: "sale_benefit_discount_inconsistent",
+        detail: `sale_benefit_total_discount=${sale.benefit_total_discount};snapshot_discount=${passengerDiscountSum}`,
+      });
+
+      return jsonResponse(
+        {
+          error:
+            "Foi detectada divergência entre o snapshot financeiro e o total da cobrança.",
+          error_code: "sale_benefit_discount_inconsistent",
+        },
+        409,
       );
     }
 

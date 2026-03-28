@@ -40,6 +40,10 @@ import { formatCurrencyBRL } from "@/lib/currency";
 import { formatPhoneBR } from "@/lib/phone";
 import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {
+  BENEFIT_PRICING_RULE_VERSION,
+  resolvePassengerBenefitPrice,
+} from "@/lib/benefitEligibility";
+import {
   CHECKOUT_RESPONSIBILITY_HELPER_TEXT,
   CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE,
   getCheckoutResponsibilityAcceptanceLabel,
@@ -83,6 +87,18 @@ interface PassengerData {
   phone: string;
 }
 
+interface PassengerBenefitSnapshot {
+  benefit_program_id: string | null;
+  benefit_program_name: string | null;
+  benefit_type: "percentual" | "valor_fixo" | "preco_final" | null;
+  benefit_value: number | null;
+  original_price: number;
+  discount_amount: number;
+  final_price: number;
+  benefit_applied: boolean;
+  pricing_rule_version: string;
+}
+
 type PaymentMethod = "pix" | "credit_card";
 
 type PaymentCheckoutStatus = "idle" | "preparing" | "popup_blocked" | "error";
@@ -107,6 +123,10 @@ function isPassengerComplete(p: PassengerData): boolean {
   return (
     p.name.trim().length >= 3 && rawCpf.length === 11 && isValidCpf(rawCpf)
   );
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 export default function Checkout() {
@@ -139,6 +159,9 @@ export default function Checkout() {
   const [step, setStep] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
+  const [passengerBenefitSnapshots, setPassengerBenefitSnapshots] = useState<
+    Array<PassengerBenefitSnapshot | null>
+  >([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [paymentCheckoutStatus, setPaymentCheckoutStatus] =
@@ -214,15 +237,18 @@ export default function Checkout() {
   const checkoutSummary = useMemo(() => {
     if (!event || platformFeePercent == null) {
       return {
-        seatSubtotal: 0,
+        originalSubtotal: 0,
+        benefitDiscountTotal: 0,
+        subtotalAfterBenefits: 0,
         totalFees: 0,
         grandTotal: 0,
         hasFeeLines: false,
+        hasBenefitsApplied: false,
       };
     }
 
     const selectedCount = selectedSeats.length;
-    const seatsTotal = usesCategoryPricing
+    const originalSeatsTotal = usesCategoryPricing
       ? selectedSeats.reduce((sum, seatId) => {
           const seat = seats.find((s) => s.id === seatId);
           const catPrice = categoryPrices.find(
@@ -233,19 +259,43 @@ export default function Checkout() {
         }, 0)
       : (event.unit_price ?? 0) * selectedCount;
 
-    const avgUnitPrice =
-      selectedCount > 0 ? seatsTotal / selectedCount : (event.unit_price ?? 0);
+    const hasResolvedBenefitSnapshot =
+      passengerBenefitSnapshots.length === selectedCount &&
+      passengerBenefitSnapshots.every((snapshot) => snapshot !== null);
+
+    const seatsSubtotalAfterBenefits = hasResolvedBenefitSnapshot
+      ? passengerBenefitSnapshots.reduce(
+          (sum, snapshot) => sum + (snapshot?.final_price ?? 0),
+          0,
+        )
+      : originalSeatsTotal;
+    const totalBenefitDiscount = hasResolvedBenefitSnapshot
+      ? passengerBenefitSnapshots.reduce(
+          (sum, snapshot) => sum + (snapshot?.discount_amount ?? 0),
+          0,
+        )
+      : 0;
+
+    const avgUnitPrice = selectedCount > 0
+      ? seatsSubtotalAfterBenefits / selectedCount
+      : (event.unit_price ?? 0);
 
     const breakdown = calculateFees(avgUnitPrice, eventFees, {
       passToCustomer: event.pass_platform_fee_to_customer,
       feePercent: platformFeePercent,
     });
 
+    const totalFees = roundCurrency(breakdown.totalFees * selectedCount);
+    const grandTotal = roundCurrency(seatsSubtotalAfterBenefits + totalFees);
+
     return {
-      seatSubtotal: seatsTotal,
-      totalFees: breakdown.totalFees * selectedCount,
-      grandTotal: seatsTotal + breakdown.totalFees * selectedCount,
+      originalSubtotal: roundCurrency(originalSeatsTotal),
+      benefitDiscountTotal: roundCurrency(totalBenefitDiscount),
+      subtotalAfterBenefits: roundCurrency(seatsSubtotalAfterBenefits),
+      totalFees,
+      grandTotal,
       hasFeeLines: breakdown.fees.length > 0,
+      hasBenefitsApplied: roundCurrency(totalBenefitDiscount) > 0,
     };
   }, [
     event,
@@ -255,6 +305,7 @@ export default function Checkout() {
     eventFees,
     seats,
     categoryPrices,
+    passengerBenefitSnapshots,
   ]);
   const fetchOccupiedSeats = useCallback(
     async (tripUuid: string, isActive: () => boolean) => {
@@ -582,6 +633,7 @@ export default function Checkout() {
     if (!valid) return;
 
     setPassengers(selectedSeats.map(() => ({ name: "", cpf: "", phone: "" })));
+    setPassengerBenefitSnapshots(selectedSeats.map(() => null));
     setErrors({});
     setPayerIndex(0);
     setOpenPassengerIdx(0);
@@ -608,6 +660,13 @@ export default function Checkout() {
       const copy = [...prev];
       if (field === "cpf") {
         copy[index] = { ...copy[index], cpf: formatCpfMask(value) };
+        // Regra da fase 1: alteração de CPF invalida snapshot de benefício do passageiro.
+        setPassengerBenefitSnapshots((prevSnapshots) => {
+          if (!prevSnapshots[index]) return prevSnapshots;
+          const next = [...prevSnapshots];
+          next[index] = null;
+          return next;
+        });
       } else if (field === "phone") {
         copy[index] = { ...copy[index], phone: formatPhoneMask(value) };
       } else {
@@ -652,6 +711,94 @@ export default function Checkout() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const resolvePassengerBenefitSnapshots = async (): Promise<
+    Array<PassengerBenefitSnapshot | null>
+  > => {
+    if (!event) return [];
+
+    try {
+      const snapshots = await Promise.all(
+        passengers.map(async (passenger, index) => {
+          const seatId = selectedSeats[index];
+          const originalPrice = getSeatPrice(seatId);
+          const resolved = await resolvePassengerBenefitPrice({
+            companyId: event.company_id,
+            eventId: event.id,
+            cpf: passenger.cpf,
+            originalPrice,
+          });
+
+          const safeResolved: PassengerBenefitSnapshot = {
+            benefit_program_id: resolved.benefitProgramId,
+            benefit_program_name: resolved.benefitProgramName,
+            benefit_type: resolved.benefitType,
+            benefit_value: resolved.benefitValue,
+            original_price: roundCurrency(resolved.originalPrice),
+            discount_amount: roundCurrency(resolved.discountAmount),
+            final_price: roundCurrency(resolved.finalPrice),
+            benefit_applied: resolved.benefitApplied,
+            pricing_rule_version:
+              resolved.pricingRuleVersion || BENEFIT_PRICING_RULE_VERSION,
+          };
+
+          return safeResolved;
+        }),
+      );
+
+      return snapshots;
+    } catch (error) {
+      console.error("Erro ao validar benefício por passageiro:", error);
+      toast.error("Não foi possível validar os benefícios dos passageiros.");
+      return [];
+    }
+  };
+
+  const calculateTotalsFromSnapshots = (
+    snapshots: Array<PassengerBenefitSnapshot | null>,
+  ) => {
+    if (!event || platformFeePercent == null) {
+      return {
+        originalSubtotal: 0,
+        benefitTotalDiscount: 0,
+        subtotalAfterBenefits: 0,
+        totalFees: 0,
+        grossAmount: 0,
+      };
+    }
+
+    const effectiveSnapshots = snapshots.filter(
+      (snapshot): snapshot is PassengerBenefitSnapshot => snapshot !== null,
+    );
+    const passengerCount = effectiveSnapshots.length;
+
+    const originalSubtotal = roundCurrency(
+      effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.original_price, 0),
+    );
+    const benefitTotalDiscount = roundCurrency(
+      effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.discount_amount, 0),
+    );
+    const subtotalAfterBenefits = roundCurrency(
+      effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.final_price, 0),
+    );
+
+    const avgFinalPrice =
+      passengerCount > 0 ? subtotalAfterBenefits / passengerCount : 0;
+    const feeBreakdown = calculateFees(avgFinalPrice, eventFees, {
+      passToCustomer: event.pass_platform_fee_to_customer,
+      feePercent: platformFeePercent,
+    });
+    const totalFees = roundCurrency(feeBreakdown.totalFees * passengerCount);
+    const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);
+
+    return {
+      originalSubtotal,
+      benefitTotalDiscount,
+      subtotalAfterBenefits,
+      totalFees,
+      grossAmount,
+    };
   };
 
   // Submit purchase — new flow: seat_locks + sale_passengers + pendente_pagamento + new tab
@@ -772,7 +919,7 @@ export default function Checkout() {
       }
     }
 
-    // Calculate fees
+    // Regra oficial: totais da venda são derivados do snapshot por passageiro.
     if (platformFeePercent == null) {
       toast.error("Taxa da plataforma da empresa indisponível.");
       preOpenedPaymentTab?.close();
@@ -781,22 +928,25 @@ export default function Checkout() {
       return;
     }
 
-    const seatsTotal = usesCategoryPricing
-      ? selectedSeats.reduce((sum, seatId) => sum + getSeatPrice(seatId), 0)
-      : (event.unit_price ?? 0) * quantity;
+    let snapshotsToPersist = passengerBenefitSnapshots;
+    const hasResolvedSnapshots =
+      snapshotsToPersist.length === passengers.length &&
+      snapshotsToPersist.every((snapshot) => snapshot !== null);
+    if (!hasResolvedSnapshots) {
+      snapshotsToPersist = await resolvePassengerBenefitSnapshots();
+      if (snapshotsToPersist.length !== passengers.length) {
+        toast.error("Não foi possível validar os benefícios dos passageiros.");
+        preOpenedPaymentTab?.close();
+        setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
+        return;
+      }
+      setPassengerBenefitSnapshots(snapshotsToPersist);
+    }
 
-    const avgUnitPrice = usesCategoryPricing
-      ? seatsTotal / quantity
-      : (event.unit_price ?? 0);
-
-    const feeBreakdown = calculateFees(avgUnitPrice, eventFees, {
-      passToCustomer: event.pass_platform_fee_to_customer,
-      feePercent: platformFeePercent,
-    });
-
-    const grossAmount = usesCategoryPricing
-      ? seatsTotal + feeBreakdown.totalFees * quantity
-      : feeBreakdown.unitPriceWithFees * quantity;
+    const totals = calculateTotalsFromSnapshots(snapshotsToPersist);
+    const grossAmount = totals.grossAmount;
+    const benefitTotalDiscount = totals.benefitTotalDiscount;
 
     // === Step 1: Create temporary seat locks (15 min expiry) ===
     const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -843,6 +993,7 @@ export default function Checkout() {
         quantity,
         unit_price: event.unit_price ?? 0,
         gross_amount: grossAmount,
+        benefit_total_discount: benefitTotalDiscount,
         status: "pendente_pagamento" as const,
         payment_method: paymentMethod,
         // Lastro de aceite: registramos data/hora para auditoria da ciência do comprador no checkout público.
@@ -885,6 +1036,25 @@ export default function Checkout() {
 
     // === Step 3: Create sale_passengers (staging for webhook ticket generation) ===
     const passengerInserts = selectedSeats.map((seatId, i) => ({
+      // Snapshot por passageiro para auditoria da regra de benefício da fase 1.
+      ...(() => {
+        const snapshot = snapshotsToPersist[i];
+        if (!snapshot) {
+          const basePrice = roundCurrency(getSeatPrice(seatId));
+          return {
+            benefit_program_id: null,
+            benefit_program_name: null,
+            benefit_type: null,
+            benefit_value: null,
+            original_price: basePrice,
+            discount_amount: 0,
+            final_price: basePrice,
+            benefit_applied: false,
+            pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
+          };
+        }
+        return snapshot;
+      })(),
       sale_id: sale.id,
       seat_id: seatId,
       seat_label: seatLabelMap[seatId] || String(i + 1),
@@ -909,6 +1079,17 @@ export default function Checkout() {
           trip_id: returnTripId,
           sort_order: selectedSeats.length + i,
           company_id: event.company_id,
+          // Trecho complementar de volta: nesta fase o valor cobrado já está
+          // consolidado na ida; mantemos snapshot zerado para não duplicar o total.
+          benefit_program_id: null,
+          benefit_program_name: null,
+          benefit_type: null,
+          benefit_value: null,
+          original_price: 0,
+          discount_amount: 0,
+          final_price: 0,
+          benefit_applied: false,
+          pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
         });
       });
     }
@@ -1157,15 +1338,29 @@ export default function Checkout() {
                 </span>
               </div>
               <div className="flex justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">Passagem</span>
+                <span className="text-muted-foreground">Subtotal original</span>
                 <span className="font-medium text-right">
-                  {formatCurrencyBRL(checkoutSummary.seatSubtotal)}
+                  {formatCurrencyBRL(checkoutSummary.originalSubtotal)}
+                </span>
+              </div>
+              {checkoutSummary.hasBenefitsApplied && (
+                <div className="flex justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">Desconto benefício</span>
+                  <span className="font-medium text-right text-emerald-700">
+                    - {formatCurrencyBRL(checkoutSummary.benefitDiscountTotal)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Subtotal com benefício</span>
+                <span className="font-medium text-right">
+                  {formatCurrencyBRL(checkoutSummary.subtotalAfterBenefits)}
                 </span>
               </div>
               {checkoutSummary.hasFeeLines && (
                 <div className="flex justify-between gap-3 text-sm">
                   <span className="text-muted-foreground">
-                    Taxa da plataforma
+                    Taxas
                   </span>
                   <span className="font-medium text-right">
                     {formatCurrencyBRL(checkoutSummary.totalFees)}
@@ -1249,6 +1444,7 @@ export default function Checkout() {
                 const isComplete = isPassengerComplete(passenger);
                 const seatLabel = seatLabelMap[selectedSeats[idx]];
                 const isOpen = openPassengerIdx === idx;
+                const passengerSnapshot = passengerBenefitSnapshots[idx];
                 const hasError = Object.keys(errors).some((k) =>
                   k.startsWith(`${idx}_`),
                 );
@@ -1354,6 +1550,33 @@ export default function Checkout() {
                           maxLength={15}
                         />
                       </div>
+
+                      {passengerSnapshot?.benefit_applied && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs space-y-1">
+                          <p className="font-medium text-emerald-800">
+                            Benefício aplicado
+                          </p>
+                          <p className="text-emerald-900">
+                            {passengerSnapshot.benefit_program_name}
+                          </p>
+                          <div className="flex items-center justify-between gap-2 text-emerald-900">
+                            <span>Desconto</span>
+                            <span className="font-medium">
+                              - {formatCurrencyBRL(passengerSnapshot.discount_amount)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-emerald-900">
+                            <span>Preço original</span>
+                            <span>{formatCurrencyBRL(passengerSnapshot.original_price)}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-emerald-900">
+                            <span>Preço final</span>
+                            <span className="font-semibold">
+                              {formatCurrencyBRL(passengerSnapshot.final_price)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </CollapsibleContent>
                   </Collapsible>
                 );
@@ -1558,7 +1781,7 @@ export default function Checkout() {
               <Button
                 className="h-10 px-4"
                 disabled={submitting}
-                onClick={() => {
+                onClick={async () => {
                   if (!validatePassengers()) {
                     const firstErrorKey = Object.keys(errors)[0];
                     if (firstErrorKey) {
@@ -1567,6 +1790,18 @@ export default function Checkout() {
                     }
                     return;
                   }
+
+                  setSubmitting(true);
+                  // Regra oficial da fase 1: decisão do benefício ocorre na transição
+                  // Passageiros -> Pagamento para garantir previsibilidade auditável.
+                  const resolvedSnapshots = await resolvePassengerBenefitSnapshots();
+                  setSubmitting(false);
+                  if (resolvedSnapshots.length !== passengers.length) {
+                    toast.error("Não foi possível validar os benefícios dos passageiros.");
+                    return;
+                  }
+
+                  setPassengerBenefitSnapshots(resolvedSnapshots);
                   setStep(3);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
