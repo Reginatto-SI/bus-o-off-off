@@ -203,8 +203,17 @@ export default function BenefitProgramEditor() {
     const tab = searchParams.get('tab');
     if (tab === 'eventos' || tab === 'cpfs' || tab === 'dados') {
       setActiveTab(tab);
+      return;
     }
-  }, [searchParams]);
+    if (tab) {
+      // Comentário: mantém navegação previsível mesmo com query param inválido vindo de link externo/bookmark.
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set('tab', 'dados');
+        return params;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     // Comentário: foco contextual da navegação dedicada; substitui o comportamento anterior de abrir aba em modal.
@@ -859,7 +868,8 @@ export default function BenefitProgramEditor() {
               return params;
             }, { replace: true });
           }} className="space-y-4">
-            <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-2 py-2">
+            {/* Comentário: tabs com tratamento de container de página (sem estética de modal) para reforçar hierarquia da tela dedicada. */}
+            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-lg border bg-muted/20 p-2">
               <TabsTrigger value="dados">Dados do programa</TabsTrigger>
               <TabsTrigger value="eventos">Eventos</TabsTrigger>
               <TabsTrigger value="cpfs">CPFs elegíveis</TabsTrigger>
@@ -1030,10 +1040,6 @@ export default function BenefitProgramEditor() {
                       <FileSpreadsheet className="mr-2 h-4 w-4" />
                       Baixar modelo
                     </Button>
-                    <Button type="button" variant="outline" onClick={handleBulkCpfAdd}>
-                      <FileUp className="h-4 w-4 mr-2" />
-                      Importar por colagem
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1106,6 +1112,11 @@ export default function BenefitProgramEditor() {
                       <div className="rounded-md border p-3">
                         <p className="text-xs font-medium mb-2">Colagem rápida</p>
                         <Textarea rows={4} value={bulkCpfText} onChange={(e) => setBulkCpfText(e.target.value)} placeholder={'00000000000\n11111111111'} />
+                        {/* Comentário: ação posicionada junto ao campo de colagem para reduzir ambiguidade de fluxo na operação diária. */}
+                        <Button type="button" variant="outline" className="mt-2" onClick={handleBulkCpfAdd}>
+                          <FileUp className="h-4 w-4 mr-2" />
+                          Importar por colagem
+                        </Button>
                       </div>
                       {importSummary && (
                         <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">

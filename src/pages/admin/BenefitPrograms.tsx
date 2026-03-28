@@ -181,9 +181,8 @@ export default function BenefitPrograms() {
 
   const navigateToEditor = (programId: string, tab?: 'dados' | 'eventos' | 'cpfs') => {
     // Comentário: fluxo principal saiu do modal e agora navega para tela dedicada com foco por query param.
-    const next = new URL(`/admin/programas-beneficio/${programId}`, window.location.origin);
-    if (tab) next.searchParams.set('tab', tab);
-    navigate(`${next.pathname}${next.search}`);
+    const suffix = tab ? `?tab=${tab}` : '';
+    navigate(`/admin/programas-beneficio/${programId}${suffix}`);
   };
 
   const handleToggleStatus = async (program: BenefitProgramWithRelations) => {
