@@ -799,7 +799,14 @@ export default function Fleet() {
     let error;
     if (editingId) {
       const { company_id, ...updateData } = vehicleData;
-      ({ error } = await supabase.from('vehicles').update(updateData).eq('id', editingId));
+      const { data: updatedVehicle, error: updateError } = await supabase
+        .from('vehicles')
+        .update(updateData)
+        .eq('id', editingId)
+        .select('id')
+        .maybeSingle();
+      // Comentário: evita falso sucesso quando update é filtrado por RLS e afeta 0 linhas sem erro explícito.
+      error = updateError ?? (!updatedVehicle ? { message: 'Nenhum veículo foi atualizado (possível bloqueio de permissão).' } : null);
     } else {
       const result = await supabase.from('vehicles').insert([vehicleData]).select('id').single();
       error = result.error;
