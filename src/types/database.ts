@@ -275,6 +275,15 @@ export interface TicketRecord {
   passenger_name: string;
   passenger_cpf: string;
   passenger_phone: string | null;
+  benefit_program_id: string | null;
+  benefit_program_name: string | null;
+  benefit_type: BenefitType | null;
+  benefit_value: number | null;
+  original_price: number;
+  discount_amount: number;
+  final_price: number;
+  benefit_applied: boolean;
+  pricing_rule_version: string;
   boarding_status: string;
   qr_code_token: string;
   ticket_number: string | null;
