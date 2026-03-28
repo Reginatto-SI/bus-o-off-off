@@ -905,72 +905,26 @@ export default function Sales() {
       return;
     }
 
-    const { error: ticketUpdateError } = await supabase
-      .from('tickets')
-      .update({
-        passenger_name: editPassengerName.trim(),
-        passenger_phone: phoneClean || null,
-        passenger_cpf: cpfClean,
-      })
-      .eq('id', editingTicket.id)
-      .eq('company_id', activeCompanyId);
+    // Etapa de robustez: frontend apenas valida UX e delega update+log para RPC única no backend.
+    // A função SQL garante operação atômica (mesma transação): ou atualiza ticket + registra log, ou falha tudo.
+    const { error: correctionError } = await supabase.rpc('correct_sale_passenger', {
+      p_ticket_id: editingTicket.id,
+      p_company_id: activeCompanyId,
+      p_new_name: editPassengerName.trim(),
+      p_new_phone: phoneClean || null,
+      p_new_cpf: cpfClean,
+      p_cpf_reason: hasCpfChanged ? cpfCorrectionReason.trim() : null,
+    });
 
-    if (ticketUpdateError) {
-      toast.error('Erro ao atualizar passageiro');
-    } else {
-      const changes: string[] = [];
-      if (hasNameChanged) changes.push(`Nome: ${oldName} → ${editPassengerName.trim()}`);
-      if (hasPhoneChanged) {
-        changes.push(`Telefone: ${oldPhone || '—'} → ${phoneClean || '—'}`);
-      }
-      if (hasCpfChanged) changes.push(`CPF: ${oldCpf} → ${cpfClean}`);
-      const logAction = hasCpfChanged ? 'cpf_corrigido' : 'passageiro_editado';
-      const logDescription = hasCpfChanged
-        ? `Correção formal de CPF (Assento ${editingTicket.seat_label})${changes.length > 0 ? `: ${changes.join(', ')}` : ''}. Motivo: ${cpfCorrectionReason.trim()}`
-        : `Dados do passageiro atualizados (Assento ${editingTicket.seat_label}): ${changes.join(', ')}`;
-
-      // Garantia mínima sem mudar arquitetura: se o log falhar após update, aplicamos rollback compensatório.
-      // Limitação explícita: não é transação SQL atômica; porém evita sucesso sem trilha de auditoria.
-      const { error: logError } = await supabase.from('sale_logs').insert({
-        sale_id: detailSale.id,
-        action: logAction,
-        description: logDescription,
-        old_value: `nome=${oldName}; telefone=${oldPhone || 'null'}; cpf=${oldCpf}${hasCpfChanged ? `; motivo_cpf=${cpfCorrectionReason.trim()}` : ''}`,
-        new_value: `nome=${editPassengerName.trim()}; telefone=${phoneClean || 'null'}; cpf=${cpfClean}`,
-        performed_by: user.id,
-        company_id: activeCompanyId,
-      });
-
-      if (logError) {
-        const { error: rollbackError } = await supabase
-          .from('tickets')
-          .update({
-            passenger_name: oldName,
-            passenger_phone: oldPhone || null,
-            passenger_cpf: oldCpf,
-          })
-          .eq('id', editingTicket.id)
-          .eq('company_id', activeCompanyId);
-
-        if (rollbackError) {
-          console.error('Falha ao registrar auditoria e ao reverter alteração de passageiro.', {
-            saleId: detailSale.id,
-            ticketId: editingTicket.id,
-            logError,
-            rollbackError,
-          });
-          toast.error('Falha crítica de auditoria. Alteração não pôde ser confirmada com segurança.');
-        } else {
-          toast.error('Falha ao registrar auditoria. Alteração revertida para manter rastreabilidade.');
-        }
-        setSavingPassenger(false);
-        return;
-      }
-
-      toast.success('Passageiro atualizado');
-      setEditingTicket(null);
-      openDetail(detailSale);
+    if (correctionError) {
+      toast.error(correctionError.message || 'Erro ao atualizar passageiro');
+      setSavingPassenger(false);
+      return;
     }
+
+    toast.success('Passageiro atualizado');
+    setEditingTicket(null);
+    openDetail(detailSale);
     setSavingPassenger(false);
   };
 
