@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -14,6 +14,9 @@ import {
   Award,
   Users,
   BarChart3,
+  Circle,
+  CheckCircle2,
+  ArrowRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
@@ -38,6 +41,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrencyBRL } from '@/lib/currency';
@@ -82,6 +87,15 @@ interface RankItem {
   count: number;
 }
 
+interface OnboardingChecklistStatus {
+  hasVehicle: boolean;
+  hasDriver: boolean;
+  hasBoardingConfig: boolean;
+  hasEvent: boolean;
+  hasPublishedEvent: boolean;
+  hasPaidSale: boolean;
+}
+
 /* ═══════════════════════════════════════════════════
    Constantes de cores para gráficos (semânticas)
    ═══════════════════════════════════════════════════ */
@@ -117,6 +131,16 @@ export default function Dashboard() {
   const { activeCompanyId, activeCompany, canViewFinancials } = useAuth();
   const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>(30);
+  const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
+  const hasEvaluatedOnboardingPopupRef = useRef(false);
+  const onboardingWelcomeDismissKey = useMemo(
+    () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
+    [activeCompanyId]
+  );
+  const onboardingEventCtaDismissKey = useMemo(
+    () => `admin-dashboard:onboarding-popup-event-cta-dismissed:${activeCompanyId ?? 'no-company'}`,
+    [activeCompanyId]
+  );
 
   // Comentário: reaproveita o mesmo padrão de nick público usado no restante do admin.
   const normalizedPublicSlug = useMemo(() => normalizePublicSlug(activeCompany?.public_slug ?? ''), [activeCompany?.public_slug]);
@@ -141,6 +165,144 @@ export default function Dashboard() {
 
   // ─── Guard: sem empresa ativa não consulta ─────────────
   const enabled = Boolean(activeCompanyId);
+
+  /* ─── Onboarding inicial ───────────────────────────────
+     Comentário: esta leitura usa dados reais por empresa (company_id)
+     nas tabelas events, vehicles, event_boarding_locations e sales.
+     Não existe estado fake: o checklist sempre reflete o banco atual. */
+  const { data: onboardingStatus, isLoading: onboardingLoading } = useQuery({
+    queryKey: ['dashboard-onboarding', activeCompanyId],
+    enabled,
+    queryFn: async (): Promise<OnboardingChecklistStatus> => {
+      const [{ count: vehiclesCount }, { count: driversCount }, { count: boardingCount }, { count: eventsCount }, { count: publishedEventsCount }, { count: paidSalesCount }] = await Promise.all([
+        supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
+        // Validação real do passo "Cadastrar motorista" usando a estrutura oficial do admin.
+        supabase.from('drivers').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
+        // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
+        // Isso evita falso positivo com registro órfão/inconsistente em event_boarding_locations.
+        supabase
+          .from('event_boarding_locations')
+          .select('id, events!inner(id)', { count: 'exact', head: true })
+          .eq('company_id', activeCompanyId!)
+          .eq('events.company_id', activeCompanyId!),
+        // Endurecimento: "publicar viagem" exige evento à venda + não arquivado + vínculo operacional mínimo
+        // (trip + configuração de embarque no mesmo evento) para reduzir falso positivo óbvio.
+        supabase
+          .from('events')
+          .select('id, trips!inner(id), event_boarding_locations!inner(id)', { count: 'exact', head: true })
+          .eq('company_id', activeCompanyId!)
+          .eq('status', 'a_venda')
+          .eq('is_archived', false),
+        supabase.from('sales').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!).eq('status', 'pago'),
+      ]);
+
+      return {
+        hasVehicle: (vehiclesCount ?? 0) > 0,
+        hasDriver: (driversCount ?? 0) > 0,
+        hasBoardingConfig: (boardingCount ?? 0) > 0,
+        hasEvent: (eventsCount ?? 0) > 0,
+        hasPublishedEvent: (publishedEventsCount ?? 0) > 0,
+        hasPaidSale: (paidSalesCount ?? 0) > 0,
+      };
+    },
+  });
+
+  const onboardingItems = useMemo(
+    () => [
+      {
+        key: 'vehicle',
+        label: 'Cadastrar veículo',
+        done: onboardingStatus?.hasVehicle ?? false,
+        href: '/admin/frota',
+      },
+      {
+        key: 'driver',
+        label: 'Cadastrar motorista',
+        done: onboardingStatus?.hasDriver ?? false,
+        href: '/admin/motoristas',
+      },
+      {
+        key: 'boarding',
+        label: 'Configurar embarque',
+        done: onboardingStatus?.hasBoardingConfig ?? false,
+        href: '/admin/locais',
+      },
+      {
+        key: 'event',
+        label: 'Criar primeiro evento',
+        done: onboardingStatus?.hasEvent ?? false,
+        href: '/admin/eventos?novo=1',
+      },
+      {
+        key: 'publish',
+        label: 'Publicar viagem',
+        done: onboardingStatus?.hasPublishedEvent ?? false,
+        href: '/admin/eventos',
+      },
+      {
+        key: 'sale',
+        label: 'Fazer primeira venda',
+        done: onboardingStatus?.hasPaidSale ?? false,
+        // Mantido: /admin/vendas abre o modal de nova venda via `novaVenda=1` (fluxo já suportado pela tela de vendas).
+        href: '/admin/vendas?novaVenda=1&aba=manual',
+      },
+    ],
+    [onboardingStatus]
+  );
+  // Nova ordem operacional explícita: veículo → motorista → embarque → evento → publicação → venda.
+  const nextOnboardingStep = useMemo(
+    () => onboardingItems.find((item) => !item.done) ?? null,
+    [onboardingItems]
+  );
+
+  useEffect(() => {
+    // Reavalia popup ao trocar empresa ativa.
+    hasEvaluatedOnboardingPopupRef.current = false;
+    setOnboardingPopupOpen(false);
+  }, [activeCompanyId]);
+
+  useEffect(() => {
+    // Popup contextual:
+    // - estágio inicial: boas-vindas e orientação do passo a passo (sem pressionar criação de evento).
+    // - estágio pronto para evento: CTA direto só quando "Criar primeiro evento" for o próximo passo lógico.
+    if (onboardingLoading || hasEvaluatedOnboardingPopupRef.current || !onboardingStatus || onboardingStatus.hasEvent) {
+      if (!onboardingLoading && onboardingStatus?.hasEvent) {
+        window.localStorage.removeItem(onboardingWelcomeDismissKey);
+        window.localStorage.removeItem(onboardingEventCtaDismissKey);
+      }
+      return;
+    }
+
+    hasEvaluatedOnboardingPopupRef.current = true;
+    const shouldShowEventCtaPopup =
+      onboardingStatus.hasVehicle &&
+      onboardingStatus.hasDriver &&
+      onboardingStatus.hasBoardingConfig &&
+      !onboardingStatus.hasEvent &&
+      nextOnboardingStep?.key === 'event';
+
+    if (shouldShowEventCtaPopup) {
+      const dismissedEventCta = window.localStorage.getItem(onboardingEventCtaDismissKey) === '1';
+      setOnboardingPopupOpen(!dismissedEventCta);
+      return;
+    }
+
+    const dismissedWelcome = window.localStorage.getItem(onboardingWelcomeDismissKey) === '1';
+    setOnboardingPopupOpen(!dismissedWelcome);
+  }, [
+    onboardingEventCtaDismissKey,
+    onboardingLoading,
+    onboardingStatus,
+    onboardingWelcomeDismissKey,
+    nextOnboardingStep?.key,
+  ]);
+
+  // Comentário: progresso calculado em tempo real a partir dos 6 passos do checklist.
+  const onboardingCompletedCount = useMemo(
+    () => onboardingItems.filter((item) => item.done).length,
+    [onboardingItems]
+  );
+  const shouldShowOnboardingCard = !onboardingLoading && onboardingCompletedCount < onboardingItems.length;
 
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
@@ -415,6 +577,101 @@ export default function Dashboard() {
             </div>
           }
         />
+
+        <Dialog open={onboardingPopupOpen} onOpenChange={setOnboardingPopupOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {nextOnboardingStep?.key === 'event'
+                  ? 'Tudo pronto para criar seu primeiro evento?'
+                  : 'Boas-vindas! Vamos preparar sua operação?'}
+              </DialogTitle>
+              <DialogDescription>
+                {nextOnboardingStep?.key === 'event'
+                  ? 'Você já concluiu os cadastros essenciais. Agora faz sentido criar seu primeiro evento e avançar para publicação.'
+                  : 'Siga o passo a passo recomendado no dashboard para configurar sua operação com segurança antes de publicar e vender.'}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Supressão local simples: evita reaparição irritante após "Fazer depois",
+                  // sem backend e sem criar preferências complexas.
+                  if (nextOnboardingStep?.key === 'event') {
+                    window.localStorage.setItem(onboardingEventCtaDismissKey, '1');
+                  } else {
+                    window.localStorage.setItem(onboardingWelcomeDismissKey, '1');
+                  }
+                  setOnboardingPopupOpen(false);
+                }}
+              >
+                {nextOnboardingStep?.key === 'event' ? 'Fazer depois' : 'Explorar painel'}
+              </Button>
+              <Button
+                onClick={() => {
+                  setOnboardingPopupOpen(false);
+                  if (nextOnboardingStep?.key === 'event') {
+                    navigate('/admin/eventos?novo=1');
+                    return;
+                  }
+                  if (nextOnboardingStep?.href) {
+                    navigate(nextOnboardingStep.href);
+                  }
+                }}
+              >
+                {nextOnboardingStep?.key === 'event' ? 'Criar evento agora' : 'Ver passo a passo'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {shouldShowOnboardingCard && (
+          <Card>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base font-semibold">🚀 Comece por aqui</CardTitle>
+                <span className="text-sm text-muted-foreground">
+                  {onboardingCompletedCount} de {onboardingItems.length} concluídos
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Siga estas etapas para preparar sua operação e começar a vender.
+              </p>
+              {nextOnboardingStep && (
+                <p className="text-xs text-muted-foreground">
+                  Próximo passo recomendado: <span className="font-medium text-foreground">{nextOnboardingStep.label}</span>
+                </p>
+              )}
+              <Progress value={(onboardingCompletedCount / onboardingItems.length) * 100} className="h-2" />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {onboardingItems.map((item) => (
+                <Button
+                  key={item.key}
+                  asChild
+                  variant="ghost"
+                  className="h-auto w-full justify-between rounded-lg border px-3 py-3"
+                >
+                  <Link to={item.href}>
+                    <span className="flex items-center gap-2 text-sm">
+                      {item.done ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span>{item.label}</span>
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      {item.done ? 'Ver' : 'Ir agora'}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </Link>
+                </Button>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Comentário: seção compacta para centralizar os atalhos operacionais mais usados no dia a dia. */}
         <section className="space-y-2">
