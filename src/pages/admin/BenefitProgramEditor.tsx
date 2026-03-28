@@ -255,8 +255,9 @@ export default function BenefitProgramEditor() {
       .from('benefit_programs')
       .select(`
         *,
-        event_links:benefit_program_event_links(event_id, event:events(name)),
-        eligible_cpf:benefit_program_eligible_cpf(*)
+        -- Comentário: desambiguação explícita dos FKs evita erro PGRST201 quando existem múltiplas relações possíveis.
+        event_links:benefit_program_event_links!benefit_program_event_links_benefit_program_id_fkey(event_id, event:events(name)),
+        eligible_cpf:benefit_program_eligible_cpf!benefit_program_eligible_cpf_benefit_program_id_fkey(*)
       `)
       .eq('id', id)
       .eq('company_id', activeCompanyId)
