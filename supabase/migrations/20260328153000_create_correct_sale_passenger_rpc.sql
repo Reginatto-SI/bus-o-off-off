@@ -5,9 +5,9 @@ CREATE OR REPLACE FUNCTION public.correct_sale_passenger(
   p_ticket_id uuid,
   p_company_id uuid,
   p_new_name text,
-  p_new_phone text DEFAULT NULL,
+  p_new_phone text,
   p_new_cpf text,
-  p_cpf_reason text DEFAULT NULL
+  p_cpf_reason text
 )
 RETURNS void
 LANGUAGE plpgsql
