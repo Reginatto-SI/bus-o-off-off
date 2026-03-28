@@ -79,7 +79,7 @@ export async function getEligibleBenefitsByPassenger({
     .from('benefit_program_eligible_cpf')
     .select(`
       *,
-      program:benefit_programs!inner(*),
+      program:benefit_programs!benefit_program_eligible_cpf_benefit_program_id_fkey!inner(*),
       event_links:benefit_program_event_links(event_id)
     `)
     .eq('company_id', companyId)
@@ -97,7 +97,7 @@ export async function getEligibleBenefitsByPassenger({
     throw new Error(`Falha ao consultar elegibilidade de benefício por CPF: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Array<BenefitProgramEligibleCpf & {
+  const rows = (data ?? []) as unknown as Array<BenefitProgramEligibleCpf & {
     program: BenefitProgram;
     event_links: Array<{ event_id: string }> | null;
   }>;

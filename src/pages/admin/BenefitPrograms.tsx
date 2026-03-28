@@ -1349,8 +1349,7 @@ export default function BenefitPrograms() {
                                             <TableCell>{record.full_name ?? '—'}</TableCell>
                                             <TableCell>
                                               <StatusBadge
-                                                status={record.status === 'ativo' ? 'active' : 'inactive'}
-                                                customLabel={record.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                                                status={record.status === 'ativo' ? 'ativo' : 'inativo'}
                                               />
                                             </TableCell>
                                             <TableCell>
@@ -1499,8 +1498,7 @@ export default function BenefitPrograms() {
                       </TableCell>
                       <TableCell>
                         <StatusBadge
-                          status={program.status === 'ativo' ? 'active' : 'inactive'}
-                          customLabel={program.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                          status={program.status === 'ativo' ? 'ativo' : 'inativo'}
                         />
                       </TableCell>
                       <TableCell>{program.eligible_cpf.length}</TableCell>
