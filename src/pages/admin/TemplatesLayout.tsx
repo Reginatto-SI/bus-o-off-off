@@ -781,9 +781,10 @@ export default function TemplatesLayout() {
         .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' })
         .select('id');
 
-      if (itemsUpsertError) {
+      if (itemsUpsertError || (upsertedItems ?? []).length === 0) {
         logTemplateErrorInDev('save-template-items-upsert', itemsUpsertError, { templateId, itemCount: sanitizedItems.length });
-        toast.error(buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
+        // Comentário: protege contra cenário de 0 linhas afetadas por RLS sem erro SQL explícito.
+        toast.error((upsertedItems ?? []).length === 0 ? 'Sem permissão para salvar os assentos deste template.' : buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
         setSaving(false);
         return;
       }
