@@ -50,7 +50,7 @@ interface GroupedManifest {
   passengers: ManifestRow[];
 }
 
-const FOOTER_TEXT = 'SmartBus BR - Documento operacional de embarque - Contato: (65) 99210-2030';
+const FOOTER_TEXT = 'SmartBus BR - Documento operacional de embarque - Contato: (31) 99207-4309';
 
 const formatDateBR = (dateIso: string) => {
   if (!dateIso) return '-';
