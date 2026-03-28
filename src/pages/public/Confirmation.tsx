@@ -143,11 +143,21 @@ export default function Confirmation() {
           if (companyFeePercent == null) {
             toast({ title: 'Taxa da plataforma da empresa indisponível', variant: 'destructive' });
           } else {
-            const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
-              passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
-              feePercent: Number(companyFeePercent),
-            });
-            setFeeLines(breakdown.fees);
+            /**
+             * Coerência de exibição:
+             * quando há benefício por passageiro, evitar recompor breakdown usando sale.unit_price,
+             * pois essa base pode divergir do valor efetivamente cobrado (snapshot por passageiro).
+             */
+            const hasBenefitDiscount = Number((saleRes.data as any).benefit_total_discount ?? 0) > 0;
+            if (hasBenefitDiscount) {
+              setFeeLines([]);
+            } else {
+              const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
+                passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
+                feePercent: Number(companyFeePercent),
+              });
+              setFeeLines(breakdown.fees);
+            }
           }
         }
       }
@@ -275,6 +285,20 @@ export default function Confirmation() {
       : undefined;
 
     const seatInfo = t.seat_id ? seatDataMap[t.seat_id] : null;
+    const benefitApplied = Boolean((t as any).benefit_applied);
+    const benefitProgramName = (t as any).benefit_program_name ?? null;
+    const benefitDiscountAmount = Number((t as any).discount_amount ?? 0);
+
+    if (benefitApplied && !benefitProgramName && benefitDiscountAmount <= 0) {
+      // Log explícito para suporte quando existir marcação de benefício sem metadado útil no ticket.
+      console.error('[confirmation] ticket_benefit_mapping_incomplete', {
+        sale_id: sale?.id,
+        ticket_id: t.id,
+        benefit_applied: benefitApplied,
+        benefit_program_name: benefitProgramName,
+        discount_amount: benefitDiscountAmount,
+      });
+    }
 
     return {
       ticketId: t.id,
@@ -323,6 +347,9 @@ export default function Confirmation() {
       seatCategory: seatInfo?.category || null,
       seatFloor: seatInfo?.floor || null,
       vehicleFloors: vehicleFloors,
+      benefitApplied,
+      benefitProgramName,
+      benefitDiscountAmount,
       commercialPartners: commercialPartners.length > 0 ? commercialPartners : undefined,
       eventSponsors: eventSponsors.length > 0 ? eventSponsors : undefined,
     };

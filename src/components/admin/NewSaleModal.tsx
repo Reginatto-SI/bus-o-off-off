@@ -782,6 +782,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         passenger_phone: p.phone?.replace(/\D/g, '') || null,
         boarding_status: 'pendente',
         company_id: activeCompanyId,
+        // Venda manual/reserva não usa motor de benefício por CPF nesta etapa.
+        benefit_program_id: null,
+        benefit_program_name: null,
+        benefit_type: null,
+        benefit_value: null,
+        original_price: basePrice,
+        discount_amount: 0,
+        final_price: basePrice,
+        benefit_applied: false,
+        pricing_rule_version: 'beneficio_checkout_v1',
       }));
       const { error: ticketError } = await supabase.from('tickets').insert(ticketRows as any);
       if (ticketError) throw ticketError;
@@ -798,6 +808,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           passenger_phone: p.phone?.replace(/\D/g, '') || null,
           boarding_status: 'pendente',
           company_id: activeCompanyId,
+          // Trecho complementar sem composição financeira própria para evitar duplicidade.
+          benefit_program_id: null,
+          benefit_program_name: null,
+          benefit_type: null,
+          benefit_value: null,
+          original_price: 0,
+          discount_amount: 0,
+          final_price: 0,
+          benefit_applied: false,
+          pricing_rule_version: 'beneficio_checkout_v1',
         }));
 
         const { error: returnTicketError } = await supabase.from('tickets').insert(returnTicketRows as any);

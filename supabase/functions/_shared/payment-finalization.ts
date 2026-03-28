@@ -141,28 +141,71 @@ export async function createTicketsFromPassengersShared(
     };
   }
 
-  const ticketInserts = passengers.map((p: Record<string, unknown>) => ({
-    sale_id: saleId,
-    trip_id: p.trip_id as string,
-    seat_id: (p.seat_id as string | null) ?? null,
-    seat_label: p.seat_label as string,
-    passenger_name: p.passenger_name as string,
-    passenger_cpf: p.passenger_cpf as string,
-    passenger_phone: (p.passenger_phone as string | null) ?? null,
-    company_id: companyId,
-  }));
+  const ticketInserts = passengers.map((p: Record<string, unknown>, index) => {
+    const benefitApplied = Boolean(p.benefit_applied);
+    const benefitProgramName = (p.benefit_program_name as string | null) ?? null;
+    const discountAmount = Number(p.discount_amount ?? 0);
+    const originalPrice = Number(p.original_price ?? 0);
+    const finalPrice = Number(p.final_price ?? 0);
+
+    /**
+     * Snapshot financeiro/de benefício precisa chegar em tickets porque
+     * sale_passengers é staging e pode ser limpo após finalização.
+     * Se houver marcação de benefício sem os dados mínimos, registramos trilha explícita.
+     */
+    if (benefitApplied && (!benefitProgramName || discountAmount <= 0)) {
+      logPaymentTrace("error", "payment-finalization", "ticket_benefit_snapshot_incomplete", {
+        sale_id: saleId,
+        company_id: companyId,
+        passenger_index: index,
+        passenger_cpf: p.passenger_cpf as string,
+        benefit_program_name: benefitProgramName,
+        discount_amount: discountAmount,
+      });
+    }
+
+    return {
+      sale_id: saleId,
+      trip_id: p.trip_id as string,
+      seat_id: (p.seat_id as string | null) ?? null,
+      seat_label: p.seat_label as string,
+      passenger_name: p.passenger_name as string,
+      passenger_cpf: p.passenger_cpf as string,
+      passenger_phone: (p.passenger_phone as string | null) ?? null,
+      company_id: companyId,
+      benefit_program_id: (p.benefit_program_id as string | null) ?? null,
+      benefit_program_name: benefitProgramName,
+      benefit_type: (p.benefit_type as string | null) ?? null,
+      benefit_value: p.benefit_value == null ? null : Number(p.benefit_value),
+      original_price: originalPrice,
+      discount_amount: discountAmount,
+      final_price: finalPrice,
+      benefit_applied: benefitApplied,
+      pricing_rule_version: (p.pricing_rule_version as string | null) ?? "beneficio_checkout_v1",
+    };
+  });
 
   const { error: ticketError } = await supabaseAdmin
     .from("tickets")
     .insert(ticketInserts);
 
   if (ticketError) {
+    logPaymentTrace("error", "payment-finalization", "ticket_insert_with_benefit_snapshot_failed", {
+      sale_id: saleId,
+      company_id: companyId,
+      error: ticketError.message,
+    });
     return {
       status: "error",
       message: `Erro ao criar tickets da venda ${saleId}`,
     };
   }
 
+  /**
+   * Segurança operacional:
+   * limpeza do staging só ocorre após inserção bem-sucedida em tickets.
+   * Assim evitamos perder snapshot de benefício em caso de falha na cópia.
+   */
   await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
 
   return {

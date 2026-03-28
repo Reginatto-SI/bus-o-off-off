@@ -2230,13 +2230,22 @@ export type Database = {
       }
       tickets: {
         Row: {
+          benefit_applied: boolean
+          benefit_program_id: string | null
+          benefit_program_name: string | null
+          benefit_type: string | null
+          benefit_value: number | null
           boarding_status: string
           company_id: string
           created_at: string
+          discount_amount: number
+          final_price: number
           id: string
+          original_price: number
           passenger_cpf: string
           passenger_name: string
           passenger_phone: string | null
+          pricing_rule_version: string
           qr_code_token: string
           sale_id: string
           seat_id: string | null
@@ -2246,13 +2255,22 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          benefit_applied?: boolean
+          benefit_program_id?: string | null
+          benefit_program_name?: string | null
+          benefit_type?: string | null
+          benefit_value?: number | null
           boarding_status?: string
           company_id: string
           created_at?: string
+          discount_amount?: number
+          final_price?: number
           id?: string
+          original_price?: number
           passenger_cpf: string
           passenger_name: string
           passenger_phone?: string | null
+          pricing_rule_version?: string
           qr_code_token?: string
           sale_id: string
           seat_id?: string | null
@@ -2262,13 +2280,22 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          benefit_applied?: boolean
+          benefit_program_id?: string | null
+          benefit_program_name?: string | null
+          benefit_type?: string | null
+          benefit_value?: number | null
           boarding_status?: string
           company_id?: string
           created_at?: string
+          discount_amount?: number
+          final_price?: number
           id?: string
+          original_price?: number
           passenger_cpf?: string
           passenger_name?: string
           passenger_phone?: string | null
+          pricing_rule_version?: string
           qr_code_token?: string
           sale_id?: string
           seat_id?: string | null
