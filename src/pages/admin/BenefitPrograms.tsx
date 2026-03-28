@@ -146,7 +146,6 @@ export default function BenefitPrograms() {
       .select(
         `
         *,
-        -- Comentário: desambiguação explícita dos FKs evita erro PGRST201 quando existem múltiplas relações possíveis.
         event_links:benefit_program_event_links!benefit_program_event_links_benefit_program_id_fkey(
           event_id,
           event:events!benefit_program_event_links_event_id_fkey(name)
