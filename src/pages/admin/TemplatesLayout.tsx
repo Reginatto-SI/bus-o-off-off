@@ -770,6 +770,38 @@ export default function TemplatesLayout() {
         setSaving(false);
         return;
       }
+
+      if ((upsertedItems ?? []).length === 0) {
+        // Comentário: alguns ambientes podem retornar payload vazio no upsert; validamos persistência real para evitar falso bloqueio.
+        const probeItem = sanitizedItems[0];
+        const { data: persistedProbeItem, error: probeError } = await supabase
+          .from('template_layout_items')
+          .select('id, seat_number, category, tags, is_blocked')
+          .eq('template_layout_id', probeItem.template_layout_id)
+          .eq('floor_number', probeItem.floor_number)
+          .eq('row_number', probeItem.row_number)
+          .eq('column_number', probeItem.column_number)
+          .maybeSingle();
+
+        const probeMatches =
+          !probeError &&
+          !!persistedProbeItem &&
+          persistedProbeItem.seat_number === probeItem.seat_number &&
+          persistedProbeItem.category === probeItem.category &&
+          JSON.stringify(persistedProbeItem.tags ?? []) === JSON.stringify(probeItem.tags ?? []) &&
+          persistedProbeItem.is_blocked === probeItem.is_blocked;
+
+        if (!probeMatches) {
+          logTemplateErrorInDev('save-template-items-upsert-empty-return', probeError, {
+            templateId,
+            probeItem,
+            persistedProbeItem,
+          });
+          toast.error('Sem permissão para salvar os assentos deste template.');
+          setSaving(false);
+          return;
+        }
+      }
     }
 
     const receivedKeys = new Set(sanitizedItems.map((item) => `${item.floor_number}-${item.row_number}-${item.column_number}`));
