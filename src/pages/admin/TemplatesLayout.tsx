@@ -747,7 +747,7 @@ export default function TemplatesLayout() {
     // Comentário: o upsert evita perda de dados parcial e garante que novos assentos não reutilizem id anterior.
     const { data: existingItems, error: existingItemsError } = await supabase
       .from('template_layout_items')
-      .select('id, floor_number, row_number, column_number')
+      .select('id, floor_number, row_number, column_number, seat_number, category, tags, is_blocked')
       .eq('template_layout_id', templateId);
 
     if (existingItemsError) {
@@ -758,6 +758,24 @@ export default function TemplatesLayout() {
     }
 
     if (sanitizedItems.length > 0) {
+      const existingItemsByCoord = new Map(
+        (existingItems ?? []).map((item) => [
+          `${item.floor_number}-${item.row_number}-${item.column_number}`,
+          item,
+        ]),
+      );
+
+      const changedItems = sanitizedItems.filter((item) => {
+        const existingItem = existingItemsByCoord.get(`${item.floor_number}-${item.row_number}-${item.column_number}`);
+        if (!existingItem) return true;
+        return (
+          existingItem.seat_number !== item.seat_number
+          || existingItem.category !== item.category
+          || JSON.stringify(existingItem.tags ?? []) !== JSON.stringify(item.tags ?? [])
+          || existingItem.is_blocked !== item.is_blocked
+        );
+      });
+
       const { data: upsertedItems, error: itemsUpsertError } = await supabase
         .from('template_layout_items')
         .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' })
@@ -771,9 +789,9 @@ export default function TemplatesLayout() {
         return;
       }
 
-      if ((upsertedItems ?? []).length === 0) {
+      if ((upsertedItems ?? []).length === 0 && changedItems.length > 0) {
         // Comentário: alguns ambientes podem retornar payload vazio no upsert; validamos persistência real para evitar falso bloqueio.
-        const probeItem = sanitizedItems[0];
+        const probeItem = changedItems[0];
         const { data: persistedProbeItem, error: probeError } = await supabase
           .from('template_layout_items')
           .select('id, seat_number, category, tags, is_blocked')
