@@ -1498,8 +1498,7 @@ export default function BenefitPrograms() {
                       </TableCell>
                       <TableCell>
                         <StatusBadge
-                          status={program.status === 'ativo' ? 'active' : 'inactive'}
-                          customLabel={program.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                          status={program.status === 'ativo' ? 'ativo' : 'inativo'}
                         />
                       </TableCell>
                       <TableCell>{program.eligible_cpf.length}</TableCell>
