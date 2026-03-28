@@ -26,6 +26,7 @@ export interface ManifestRow {
   stop_order: number | null;
   departure_time: string | null;
   passenger_name: string;
+  passenger_cpf: string | null;
   passenger_phone: string | null;
   seat_label: string;
 }
@@ -104,6 +105,13 @@ const formatPhoneForPrint = (value: string | null) => {
   }
 
   return value;
+};
+
+const formatCpfMaskedForPrint = (value: string | null) => {
+  if (!value) return '-';
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 11) return '-';
+  return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 };
 
 /**
@@ -316,6 +324,7 @@ export async function generateBoardingManifest({
       '',
       passenger.seat_label,
       passenger.passenger_name,
+      formatCpfMaskedForPrint(passenger.passenger_cpf),
       formatPhoneForPrint(passenger.passenger_phone),
     ]);
 
@@ -348,7 +357,7 @@ export async function generateBoardingManifest({
 
     autoTable(doc, {
       startY: currentY + 9,
-      head: [['E', 'D', 'R', 'Poltrona', 'Passageiro', 'Telefone']],
+      head: [['E', 'D', 'R', 'Poltrona', 'Passageiro', 'CPF', 'Telefone']],
       body: tableRows,
       margin: { left: margin, right: margin, top: margin },
       showHead: 'everyPage',
@@ -372,9 +381,10 @@ export async function generateBoardingManifest({
         0: { cellWidth: 10, halign: 'center' },
         1: { cellWidth: 10, halign: 'center' },
         2: { cellWidth: 10, halign: 'center' },
-        3: { cellWidth: 20, halign: 'center' },
-        4: { cellWidth: 88 },
-        5: { cellWidth: 48, halign: 'left' },
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 60 },
+        5: { cellWidth: 34, halign: 'left' },
+        6: { cellWidth: 44, halign: 'left' },
       },
       didDrawPage: (hookData) => {
         // Sempre redesenha o cabeçalho do grupo quando a tabela quebra de página.

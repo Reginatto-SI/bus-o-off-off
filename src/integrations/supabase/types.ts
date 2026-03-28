@@ -2608,6 +2608,7 @@ export type Database = {
           event_date: string
           event_id: string
           event_name: string
+          passenger_cpf: string
           passenger_name: string
           passenger_phone: string
           sale_id: string
