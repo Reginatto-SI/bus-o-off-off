@@ -1096,6 +1096,8 @@ export default function BenefitProgramEditor() {
                         <div className="space-y-1">
                           <Label>CPF</Label>
                           <Input placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
+                          {/* Comentário: orientação explícita de formato, pois o backend normaliza para 11 dígitos e aceita com/sem máscara. */}
+                          <p className="text-xs text-muted-foreground">Aceita CPF com ou sem pontos/traço. Ex.: 123.456.789-09 ou 12345678909.</p>
                         </div>
                         <div className="space-y-1">
                           <Label>Nome (opcional)</Label>
@@ -1142,7 +1144,8 @@ export default function BenefitProgramEditor() {
 
                     <div className="space-y-3 rounded-md border p-4">
                       <p className="text-sm font-medium">Importação em massa (CSV/XLSX)</p>
-                      <p className="text-xs text-muted-foreground">Baixe o modelo padrão, preencha no Excel e importe. O sistema valida CPF, vigência e duplicidades.</p>
+                      {/* Comentário: deixa claro no fluxo de planilha que CPFs com máscara também são normalizados automaticamente. */}
+                      <p className="text-xs text-muted-foreground">Baixe o modelo padrão, preencha no Excel e importe. O sistema aceita CPF com ou sem máscara, normaliza para 11 dígitos e valida vigência/duplicidades.</p>
                       <Input
                         type="file"
                         accept=".csv,.xlsx"
@@ -1158,6 +1161,7 @@ export default function BenefitProgramEditor() {
                       <div className="rounded-md border p-3">
                         <p className="text-xs font-medium mb-2">Colagem rápida</p>
                         <Textarea rows={4} value={bulkCpfText} onChange={(e) => setBulkCpfText(e.target.value)} placeholder={'00000000000\n11111111111'} />
+                        <p className="mt-2 text-xs text-muted-foreground">Você pode colar CPFs com pontuação (.) e (-); o sistema remove a máscara automaticamente.</p>
                         {/* Comentário: ação posicionada junto ao campo de colagem para reduzir ambiguidade de fluxo na operação diária. */}
                         <Button type="button" variant="outline" className="mt-2" onClick={handleBulkCpfAdd}>
                           <FileUp className="h-4 w-4 mr-2" />
