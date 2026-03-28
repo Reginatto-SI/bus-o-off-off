@@ -1440,12 +1440,21 @@ export type Database = {
       }
       sale_passengers: {
         Row: {
+          benefit_applied: boolean
+          benefit_program_id: string | null
+          benefit_program_name: string | null
+          benefit_type: string | null
+          benefit_value: number | null
           company_id: string
           created_at: string
+          discount_amount: number
           id: string
+          final_price: number
+          original_price: number
           passenger_cpf: string
           passenger_name: string
           passenger_phone: string | null
+          pricing_rule_version: string
           sale_id: string
           seat_id: string | null
           seat_label: string
@@ -1453,12 +1462,21 @@ export type Database = {
           trip_id: string
         }
         Insert: {
+          benefit_applied?: boolean
+          benefit_program_id?: string | null
+          benefit_program_name?: string | null
+          benefit_type?: string | null
+          benefit_value?: number | null
           company_id: string
           created_at?: string
+          discount_amount?: number
           id?: string
+          final_price: number
+          original_price: number
           passenger_cpf: string
           passenger_name: string
           passenger_phone?: string | null
+          pricing_rule_version?: string
           sale_id: string
           seat_id?: string | null
           seat_label: string
@@ -1466,12 +1484,21 @@ export type Database = {
           trip_id: string
         }
         Update: {
+          benefit_applied?: boolean
+          benefit_program_id?: string | null
+          benefit_program_name?: string | null
+          benefit_type?: string | null
+          benefit_value?: number | null
           company_id?: string
           created_at?: string
+          discount_amount?: number
           id?: string
+          final_price?: number
+          original_price?: number
           passenger_cpf?: string
           passenger_name?: string
           passenger_phone?: string | null
+          pricing_rule_version?: string
           sale_id?: string
           seat_id?: string | null
           seat_label?: string
@@ -1514,6 +1541,7 @@ export type Database = {
           asaas_payment_id: string | null
           asaas_payment_status: string | null
           asaas_transfer_id: string | null
+          benefit_total_discount: number
           block_reason: string | null
           boarding_location_id: string
           cancel_reason: string | null
@@ -1552,6 +1580,7 @@ export type Database = {
           asaas_payment_id?: string | null
           asaas_payment_status?: string | null
           asaas_transfer_id?: string | null
+          benefit_total_discount?: number
           block_reason?: string | null
           boarding_location_id: string
           cancel_reason?: string | null
@@ -1590,6 +1619,7 @@ export type Database = {
           asaas_payment_id?: string | null
           asaas_payment_status?: string | null
           asaas_transfer_id?: string | null
+          benefit_total_discount?: number
           block_reason?: string | null
           boarding_location_id?: string
           cancel_reason?: string | null

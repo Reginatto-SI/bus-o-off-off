@@ -283,6 +283,29 @@ export interface TicketRecord {
   updated_at: string;
 }
 
+export interface SalePassengerRecord {
+  id: string;
+  sale_id: string;
+  seat_id: string | null;
+  seat_label: string;
+  passenger_name: string;
+  passenger_cpf: string;
+  passenger_phone: string | null;
+  trip_id: string;
+  sort_order: number;
+  company_id: string;
+  benefit_program_id: string | null;
+  benefit_program_name: string | null;
+  benefit_type: BenefitType | null;
+  benefit_value: number | null;
+  original_price: number;
+  discount_amount: number;
+  final_price: number;
+  benefit_applied: boolean;
+  pricing_rule_version: string;
+  created_at: string;
+}
+
 
 
 export type TicketValidationAction = 'checkin' | 'checkout';
@@ -456,6 +479,7 @@ export interface Sale {
   intermediation_responsibility_accepted_at: string | null;
   // Dados financeiros de comissão (preenchidos após pagamento)
   gross_amount: number | null;
+  benefit_total_discount: number;
   platform_fee_total: number | null;
   socio_fee_amount: number | null;
   platform_net_amount: number | null;
