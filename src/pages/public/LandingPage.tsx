@@ -504,6 +504,11 @@ const LANDING_FAQS = [
     answer:
       "Em poucos minutos você já pode configurar sua operação e começar a vender.",
   },
+  {
+    question: "Posso corrigir dados de uma passagem após a compra?",
+    answer:
+      "Sim. Caso o passageiro tenha informado dados incorretos, como nome, telefone ou CPF, é possível realizar a correção diretamente no sistema. Para garantir segurança e rastreabilidade, essas alterações são controladas e podem ter limitações dependendo do status da passagem. Após o embarque, por exemplo, não é possível realizar alterações.",
+  },
 ] as const;
 // Nova seção comercial antes da FAQ: mostra que começar a vender é um processo simples,
 // visual e rápido, sem transformar a landing em tutorial técnico.
