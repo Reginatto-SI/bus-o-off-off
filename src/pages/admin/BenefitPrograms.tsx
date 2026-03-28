@@ -1349,8 +1349,7 @@ export default function BenefitPrograms() {
                                             <TableCell>{record.full_name ?? '—'}</TableCell>
                                             <TableCell>
                                               <StatusBadge
-                                                status={record.status === 'ativo' ? 'active' : 'inactive'}
-                                                customLabel={record.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                                                status={record.status === 'ativo' ? 'ativo' : 'inativo'}
                                               />
                                             </TableCell>
                                             <TableCell>
