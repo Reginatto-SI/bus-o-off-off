@@ -512,7 +512,7 @@ export default function CompanyRegistration() {
 
                   {/* Comentário visual: bloco de confiança melhora destaque do CTA e reduz percepção de burocracia. */}
                   <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                    <p className="text-sm text-muted-foreground">Leva menos de 1 minuto para começar.</p>
+                    <p className="text-sm text-muted-foreground">Leva menos de 1 minuto para criar sua conta e acessar o painel da empresa.</p>
                     <Button
                       type="submit"
                       className="h-11 w-full rounded-xl text-base font-medium shadow-[0_12px_24px_-14px_hsla(var(--primary),0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:opacity-95"
