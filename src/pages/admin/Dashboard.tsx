@@ -96,6 +96,8 @@ interface OnboardingChecklistStatus {
   hasPaidSale: boolean;
 }
 
+type OnboardingPopupMode = 'welcome' | 'event_cta' | 'none';
+
 /* ═══════════════════════════════════════════════════
    Constantes de cores para gráficos (semânticas)
    ═══════════════════════════════════════════════════ */
@@ -132,7 +134,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>(30);
   const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
-  const hasEvaluatedOnboardingPopupRef = useRef(false);
+  const lastPopupModeRef = useRef<OnboardingPopupMode | null>(null);
   const onboardingWelcomeDismissKey = useMemo(
     () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
     [activeCompanyId]
@@ -170,94 +172,138 @@ export default function Dashboard() {
      Comentário: esta leitura usa dados reais por empresa (company_id)
      nas tabelas events, vehicles, event_boarding_locations e sales.
      Não existe estado fake: o checklist sempre reflete o banco atual. */
-  const { data: onboardingStatus, isLoading: onboardingLoading } = useQuery({
-    queryKey: ['dashboard-onboarding', activeCompanyId],
+  const { data: onboardingLightStatus, isLoading: onboardingLightLoading } = useQuery({
+    // Otimização: leitura leve primeiro (sem joins pesados) para o card aparecer cedo.
+    queryKey: ['dashboard-onboarding-light', activeCompanyId],
     enabled,
     queryFn: async (): Promise<OnboardingChecklistStatus> => {
-      const [{ count: vehiclesCount }, { count: driversCount }, { count: boardingCount }, { count: eventsCount }, { count: publishedEventsCount }, { count: paidSalesCount }] = await Promise.all([
+      const [{ count: vehiclesCount }, { count: driversCount }, { count: eventsCount }, { count: paidSalesCount }] = await Promise.all([
         supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
         // Validação real do passo "Cadastrar motorista" usando a estrutura oficial do admin.
         supabase.from('drivers').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
-        // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
-        // Isso evita falso positivo com registro órfão/inconsistente em event_boarding_locations.
-        supabase
-          .from('event_boarding_locations')
-          .select('id, events!inner(id)', { count: 'exact', head: true })
-          .eq('company_id', activeCompanyId!)
-          .eq('events.company_id', activeCompanyId!),
-        // Endurecimento: "publicar viagem" exige evento à venda + não arquivado + vínculo operacional mínimo
-        // (trip + configuração de embarque no mesmo evento) para reduzir falso positivo óbvio.
-        supabase
-          .from('events')
-          .select('id, trips!inner(id), event_boarding_locations!inner(id)', { count: 'exact', head: true })
-          .eq('company_id', activeCompanyId!)
-          .eq('status', 'a_venda')
-          .eq('is_archived', false),
+        supabase.from('events').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
         supabase.from('sales').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!).eq('status', 'pago'),
       ]);
 
       return {
         hasVehicle: (vehiclesCount ?? 0) > 0,
         hasDriver: (driversCount ?? 0) > 0,
-        hasBoardingConfig: (boardingCount ?? 0) > 0,
+        hasBoardingConfig: false,
         hasEvent: (eventsCount ?? 0) > 0,
-        hasPublishedEvent: (publishedEventsCount ?? 0) > 0,
+        hasPublishedEvent: false,
         hasPaidSale: (paidSalesCount ?? 0) > 0,
       };
     },
   });
+
+  const shouldEnableOnboardingHeavy = Boolean(
+    activeCompanyId &&
+    onboardingLightStatus?.hasVehicle &&
+    onboardingLightStatus?.hasDriver
+  );
+  const { data: onboardingHeavyStatus, isLoading: onboardingHeavyLoading } = useQuery({
+    // Otimização: joins mais custosos só quando já existem pré-requisitos operacionais.
+    queryKey: ['dashboard-onboarding-heavy', activeCompanyId],
+    enabled: shouldEnableOnboardingHeavy,
+    queryFn: async (): Promise<Pick<OnboardingChecklistStatus, 'hasBoardingConfig' | 'hasPublishedEvent'>> => {
+      const [{ count: boardingCount }, { count: publishedEventsCount }] = await Promise.all([
+        // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
+        supabase
+          .from('event_boarding_locations')
+          .select('id, events!inner(id)', { count: 'exact', head: true })
+          .eq('company_id', activeCompanyId!)
+          .eq('events.company_id', activeCompanyId!),
+        // Endurecimento: "publicar viagem" exige evento à venda + não arquivado + vínculo operacional mínimo.
+        supabase
+          .from('events')
+          .select('id, trips!inner(id), event_boarding_locations!inner(id)', { count: 'exact', head: true })
+          .eq('company_id', activeCompanyId!)
+          .eq('status', 'a_venda')
+          .eq('is_archived', false),
+      ]);
+
+      return {
+        hasBoardingConfig: (boardingCount ?? 0) > 0,
+        hasPublishedEvent: (publishedEventsCount ?? 0) > 0,
+      };
+    },
+  });
+
+  const onboardingStatus = useMemo<OnboardingChecklistStatus>(() => ({
+    hasVehicle: onboardingLightStatus?.hasVehicle ?? false,
+    hasDriver: onboardingLightStatus?.hasDriver ?? false,
+    hasBoardingConfig: onboardingHeavyStatus?.hasBoardingConfig ?? false,
+    hasEvent: onboardingLightStatus?.hasEvent ?? false,
+    hasPublishedEvent: onboardingHeavyStatus?.hasPublishedEvent ?? false,
+    hasPaidSale: onboardingLightStatus?.hasPaidSale ?? false,
+  }), [onboardingHeavyStatus, onboardingLightStatus]);
+  const onboardingLoading = onboardingLightLoading;
 
   const onboardingItems = useMemo(
     () => [
       {
         key: 'vehicle',
         label: 'Cadastrar veículo',
-        done: onboardingStatus?.hasVehicle ?? false,
+        done: onboardingStatus.hasVehicle,
+        isLoading: onboardingLoading,
         href: '/admin/frota',
       },
       {
         key: 'driver',
         label: 'Cadastrar motorista',
-        done: onboardingStatus?.hasDriver ?? false,
+        done: onboardingStatus.hasDriver,
+        isLoading: onboardingLoading,
         href: '/admin/motoristas',
       },
       {
         key: 'boarding',
         label: 'Configurar embarque',
-        done: onboardingStatus?.hasBoardingConfig ?? false,
+        done: onboardingStatus.hasBoardingConfig,
+        // Validação pesada carregada depois para não segurar a pintura inicial do card.
+        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
         href: '/admin/locais',
       },
       {
         key: 'event',
         label: 'Criar primeiro evento',
-        done: onboardingStatus?.hasEvent ?? false,
+        done: onboardingStatus.hasEvent,
+        isLoading: onboardingLoading,
         href: '/admin/eventos?novo=1',
       },
       {
         key: 'publish',
         label: 'Publicar viagem',
-        done: onboardingStatus?.hasPublishedEvent ?? false,
+        done: onboardingStatus.hasPublishedEvent,
+        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
         href: '/admin/eventos',
       },
       {
         key: 'sale',
         label: 'Fazer primeira venda',
-        done: onboardingStatus?.hasPaidSale ?? false,
+        done: onboardingStatus.hasPaidSale,
+        isLoading: onboardingLoading,
         // Mantido: /admin/vendas abre o modal de nova venda via `novaVenda=1` (fluxo já suportado pela tela de vendas).
         href: '/admin/vendas?novaVenda=1&aba=manual',
       },
     ],
-    [onboardingStatus]
+    [onboardingLoading, onboardingStatus, onboardingHeavyLoading, shouldEnableOnboardingHeavy]
   );
   // Nova ordem operacional explícita: veículo → motorista → embarque → evento → publicação → venda.
   const nextOnboardingStep = useMemo(
-    () => onboardingItems.find((item) => !item.done) ?? null,
+    // Lógica previsível: primeiro passo ainda pendente; se estiver carregando, aguardamos antes de avançar.
+    () => {
+      for (const item of onboardingItems) {
+        if (item.isLoading) return null;
+        if (!item.done) return item;
+      }
+      return null;
+    },
     [onboardingItems]
   );
 
   useEffect(() => {
     // Reavalia popup ao trocar empresa ativa.
-    hasEvaluatedOnboardingPopupRef.current = false;
+    lastPopupModeRef.current = null;
     setOnboardingPopupOpen(false);
   }, [activeCompanyId]);
 
@@ -265,23 +311,28 @@ export default function Dashboard() {
     // Popup contextual:
     // - estágio inicial: boas-vindas e orientação do passo a passo (sem pressionar criação de evento).
     // - estágio pronto para evento: CTA direto só quando "Criar primeiro evento" for o próximo passo lógico.
-    if (onboardingLoading || hasEvaluatedOnboardingPopupRef.current || !onboardingStatus || onboardingStatus.hasEvent) {
-      if (!onboardingLoading && onboardingStatus?.hasEvent) {
+    if (onboardingLightLoading || onboardingStatus.hasEvent) {
+      if (!onboardingLightLoading && onboardingStatus.hasEvent) {
         window.localStorage.removeItem(onboardingWelcomeDismissKey);
         window.localStorage.removeItem(onboardingEventCtaDismissKey);
       }
       return;
     }
-
-    hasEvaluatedOnboardingPopupRef.current = true;
+    let popupMode: OnboardingPopupMode = 'welcome';
     const shouldShowEventCtaPopup =
       onboardingStatus.hasVehicle &&
       onboardingStatus.hasDriver &&
       onboardingStatus.hasBoardingConfig &&
       !onboardingStatus.hasEvent &&
       nextOnboardingStep?.key === 'event';
-
     if (shouldShowEventCtaPopup) {
+      popupMode = 'event_cta';
+    }
+
+    if (lastPopupModeRef.current === popupMode) return;
+    lastPopupModeRef.current = popupMode;
+
+    if (popupMode === 'event_cta') {
       const dismissedEventCta = window.localStorage.getItem(onboardingEventCtaDismissKey) === '1';
       setOnboardingPopupOpen(!dismissedEventCta);
       return;
@@ -291,7 +342,7 @@ export default function Dashboard() {
     setOnboardingPopupOpen(!dismissedWelcome);
   }, [
     onboardingEventCtaDismissKey,
-    onboardingLoading,
+    onboardingLightLoading,
     onboardingStatus,
     onboardingWelcomeDismissKey,
     nextOnboardingStep?.key,
@@ -302,7 +353,8 @@ export default function Dashboard() {
     () => onboardingItems.filter((item) => item.done).length,
     [onboardingItems]
   );
-  const shouldShowOnboardingCard = !onboardingLoading && onboardingCompletedCount < onboardingItems.length;
+  const shouldShowOnboardingCard =
+    enabled && (onboardingLoading || onboardingCompletedCount < onboardingItems.length);
 
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
@@ -638,36 +690,50 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">
                 Siga estas etapas para preparar sua operação e começar a vender.
               </p>
-              {nextOnboardingStep && (
+              {!nextOnboardingStep && (onboardingLoading || onboardingHeavyLoading) ? (
+                <p className="text-xs text-muted-foreground">Calculando próximo passo recomendado...</p>
+              ) : nextOnboardingStep ? (
                 <p className="text-xs text-muted-foreground">
                   Próximo passo recomendado: <span className="font-medium text-foreground">{nextOnboardingStep.label}</span>
                 </p>
-              )}
+              ) : null}
               <Progress value={(onboardingCompletedCount / onboardingItems.length) * 100} className="h-2" />
             </CardHeader>
             <CardContent className="space-y-2">
               {onboardingItems.map((item) => (
-                <Button
-                  key={item.key}
-                  asChild
-                  variant="ghost"
-                  className="h-auto w-full justify-between rounded-lg border px-3 py-3"
-                >
-                  <Link to={item.href}>
-                    <span className="flex items-center gap-2 text-sm">
-                      {item.done ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      ) : (
+                item.isLoading ? (
+                  <div key={item.key} className="rounded-lg border px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                         <Circle className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span>{item.label}</span>
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {item.done ? 'Ver' : 'Ir agora'}
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </span>
-                  </Link>
-                </Button>
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    key={item.key}
+                    asChild
+                    variant="ghost"
+                    className="h-auto w-full justify-between rounded-lg border px-3 py-3"
+                  >
+                    <Link to={item.href}>
+                      <span className="flex items-center gap-2 text-sm">
+                        {item.done ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span>{item.label}</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        {item.done ? 'Ver' : 'Ir agora'}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
+                    </Link>
+                  </Button>
+                )
               ))}
             </CardContent>
           </Card>
