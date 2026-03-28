@@ -1110,18 +1110,19 @@ export default function BenefitProgramEditor() {
                   <div className="grid gap-4 xl:grid-cols-2">
                     <div className="space-y-3 rounded-md border p-4">
                       <p className="text-sm font-medium">Cadastro manual</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
+                      {/* Comentário: grade em 6 colunas para manter Status + Vigência inicial + Vigência final na mesma linha em telas com espaço. */}
+                      <div className="grid gap-3 sm:grid-cols-6">
+                        <div className="space-y-1 sm:col-span-3">
                           <Label>CPF</Label>
                           <Input placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
                           {/* Comentário: orientação explícita de formato, pois o backend normaliza para 11 dígitos e aceita com/sem máscara. */}
                           <p className="text-xs text-muted-foreground">Aceita CPF com ou sem pontos/traço. Ex.: 123.456.789-09 ou 12345678909.</p>
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 sm:col-span-3">
                           <Label>Nome (opcional)</Label>
                           <Input value={cpfForm.full_name} onChange={(e) => setCpfForm({ ...cpfForm, full_name: e.target.value })} />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 sm:col-span-2">
                           <Label>Status</Label>
                           <Select value={cpfForm.status} onValueChange={(value: BenefitProgramStatus) => setCpfForm({ ...cpfForm, status: value })}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1131,15 +1132,15 @@ export default function BenefitProgramEditor() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 sm:col-span-2">
                           <Label>Vigência inicial</Label>
                           <Input type="date" value={cpfForm.valid_from} onChange={(e) => setCpfForm({ ...cpfForm, valid_from: e.target.value })} />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 sm:col-span-2">
                           <Label>Vigência final</Label>
                           <Input type="date" value={cpfForm.valid_until} onChange={(e) => setCpfForm({ ...cpfForm, valid_until: e.target.value })} />
                         </div>
-                        <div className="space-y-1 sm:col-span-2">
+                        <div className="space-y-1 sm:col-span-6">
                           <Label>Observação</Label>
                           <Textarea rows={2} value={cpfForm.notes} onChange={(e) => setCpfForm({ ...cpfForm, notes: e.target.value })} />
                         </div>
