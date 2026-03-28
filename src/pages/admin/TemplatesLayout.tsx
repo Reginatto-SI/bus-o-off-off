@@ -170,7 +170,7 @@ const logTemplateErrorInDev = (context: string, error: PostgrestError | null, me
 };
 
 export default function TemplatesLayout() {
-  const { isDeveloper } = useAuth();
+  const { canAccessTemplatesLayout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -284,9 +284,9 @@ export default function TemplatesLayout() {
   };
 
   useEffect(() => {
-    if (!isDeveloper) return;
+    if (!canAccessTemplatesLayout) return;
     fetchTemplates(page, pageSize);
-  }, [isDeveloper, filteredSearch, statusFilter, typeFilter, page, pageSize]);
+  }, [canAccessTemplatesLayout, filteredSearch, statusFilter, typeFilter, page, pageSize]);
 
   const floorLabels = useMemo(() => Array.from({ length: form.floors }, (_, idx) => idx + 1), [form.floors]);
 
@@ -883,7 +883,7 @@ export default function TemplatesLayout() {
     setDeleting(false);
   };
 
-  if (!isDeveloper) return <Navigate to="/admin/eventos" replace />;
+  if (!canAccessTemplatesLayout) return <Navigate to="/admin/eventos" replace />;
 
   const rowIndexes = Array.from({ length: form.grid_rows }, (_, i) => i + 1);
   const columnIndexes = Array.from({ length: form.grid_columns }, (_, i) => i + 1);
