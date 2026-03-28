@@ -43,6 +43,13 @@ const formatTripLabel = (trip: TripOption) => {
   return `${trip.trip_type.toUpperCase()} • ${timeLabel}${vehicleLabel}`;
 };
 
+const formatManifestCpfMask = (cpf: string | null) => {
+  if (!cpf) return 'CPF não informado';
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11) return 'CPF não informado';
+  return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
+};
+
 export default function BoardingManifestReport() {
   const { activeCompanyId, activeCompany } = useAuth();
 
@@ -402,7 +409,8 @@ export default function BoardingManifestReport() {
                                 <div className="space-y-1">
                                   {passengers.map((passenger) => (
                                     <p key={passenger.ticket_id ?? passenger.sale_id} className="text-sm text-muted-foreground">
-                                      • {passenger.seat_label} — <span className="text-foreground">{passenger.passenger_name}</span>
+                                      • {passenger.seat_label} — <span className="text-foreground">{passenger.passenger_name}</span>{' '}
+                                      <span className="text-xs">({formatManifestCpfMask(passenger.passenger_cpf)})</span>
                                     </p>
                                   ))}
                                 </div>
