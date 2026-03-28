@@ -54,6 +54,8 @@ import {
   Power,
   UserX,
   Link,
+  BadgeCheck,
+  MapPinned,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -458,15 +460,34 @@ export default function BoardingAssistants() {
                   <DialogHeader className="admin-modal__header px-6 py-4">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Auxiliar de Embarque</DialogTitle>
                   </DialogHeader>
-                  <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                    <Tabs defaultValue="dados-pessoais" className="flex h-full flex-col">
+                  <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+                    <Tabs defaultValue="dados-pessoais" className="flex h-full min-h-0 flex-col">
                       <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                        <TabsTrigger value="dados-pessoais">Dados pessoais</TabsTrigger>
-                        <TabsTrigger value="contato-endereco">Contato e endereço</TabsTrigger>
-                        <TabsTrigger value="dados-operacionais">Dados operacionais</TabsTrigger>
+                        {/* Mantém o padrão visual de abas do admin (ícone + texto) sem criar novos componentes. */}
+                        <TabsTrigger
+                          value="dados-pessoais"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <IdCard className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Dados pessoais</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="contato-endereco"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <MapPinned className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Contato e endereço</span>
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="dados-operacionais"
+                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                        >
+                          <BadgeCheck className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 truncate">Dados operacionais</span>
+                        </TabsTrigger>
                       </TabsList>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4 min-h-0">
                         <TabsContent value="dados-pessoais" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2 sm:col-span-2">
@@ -495,7 +516,8 @@ export default function BoardingAssistants() {
                         </TabsContent>
 
                         <TabsContent value="contato-endereco" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
+                          {/* Reorganização em 3 colunas no desktop para compactar a aba e reduzir o estouro visual. */}
+                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <div className="space-y-2">
                               <Label htmlFor="phone">Telefone</Label>
                               <Input
@@ -515,15 +537,15 @@ export default function BoardingAssistants() {
                                 placeholder="(11) 99999-9999"
                               />
                             </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="email">E-mail</Label>
-                              <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
+                            <div className="space-y-2 sm:col-span-2 lg:col-span-1">
                               <Label htmlFor="cep">CEP</Label>
                               <Input id="cep" value={form.cep} onChange={(e) => setForm({ ...form, cep: formatCepInput(e.target.value) })} placeholder="00000-000" />
                             </div>
-                            <div className="space-y-2 sm:col-span-2">
+                            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                              <Label htmlFor="email">E-mail</Label>
+                              <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                            </div>
+                            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
                               <Label htmlFor="street">Logradouro</Label>
                               <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
                             </div>
