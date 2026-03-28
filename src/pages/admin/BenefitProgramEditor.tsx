@@ -29,6 +29,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ActionsDropdown, type ActionItem } from '@/components/admin/ActionsDropdown';
 import {
   BenefitProgram,
@@ -176,6 +183,8 @@ export default function BenefitProgramEditor() {
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [pendingCpfs, setPendingCpfs] = useState<EligibleCpfDraft[]>([]);
   const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [manualCpfModalOpen, setManualCpfModalOpen] = useState(false);
+  const [bulkImportModalOpen, setBulkImportModalOpen] = useState(false);
 
   const eventsRef = useRef<HTMLDivElement | null>(null);
   const cpfsRef = useRef<HTMLDivElement | null>(null);
@@ -483,6 +492,13 @@ export default function BenefitProgramEditor() {
       notes: record.notes ?? '',
     });
     setEditingCpfId(record.id);
+    // Comentário: ao editar pela tabela, abrimos o mesmo formulário já existente no modal para evitar duplicação de fluxo.
+    setManualCpfModalOpen(true);
+  };
+
+  const resetCpfFormState = () => {
+    setEditingCpfId(null);
+    setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
   };
 
   const handleAddCpf = async () => {
@@ -515,8 +531,7 @@ export default function BenefitProgramEditor() {
           notes: cpfForm.notes.trim() || null,
         },
       ]);
-      setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
-      setEditingCpfId(null);
+      resetCpfFormState();
       toast.success('CPF adicionado na lista pendente.');
       return;
     }
@@ -549,8 +564,7 @@ export default function BenefitProgramEditor() {
       return;
     }
 
-    setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
-    setEditingCpfId(null);
+    resetCpfFormState();
     toast.success(editingCpfId ? 'CPF elegível atualizado com sucesso.' : 'CPF elegível adicionado com sucesso.');
     await fetchProgram();
   };
@@ -1107,101 +1121,17 @@ export default function BenefitProgramEditor() {
                     <p><strong className="text-foreground">Consulta:</strong> pesquise por CPF/nome e gerencie status na tabela.</p>
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <div className="space-y-3 rounded-md border p-4">
-                      <p className="text-sm font-medium">Cadastro manual</p>
-                      {/* Comentário: grade em 6 colunas para manter Status + Vigência inicial + Vigência final na mesma linha em telas com espaço. */}
-                      <div className="grid gap-3 sm:grid-cols-6">
-                        <div className="space-y-1 sm:col-span-3">
-                          <Label>CPF</Label>
-                          <Input placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
-                          {/* Comentário: orientação explícita de formato, pois o backend normaliza para 11 dígitos e aceita com/sem máscara. */}
-                          <p className="text-xs text-muted-foreground">Aceita CPF com ou sem pontos/traço. Ex.: 123.456.789-09 ou 12345678909.</p>
-                        </div>
-                        <div className="space-y-1 sm:col-span-3">
-                          <Label>Nome (opcional)</Label>
-                          <Input value={cpfForm.full_name} onChange={(e) => setCpfForm({ ...cpfForm, full_name: e.target.value })} />
-                        </div>
-                        <div className="space-y-1 sm:col-span-2">
-                          <Label>Status</Label>
-                          <Select value={cpfForm.status} onValueChange={(value: BenefitProgramStatus) => setCpfForm({ ...cpfForm, status: value })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ativo">Ativo</SelectItem>
-                              <SelectItem value="inativo">Inativo</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1 sm:col-span-2">
-                          <Label>Vigência inicial</Label>
-                          <Input type="date" value={cpfForm.valid_from} onChange={(e) => setCpfForm({ ...cpfForm, valid_from: e.target.value })} />
-                        </div>
-                        <div className="space-y-1 sm:col-span-2">
-                          <Label>Vigência final</Label>
-                          <Input type="date" value={cpfForm.valid_until} onChange={(e) => setCpfForm({ ...cpfForm, valid_until: e.target.value })} />
-                        </div>
-                        <div className="space-y-1 sm:col-span-6">
-                          <Label>Observação</Label>
-                          <Textarea rows={2} value={cpfForm.notes} onChange={(e) => setCpfForm({ ...cpfForm, notes: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" onClick={() => void handleAddCpf()} disabled={cpfSaving}>
-                          {cpfSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : editingCpfId ? <Pencil className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-                          {editingCpfId ? 'Salvar edição do CPF' : 'Adicionar CPF'}
-                        </Button>
-                        {editingCpfId && (
-                          <Button type="button" variant="outline" onClick={() => {
-                            setEditingCpfId(null);
-                            setCpfForm({ cpf: '', full_name: '', status: 'ativo', valid_from: '', valid_until: '', notes: '' });
-                          }}>
-                            Cancelar edição
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 rounded-md border p-4">
-                      <p className="text-sm font-medium">Importação em massa (CSV/XLSX)</p>
-                      {/* Comentário: deixa claro no fluxo de planilha que CPFs com máscara também são normalizados automaticamente. */}
-                      <p className="text-xs text-muted-foreground">Baixe o modelo padrão, preencha no Excel e importe. O sistema aceita CPF com ou sem máscara, normaliza para 11 dígitos e valida vigência/duplicidades.</p>
-                      <Input
-                        type="file"
-                        accept=".csv,.xlsx"
-                        disabled={importingCpfFile}
-                        onChange={(event) => {
-                          const selectedFile = event.target.files?.[0] ?? null;
-                          void handleCpfFileImport(selectedFile);
-                          event.currentTarget.value = '';
-                        }}
-                        className="max-w-sm"
-                      />
-                      {importingCpfFile && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                      <div className="rounded-md border p-3">
-                        <p className="text-xs font-medium mb-2">Colagem rápida</p>
-                        <Textarea rows={4} value={bulkCpfText} onChange={(e) => setBulkCpfText(e.target.value)} placeholder={'00000000000\n11111111111'} />
-                        <p className="mt-2 text-xs text-muted-foreground">Você pode colar CPFs com pontuação (.) e (-); o sistema remove a máscara automaticamente.</p>
-                        {/* Comentário: ação posicionada junto ao campo de colagem para reduzir ambiguidade de fluxo na operação diária. */}
-                        <Button type="button" variant="outline" className="mt-2" onClick={handleBulkCpfAdd}>
-                          <FileUp className="h-4 w-4 mr-2" />
-                          Importar por colagem
-                        </Button>
-                      </div>
-                      {importSummary && (
-                        <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
-                          <p className="font-medium">Resumo da importação</p>
-                          <p>Total de linhas lidas: {importSummary.totalLidas}</p>
-                          <p>Válidas: {importSummary.validas}</p>
-                          <p>Inválidas: {importSummary.invalidas}</p>
-                          <p>Duplicadas no arquivo: {importSummary.duplicadasNoArquivo}</p>
-                          <p>Já existentes no programa: {importSummary.jaExistentesNoPrograma}</p>
-                          <p>Importadas com sucesso: {importSummary.importadasComSucesso}</p>
-                          {importSummary.erros.length > 0 && (
-                            <p className="text-destructive">Exemplo de erro: {importSummary.erros[0]}{importSummary.erros.length > 1 ? ` (+${importSummary.erros.length - 1})` : ''}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Comentário: ação dedicada para abrir o formulário manual em modal, mantendo a listagem como foco principal da aba. */}
+                    <Button type="button" variant="outline" onClick={() => setManualCpfModalOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Cadastrar CPF manualmente
+                    </Button>
+                    {/* Comentário: ação dedicada para abrir o fluxo existente de importação em um modal separado. */}
+                    <Button type="button" variant="outline" onClick={() => setBulkImportModalOpen(true)}>
+                      <FileUp className="h-4 w-4 mr-2" />
+                      Importar CPFs
+                    </Button>
                   </div>
 
                   <div className="space-y-3 rounded-md border p-4">
@@ -1246,6 +1176,119 @@ export default function BenefitProgramEditor() {
                       </Table>
                     </div>
                   </div>
+
+                  <Dialog
+                    open={manualCpfModalOpen}
+                    onOpenChange={(open) => {
+                      setManualCpfModalOpen(open);
+                      if (!open && !cpfSaving) resetCpfFormState();
+                    }}
+                  >
+                    <DialogContent className="sm:max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>{editingCpfId ? 'Editar CPF elegível' : 'Cadastro manual de CPF'}</DialogTitle>
+                        <DialogDescription>
+                          Reaproveita o mesmo formulário e validações existentes da aba de CPFs elegíveis.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        {/* Comentário: grade em 6 colunas para manter Status + Vigência inicial + Vigência final na mesma linha em telas com espaço. */}
+                        <div className="grid gap-3 sm:grid-cols-6">
+                          <div className="space-y-1 sm:col-span-3">
+                            <Label>CPF</Label>
+                            <Input placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
+                            <p className="text-xs text-muted-foreground">Aceita CPF com ou sem pontos/traço. Ex.: 123.456.789-09 ou 12345678909.</p>
+                          </div>
+                          <div className="space-y-1 sm:col-span-3">
+                            <Label>Nome (opcional)</Label>
+                            <Input value={cpfForm.full_name} onChange={(e) => setCpfForm({ ...cpfForm, full_name: e.target.value })} />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label>Status</Label>
+                            <Select value={cpfForm.status} onValueChange={(value: BenefitProgramStatus) => setCpfForm({ ...cpfForm, status: value })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ativo">Ativo</SelectItem>
+                                <SelectItem value="inativo">Inativo</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label>Vigência inicial</Label>
+                            <Input type="date" value={cpfForm.valid_from} onChange={(e) => setCpfForm({ ...cpfForm, valid_from: e.target.value })} />
+                          </div>
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label>Vigência final</Label>
+                            <Input type="date" value={cpfForm.valid_until} onChange={(e) => setCpfForm({ ...cpfForm, valid_until: e.target.value })} />
+                          </div>
+                          <div className="space-y-1 sm:col-span-6">
+                            <Label>Observação</Label>
+                            <Textarea rows={2} value={cpfForm.notes} onChange={(e) => setCpfForm({ ...cpfForm, notes: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" onClick={() => void handleAddCpf()} disabled={cpfSaving}>
+                            {cpfSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : editingCpfId ? <Pencil className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                            {editingCpfId ? 'Salvar edição do CPF' : 'Adicionar CPF'}
+                          </Button>
+                          {editingCpfId && (
+                            <Button type="button" variant="outline" onClick={resetCpfFormState}>
+                              Cancelar edição
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={bulkImportModalOpen} onOpenChange={setBulkImportModalOpen}>
+                    <DialogContent className="sm:max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Importação em massa (CSV/XLSX)</DialogTitle>
+                        <DialogDescription>
+                          Reaproveita o fluxo atual de arquivo e colagem rápida sem alterar regras de importação.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">Baixe o modelo padrão, preencha no Excel e importe. O sistema aceita CPF com ou sem máscara, normaliza para 11 dígitos e valida vigência/duplicidades.</p>
+                        <Input
+                          type="file"
+                          accept=".csv,.xlsx"
+                          disabled={importingCpfFile}
+                          onChange={(event) => {
+                            const selectedFile = event.target.files?.[0] ?? null;
+                            void handleCpfFileImport(selectedFile);
+                            event.currentTarget.value = '';
+                          }}
+                          className="max-w-sm"
+                        />
+                        {importingCpfFile && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                        <div className="rounded-md border p-3">
+                          <p className="text-xs font-medium mb-2">Colagem rápida</p>
+                          <Textarea rows={4} value={bulkCpfText} onChange={(e) => setBulkCpfText(e.target.value)} placeholder={'00000000000\n11111111111'} />
+                          <p className="mt-2 text-xs text-muted-foreground">Você pode colar CPFs com pontuação (.) e (-); o sistema remove a máscara automaticamente.</p>
+                          <Button type="button" variant="outline" className="mt-2" onClick={handleBulkCpfAdd}>
+                            <FileUp className="h-4 w-4 mr-2" />
+                            Importar por colagem
+                          </Button>
+                        </div>
+                        {importSummary && (
+                          <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+                            <p className="font-medium">Resumo da importação</p>
+                            <p>Total de linhas lidas: {importSummary.totalLidas}</p>
+                            <p>Válidas: {importSummary.validas}</p>
+                            <p>Inválidas: {importSummary.invalidas}</p>
+                            <p>Duplicadas no arquivo: {importSummary.duplicadasNoArquivo}</p>
+                            <p>Já existentes no programa: {importSummary.jaExistentesNoPrograma}</p>
+                            <p>Importadas com sucesso: {importSummary.importadasComSucesso}</p>
+                            {importSummary.erros.length > 0 && (
+                              <p className="text-destructive">Exemplo de erro: {importSummary.erros[0]}{importSummary.erros.length > 1 ? ` (+${importSummary.erros.length - 1})` : ''}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </CardContent>
               </Card>
             </TabsContent>
