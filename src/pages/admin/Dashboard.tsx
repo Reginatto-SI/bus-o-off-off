@@ -170,7 +170,7 @@ export default function Dashboard() {
 
   /* ─── Onboarding inicial ───────────────────────────────
      Comentário: esta leitura usa dados reais por empresa (company_id)
-     nas tabelas events, vehicles, event_boarding_locations e sales.
+     nas tabelas events, vehicles, boarding_locations e sales.
      Não existe estado fake: o checklist sempre reflete o banco atual. */
   const { data: onboardingLightStatus, isLoading: onboardingLightLoading } = useQuery({
     // Otimização: leitura leve primeiro (sem joins pesados) para o card aparecer cedo.
@@ -196,27 +196,25 @@ export default function Dashboard() {
     },
   });
 
-  const shouldEnableOnboardingHeavy = Boolean(
-    activeCompanyId &&
-    onboardingLightStatus?.hasVehicle &&
-    onboardingLightStatus?.hasDriver
-  );
+  // Regra determinística: consultas de onboarding não dependem de pré-requisitos entre si.
+  // Cada etapa é avaliada por existência de dados essenciais da própria empresa ativa.
+  const shouldEnableOnboardingHeavy = Boolean(activeCompanyId);
   const { data: onboardingHeavyStatus, isLoading: onboardingHeavyLoading } = useQuery({
-    // Otimização: joins mais custosos só quando já existem pré-requisitos operacionais.
+    // Regra simples e auditável: contagens diretas por company_id, sem dependências implícitas.
     queryKey: ['dashboard-onboarding-heavy', activeCompanyId],
     enabled: shouldEnableOnboardingHeavy,
     queryFn: async (): Promise<Pick<OnboardingChecklistStatus, 'hasBoardingConfig' | 'hasPublishedEvent'>> => {
       const [{ count: boardingCount }, { count: publishedEventsCount }] = await Promise.all([
-        // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
+        // "Configurar embarque": concluído quando existe ao menos 1 local ativo da empresa.
         supabase
-          .from('event_boarding_locations')
-          .select('id, events!inner(id)', { count: 'exact', head: true })
+          .from('boarding_locations')
+          .select('id', { count: 'exact', head: true })
           .eq('company_id', activeCompanyId!)
-          .eq('events.company_id', activeCompanyId!),
-        // Endurecimento: "publicar viagem" exige evento à venda + não arquivado + vínculo operacional mínimo.
+          .eq('status', 'ativo'),
+        // "Publicar viagem": concluído quando existe ao menos 1 evento ativo em venda da empresa.
         supabase
           .from('events')
-          .select('id, trips!inner(id), event_boarding_locations!inner(id)', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('company_id', activeCompanyId!)
           .eq('status', 'a_venda')
           .eq('is_archived', false),
@@ -244,6 +242,7 @@ export default function Dashboard() {
       {
         key: 'vehicle',
         label: 'Cadastrar veículo',
+        description: 'Cadastre pelo menos um veículo para começar a operar suas viagens.',
         done: onboardingStatus.hasVehicle,
         isLoading: onboardingLoading,
         href: '/admin/frota',
@@ -251,6 +250,7 @@ export default function Dashboard() {
       {
         key: 'driver',
         label: 'Cadastrar motorista',
+        description: 'Cadastre motoristas para vincular às viagens e liberar a operação.',
         done: onboardingStatus.hasDriver,
         isLoading: onboardingLoading,
         href: '/admin/motoristas',
@@ -258,14 +258,16 @@ export default function Dashboard() {
       {
         key: 'boarding',
         label: 'Configurar embarque',
+        description: 'Cadastre locais de embarque para definir onde os passageiros irão embarcar.',
         done: onboardingStatus.hasBoardingConfig,
         // Validação pesada carregada depois para não segurar a pintura inicial do card.
-        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
+        isLoading: onboardingHeavyLoading,
         href: '/admin/locais',
       },
       {
         key: 'event',
         label: 'Criar primeiro evento',
+        description: 'Crie seu primeiro evento para disponibilizar passagens para venda.',
         done: onboardingStatus.hasEvent,
         isLoading: onboardingLoading,
         href: '/admin/eventos?novo=1',
@@ -273,20 +275,22 @@ export default function Dashboard() {
       {
         key: 'publish',
         label: 'Publicar viagem',
+        description: 'Publique a viagem para liberar a venda de passagens.',
         done: onboardingStatus.hasPublishedEvent,
-        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
+        isLoading: onboardingHeavyLoading,
         href: '/admin/eventos',
       },
       {
         key: 'sale',
         label: 'Fazer primeira venda',
+        description: 'Realize sua primeira venda para iniciar sua operação no sistema.',
         done: onboardingStatus.hasPaidSale,
         isLoading: onboardingLoading,
         // Mantido: /admin/vendas abre o modal de nova venda via `novaVenda=1` (fluxo já suportado pela tela de vendas).
         href: '/admin/vendas?novaVenda=1&aba=manual',
       },
     ],
-    [onboardingLoading, onboardingStatus, onboardingHeavyLoading, shouldEnableOnboardingHeavy]
+    [onboardingLoading, onboardingStatus, onboardingHeavyLoading]
   );
   // Nova ordem operacional explícita: veículo → motorista → embarque → evento → publicação → venda.
   const nextOnboardingStep = useMemo(
@@ -719,13 +723,16 @@ export default function Dashboard() {
                     className="h-auto w-full justify-between rounded-lg border px-3 py-3"
                   >
                     <Link to={item.href}>
-                      <span className="flex items-center gap-2 text-sm">
+                      <span className="flex items-start gap-2 text-sm">
                         {item.done ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                         ) : (
-                          <Circle className="h-4 w-4 text-muted-foreground" />
+                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
-                        <span>{item.label}</span>
+                        <span className="flex flex-col items-start gap-0.5">
+                          <span>{item.label}</span>
+                          <span className="text-xs font-normal text-muted-foreground">{item.description}</span>
+                        </span>
                       </span>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         {item.done ? 'Ver' : 'Ir agora'}
