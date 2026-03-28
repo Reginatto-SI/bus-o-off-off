@@ -21,6 +21,7 @@ interface AuthContextType {
   isOperador: boolean;
   isVendedor: boolean;
   isDeveloper: boolean;
+  canAccessTemplatesLayout: boolean;
   canViewFinancials: boolean;
 }
 
@@ -29,6 +30,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Usuário multiempresa com permissão especial: deve permanecer developer em qualquer empresa ativa.
   const FORCED_DEVELOPER_USER_ID = '27add21e-ade9-436a-9ec2-185a3d7819cc';
+  // Exceção operacional: usuário sócio com acesso técnico total APENAS à tela de templates de layout.
+  const TEMPLATES_LAYOUT_EXCEPTION_USER_ID = 'f1ba5ea7-2d3d-4171-b651-c1917655e5b1';
 
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -295,6 +298,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Developer herda acesso de gerente automaticamente
   const isDeveloper = userRole === 'developer';
+  // Exceção pontual sem trocar role técnica: mantém escopo limitado à rota /admin/templates-layout.
+  const canAccessTemplatesLayout = isDeveloper || user?.id === TEMPLATES_LAYOUT_EXCEPTION_USER_ID;
   const isGerente = userRole === 'gerente' || isDeveloper;
   const isOperador = userRole === 'operador';
   const isVendedor = userRole === 'vendedor';
@@ -320,6 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isOperador,
         isVendedor,
         isDeveloper,
+        canAccessTemplatesLayout,
         canViewFinancials,
       }}
     >
