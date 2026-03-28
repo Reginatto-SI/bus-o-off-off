@@ -6,7 +6,6 @@ import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { cn } from '@/lib/utils';
 import { EventWithCompany } from '@/types/database';
 
@@ -35,9 +34,10 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   return (
     <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
       <Link to={linkTo} className="block">
-        {/* Comentário de manutenção: no mobile usamos um ratio mais alto para dar respiro ao conteúdo textual e evitar colisão visual. */}
-        <AspectRatio ratio={1} className="sm:aspect-[16/9]">
-          <div className="relative w-full h-full">
+        {/* Comentário de manutenção: substituímos o AspectRatio híbrido por utilitários responsivos explícitos para isolar mobile (`aspect-[4/5]`) e desktop (`sm:aspect-[16/9]`) sem vazamento entre breakpoints. */}
+        <div className="relative aspect-[4/5] sm:aspect-[16/9]">
+          {/* Comentário de layout: o wrapper absoluto garante preenchimento total da área proporcional, evitando o bloco vazio observado no desktop. */}
+          <div className="absolute inset-0">
             {/* Background blur */}
             <div 
               className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
@@ -53,7 +53,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             {/* Comentário de suporte: overlay mais forte para reforçar leitura comercial do destaque sem mudar a estrutura do banner. */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
           </div>
-        </AspectRatio>
+        </div>
 
         {/* Badge Esgotado */}
         {isSoldOut && (
