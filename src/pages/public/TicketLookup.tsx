@@ -40,6 +40,9 @@ type TicketLookupResponseTicket = {
   asaasPaymentId?: string | null;
   saleOrigin?: string | null;
   unitPrice?: number;
+  benefitApplied?: boolean;
+  benefitProgramName?: string | null;
+  benefitDiscountAmount?: number | null;
   companyName: string;
   companyLogoUrl: string | null;
   companyCity: string | null;
@@ -144,6 +147,9 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       vehicleFloors: ticket.vehicleFloors || null,
       fees: breakdown && breakdown.fees.length > 0 ? breakdown.fees : undefined,
       totalPaid: breakdown && breakdown.fees.length > 0 ? breakdown.unitPriceWithFees : undefined,
+      benefitApplied: Boolean(ticket.benefitApplied),
+      benefitProgramName: ticket.benefitProgramName ?? null,
+      benefitDiscountAmount: Number(ticket.benefitDiscountAmount ?? 0),
       commercialPartners: response.commercialPartners?.length ? response.commercialPartners : undefined,
       eventSponsors: response.eventSponsors?.length ? response.eventSponsors : undefined,
     };

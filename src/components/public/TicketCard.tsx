@@ -54,6 +54,9 @@ export interface TicketCardData {
   fees?: { name: string; amount: number }[];
   totalPaid?: number;
   unitPrice?: number;
+  benefitApplied?: boolean;
+  benefitProgramName?: string | null;
+  benefitDiscountAmount?: number | null;
   // Double Decker / categoria
   seatCategory?: string | null;
   seatFloor?: number | null;
@@ -460,6 +463,25 @@ export function TicketCard({
               <p>• É obrigatório apresentar documento oficial com foto no momento do embarque.</p>
               <p>• Recomenda-se chegar com antecedência mínima de 10 minutos.</p>
             </div>
+
+            {/* Exibição operacional e discreta do benefício aplicado no passageiro (quando existir). */}
+            {ticket.benefitApplied && (ticket.benefitProgramName || Number(ticket.benefitDiscountAmount ?? 0) > 0) && (
+              <div className="border-t pt-2 mt-2 space-y-1 text-xs">
+                <p className="font-medium text-foreground text-sm mb-1">Benefício aplicado</p>
+                {ticket.benefitProgramName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Benefício</span>
+                    <span>{ticket.benefitProgramName}</span>
+                  </div>
+                )}
+                {Number(ticket.benefitDiscountAmount ?? 0) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Desconto</span>
+                    <span>- {formatCurrencyBRL(Number(ticket.benefitDiscountAmount ?? 0))}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Rodapé institucional na passagem oficial para reforçar intermediação em tela, impressão e PDF. */}
             <div className="border-t pt-2 mt-2 space-y-1 text-xs text-muted-foreground">
