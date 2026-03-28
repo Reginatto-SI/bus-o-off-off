@@ -170,7 +170,7 @@ const logTemplateErrorInDev = (context: string, error: PostgrestError | null, me
 };
 
 export default function TemplatesLayout() {
-  const { isDeveloper } = useAuth();
+  const { canAccessTemplatesLayout } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -284,9 +284,9 @@ export default function TemplatesLayout() {
   };
 
   useEffect(() => {
-    if (!isDeveloper) return;
+    if (!canAccessTemplatesLayout) return;
     fetchTemplates(page, pageSize);
-  }, [isDeveloper, filteredSearch, statusFilter, typeFilter, page, pageSize]);
+  }, [canAccessTemplatesLayout, filteredSearch, statusFilter, typeFilter, page, pageSize]);
 
   const floorLabels = useMemo(() => Array.from({ length: form.floors }, (_, idx) => idx + 1), [form.floors]);
 
@@ -606,9 +606,14 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: updateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` }).eq('id', editingId);
+      const { data: updatedTemplate, error: updateError } = await supabase
+        .from('template_layouts')
+        .update({ description: `[img]${publicUrl}` })
+        .eq('id', editingId)
+        .select('id')
+        .maybeSingle();
 
-      if (updateError) {
+      if (updateError || !updatedTemplate) {
         toast.error('Erro ao salvar imagem no template.');
       } else {
         setForm((prev) => ({ ...prev, image_url: publicUrl }));
@@ -632,8 +637,14 @@ export default function TemplatesLayout() {
     setPendingImageFile(null);
 
     if (editingId && !isTemplateImageLocalPreview(form.image_url)) {
-      const { error } = await supabase.from('template_layouts').update({ description: null }).eq('id', editingId);
-      if (error) {
+      const { data: updatedTemplate, error } = await supabase
+        .from('template_layouts')
+        .update({ description: null })
+        .eq('id', editingId)
+        .select('id')
+        .maybeSingle();
+
+      if (error || !updatedTemplate) {
         toast.error('Erro ao remover imagem de referência.');
         return;
       }
@@ -660,10 +671,17 @@ export default function TemplatesLayout() {
 
     let templateId = editingId;
     if (editingId) {
-      const { error } = await supabase.from('template_layouts').update(payload).eq('id', editingId);
-      if (error) {
+      const { data: updatedTemplate, error } = await supabase
+        .from('template_layouts')
+        .update(payload)
+        .eq('id', editingId)
+        .select('id')
+        .maybeSingle();
+
+      if (error || !updatedTemplate) {
         logTemplateErrorInDev('save-template-update', error, { editingId, payload });
-        toast.error(buildFriendlyTemplateError(error, 'Erro ao atualizar template'));
+        // Comentário: evita falso positivo quando RLS bloqueia update e a operação afeta 0 linhas sem erro explícito.
+        toast.error(updatedTemplate ? buildFriendlyTemplateError(error, 'Erro ao atualizar template') : 'Sem permissão para atualizar este template.');
         setSaving(false);
         return;
       }
@@ -697,8 +715,14 @@ export default function TemplatesLayout() {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      const { error: imageUpdateError } = await supabase.from('template_layouts').update({ description: `[img]${publicUrl}` }).eq('id', templateId);
-      if (imageUpdateError) {
+      const { data: updatedImageTemplate, error: imageUpdateError } = await supabase
+        .from('template_layouts')
+        .update({ description: `[img]${publicUrl}` })
+        .eq('id', templateId)
+        .select('id')
+        .maybeSingle();
+
+      if (imageUpdateError || !updatedImageTemplate) {
         toast.error('Erro ao salvar imagem de referência no template');
         setSaving(false);
         return;
@@ -723,7 +747,7 @@ export default function TemplatesLayout() {
     // Comentário: o upsert evita perda de dados parcial e garante que novos assentos não reutilizem id anterior.
     const { data: existingItems, error: existingItemsError } = await supabase
       .from('template_layout_items')
-      .select('id, floor_number, row_number, column_number')
+      .select('id, floor_number, row_number, column_number, seat_number, category, tags, is_blocked')
       .eq('template_layout_id', templateId);
 
     if (existingItemsError) {
@@ -734,15 +758,66 @@ export default function TemplatesLayout() {
     }
 
     if (sanitizedItems.length > 0) {
-      const { error: itemsUpsertError } = await supabase
+      const existingItemsByCoord = new Map(
+        (existingItems ?? []).map((item) => [
+          `${item.floor_number}-${item.row_number}-${item.column_number}`,
+          item,
+        ]),
+      );
+
+      const changedItems = sanitizedItems.filter((item) => {
+        const existingItem = existingItemsByCoord.get(`${item.floor_number}-${item.row_number}-${item.column_number}`);
+        if (!existingItem) return true;
+        return (
+          existingItem.seat_number !== item.seat_number
+          || existingItem.category !== item.category
+          || JSON.stringify(existingItem.tags ?? []) !== JSON.stringify(item.tags ?? [])
+          || existingItem.is_blocked !== item.is_blocked
+        );
+      });
+
+      const { data: upsertedItems, error: itemsUpsertError } = await supabase
         .from('template_layout_items')
-        .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' });
+        .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' })
+        .select('id');
 
       if (itemsUpsertError) {
         logTemplateErrorInDev('save-template-items-upsert', itemsUpsertError, { templateId, itemCount: sanitizedItems.length });
         toast.error(buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
         setSaving(false);
         return;
+      }
+
+      if ((upsertedItems ?? []).length === 0 && changedItems.length > 0) {
+        // Comentário: alguns ambientes podem retornar payload vazio no upsert; validamos persistência real para evitar falso bloqueio.
+        const probeItem = changedItems[0];
+        const { data: persistedProbeItem, error: probeError } = await supabase
+          .from('template_layout_items')
+          .select('id, seat_number, category, tags, is_blocked')
+          .eq('template_layout_id', probeItem.template_layout_id)
+          .eq('floor_number', probeItem.floor_number)
+          .eq('row_number', probeItem.row_number)
+          .eq('column_number', probeItem.column_number)
+          .maybeSingle();
+
+        const probeMatches =
+          !probeError &&
+          !!persistedProbeItem &&
+          persistedProbeItem.seat_number === probeItem.seat_number &&
+          persistedProbeItem.category === probeItem.category &&
+          JSON.stringify(persistedProbeItem.tags ?? []) === JSON.stringify(probeItem.tags ?? []) &&
+          persistedProbeItem.is_blocked === probeItem.is_blocked;
+
+        if (!probeMatches) {
+          logTemplateErrorInDev('save-template-items-upsert-empty-return', probeError, {
+            templateId,
+            probeItem,
+            persistedProbeItem,
+          });
+          toast.error('Sem permissão para salvar os assentos deste template.');
+          setSaving(false);
+          return;
+        }
       }
     }
 
@@ -752,10 +827,15 @@ export default function TemplatesLayout() {
       .map((item) => item.id);
 
     if (idsToDelete.length > 0) {
-      const { error: deleteItemsError } = await supabase.from('template_layout_items').delete().in('id', idsToDelete);
-      if (deleteItemsError) {
+      const { data: deletedItems, error: deleteItemsError } = await supabase
+        .from('template_layout_items')
+        .delete()
+        .in('id', idsToDelete)
+        .select('id');
+
+      if (deleteItemsError || (deletedItems ?? []).length !== idsToDelete.length) {
         logTemplateErrorInDev('save-template-items-delete-missing', deleteItemsError, { templateId, idsToDeleteCount: idsToDelete.length });
-        toast.error(buildFriendlyTemplateError(deleteItemsError, 'Erro ao remover assentos antigos do template'));
+        toast.error((deletedItems ?? []).length !== idsToDelete.length ? 'Sem permissão para remover assentos antigos deste template.' : buildFriendlyTemplateError(deleteItemsError, 'Erro ao remover assentos antigos do template'));
         setSaving(false);
         return;
       }
@@ -806,8 +886,14 @@ export default function TemplatesLayout() {
 
   const toggleStatus = async (template: TemplateLayout) => {
     const nextStatus = template.status === 'ativo' ? 'inativo' : 'ativo';
-    const { error } = await supabase.from('template_layouts').update({ status: nextStatus }).eq('id', template.id);
-    if (error) toast.error('Erro ao alterar status');
+    const { data: updatedTemplate, error } = await supabase
+      .from('template_layouts')
+      .update({ status: nextStatus })
+      .eq('id', template.id)
+      .select('id')
+      .maybeSingle();
+
+    if (error || !updatedTemplate) toast.error(updatedTemplate ? 'Erro ao alterar status' : 'Sem permissão para alterar status deste template.');
     else {
       toast.success(`Template ${nextStatus}`);
       fetchTemplates();
@@ -869,11 +955,16 @@ export default function TemplatesLayout() {
       return;
     }
 
-    const { error } = await supabase.from('template_layouts').delete().eq('id', templateToDelete.id);
+    const { data: deletedTemplate, error } = await supabase
+      .from('template_layouts')
+      .delete()
+      .eq('id', templateToDelete.id)
+      .select('id')
+      .maybeSingle();
     logSupabaseErrorInDev('delete-template-execute', error);
 
-    if (error) {
-      toast.error(getDeleteTemplateErrorMessage(error));
+    if (error || !deletedTemplate) {
+      toast.error(error ? getDeleteTemplateErrorMessage(error) : 'Sem permissão para excluir este template.');
     } else {
       toast.success('Template excluído com sucesso');
       setTemplateToDelete(null);
@@ -883,7 +974,7 @@ export default function TemplatesLayout() {
     setDeleting(false);
   };
 
-  if (!isDeveloper) return <Navigate to="/admin/eventos" replace />;
+  if (!canAccessTemplatesLayout) return <Navigate to="/admin/eventos" replace />;
 
   const rowIndexes = Array.from({ length: form.grid_rows }, (_, i) => i + 1);
   const columnIndexes = Array.from({ length: form.grid_columns }, (_, i) => i + 1);

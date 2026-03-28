@@ -279,7 +279,7 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper, activeCompany } = useAuth();
+  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -310,7 +310,11 @@ export function AdminSidebar() {
 
   const visibleGroups = groupsWithShowcaseLink.map(group => ({
     ...group,
-    items: group.items.filter(item => isDeveloper || !item.roles || (userRole && item.roles.includes(userRole)))
+    items: group.items.filter(item => {
+      // Exceção pontual: mantém item "Templates de Layout" acessível ao sócio autorizado sem abrir outras áreas de developer.
+      if (item.href === '/admin/templates-layout') return canAccessTemplatesLayout;
+      return isDeveloper || !item.roles || (userRole && item.roles.includes(userRole));
+    })
   })).filter(group => group.items.length > 0);
 
   // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
