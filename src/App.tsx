@@ -54,6 +54,7 @@ import CompanyReferralRedirect from "./pages/public/CompanyReferralRedirect";
 import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
+import AboutSmartbus from "./pages/public/AboutSmartbus";
 
 import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
@@ -89,6 +90,8 @@ const App = () => (
             <Route path="/cadastro-empresa" element={<Navigate to="/cadastro" replace />} />
             <Route path="/empresa/:nick" element={<PublicCompanyShowcase />} />
             <Route path="/politica-de-intermediacao" element={<IntermediationPolicy />} />
+            {/* Página institucional enxuta para explicar a proposta da plataforma sem promessas exageradas. */}
+            <Route path="/sobre-smartbus-br" element={<AboutSmartbus />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
