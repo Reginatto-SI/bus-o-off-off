@@ -88,9 +88,10 @@ interface RankItem {
 }
 
 interface OnboardingChecklistStatus {
-  hasEvent: boolean;
   hasVehicle: boolean;
+  hasDriver: boolean;
   hasBoardingConfig: boolean;
+  hasEvent: boolean;
   hasPublishedEvent: boolean;
   hasPaidSale: boolean;
 }
@@ -132,8 +133,12 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<Period>(30);
   const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
   const hasEvaluatedOnboardingPopupRef = useRef(false);
-  const onboardingPopupDismissKey = useMemo(
-    () => `admin-dashboard:onboarding-popup-dismissed:${activeCompanyId ?? 'no-company'}`,
+  const onboardingWelcomeDismissKey = useMemo(
+    () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
+    [activeCompanyId]
+  );
+  const onboardingEventCtaDismissKey = useMemo(
+    () => `admin-dashboard:onboarding-popup-event-cta-dismissed:${activeCompanyId ?? 'no-company'}`,
     [activeCompanyId]
   );
 
@@ -169,9 +174,10 @@ export default function Dashboard() {
     queryKey: ['dashboard-onboarding', activeCompanyId],
     enabled,
     queryFn: async (): Promise<OnboardingChecklistStatus> => {
-      const [{ count: eventsCount }, { count: vehiclesCount }, { count: boardingCount }, { count: publishedEventsCount }, { count: paidSalesCount }] = await Promise.all([
-        supabase.from('events').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
+      const [{ count: vehiclesCount }, { count: driversCount }, { count: boardingCount }, { count: eventsCount }, { count: publishedEventsCount }, { count: paidSalesCount }] = await Promise.all([
         supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
+        // Validação real do passo "Cadastrar motorista" usando a estrutura oficial do admin.
+        supabase.from('drivers').select('id', { count: 'exact', head: true }).eq('company_id', activeCompanyId!),
         // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
         // Isso evita falso positivo com registro órfão/inconsistente em event_boarding_locations.
         supabase
@@ -191,37 +197,18 @@ export default function Dashboard() {
       ]);
 
       return {
-        hasEvent: (eventsCount ?? 0) > 0,
         hasVehicle: (vehiclesCount ?? 0) > 0,
+        hasDriver: (driversCount ?? 0) > 0,
         hasBoardingConfig: (boardingCount ?? 0) > 0,
+        hasEvent: (eventsCount ?? 0) > 0,
         hasPublishedEvent: (publishedEventsCount ?? 0) > 0,
         hasPaidSale: (paidSalesCount ?? 0) > 0,
       };
     },
   });
 
-  useEffect(() => {
-    // Comentário: popup inicial aparece apenas quando a empresa ainda não tem eventos.
-    // Avaliamos 1x por acesso ao dashboard e respeitamos supressão local após "Fazer depois".
-    if (onboardingLoading || hasEvaluatedOnboardingPopupRef.current || !onboardingStatus) return;
-    hasEvaluatedOnboardingPopupRef.current = true;
-    const wasDismissedLocally = window.localStorage.getItem(onboardingPopupDismissKey) === '1';
-    if (!onboardingStatus.hasEvent) {
-      setOnboardingPopupOpen(!wasDismissedLocally);
-      return;
-    }
-    // Se a empresa já tem evento, removemos a supressão local para manter regra previsível em futuros ciclos.
-    window.localStorage.removeItem(onboardingPopupDismissKey);
-  }, [onboardingLoading, onboardingPopupDismissKey, onboardingStatus]);
-
   const onboardingItems = useMemo(
     () => [
-      {
-        key: 'event',
-        label: 'Criar primeiro evento',
-        done: onboardingStatus?.hasEvent ?? false,
-        href: '/admin/eventos?novo=1',
-      },
       {
         key: 'vehicle',
         label: 'Cadastrar veículo',
@@ -229,10 +216,22 @@ export default function Dashboard() {
         href: '/admin/frota',
       },
       {
+        key: 'driver',
+        label: 'Cadastrar motorista',
+        done: onboardingStatus?.hasDriver ?? false,
+        href: '/admin/motoristas',
+      },
+      {
         key: 'boarding',
         label: 'Configurar embarque',
         done: onboardingStatus?.hasBoardingConfig ?? false,
         href: '/admin/locais',
+      },
+      {
+        key: 'event',
+        label: 'Criar primeiro evento',
+        done: onboardingStatus?.hasEvent ?? false,
+        href: '/admin/eventos?novo=1',
       },
       {
         key: 'publish',
@@ -250,8 +249,55 @@ export default function Dashboard() {
     ],
     [onboardingStatus]
   );
+  // Nova ordem operacional explícita: veículo → motorista → embarque → evento → publicação → venda.
+  const nextOnboardingStep = useMemo(
+    () => onboardingItems.find((item) => !item.done) ?? null,
+    [onboardingItems]
+  );
 
-  // Comentário: progresso calculado em tempo real a partir dos 5 passos do checklist.
+  useEffect(() => {
+    // Reavalia popup ao trocar empresa ativa.
+    hasEvaluatedOnboardingPopupRef.current = false;
+    setOnboardingPopupOpen(false);
+  }, [activeCompanyId]);
+
+  useEffect(() => {
+    // Popup contextual:
+    // - estágio inicial: boas-vindas e orientação do passo a passo (sem pressionar criação de evento).
+    // - estágio pronto para evento: CTA direto só quando "Criar primeiro evento" for o próximo passo lógico.
+    if (onboardingLoading || hasEvaluatedOnboardingPopupRef.current || !onboardingStatus || onboardingStatus.hasEvent) {
+      if (!onboardingLoading && onboardingStatus?.hasEvent) {
+        window.localStorage.removeItem(onboardingWelcomeDismissKey);
+        window.localStorage.removeItem(onboardingEventCtaDismissKey);
+      }
+      return;
+    }
+
+    hasEvaluatedOnboardingPopupRef.current = true;
+    const shouldShowEventCtaPopup =
+      onboardingStatus.hasVehicle &&
+      onboardingStatus.hasDriver &&
+      onboardingStatus.hasBoardingConfig &&
+      !onboardingStatus.hasEvent &&
+      nextOnboardingStep?.key === 'event';
+
+    if (shouldShowEventCtaPopup) {
+      const dismissedEventCta = window.localStorage.getItem(onboardingEventCtaDismissKey) === '1';
+      setOnboardingPopupOpen(!dismissedEventCta);
+      return;
+    }
+
+    const dismissedWelcome = window.localStorage.getItem(onboardingWelcomeDismissKey) === '1';
+    setOnboardingPopupOpen(!dismissedWelcome);
+  }, [
+    onboardingEventCtaDismissKey,
+    onboardingLoading,
+    onboardingStatus,
+    onboardingWelcomeDismissKey,
+    nextOnboardingStep?.key,
+  ]);
+
+  // Comentário: progresso calculado em tempo real a partir dos 6 passos do checklist.
   const onboardingCompletedCount = useMemo(
     () => onboardingItems.filter((item) => item.done).length,
     [onboardingItems]
@@ -535,9 +581,15 @@ export default function Dashboard() {
         <Dialog open={onboardingPopupOpen} onOpenChange={setOnboardingPopupOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Vamos colocar sua primeira viagem à venda?</DialogTitle>
+              <DialogTitle>
+                {nextOnboardingStep?.key === 'event'
+                  ? 'Tudo pronto para criar seu primeiro evento?'
+                  : 'Boas-vindas! Vamos preparar sua operação?'}
+              </DialogTitle>
               <DialogDescription>
-                Em poucos minutos você já pode começar a vender passagens no SmartBus BR.
+                {nextOnboardingStep?.key === 'event'
+                  ? 'Você já concluiu os cadastros essenciais. Agora faz sentido criar seu primeiro evento e avançar para publicação.'
+                  : 'Siga o passo a passo recomendado no dashboard para configurar sua operação com segurança antes de publicar e vender.'}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">
@@ -546,19 +598,29 @@ export default function Dashboard() {
                 onClick={() => {
                   // Supressão local simples: evita reaparição irritante após "Fazer depois",
                   // sem backend e sem criar preferências complexas.
-                  window.localStorage.setItem(onboardingPopupDismissKey, '1');
+                  if (nextOnboardingStep?.key === 'event') {
+                    window.localStorage.setItem(onboardingEventCtaDismissKey, '1');
+                  } else {
+                    window.localStorage.setItem(onboardingWelcomeDismissKey, '1');
+                  }
                   setOnboardingPopupOpen(false);
                 }}
               >
-                Fazer depois
+                {nextOnboardingStep?.key === 'event' ? 'Fazer depois' : 'Explorar painel'}
               </Button>
               <Button
                 onClick={() => {
                   setOnboardingPopupOpen(false);
-                  navigate('/admin/eventos?novo=1');
+                  if (nextOnboardingStep?.key === 'event') {
+                    navigate('/admin/eventos?novo=1');
+                    return;
+                  }
+                  if (nextOnboardingStep?.href) {
+                    navigate(nextOnboardingStep.href);
+                  }
                 }}
               >
-                Começar agora
+                {nextOnboardingStep?.key === 'event' ? 'Criar evento agora' : 'Ver passo a passo'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -573,6 +635,14 @@ export default function Dashboard() {
                   {onboardingCompletedCount} de {onboardingItems.length} concluídos
                 </span>
               </div>
+              <p className="text-sm text-muted-foreground">
+                Siga estas etapas para preparar sua operação e começar a vender.
+              </p>
+              {nextOnboardingStep && (
+                <p className="text-xs text-muted-foreground">
+                  Próximo passo recomendado: <span className="font-medium text-foreground">{nextOnboardingStep.label}</span>
+                </p>
+              )}
               <Progress value={(onboardingCompletedCount / onboardingItems.length) * 100} className="h-2" />
             </CardHeader>
             <CardContent className="space-y-2">
