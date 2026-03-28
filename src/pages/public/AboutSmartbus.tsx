@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowRight, CheckCircle2, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
 
+import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 
 const OPERATION_PAIN_POINTS = [
@@ -27,8 +28,19 @@ const TRUST_POINTS = [
 
 export default function AboutSmartbus() {
   return (
-    <div className="min-h-screen bg-background py-14 sm:py-16">
-      <div className="mx-auto max-w-6xl space-y-12 px-4 sm:px-6 lg:px-8">
+    // Esta rota estava "sem header" porque era renderizada fora do layout público compartilhado.
+    <PublicLayout>
+      <div className="mx-auto max-w-6xl space-y-12 px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+        {/* Reaproveitamos o padrão público já existente e adicionamos retorno explícito para a landing institucional. */}
+        <div>
+          <Button asChild variant="ghost" className="gap-2 px-0 text-muted-foreground hover:text-foreground">
+            <Link to="/">
+              <ArrowRight className="h-4 w-4 rotate-180" />
+              Voltar para a landing page
+            </Link>
+          </Button>
+        </div>
+
         <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-card via-card to-primary/[0.05] p-6 sm:p-8">
           <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             Sobre a Smartbus BR
@@ -113,6 +125,6 @@ export default function AboutSmartbus() {
           </div>
         </section>
       </div>
-    </div>
+    </PublicLayout>
   );
 }
