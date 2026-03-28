@@ -43,6 +43,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Car,
   CheckCircle,
+  Copy,
+  Eye,
   FileSpreadsheet,
   FileText,
   Key,
@@ -53,6 +55,8 @@ import {
   Pencil,
   Plus,
   Power,
+  RefreshCw,
+  Send,
   Settings,
   Shield,
   UserCheck,
@@ -79,6 +83,29 @@ interface CreateUserFunctionResponse {
   result?: 'created' | 'linked_existing';
   warnings?: string[];
   runtime_version?: string;
+}
+
+interface AuthSupportResponse {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  action?: 'get_auth_status' | 'send_recovery' | 'resend_confirmation' | 'generate_magic_link';
+  data?: {
+    user_id?: string;
+    email?: string;
+    email_confirmed?: boolean;
+    email_confirmed_at?: string | null;
+    auth_created_at?: string | null;
+    last_sign_in_at?: string | null;
+    email_event_unavailable?: boolean;
+    last_email_event?: {
+      status?: string | null;
+      template_name?: string | null;
+      error_message?: string | null;
+      created_at?: string | null;
+    } | null;
+    action_link?: string | null;
+  };
 }
 
 const initialFilters: UserFilters = {
@@ -143,10 +170,16 @@ export default function UsersPage() {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [authActionLoadingUserId, setAuthActionLoadingUserId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUserRoleId, setEditingUserRoleId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'acesso' | 'vinculos' | 'observacoes'>('acesso');
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
+  const [authStatusDialogOpen, setAuthStatusDialogOpen] = useState(false);
+  const [magicLinkDialogOpen, setMagicLinkDialogOpen] = useState(false);
+  const [selectedUserForAuth, setSelectedUserForAuth] = useState<UserWithRole | null>(null);
+  const [authStatusData, setAuthStatusData] = useState<AuthSupportResponse['data'] | null>(null);
+  const [magicLinkValue, setMagicLinkValue] = useState<string | null>(null);
 
   // seller_id e driver_id conectam o usuário ao cadastro gerencial de vendedor/motorista
   // para controle interno de comissão e operação. Não tem relação com Stripe ou pagamento.
@@ -674,17 +707,152 @@ export default function UsersPage() {
   const motoristaVinculoLabel = form.operational_role === 'auxiliar_embarque' ? 'Auxiliar de Embarque' : 'Motorista';
   const motoristaVinculoLabelLower = form.operational_role === 'auxiliar_embarque' ? 'auxiliar de embarque' : 'motorista';
 
+  const formatDateTime = (value?: string | null): string => {
+    if (!value) return 'Não disponível';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Não disponível';
+    return date.toLocaleString('pt-BR');
+  };
+
+  const invokeAuthSupportAction = async (
+    userRow: UserWithRole,
+    action: 'get_auth_status' | 'send_recovery' | 'resend_confirmation' | 'generate_magic_link',
+  ): Promise<AuthSupportResponse> => {
+    if (!activeCompanyId) {
+      throw new Error('Empresa ativa não encontrada');
+    }
+
+    const { data, error } = await supabase.functions.invoke<AuthSupportResponse>('admin-user-auth-support', {
+      body: {
+        action,
+        target_user_id: userRow.id,
+        company_id: activeCompanyId,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Falha ao acionar suporte de autenticação');
+    }
+
+    if (!data) {
+      throw new Error('Informação auth não disponível');
+    }
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    return data;
+  };
+
+  const handleViewAuthStatus = async (userRow: UserWithRole) => {
+    setAuthActionLoadingUserId(userRow.id);
+    try {
+      const response = await invokeAuthSupportAction(userRow, 'get_auth_status');
+      setSelectedUserForAuth(userRow);
+      setAuthStatusData(response.data ?? null);
+      setAuthStatusDialogOpen(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao obter status de autenticação';
+      toast.error(message);
+    } finally {
+      setAuthActionLoadingUserId(null);
+    }
+  };
+
+  const handleSendRecovery = async (userRow: UserWithRole) => {
+    setAuthActionLoadingUserId(userRow.id);
+    try {
+      const response = await invokeAuthSupportAction(userRow, 'send_recovery');
+      toast.success(response.message || 'Redefinição de senha enviada com sucesso');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao enviar redefinição de senha';
+      toast.error(message);
+    } finally {
+      setAuthActionLoadingUserId(null);
+    }
+  };
+
+  const handleResendConfirmation = async (userRow: UserWithRole) => {
+    setAuthActionLoadingUserId(userRow.id);
+    try {
+      const response = await invokeAuthSupportAction(userRow, 'resend_confirmation');
+      toast.success(response.message || 'Ativação reenviada com sucesso');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao reenviar ativação';
+      toast.error(message);
+    } finally {
+      setAuthActionLoadingUserId(null);
+    }
+  };
+
+  const handleGenerateMagicLink = async (userRow: UserWithRole) => {
+    setAuthActionLoadingUserId(userRow.id);
+    try {
+      const response = await invokeAuthSupportAction(userRow, 'generate_magic_link');
+      setSelectedUserForAuth(userRow);
+      setMagicLinkValue(response.data?.action_link ?? null);
+      setMagicLinkDialogOpen(true);
+      toast.success(response.message || 'Magic link processado com sucesso');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao gerar magic link';
+      toast.error(message);
+    } finally {
+      setAuthActionLoadingUserId(null);
+    }
+  };
+
+  const handleCopyMagicLink = async () => {
+    if (!magicLinkValue) {
+      toast.error('Link mágico não disponível para cópia neste ambiente');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(magicLinkValue);
+      toast.success('Link mágico copiado');
+    } catch {
+      toast.error('Não foi possível copiar o link mágico');
+    }
+  };
+
   const getUserActions = (u: UserWithRole): ActionItem[] => [
     {
       label: 'Editar',
       icon: Pencil,
       onClick: () => handleEdit(u),
+      disabled: authActionLoadingUserId === u.id,
     },
     {
       label: u.status === 'ativo' ? 'Desativar' : 'Ativar',
       icon: Power,
       onClick: () => handleToggleStatus(u),
       variant: u.status === 'ativo' ? 'destructive' : 'default',
+      disabled: authActionLoadingUserId === u.id,
+    },
+    {
+      label: 'Ver status de autenticação',
+      icon: Eye,
+      onClick: () => handleViewAuthStatus(u),
+      disabled: authActionLoadingUserId === u.id,
+    },
+    {
+      label: 'Enviar redefinição de senha',
+      icon: Send,
+      onClick: () => handleSendRecovery(u),
+      disabled: authActionLoadingUserId === u.id,
+    },
+    {
+      label: 'Reenviar ativação',
+      icon: RefreshCw,
+      onClick: () => handleResendConfirmation(u),
+      disabled: authActionLoadingUserId === u.id,
+    },
+    {
+      label: 'Gerar magic link',
+      icon: Key,
+      onClick: () => handleGenerateMagicLink(u),
+      disabled: authActionLoadingUserId === u.id,
     },
   ];
 
@@ -1104,7 +1272,12 @@ export default function UsersPage() {
                         <StatusBadge status={u.status} />
                       </TableCell>
                       <TableCell>
-                        <ActionsDropdown actions={getUserActions(u)} />
+                        <div className="flex items-center justify-end gap-2">
+                          {authActionLoadingUserId === u.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : null}
+                          <ActionsDropdown actions={getUserActions(u)} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1136,6 +1309,90 @@ export default function UsersPage() {
           title="Usuários do Sistema"
           company={activeCompany}
         />
+
+        <Dialog
+          open={authStatusDialogOpen}
+          onOpenChange={(open) => {
+            setAuthStatusDialogOpen(open);
+            if (!open) {
+              setAuthStatusData(null);
+              setSelectedUserForAuth(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Status de autenticação</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                Usuário: <span className="font-medium text-foreground">{selectedUserForAuth?.name || '-'}</span>
+              </p>
+              <div className="rounded-md border p-3 space-y-2">
+                <p>
+                  <strong>E-mail confirmado:</strong>{' '}
+                  {authStatusData?.email_confirmed === true ? 'Sim' : authStatusData?.email_confirmed === false ? 'Não' : 'Não disponível'}
+                </p>
+                <p><strong>Conta criada em:</strong> {formatDateTime(authStatusData?.auth_created_at)}</p>
+                <p><strong>Último login:</strong> {formatDateTime(authStatusData?.last_sign_in_at)}</p>
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="font-medium">Último evento de e-mail</p>
+                {authStatusData?.last_email_event ? (
+                  <>
+                    <p><strong>Status:</strong> {authStatusData.last_email_event.status || 'Não disponível'}</p>
+                    <p><strong>Template:</strong> {authStatusData.last_email_event.template_name || 'Não disponível'}</p>
+                    <p><strong>Quando:</strong> {formatDateTime(authStatusData.last_email_event.created_at)}</p>
+                    <p><strong>Erro:</strong> {authStatusData.last_email_event.error_message || 'Não disponível'}</p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">Nenhum evento de e-mail encontrado para este usuário.</p>
+                )}
+                {authStatusData?.email_event_unavailable ? (
+                  <p className="text-xs text-amber-600">
+                    Não foi possível consultar logs de e-mail neste ambiente.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={magicLinkDialogOpen}
+          onOpenChange={(open) => {
+            setMagicLinkDialogOpen(open);
+            if (!open) {
+              setMagicLinkValue(null);
+              setSelectedUserForAuth(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Magic link assistido</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                Este link é sensível. Compartilhe apenas com o usuário correto e por canal seguro.
+              </p>
+              <p className="text-muted-foreground">
+                Usuário: <span className="font-medium text-foreground">{selectedUserForAuth?.email || '-'}</span>
+              </p>
+              <Textarea
+                value={magicLinkValue || 'Link não disponível para cópia neste ambiente.'}
+                readOnly
+                rows={4}
+              />
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={handleCopyMagicLink} disabled={!magicLinkValue}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copiar link
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
