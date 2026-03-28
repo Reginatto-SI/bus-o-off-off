@@ -35,7 +35,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   return (
     <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
       <Link to={linkTo} className="block">
-        <AspectRatio ratio={16 / 9}>
+        {/* Comentário de manutenção: no mobile usamos um ratio mais alto para dar respiro ao conteúdo textual e evitar colisão visual. */}
+        <AspectRatio ratio={1} className="sm:aspect-[16/9]">
           <div className="relative w-full h-full">
             {/* Background blur */}
             <div 
@@ -65,7 +66,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         )}
 
         {/* Conteúdo sobre o banner */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 pr-40 z-30 space-y-3">
+        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pr-32 sm:space-y-3 sm:p-4 sm:pr-40">
           <div className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             Evento em destaque
           </div>
@@ -73,10 +74,11 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           <div className="flex gap-3 items-start">
             <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-bold text-white line-clamp-2">
+              <h3 className="text-lg font-bold text-white line-clamp-2 sm:text-xl">
                 {event.name}
               </h3>
-              <p className="text-sm text-white/80 mt-1">
+              {/* Comentário de manutenção: a descrição curta é ocultada em telas muito pequenas para preservar legibilidade do bloco principal. */}
+              <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
               </p>
               <p className="text-2xl font-bold text-primary mt-1">
@@ -85,8 +87,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             </div>
           </div>
 
-          {/* Metadados secundários no mesmo fluxo para evitar sobreposição com CTAs absolutos do banner. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/90">
+          {/* Comentário de manutenção: metadados secundários aparecem apenas a partir de sm para não saturar o card no viewport móvel. */}
+          <div className="hidden flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/90 sm:flex">
             <div className="flex items-center gap-1.5 min-w-0">
               <MapPin className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">{event.city}</span>
