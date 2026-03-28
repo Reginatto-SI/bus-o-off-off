@@ -364,7 +364,8 @@ export default function PublicCompanyShowcase() {
             <section
               className={`relative ${
                 hasCover
-                  ? 'h-[320px] sm:h-[480px]'
+                  // Comentário de manutenção: ampliamos a altura no mobile para acomodar títulos longos e CTAs sem sensação de corte/sobreposição no topo.
+                  ? 'h-[420px] sm:h-[480px]'
                   : 'py-10 sm:py-14'
               } flex items-center justify-center`}
               style={loading ? {} : renderHeroStyle()}
@@ -379,7 +380,7 @@ export default function PublicCompanyShowcase() {
                   Editar aparência
                 </button>
               )}
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-5 w-full">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-4 sm:space-y-5 w-full">
                 {company?.logo_url && (
                   <div className="hidden sm:inline-block bg-white rounded-xl p-2 shadow-md">
                     <img
@@ -389,7 +390,8 @@ export default function PublicCompanyShowcase() {
                     />
                   </div>
                 )}
-                <h1 className={`text-2xl sm:text-3xl font-bold ${
+                {/* Comentário de manutenção: leading e largura controlada evitam clipping visual do título em nomes comerciais longos no celular. */}
+                <h1 className={`mx-auto max-w-2xl text-2xl sm:text-3xl font-bold leading-snug sm:leading-tight ${
                   hasCover ? 'text-white' : 'text-foreground'
                 }`}>
                   {companyDisplayName ? `Excursões e eventos com a ${companyDisplayName}` : 'Excursões e eventos'}
