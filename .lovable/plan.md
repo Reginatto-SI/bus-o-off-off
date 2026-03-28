@@ -1,54 +1,55 @@
 
 
-# Plano: Padronizar Templates de E-mail + Corrigir Build Errors
+# Plano: Corrigir Build Errors + Email com Resend
 
-## Parte 1: Corrigir Build Errors em Users.tsx
+## Parte 1: Corrigir 3 Build Errors
 
-Dois erros de tipo onde `operational_role` (string do banco) precisa ser castado para `MotoristaOperationalRole`:
+### 1A. BenefitPrograms.tsx (linhas 1352 e 1502)
+O `StatusBadge` aceita `StatusType` que inclui `'ativo'` e `'inativo'`, mas o código passa `'active'` / `'inactive'`.
 
-**Arquivo:** `src/pages/admin/Users.tsx`
+**Correção:** Trocar `'active'` por `'ativo'` e `'inactive'` por `'inativo'`, e remover `customLabel` (que não existe no componente).
 
-1. **Linha 334** — No mapeamento de dados, castar `role.operational_role`:
-   ```typescript
-   operational_role: (role.operational_role === 'auxiliar_embarque' ? 'auxiliar_embarque' : 'motorista') as MotoristaOperationalRole,
-   ```
+```tsx
+// Linha 1352
+<StatusBadge status={record.status === 'ativo' ? 'ativo' : 'inativo'} />
 
-2. **Linha 623-626** — No `handleEditUser`, o cast já existe mas o `setForm` na linha 631 recebe tipo `string`. Garantir que `baseForm.operational_role` tenha o tipo correto com cast explícito.
+// Linha 1502
+<StatusBadge status={program.status === 'ativo' ? 'ativo' : 'inativo'} />
+```
+
+### 1B. benefitEligibility.ts (linha 100)
+A query tem relação ambígua entre `benefit_programs` e `benefit_program_eligible_cpf`. Precisa hint explícito na select.
+
+**Correção:** Adicionar hint de coluna na relação e usar cast via `unknown`:
+
+```typescript
+program:benefit_programs!benefit_program_eligible_cpf_benefit_program_id_fkey(*)
+```
+
+E no cast (linha 100):
+```typescript
+const rows = (data ?? []) as unknown as Array<...>
+```
 
 ---
 
-## Parte 2: Padronizar Templates de E-mail de Autenticação
+## Parte 2: Integração de E-mail com Resend
 
-Alterar apenas textos nos 6 templates existentes em `supabase/functions/_shared/email-templates/`. Sem mudança de layout, cores ou estrutura.
+### Situação atual
+O projeto já tem domínio `notify.www.smartbusbr.com.br` configurado no Lovable Cloud, com status **Pending** (DNS ainda não verificado). O `auth-email-hook` já existe e usa o sistema de fila do Lovable (`enqueue_email`). Os templates já estão padronizados com "SmartBus BR".
 
-### Mudancas em todos os templates:
+**Causa raiz dos e-mails não chegarem:** O DNS do domínio de envio ainda não foi verificado. Enquanto o DNS não propagar, nenhum e-mail customizado é enviado.
 
-- Substituir qualquer referencia a `{siteName}` nos textos por constante hardcoded **"SmartBus BR"** (o siteName vem do sistema e pode conter nomes errados como "busaooofoof")
-- Padronizar rodape em todos:
-  ```
-  SmartBus BR — Plataforma de venda de passagens e gestao de viagens.
-  Este e um e-mail automatico. Se voce nao reconhece esta acao, ignore com seguranca.
-  ```
-- Melhorar CTAs conforme solicitado
+### Sobre usar Resend
+O projeto já tem infraestrutura de e-mail do Lovable Cloud configurada para `notify.www.smartbusbr.com.br`. Usar Resend no mesmo subdomínio causaria conflito de DNS (os registros NS já apontam para os nameservers do Lovable).
 
-### Template por template:
+**Opções para o usuário:**
+1. **Completar verificação DNS do Lovable Cloud** — Caminho mais simples. Sem mudança de código. Basta verificar os registros NS no provedor de domínio. Tudo já está implementado.
+2. **Desativar Lovable Emails e usar Resend** — Requer remover registros NS do domínio, desativar Lovable Emails, configurar Resend API Key como secret, e reescrever o `auth-email-hook` para chamar a API do Resend diretamente.
 
-| Template | Subject | CTA | Ajuste de corpo |
-|---|---|---|---|
-| `signup.tsx` | "Confirme seu e-mail — SmartBus BR" | "Confirmar meu e-mail" | Texto mais direto sobre conta criada |
-| `recovery.tsx` | "Criar nova senha — SmartBus BR" | "Criar nova senha" | Contexto: "Recebemos uma solicitacao..." |
-| `invite.tsx` | "Voce foi convidado — SmartBus BR" | "Aceitar convite" | Contexto sobre acesso a plataforma |
-| `magic-link.tsx` | "Seu link de acesso — SmartBus BR" | "Acessar minha conta" | Texto direto |
-| `email-change.tsx` | "Confirmacao de alteracao de e-mail — SmartBus BR" | "Confirmar alteracao" | Manter clareza |
-| `reauthentication.tsx` | sem botao (codigo) | N/A | Padronizar rodape |
+**Recomendação:** Perguntar ao usuário qual caminho prefere antes de implementar, já que ambos são válidos mas mutuamente exclusivos no mesmo subdomínio.
 
-### O que NAO sera alterado:
-- Cores (laranja #f07d00 mantida)
-- Layout/estrutura HTML
-- Logica do auth-email-hook
-- Sistema de envio
-- Nenhum outro arquivo
-
-### Deploy
-Apos editar os templates, redeploy de `auth-email-hook` para que as mudancas entrem em vigor.
+### Arquivos alterados
+- `src/pages/admin/BenefitPrograms.tsx` — fix StatusBadge status values
+- `src/lib/benefitEligibility.ts` — fix ambiguous relationship hint + cast
 
