@@ -1,6 +1,6 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
-export type EventCategory = 'evento' | 'excursao' | 'bate_e_volta' | 'viagem';
+export type EventCategory = 'evento' | 'excursao' | 'bate_e_volta' | 'viagem' | 'caravana';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type TemplateVehicleType = VehicleType | 'double_deck';
 export type VehicleStatus = 'ativo' | 'inativo';

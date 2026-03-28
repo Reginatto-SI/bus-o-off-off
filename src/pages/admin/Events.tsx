@@ -185,6 +185,8 @@ const eventCategoryFilterOptions: Array<{ value: EventFilters['eventCategory']; 
   { value: 'all', label: 'Todas' },
   { value: 'evento', label: 'Evento' },
   { value: 'excursao', label: 'Excursão' },
+  // Nova categoria disponível também no filtro para manter consistência com o cadastro.
+  { value: 'caravana', label: 'Caravana' },
   { value: 'bate_e_volta', label: 'Bate e volta' },
   { value: 'viagem', label: 'Viagem' },
 ];
@@ -240,6 +242,8 @@ type EventCategoryOptionValue = EventCategory;
 const eventCategoryOptions: Array<{ value: EventCategoryOptionValue; label: string; description: string; icon: string }> = [
   { value: 'evento', label: 'Evento', description: 'Ocasião pontual com rota principal definida.', icon: '🎟️' },
   { value: 'excursao', label: 'Excursão', description: 'Viagem em grupo com ida e retorno planejados.', icon: '🚌' },
+  // Caravana adicionada na própria fonte de verdade das categorias para reaproveitar o mesmo card/fluxo.
+  { value: 'caravana', label: 'Caravana', description: 'Grupo organizado, torcida ou excursão com coordenação coletiva.', icon: '🧑‍🤝‍🧑' },
   { value: 'bate_e_volta', label: 'Bate e volta', description: 'Operação no mesmo dia com retorno vinculado.', icon: '🔁' },
   { value: 'viagem', label: 'Viagem', description: 'Operação com flexibilidade entre ida e volta.', icon: '🧭' },
 ];
@@ -247,6 +251,7 @@ const eventCategoryOptions: Array<{ value: EventCategoryOptionValue; label: stri
 const categorySuggestedTransportPolicyMap: Record<EventCategoryOptionValue, TransportPolicy> = {
   evento: 'ida_volta_obrigatorio',
   excursao: 'ida_volta_obrigatorio',
+  caravana: 'ida_volta_obrigatorio',
   bate_e_volta: 'ida_volta_obrigatorio',
   viagem: 'trecho_independente',
 };
@@ -3173,8 +3178,8 @@ export default function Events() {
                         <div className="space-y-2">
                           {/* Ajuste estrutural: categoria em linha própria para não disputar altura com o input de nome. */}
                           <Label>Categoria do Evento</Label>
-                          {/* Mantém cards clicáveis, porém com densidade compacta para evitar bloco inflado no topo. */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {/* Grid ajustado para 3 colunas no desktop; com 5 opções mantém composição em 2 linhas (3 + 2). */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                             {eventCategoryOptions.map((option) => {
                               const isSelected = form.event_category === option.value;
                               return (

@@ -504,6 +504,11 @@ const LANDING_FAQS = [
     answer:
       "Em poucos minutos você já pode configurar sua operação e começar a vender.",
   },
+  {
+    question: "Posso corrigir dados de uma passagem após a compra?",
+    answer:
+      "Sim. Caso o passageiro tenha informado dados incorretos, como nome, telefone ou CPF, é possível realizar a correção diretamente no sistema. Para garantir segurança e rastreabilidade, essas alterações são controladas e podem ter limitações dependendo do status da passagem. Após o embarque, por exemplo, não é possível realizar alterações.",
+  },
 ] as const;
 // Nova seção comercial antes da FAQ: mostra que começar a vender é um processo simples,
 // visual e rápido, sem transformar a landing em tutorial técnico.
@@ -669,6 +674,13 @@ export default function LandingPage() {
                   <span>Minhas Passagens</span>
                 </Link>
               </Button>
+              {/* Atalho institucional no header para dar contexto de produto sem forçar navegação complexa. */}
+              <Button asChild variant="ghost" className={desktopNavLinkClass}>
+                <Link to="/sobre-smartbus-br">
+                  <Building2 className="h-4 w-4" aria-hidden="true" />
+                  <span>Sobre a Smartbus BR</span>
+                </Link>
+              </Button>
             </div>
             <Button
               asChild
@@ -716,6 +728,14 @@ export default function LandingPage() {
             >
               <Ticket className="h-4 w-4 shrink-0 text-primary" />
               Minhas Passagens
+            </Link>
+            <Link
+              to="/sobre-smartbus-br"
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+              onClick={() => setMobileMenu(false)}
+            >
+              <Building2 className="h-4 w-4 shrink-0 text-primary" />
+              Sobre a Smartbus BR
             </Link>
             <div className="mt-2 space-y-2">
               <Link
@@ -1034,6 +1054,60 @@ export default function LandingPage() {
                   Isso deixa a decisão mais leve para testar, validar demanda e crescer sem assumir mensalidade antes da primeira venda.
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="sobre-smartbus-br" className="py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Bloco institucional estratégico: entra antes da vitrine de eventos para reforçar confiança antes da etapa comercial. */}
+          <div className="grid gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm lg:grid-cols-[1.1fr_0.9fr] lg:items-start lg:p-8">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Building2 className="h-3.5 w-3.5" />
+                Sobre a Smartbus BR
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Uma plataforma criada para simplificar a venda de passagens e a gestão de embarques em eventos e
+                viagens.
+              </h2>
+              <p className="text-muted-foreground sm:text-lg">
+                A Smartbus BR foi criada para organizar vendas, passageiros e embarques de forma simples, prática e
+                confiável.
+              </p>
+              <p className="text-muted-foreground">
+                Hoje, muitas operações ainda dependem de planilhas, anotações e processos manuais que geram erros,
+                retrabalho e perda de controle. A proposta da Smartbus BR é centralizar essa operação em um único
+                sistema, pensado para uso real no dia a dia.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-primary/15 bg-primary/5 p-5">
+              <h3 className="text-lg font-semibold text-foreground">O que você encontra na plataforma</h3>
+              <ul className="mt-4 space-y-3 text-sm text-muted-foreground sm:text-base">
+                <li className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  Criação de eventos e venda de passagens
+                </li>
+                <li className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  Controle das vendas em tempo real
+                </li>
+                <li className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  Organização clara dos passageiros
+                </li>
+                <li className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  Gestão de embarque com mais praticidade
+                </li>
+              </ul>
+              <Link
+                to="/sobre-smartbus-br"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Conhecer a Smartbus BR
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
           </div>
         </div>
@@ -1793,6 +1867,14 @@ export default function LandingPage() {
                 Institucional
               </h4>
               <ul className="space-y-2.5">
+                <li>
+                  <Link
+                    to="/sobre-smartbus-br"
+                    className="text-sm text-white/40 transition-colors hover:text-white"
+                  >
+                    Sobre a Smartbus BR
+                  </Link>
+                </li>
                 <li>
                   <Link
                     to="/politica-de-intermediacao"
