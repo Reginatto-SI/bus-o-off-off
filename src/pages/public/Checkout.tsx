@@ -129,6 +129,12 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function maskCpfForLog(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 4) return "***";
+  return `***${digits.slice(-4)}`;
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -718,11 +724,24 @@ export default function Checkout() {
   > => {
     if (!event) return [];
 
-    try {
-      const snapshots = await Promise.all(
-        passengers.map(async (passenger, index) => {
-          const seatId = selectedSeats[index];
-          const originalPrice = getSeatPrice(seatId);
+    const snapshots = await Promise.all(
+      passengers.map(async (passenger, index) => {
+        const seatId = selectedSeats[index];
+        const originalPrice = roundCurrency(getSeatPrice(seatId));
+
+        const fallbackSnapshot: PassengerBenefitSnapshot = {
+          benefit_program_id: null,
+          benefit_program_name: null,
+          benefit_type: null,
+          benefit_value: null,
+          original_price: originalPrice,
+          discount_amount: 0,
+          final_price: originalPrice,
+          benefit_applied: false,
+          pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
+        };
+
+        try {
           const resolved = await resolvePassengerBenefitPrice({
             companyId: event.company_id,
             eventId: event.id,
@@ -730,7 +749,7 @@ export default function Checkout() {
             originalPrice,
           });
 
-          const safeResolved: PassengerBenefitSnapshot = {
+          return {
             benefit_program_id: resolved.benefitProgramId,
             benefit_program_name: resolved.benefitProgramName,
             benefit_type: resolved.benefitType,
@@ -742,17 +761,25 @@ export default function Checkout() {
             pricing_rule_version:
               resolved.pricingRuleVersion || BENEFIT_PRICING_RULE_VERSION,
           };
+        } catch (error) {
+          // Regra de ouro do checkout: benefício é opcional e jamais pode bloquear venda.
+          // Em erro técnico (RLS/query/timeout), seguimos com preço base e log detalhado.
+          console.error("[checkout] benefit_validation_fallback_applied", {
+            stage: "passengers_to_payment_transition",
+            environment: import.meta.env.MODE,
+            eventId: event.id,
+            companyId: event.company_id,
+            seatId,
+            passengerIndex: index,
+            cpfMasked: maskCpfForLog(passenger.cpf),
+            cause: error,
+          });
+          return fallbackSnapshot;
+        }
+      }),
+    );
 
-          return safeResolved;
-        }),
-      );
-
-      return snapshots;
-    } catch (error) {
-      console.error("Erro ao validar benefício por passageiro:", error);
-      toast.error("Não foi possível validar os benefícios dos passageiros.");
-      return [];
-    }
+    return snapshots;
   };
 
   const calculateTotalsFromSnapshots = (
@@ -935,7 +962,31 @@ export default function Checkout() {
     if (!hasResolvedSnapshots) {
       snapshotsToPersist = await resolvePassengerBenefitSnapshots();
       if (snapshotsToPersist.length !== passengers.length) {
-        toast.error("Não foi possível validar os benefícios dos passageiros.");
+        // Fallback final: se algo inesperado quebrar o shape, mantemos venda com preço base.
+        snapshotsToPersist = selectedSeats.map((seatId) => {
+          const basePrice = roundCurrency(getSeatPrice(seatId));
+          return {
+            benefit_program_id: null,
+            benefit_program_name: null,
+            benefit_type: null,
+            benefit_value: null,
+            original_price: basePrice,
+            discount_amount: 0,
+            final_price: basePrice,
+            benefit_applied: false,
+            pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
+          } satisfies PassengerBenefitSnapshot;
+        });
+        console.error("[checkout] benefit_snapshot_shape_fallback", {
+          stage: "submit_before_sale_insert",
+          environment: import.meta.env.MODE,
+          eventId: event.id,
+          companyId: event.company_id,
+          expectedPassengers: passengers.length,
+          receivedSnapshots: snapshotsToPersist.length,
+        });
+      }
+      if (snapshotsToPersist.length !== passengers.length) {
         preOpenedPaymentTab?.close();
         setSubmitting(false);
         setPaymentCheckoutStatus("idle");
@@ -1796,12 +1847,40 @@ export default function Checkout() {
                   // Passageiros -> Pagamento para garantir previsibilidade auditável.
                   const resolvedSnapshots = await resolvePassengerBenefitSnapshots();
                   setSubmitting(false);
+                  // Regra de negócio obrigatória: mesmo se benefício falhar tecnicamente,
+                  // o checkout deve continuar com fallback seguro (sem desconto).
+                  const snapshotsForStep =
+                    resolvedSnapshots.length === passengers.length
+                      ? resolvedSnapshots
+                      : selectedSeats.map((seatId) => {
+                          const basePrice = roundCurrency(getSeatPrice(seatId));
+                          return {
+                            benefit_program_id: null,
+                            benefit_program_name: null,
+                            benefit_type: null,
+                            benefit_value: null,
+                            original_price: basePrice,
+                            discount_amount: 0,
+                            final_price: basePrice,
+                            benefit_applied: false,
+                            pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
+                          } satisfies PassengerBenefitSnapshot;
+                        });
+
                   if (resolvedSnapshots.length !== passengers.length) {
-                    toast.error("Não foi possível validar os benefícios dos passageiros.");
-                    return;
+                    // Fallback explícito na transição Passageiros -> Pagamento:
+                    // inconsistência de snapshot nunca pode travar o avanço do checkout.
+                    console.error("[checkout] benefit_snapshot_shape_fallback", {
+                      stage: "passengers_to_payment_transition",
+                      environment: import.meta.env.MODE,
+                      eventId: event?.id,
+                      companyId: event?.company_id,
+                      expectedPassengers: passengers.length,
+                      receivedSnapshots: resolvedSnapshots.length,
+                    });
                   }
 
-                  setPassengerBenefitSnapshots(resolvedSnapshots);
+                  setPassengerBenefitSnapshots(snapshotsForStep);
                   setStep(3);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
