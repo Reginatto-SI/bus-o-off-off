@@ -233,6 +233,10 @@ export default function CompanyPage() {
     // Padrão para novas empresas: comissão inicial de 3% + 3%.
     platform_fee_percent: '3',
     socio_split_percent: '3',
+    // Política de reservas (Fase 1): validade padrão em horas + minutos.
+    allow_manual_reservations: true,
+    manual_reservation_ttl_hours: '72',
+    manual_reservation_ttl_minutes: '0',
   });
   const [brandColors, setBrandColors] = useState({
     primary: '#F97316',
@@ -343,6 +347,10 @@ export default function CompanyPage() {
       // e impedir perda de foco durante a digitação de decimais.
       platform_fee_percent: String(data?.platform_fee_percent ?? 3),
       socio_split_percent: String(data?.socio_split_percent ?? 3),
+      // Política de reservas: UX em horas + minutos, persistência em minutos totais.
+      allow_manual_reservations: data?.allow_manual_reservations ?? true,
+      manual_reservation_ttl_hours: String(Math.floor((data?.manual_reservation_ttl_minutes ?? 4320) / 60)),
+      manual_reservation_ttl_minutes: String((data?.manual_reservation_ttl_minutes ?? 4320) % 60),
     });
     // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
     setBrandColors({
@@ -634,6 +642,9 @@ export default function CompanyPage() {
       social_website: '',
       platform_fee_percent: '3',
       socio_split_percent: '3',
+      allow_manual_reservations: true,
+      manual_reservation_ttl_hours: '72',
+      manual_reservation_ttl_minutes: '0',
     });
   };
 
@@ -695,6 +706,13 @@ export default function CompanyPage() {
     const parsed = Number(normalized);
     if (!Number.isFinite(parsed)) return NaN;
     return parsed;
+  };
+
+  const parseNonNegativeIntInput = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) return null;
+    if (!/^\d+$/.test(normalized)) return NaN;
+    return Number(normalized);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -800,6 +818,26 @@ export default function CompanyPage() {
       return;
     }
 
+    const reservationHours = parseNonNegativeIntInput(form.manual_reservation_ttl_hours);
+    const reservationMinutes = parseNonNegativeIntInput(form.manual_reservation_ttl_minutes);
+    if (reservationHours === null || Number.isNaN(reservationHours) || reservationHours < 0) {
+      toast.error('Horas da validade da reserva devem ser um número inteiro maior ou igual a zero');
+      setSaving(false);
+      return;
+    }
+    if (reservationMinutes === null || Number.isNaN(reservationMinutes) || reservationMinutes < 0 || reservationMinutes > 59) {
+      toast.error('Minutos da validade da reserva devem estar entre 0 e 59');
+      setSaving(false);
+      return;
+    }
+
+    const manualReservationTtlMinutes = reservationHours * 60 + reservationMinutes;
+    if (manualReservationTtlMinutes <= 0) {
+      toast.error('A validade da reserva deve ser maior que zero (ex.: 00h 40min, 01h 30min ou 72h 00min).');
+      setSaving(false);
+      return;
+    }
+
     // Comentário de manutenção:
     // - Persistimos documento sempre com apenas dígitos para evitar divergência entre máscara/UI e banco.
     // - Mantemos `document` e `cnpj` por compatibilidade legada, mas no mesmo padrão normalizado.
@@ -858,6 +896,9 @@ export default function CompanyPage() {
       // para evitar re-render prematuro e perda de foco nos campos de comissão.
       platform_fee_percent: platformFeePercent,
       socio_split_percent: socioSplitPercent,
+      // Política de reservas: salvamos em minutos totais para manter cálculo único no backend/frontend.
+      allow_manual_reservations: form.allow_manual_reservations,
+      manual_reservation_ttl_minutes: manualReservationTtlMinutes,
     };
 
     let error;
@@ -1746,6 +1787,74 @@ export default function CompanyPage() {
 
                   <TabsContent value="pagamentos" className="mt-0">
                     <div className="space-y-6">
+                      <div className="rounded-lg border p-4 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-medium">Política de Reservas</h3>
+                          <Badge variant="outline">Admin</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Define por quanto tempo uma reserva manual permanece válida antes do cancelamento automático.
+                        </p>
+
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                          <div className="space-y-2 sm:col-span-1">
+                            <Label htmlFor="allow_manual_reservations">Permitir reservas manuais</Label>
+                            <Select
+                              value={form.allow_manual_reservations ? 'sim' : 'nao'}
+                              onValueChange={(value) => {
+                                // Mantemos enum explícito em UI para reduzir ambiguidade de toggle.
+                                setForm((prev) => ({ ...prev, allow_manual_reservations: value === 'sim' }));
+                              }}
+                              disabled={!isGerente && !isDeveloper}
+                            >
+                              <SelectTrigger id="allow_manual_reservations">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="sim">Sim</SelectItem>
+                                <SelectItem value="nao">Não</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2 sm:col-span-1">
+                            <Label htmlFor="manual_reservation_ttl_hours">Horas</Label>
+                            <Input
+                              id="manual_reservation_ttl_hours"
+                              type="text"
+                              inputMode="numeric"
+                              value={form.manual_reservation_ttl_hours}
+                              onChange={(e) => {
+                                const normalized = e.target.value.replace(/\D/g, '');
+                                setForm((prev) => ({ ...prev, manual_reservation_ttl_hours: normalized }));
+                              }}
+                              placeholder="Ex.: 1, 6, 24, 72"
+                              disabled={!isGerente && !isDeveloper}
+                            />
+                          </div>
+
+                          <div className="space-y-2 sm:col-span-1">
+                            <Label htmlFor="manual_reservation_ttl_minutes">Minutos</Label>
+                            <Input
+                              id="manual_reservation_ttl_minutes"
+                              type="text"
+                              inputMode="numeric"
+                              value={form.manual_reservation_ttl_minutes}
+                              onChange={(e) => {
+                                const normalized = e.target.value.replace(/\D/g, '').slice(0, 2);
+                                setForm((prev) => ({ ...prev, manual_reservation_ttl_minutes: normalized }));
+                              }}
+                              placeholder="Ex.: 00, 30, 40"
+                              disabled={!isGerente && !isDeveloper}
+                            />
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          Exemplos: 00h40, 01h30, 06h00, 24h00, 72h00. O sistema sempre exige duração maior que zero.
+                        </p>
+                      </div>
+
                       {/* Comissionamento da Plataforma — Developer Only */}
                       {isDeveloper && (() => {
                         // Comentário de manutenção:

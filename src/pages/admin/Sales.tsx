@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, SaleLog, TicketRecord, Seller } from '@/types/database';
@@ -131,6 +131,7 @@ function formatEventDisplayName(event?: { name?: string | null; date?: string | 
 interface SalesFilters {
   search: string;
   status: 'all' | SaleStatus;
+  reservationRisk: 'all' | 'ativa' | 'proxima' | 'vencida';
   eventId: string;
   sellerId: string;
   dateFrom: string;
@@ -159,6 +160,7 @@ type SalesSortDirection = 'asc' | 'desc';
 const initialFilters: SalesFilters = {
   search: '',
   status: 'all',
+  reservationRisk: 'all',
   eventId: 'all',
   sellerId: 'all',
   dateFrom: '',
@@ -191,6 +193,40 @@ type SalesOperationalSignal = {
   label: string;
   detail: string;
 };
+
+type ReservationVisibility = {
+  riskLabel: 'Reserva ativa' | 'Próxima do vencimento' | 'Vencida';
+  expiresAtLabel: string;
+  relativeLabel: string;
+  helperLabel: string;
+  nearExpiry: boolean;
+  expired: boolean;
+};
+
+const RESERVATION_EXPIRING_SOON_MINUTES = 60;
+
+function getReservationVisibility(reservationExpiresAt: string | null): ReservationVisibility | null {
+  if (!reservationExpiresAt) return null;
+
+  const expiresAt = new Date(reservationExpiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return null;
+
+  const now = new Date();
+  const diffMinutes = Math.round((expiresAt.getTime() - now.getTime()) / 60000);
+  const absMinutes = Math.abs(diffMinutes);
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+  const relativeBase = `${hours}h ${String(minutes).padStart(2, '0')}min`;
+
+  return {
+    riskLabel: diffMinutes < 0 ? 'Vencida' : diffMinutes <= RESERVATION_EXPIRING_SOON_MINUTES ? 'Próxima do vencimento' : 'Reserva ativa',
+    expiresAtLabel: format(expiresAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
+    relativeLabel: diffMinutes >= 0 ? `Expira em ${relativeBase}` : `Vencida há ${relativeBase}`,
+    helperLabel: diffMinutes < 0 ? 'Aguardando cancelamento automático' : 'Reserva temporária ativa',
+    nearExpiry: diffMinutes >= 0 && diffMinutes <= RESERVATION_EXPIRING_SOON_MINUTES,
+    expired: diffMinutes < 0,
+  };
+}
 
 function getSalesOperationalSignal(params: {
   sale: Sale;
@@ -317,6 +353,13 @@ export default function Sales() {
   const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
   const [eventFilterSearch, setEventFilterSearch] = useState('');
   const [sellerFilterSearch, setSellerFilterSearch] = useState('');
+  const [globalReservationRiskSummary, setGlobalReservationRiskSummary] = useState({
+    nearExpiry: 0,
+    expired: 0,
+    checkedAt: null as string | null,
+    loading: false,
+  });
+  const riskToastSignatureRef = useRef<string | null>(null);
 
   // Detail modal
   const [detailSale, setDetailSale] = useState<Sale | null>(null);
@@ -379,6 +422,39 @@ export default function Sales() {
   ];
 
   // ── Fetch ──
+  const resolveSearchScope = async (searchTerm: string) => {
+    let saleIdsFromTicketSearch: string[] = [];
+    let eventIdsFromSearch: string[] = [];
+
+    let ticketSearchQuery = supabase
+      .from('tickets')
+      .select('sale_id')
+      .or(`ticket_number.ilike.%${searchTerm}%,passenger_name.ilike.%${searchTerm}%,passenger_cpf.ilike.%${searchTerm}%`)
+      .limit(300);
+
+    if (activeCompanyId) {
+      ticketSearchQuery = ticketSearchQuery.eq('company_id', activeCompanyId);
+    }
+
+    const { data: ticketSearchRows } = await ticketSearchQuery;
+    saleIdsFromTicketSearch = Array.from(new Set((ticketSearchRows ?? []).map((row: any) => row.sale_id).filter(Boolean)));
+
+    let eventSearchQuery = supabase
+      .from('events')
+      .select('id')
+      .ilike('name', `%${searchTerm}%`)
+      .limit(100);
+
+    if (activeCompanyId) {
+      eventSearchQuery = eventSearchQuery.eq('company_id', activeCompanyId);
+    }
+
+    const { data: eventSearchRows } = await eventSearchQuery;
+    eventIdsFromSearch = Array.from(new Set((eventSearchRows ?? []).map((row: any) => row.id).filter(Boolean)));
+
+    return { saleIdsFromTicketSearch, eventIdsFromSearch };
+  };
+
   const fetchSales = async () => {
     setLoading(true);
 
@@ -416,37 +492,9 @@ export default function Sales() {
 
     if (filters.search.trim()) {
       const searchTerm = filters.search.trim();
-
       // Busca ampliada: além do cliente da venda, inclui número oficial da passagem (ticket_number),
       // dados do passageiro no ticket individual e nome do evento, sem mudar a arquitetura da listagem.
-      let saleIdsFromTicketSearch: string[] = [];
-      let eventIdsFromSearch: string[] = [];
-
-      let ticketSearchQuery = supabase
-        .from('tickets')
-        .select('sale_id')
-        .or(`ticket_number.ilike.%${searchTerm}%,passenger_name.ilike.%${searchTerm}%,passenger_cpf.ilike.%${searchTerm}%`)
-        .limit(300);
-
-      if (activeCompanyId) {
-        ticketSearchQuery = ticketSearchQuery.eq('company_id', activeCompanyId);
-      }
-
-      const { data: ticketSearchRows } = await ticketSearchQuery;
-      saleIdsFromTicketSearch = Array.from(new Set((ticketSearchRows ?? []).map((row: any) => row.sale_id).filter(Boolean)));
-
-      let eventSearchQuery = supabase
-        .from('events')
-        .select('id')
-        .ilike('name', `%${searchTerm}%`)
-        .limit(100);
-
-      if (activeCompanyId) {
-        eventSearchQuery = eventSearchQuery.eq('company_id', activeCompanyId);
-      }
-
-      const { data: eventSearchRows } = await eventSearchQuery;
-      eventIdsFromSearch = Array.from(new Set((eventSearchRows ?? []).map((row: any) => row.id).filter(Boolean)));
+      const { saleIdsFromTicketSearch, eventIdsFromSearch } = await resolveSearchScope(searchTerm);
 
       const orParts = [
         `customer_name.ilike.%${searchTerm}%`,
@@ -466,6 +514,27 @@ export default function Sales() {
 
     if (filters.status !== 'all') {
       query = query.eq('status', filters.status);
+    }
+
+    if (filters.reservationRisk !== 'all') {
+      const nowIso = new Date().toISOString();
+      const soonIso = new Date(Date.now() + RESERVATION_EXPIRING_SOON_MINUTES * 60 * 1000).toISOString();
+
+      // Filtro operacional de risco aplica apenas em reservas administrativas ativas.
+      // Mantemos regra explícita para evitar confusão de leitura com status pago/cancelado.
+      query = query
+        .eq('status', 'reservado')
+        .not('reservation_expires_at', 'is', null);
+
+      if (filters.reservationRisk === 'ativa') {
+        query = query.gt('reservation_expires_at', soonIso);
+      }
+      if (filters.reservationRisk === 'proxima') {
+        query = query.gte('reservation_expires_at', nowIso).lte('reservation_expires_at', soonIso);
+      }
+      if (filters.reservationRisk === 'vencida') {
+        query = query.lt('reservation_expires_at', nowIso);
+      }
     }
 
     if (filters.eventId !== 'all') {
@@ -592,6 +661,99 @@ export default function Sales() {
     setLoading(false);
   };
 
+  const fetchGlobalReservationRiskSummary = async () => {
+    if (!activeCompanyId) {
+      setGlobalReservationRiskSummary({ nearExpiry: 0, expired: 0, checkedAt: null, loading: false });
+      return;
+    }
+
+    setGlobalReservationRiskSummary((prev) => ({ ...prev, loading: true }));
+    const nowIso = new Date().toISOString();
+    const soonIso = new Date(Date.now() + RESERVATION_EXPIRING_SOON_MINUTES * 60 * 1000).toISOString();
+
+    let nearQuery = supabase
+      .from('sales')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', activeCompanyId)
+      .eq('status', 'reservado')
+      .not('reservation_expires_at', 'is', null)
+      .gte('reservation_expires_at', nowIso)
+      .lte('reservation_expires_at', soonIso);
+
+    let expiredQuery = supabase
+      .from('sales')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', activeCompanyId)
+      .eq('status', 'reservado')
+      .not('reservation_expires_at', 'is', null)
+      .lt('reservation_expires_at', nowIso);
+
+    if (filters.search.trim()) {
+      const searchTerm = filters.search.trim();
+      const { saleIdsFromTicketSearch, eventIdsFromSearch } = await resolveSearchScope(searchTerm);
+      const orParts = [
+        `customer_name.ilike.%${searchTerm}%`,
+        `customer_cpf.ilike.%${searchTerm}%`,
+      ];
+
+      if (saleIdsFromTicketSearch.length > 0) {
+        orParts.push(`id.in.(${saleIdsFromTicketSearch.join(',')})`);
+      }
+      if (eventIdsFromSearch.length > 0) {
+        orParts.push(`event_id.in.(${eventIdsFromSearch.join(',')})`);
+      }
+
+      nearQuery = nearQuery.or(orParts.join(','));
+      expiredQuery = expiredQuery.or(orParts.join(','));
+    }
+
+    if (filters.eventId !== 'all') {
+      nearQuery = nearQuery.eq('event_id', filters.eventId);
+      expiredQuery = expiredQuery.eq('event_id', filters.eventId);
+    }
+
+    if (filters.sellerId !== 'all') {
+      nearQuery = nearQuery.eq('seller_id', filters.sellerId);
+      expiredQuery = expiredQuery.eq('seller_id', filters.sellerId);
+    }
+
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom).toISOString();
+      nearQuery = nearQuery.gte('created_at', fromDate);
+      expiredQuery = expiredQuery.gte('created_at', fromDate);
+    }
+
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      nearQuery = nearQuery.lte('created_at', toDate.toISOString());
+      expiredQuery = expiredQuery.lte('created_at', toDate.toISOString());
+    }
+
+    if (filters.status !== 'all' && filters.status !== 'reservado') {
+      setGlobalReservationRiskSummary({
+        nearExpiry: 0,
+        expired: 0,
+        checkedAt: new Date().toISOString(),
+        loading: false,
+      });
+      return;
+    }
+
+    const [nearResult, expiredResult] = await Promise.all([nearQuery, expiredQuery]);
+    if (nearResult.error || expiredResult.error) {
+      setGlobalReservationRiskSummary((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+
+    setGlobalReservationRiskSummary({
+      nearExpiry: nearResult.count ?? 0,
+      expired: expiredResult.count ?? 0,
+      checkedAt: new Date().toISOString(),
+      loading: false,
+    });
+  };
+
   const fetchFiltersData = async () => {
     if (!activeCompanyId) {
       setEvents([]);
@@ -620,6 +782,43 @@ export default function Sales() {
   useEffect(() => {
     fetchSales();
   }, [activeCompanyId, filters, currentPage, rowsPerPage, sortConfig]);
+
+  useEffect(() => {
+    fetchGlobalReservationRiskSummary();
+  }, [activeCompanyId, filters.search, filters.status, filters.eventId, filters.sellerId, filters.dateFrom, filters.dateTo]);
+
+  useEffect(() => {
+    if (globalReservationRiskSummary.loading) return;
+    const totalRisk = globalReservationRiskSummary.nearExpiry + globalReservationRiskSummary.expired;
+    if (totalRisk <= 0) return;
+
+    const signature = `${activeCompanyId ?? 'none'}:${filters.search}:${filters.status}:${filters.eventId}:${filters.sellerId}:${filters.dateFrom}:${filters.dateTo}:${globalReservationRiskSummary.nearExpiry}:${globalReservationRiskSummary.expired}`;
+    if (riskToastSignatureRef.current === signature) return;
+    riskToastSignatureRef.current = signature;
+
+    const riskMessages: string[] = [];
+    if (globalReservationRiskSummary.expired > 0) {
+      riskMessages.push(`${globalReservationRiskSummary.expired} reserva(s) vencida(s)`);
+    }
+    if (globalReservationRiskSummary.nearExpiry > 0) {
+      riskMessages.push(`${globalReservationRiskSummary.nearExpiry} próxima(s) do vencimento`);
+    }
+
+    toast.warning('Atenção operacional nas reservas', {
+      description: riskMessages.join(' • '),
+    });
+  }, [
+    activeCompanyId,
+    filters.search,
+    filters.status,
+    filters.eventId,
+    filters.sellerId,
+    filters.dateFrom,
+    filters.dateTo,
+    globalReservationRiskSummary.nearExpiry,
+    globalReservationRiskSummary.expired,
+    globalReservationRiskSummary.loading,
+  ]);
 
   useEffect(() => {
     fetchFiltersData();
@@ -681,6 +880,7 @@ export default function Sales() {
     return (
       filters.search !== '' ||
       filters.status !== 'all' ||
+      filters.reservationRisk !== 'all' ||
       filters.eventId !== 'all' ||
       filters.sellerId !== 'all' ||
       filters.dateFrom !== '' ||
@@ -768,6 +968,13 @@ export default function Sales() {
       totalSellersCommission,
     };
   }, [sales, totalSalesCount]);
+
+  const cleanupHealthLabel = useMemo(() => {
+    if (!globalReservationRiskSummary.checkedAt) return 'Sincronização ativa';
+    const minutes = Math.max(0, differenceInMinutes(new Date(), new Date(globalReservationRiskSummary.checkedAt)));
+    if (minutes <= 0) return 'Atualizado automaticamente agora';
+    return `Atualizado automaticamente há ${minutes} min`;
+  }, [globalReservationRiskSummary.checkedAt]);
 
   // ── Flat data for export ──
   const flatData = useMemo(() => {
@@ -1297,6 +1504,44 @@ export default function Sales() {
             <StatsCard label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} />
             <StatsCard label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" />
           </div>
+          <Alert className={cn(
+            'border',
+            globalReservationRiskSummary.expired > 0
+              ? 'border-destructive/40 bg-destructive/5'
+              : globalReservationRiskSummary.nearExpiry > 0
+                ? 'border-amber-300 bg-amber-50'
+                : 'border-border bg-muted/30',
+          )}>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Monitoramento global de reservas: <strong>{globalReservationRiskSummary.nearExpiry}</strong> próxima(s) do vencimento e{' '}
+                <strong>{globalReservationRiskSummary.expired}</strong> vencida(s). <span className="text-xs text-muted-foreground">{cleanupHealthLabel}</span>
+              </span>
+              {(globalReservationRiskSummary.nearExpiry > 0 || globalReservationRiskSummary.expired > 0) && (
+                <div className="flex gap-2">
+                  {globalReservationRiskSummary.expired > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFilters((prev) => ({ ...prev, status: 'reservado', reservationRisk: 'vencida' }))}
+                    >
+                      Ver reservas vencidas
+                    </Button>
+                  )}
+                  {globalReservationRiskSummary.nearExpiry > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFilters((prev) => ({ ...prev, status: 'reservado', reservationRisk: 'proxima' }))}
+                    >
+                      Ver reservas críticas
+                    </Button>
+                  )}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
         </section>
 
         {/* Financeiro consolidado fica em bloco próprio e continua restrito a gerente/developer
@@ -1338,6 +1583,19 @@ export default function Sales() {
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },
                   { value: 'bloqueado', label: 'Bloqueado' },
+                ],
+              },
+              {
+                id: 'reservationRisk',
+                label: 'Risco da Reserva',
+                placeholder: 'Todos',
+                value: filters.reservationRisk,
+                onChange: (v) => setFilters((f) => ({ ...f, reservationRisk: v as SalesFilters['reservationRisk'] })),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  { value: 'ativa', label: 'Reserva ativa' },
+                  { value: 'proxima', label: 'Próxima do vencimento' },
+                  { value: 'vencida', label: 'Vencida' },
                 ],
               },
             ]}
@@ -1497,6 +1755,9 @@ export default function Sales() {
                       sale,
                       latestLockExpiresAt: latestLockExpiryMap[sale.id] ?? null,
                     });
+                    const reservationVisibility = sale.status === 'reservado'
+                      ? getReservationVisibility(sale.reservation_expires_at)
+                      : null;
                     return (
                       <TableRow key={sale.id} className={isBlock ? 'bg-muted/30' : undefined}>
                         <TableCell className="text-sm whitespace-nowrap">
@@ -1574,6 +1835,43 @@ export default function Sales() {
                                   {operationalSignal.detail}
                                 </TooltipContent>
                               </Tooltip>
+                            )}
+                            {reservationVisibility && (
+                              <>
+                                <span
+                                  className={cn(
+                                    'inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                    reservationVisibility.expired
+                                      ? 'bg-destructive/10 text-destructive'
+                                      : reservationVisibility.nearExpiry
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-muted text-muted-foreground',
+                                  )}
+                                >
+                                  {reservationVisibility.riskLabel}
+                                </span>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className={cn(
+                                        'inline-flex items-center gap-1 text-[10px] font-medium cursor-help',
+                                        reservationVisibility.expired
+                                          ? 'text-destructive'
+                                          : reservationVisibility.nearExpiry
+                                            ? 'text-amber-700'
+                                            : 'text-muted-foreground',
+                                      )}
+                                    >
+                                      <Clock className="h-3 w-3" />
+                                      {reservationVisibility.relativeLabel}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Validade da reserva: {reservationVisibility.expiresAtLabel}</p>
+                                    <p>{reservationVisibility.helperLabel}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </>
                             )}
                             {(sale as any).platform_fee_status === 'pending' && (
                               <Tooltip>
