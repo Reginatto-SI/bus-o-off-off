@@ -78,10 +78,11 @@ export function EventsCarousel({ events, sellerRef }: EventsCarouselProps) {
 
         <div className="overflow-hidden" ref={emblaRef}>
           <div className="flex">
+            {/* Comentário de responsividade: reduzimos recuo lateral no mobile para ampliar área útil do destaque. */}
             {events.map((event) => (
               <div 
                 key={event.id} 
-                className="flex-[0_0_100%] min-w-0 pl-4 first:pl-0"
+                className="flex-[0_0_100%] min-w-0 pl-2 first:pl-0 sm:pl-4"
               >
                 <EventCardFeatured 
                   event={event} 
