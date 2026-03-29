@@ -35,34 +35,24 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   const categoryLabel = getEventCategoryLabel(event.event_category);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
+    <div className="group relative overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_16px_40px_-24px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_55px_-24px_rgba(15,23,42,0.6)]">
       <Link to={linkTo} className="block">
-        {/* Comentário de manutenção: substituímos o AspectRatio híbrido por utilitários responsivos explícitos para isolar mobile (`aspect-[4/5]`) e desktop (`sm:aspect-[16/9]`) sem vazamento entre breakpoints. */}
-        <div className="relative aspect-[4/5] sm:aspect-[16/9]">
-          {/* Comentário de layout: o wrapper absoluto garante preenchimento total da área proporcional, evitando o bloco vazio observado no desktop. */}
-          <div className="absolute inset-0">
-            {/* Background blur */}
-            <div 
-              className="absolute inset-0 bg-cover bg-center blur-xl scale-110"
-              style={{ backgroundImage: `url(${imageUrl})` }}
-            />
-            {/* Imagem principal */}
-            <img
-              src={imageUrl}
-              alt={event.name}
-              className="relative w-full h-full object-contain z-10"
-            />
-            {/* Overlay escuro */}
-            {/* Comentário de suporte: overlay mais forte para reforçar leitura comercial do destaque sem mudar a estrutura do banner. */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
-          </div>
+        {/* Padronização 16:9 em todos os breakpoints para manter previsibilidade entre vitrine/listagens. */}
+        <div className="relative aspect-video">
+          <img
+            src={imageUrl}
+            alt={event.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+          />
+          {/* Overlay escuro mantido para preservar legibilidade dos textos sobre o banner. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
         </div>
 
         {/* Badge Esgotado */}
         {isSoldOut && (
           <Badge 
             variant="destructive" 
-            className="absolute top-4 right-4 z-30"
+            className="absolute top-4 right-4 z-30 rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] shadow-sm"
           >
             Esgotado
           </Badge>
@@ -71,21 +61,21 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         {/* Conteúdo sobre o banner */}
         <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pb-20 sm:space-y-3 sm:p-4 sm:pb-4 sm:pr-40">
           {/* Comentário de responsividade: no mobile reservamos espaço vertical extra para o CTA principal ocupar linha própria sem competir com título/preço. */}
-          <div className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
+          <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             {categoryLabel}
           </div>
           {/* Nome, Data Badge e Preço */}
           <div className="flex gap-3 items-start">
             <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-bold text-white line-clamp-2 sm:text-xl">
+              <h3 className="text-lg font-extrabold leading-tight text-white line-clamp-2 sm:text-xl">
                 {event.name}
               </h3>
               {/* Comentário de manutenção: a descrição curta é ocultada em telas muito pequenas para preservar legibilidade do bloco principal. */}
               <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
               </p>
-              <p className="text-2xl font-bold text-primary mt-1">
+              <p className="mt-1 text-2xl font-extrabold tracking-tight text-primary">
                 {formatCurrencyBRL(event.unit_price)}
               </p>
             </div>
@@ -157,7 +147,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         {/* Comentário de UX: no mobile o CTA ocupa linha inteira para reforçar prioridade de compra e evitar sobreposição com conteúdo textual. */}
         <Button 
           size="lg"
-          className={cn("h-12 w-full px-4 text-base font-medium shadow-lg sm:w-auto sm:px-6")}
+          className={cn("h-12 w-full px-4 text-base font-semibold shadow-lg sm:w-auto sm:px-6")}
           disabled={isSoldOut}
           asChild={!isSoldOut}
         >

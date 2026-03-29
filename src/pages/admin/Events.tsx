@@ -129,6 +129,10 @@ interface EventWithTrips extends Event {
 // Versão textual do termo comercial de taxa da plataforma.
 // Mantemos constante explícita para rastreabilidade mínima sem criar arquitetura jurídica complexa.
 const PLATFORM_FEE_TERMS_VERSION = '2026-03-cancelamento-nao-devolve-taxa-v1';
+const RECOMMENDED_BANNER_WIDTH = 1280;
+const RECOMMENDED_BANNER_HEIGHT = 720;
+const RECOMMENDED_BANNER_RATIO = 16 / 9;
+const BANNER_RATIO_TOLERANCE = 0.08;
 
 type EventSortOption =
   | 'event_date_asc'
@@ -424,6 +428,7 @@ export default function Events() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [bannerUploadAdvisory, setBannerUploadAdvisory] = useState<string | null>(null);
   const pendingImagePreviewUrlRef = useRef<string | null>(null);
   // Ref do input usado pelo botão "Trocar" para abrir o seletor de arquivos de forma confiável.
   const replaceImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -434,6 +439,40 @@ export default function Events() {
       pendingImagePreviewUrlRef.current = null;
     }
     setPendingImageFile(null);
+  };
+
+  const evaluateBannerFileAdvisory = async (file: File): Promise<string | null> => {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        const image = new window.Image();
+        image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+        image.onerror = () => reject(new Error('Falha ao ler dimensões da imagem'));
+        image.src = objectUrl;
+      });
+
+      const { width, height } = dimensions;
+      if (!width || !height) return null;
+
+      const ratio = width / height;
+      const ratioOutOfRange = Math.abs(ratio - RECOMMENDED_BANNER_RATIO) > BANNER_RATIO_TOLERANCE;
+      const resolutionTooLow = width < RECOMMENDED_BANNER_WIDTH || height < RECOMMENDED_BANNER_HEIGHT;
+
+      if (!ratioOutOfRange && !resolutionTooLow) return null;
+
+      if (ratioOutOfRange && resolutionTooLow) {
+        return 'Esta imagem está fora do formato recomendado (16:9) e com resolução abaixo do ideal. Ela pode ser usada normalmente, mas o resultado visual pode sofrer corte e perda de qualidade.';
+      }
+      if (ratioOutOfRange) {
+        return 'Esta imagem está fora do formato recomendado (16:9). Ela ainda pode ser usada, mas o resultado visual pode não ficar ideal.';
+      }
+      return 'Esta imagem tem resolução abaixo do recomendado (1280×720). Ela ainda pode ser usada, mas pode perder qualidade em telas maiores.';
+    } catch {
+      // Comentário de resiliência: se a leitura de dimensões falhar, não bloqueamos upload nem interrompemos o fluxo.
+      return null;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
   };
 
   // Regras de progressão entre abas (fluxo guiado): evita pulo de etapa e reduz erros de backend.
@@ -2202,6 +2241,7 @@ export default function Events() {
 
   const resetForm = () => {
     clearPendingImage();
+    setBannerUploadAdvisory(null);
     setEditingId(null);
     setIsCreateWizardMode(false);
     setPublishDecisionDialogOpen(false);
@@ -2242,6 +2282,8 @@ export default function Events() {
 
   const handleImageUpload = async (file?: File) => {
     if (!file) return;
+    const advisoryMessage = await evaluateBannerFileAdvisory(file);
+    setBannerUploadAdvisory(advisoryMessage);
 
     // Agora permitimos selecionar banner antes do evento existir.
     // O arquivo fica pendente em memória e só vai para o storage após salvar.
@@ -2790,28 +2832,24 @@ export default function Events() {
               <Card 
                 key={event.id} 
                 className={cn(
-                  'card-corporate h-full overflow-hidden transition-all duration-300',
+                  'card-corporate group h-full overflow-hidden border-border/70 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.55)]',
                   event.status === 'a_venda' && 'ring-1 ring-success/30 card-active-glow',
                   event.status === 'encerrado' && 'opacity-70',
                   event.status === 'rascunho' && 'border-dashed',
                 )}
               >
-                {/* Image with fallback - 1:1 padrão oficial (1080×1080 recomendado). */}
+                {/* Padronização 16:9 também na listagem admin para refletir o banner público. */}
                 {(() => {
                   const imgUrl = event.image_url || '/assets/eventos/evento_padrao.png';
                   return (
-                    <div className="aspect-square w-full relative overflow-hidden bg-muted">
-                      <img 
-                        src={imgUrl} 
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                      />
+                    <div className="relative aspect-video w-full overflow-hidden bg-muted">
                       <img 
                         src={imgUrl} 
                         alt={event.name}
-                        className="relative w-full h-full object-contain"
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                       />
+                      {/* Reforço leve de contraste para o topo do card sem impactar leitura operacional. */}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent" />
                     </div>
                   );
                 })()}
@@ -3031,26 +3069,19 @@ export default function Events() {
                     <div className="grid gap-4 lg:grid-cols-[200px,1fr] items-start">
                       <div className="space-y-2">
                         <Label>Imagem/Banner do Evento</Label>
-                        {/* Padrão oficial 1:1 (1080×1080 recomendado) para manter consistência. */}
+                        {/* Upload orientado para o novo padrão único 16:9 da vitrine/listagens. */}
                         {form.image_url ? (
                           <div className="space-y-2">
                             <label
-                              className={`group relative block h-40 w-40 lg:h-44 lg:w-44 overflow-hidden rounded-lg border bg-muted ${
+                              className={`group relative block w-full max-w-44 aspect-video overflow-hidden rounded-lg border bg-muted ${
                                 isReadOnly ? 'cursor-default' : 'cursor-pointer'
                               }`}
                             >
-                              {/* Miniatura 1:1 para não dominar o modal. */}
-                              <img 
-                                src={form.image_url} 
-                                alt=""
-                                aria-hidden="true"
-                                className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                              />
-                              {/* Main image - no crop, centered (contain). */}
+                              {/* Preview alinhado ao padrão final de vitrine/cards: 16:9 com cover e sem blur. */}
                               <img 
                                 src={form.image_url} 
                                 alt="Banner do evento" 
-                                className="relative w-full h-full object-contain"
+                                className="h-full w-full object-cover"
                               />
                               {!isReadOnly && (
                                 <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
@@ -3085,6 +3116,7 @@ export default function Events() {
                                         clearPendingImage();
                                       }
                                       setForm((prev) => ({ ...prev, image_url: null }));
+                                      setBannerUploadAdvisory(null);
                                       toast.success('Imagem removida');
                                     }}
                                   >
@@ -3130,7 +3162,7 @@ export default function Events() {
                           </div>
                         ) : (
                           <label 
-                            className={`flex h-40 w-40 lg:h-44 lg:w-44 flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
+                            className={`flex w-full max-w-44 aspect-video flex-col items-center justify-center gap-2 rounded-lg border bg-muted/30 text-center transition-colors ${
                               isReadOnly 
                                 ? 'border-muted-foreground/15 cursor-not-allowed' 
                                 : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5 cursor-pointer'
@@ -3153,13 +3185,21 @@ export default function Events() {
                                 ? 'Enviando imagem...' 
                                 : pendingImageFile
                                   ? 'Banner pendente (salve para persistir)'
-                                  : 'Adicionar banner (1080×1080)'
+                                  : 'Banner do evento'
                               }
                             </p>
                             <p className="text-xs text-muted-foreground/70">
-                              1:1 com contain, sem cortes
+                              Recomendado: 1280×720 (formato horizontal). A imagem será ajustada automaticamente para melhor visualização.
                             </p>
                           </label>
+                        )}
+                        {bannerUploadAdvisory && (
+                          <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                            <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            <AlertDescription className="text-xs leading-relaxed">
+                              {bannerUploadAdvisory} Para melhor resultado, recomendamos imagens em 1280×720 ou superior.
+                            </AlertDescription>
+                          </Alert>
                         )}
                       </div>
 
@@ -4517,24 +4557,16 @@ export default function Events() {
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
-              <DialogTitle>Pré-visualização do banner (1:1)</DialogTitle>
+              <DialogTitle>Pré-visualização do banner (16:9)</DialogTitle>
             </DialogHeader>
-            <div className="relative mx-auto w-full max-w-md aspect-square overflow-hidden rounded-lg border bg-muted">
-              {/* Prévia 1:1 com contain para evitar distorções/cortes. */}
+            <div className="relative mx-auto w-full max-w-md aspect-video overflow-hidden rounded-lg border bg-muted">
+              {/* Prévia fiel ao resultado final: 16:9 com preenchimento total (cover). */}
               {form.image_url ? (
-                <>
-                  <img
-                    src={form.image_url}
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-40"
-                  />
-                  <img
-                    src={form.image_url}
-                    alt="Pré-visualização do banner do evento"
-                    className="relative w-full h-full object-contain"
-                  />
-                </>
+                <img
+                  src={form.image_url}
+                  alt="Pré-visualização do banner do evento"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
                   Nenhuma imagem selecionada
