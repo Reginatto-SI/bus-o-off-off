@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import jsQR from 'jsqr';
 import { APP_VERSION } from '@/generated/build-info';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,6 +30,7 @@ type ValidationResponse = {
 type BarcodeDetection = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<BarcodeDetection[]> };
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorInstance;
+type ScannerEngine = 'barcode_detector' | 'jsqr' | 'none';
 
 declare global {
   interface Window {
@@ -60,6 +62,7 @@ type DebugInfo = {
   cameraReady: boolean;
   cameraError: string | null;
   scannerSupported: boolean;
+  scannerEngine: ScannerEngine;
   constraintUsed: string;
   lastError: string | null;
   devices: string[];
@@ -84,6 +87,7 @@ const INITIAL_DEBUG: DebugInfo = {
   cameraReady: false,
   cameraError: null,
   scannerSupported: false,
+  scannerEngine: 'none',
   constraintUsed: 'none',
   lastError: null,
   devices: [],
@@ -172,6 +176,9 @@ export default function DriverValidate() {
 
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const scannerEngineRef = useRef<ScannerEngine>('none');
+  const frameCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameContextRef = useRef<CanvasRenderingContext2D | null>(null);
   const initInProgressRef = useRef(false);
   const initCountRef = useRef(0);
   const scanIntervalRef = useRef<number | null>(null);
@@ -308,10 +315,20 @@ export default function DriverValidate() {
 
     // 2. Setup BarcodeDetector
     const hasBarcodeDetector = Boolean(window.BarcodeDetector);
-    setScannerSupported(hasBarcodeDetector);
-    updateDebug({ scannerSupported: hasBarcodeDetector });
     if (hasBarcodeDetector && window.BarcodeDetector) {
       detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+      scannerEngineRef.current = 'barcode_detector';
+      setScannerSupported(true);
+      setScannerStatusMessage(null);
+      updateDebug({ scannerSupported: true, scannerEngine: 'barcode_detector' });
+    } else {
+      // iOS Safari não expõe BarcodeDetector; sem fallback o vídeo abre, mas o scanner nunca inicia.
+      detectorRef.current = null;
+      scannerEngineRef.current = 'jsqr';
+      setScannerSupported(true);
+      setScannerStatusMessage('Usando modo de leitura compatível com este navegador.');
+      updateDebug({ scannerSupported: true, scannerEngine: 'jsqr' });
+      console.warn('[SCAN] BarcodeDetector indisponível; fallback para jsQR ativado.');
     }
 
     // 3. Enumerate devices for debug
@@ -508,18 +525,49 @@ export default function DriverValidate() {
     if (!scannerSupported || !cameraReady || !videoEl || overlay || processing) return;
 
     scanIntervalRef.current = window.setInterval(async () => {
-      if (!videoEl || !detectorRef.current || scanLocked || processing || overlay) return;
+      if (!videoEl || scanLocked || processing || overlay) return;
       try {
-        const detected = await detectorRef.current.detect(videoEl);
-        const token = detected?.[0]?.rawValue?.trim();
+        let token = '';
+        if (scannerEngineRef.current === 'barcode_detector') {
+          if (!detectorRef.current) return;
+          const detected = await detectorRef.current.detect(videoEl);
+          token = detected?.[0]?.rawValue?.trim() ?? '';
+        } else if (scannerEngineRef.current === 'jsqr') {
+          const width = videoEl.videoWidth;
+          const height = videoEl.videoHeight;
+          if (!width || !height) return;
+          if (!frameCanvasRef.current) frameCanvasRef.current = document.createElement('canvas');
+          const canvas = frameCanvasRef.current;
+          canvas.width = width;
+          canvas.height = height;
+          if (!frameContextRef.current) frameContextRef.current = canvas.getContext('2d', { willReadFrequently: true });
+          const ctx = frameContextRef.current;
+          if (!ctx) return;
+          ctx.drawImage(videoEl, 0, 0, width, height);
+          const image = ctx.getImageData(0, 0, width, height);
+          const result = jsQR(image.data, width, height, { inversionAttempts: 'dontInvert' });
+          token = result?.data?.trim() ?? '';
+        } else {
+          return;
+        }
         if (token) {
+          setScannerStatusMessage(null);
           await handleValidate(token, phaseConfig.action);
         }
-      } catch {
+      } catch (err: any) {
+        console.error('[SCAN] erro no loop de leitura', {
+          engine: scannerEngineRef.current,
+          message: err?.message,
+          name: err?.name,
+        });
         // Não deixar falha de leitura silenciosa em campo: expor aviso curto após erros repetidos.
         scanErrorCountRef.current += 1;
         if (scanErrorCountRef.current >= 3) {
-          setScannerStatusMessage('Não foi possível processar a leitura. Tente novamente.');
+          setScannerStatusMessage('Erro ao iniciar leitura do QR. Tentando reinicializar...');
+          updateDebug({ lastError: `scanner_loop:${err?.name ?? 'unknown'}` });
+          if (videoEl) {
+            startCamera(videoEl);
+          }
         }
       }
     }, 300);
@@ -530,7 +578,7 @@ export default function DriverValidate() {
         scanIntervalRef.current = null;
       }
     };
-  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, videoEl]);
+  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, startCamera, videoEl]);
 
   useEffect(() => {
     if (!cameraReady || overlay || processing) return;
@@ -547,7 +595,7 @@ export default function DriverValidate() {
   useEffect(() => {
     if (!cameraReady) return;
     if (!scannerSupported) {
-      setScannerStatusMessage('Seu dispositivo não suporta leitura automática. Use o token manual do QR.');
+      setScannerStatusMessage('Leitura indisponível neste navegador. Use o token manual do QR.');
     }
   }, [cameraReady, scannerSupported]);
 
@@ -788,7 +836,7 @@ export default function DriverValidate() {
                 `readyState: ${debugInfo.readyState}`,
                 `cameraReady: ${debugInfo.cameraReady ? '✅' : '❌'}`,
                 `cameraError: ${debugInfo.cameraError ?? '—'}`,
-                `scanner: ${debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}`,
+                `scanner: ${debugInfo.scannerSupported ? `✅ ${debugInfo.scannerEngine}` : '❌ não disponível'}`,
                 `initInProgress: ${debugInfo.initInProgress ? '⏳ sim' : 'não'}`,
                 `initCount: ${debugInfo.initCount}`,
                 `lastInitAt: ${debugInfo.lastInitAt ?? '—'}`,
@@ -816,7 +864,7 @@ export default function DriverValidate() {
             <p><strong>readyState:</strong> {debugInfo.readyState}</p>
             <p><strong>cameraReady:</strong> {debugInfo.cameraReady ? '✅' : '❌'}</p>
             <p><strong>cameraError:</strong> {debugInfo.cameraError ?? '—'}</p>
-            <p><strong>scanner:</strong> {debugInfo.scannerSupported ? '✅ BarcodeDetector' : '❌ não disponível'}</p>
+            <p><strong>scanner:</strong> {debugInfo.scannerSupported ? `✅ ${debugInfo.scannerEngine}` : '❌ não disponível'}</p>
             <p><strong>initInProgress:</strong> {debugInfo.initInProgress ? '⏳ sim' : 'não'}</p>
             <p><strong>initCount:</strong> {debugInfo.initCount}</p>
             <p><strong>lastInitAt:</strong> {debugInfo.lastInitAt ?? '—'}</p>
