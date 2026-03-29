@@ -1,6 +1,7 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { FloatingWhatsApp } from "@/components/public/FloatingWhatsApp";
 import { Link } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import {
   MapPin,
   Calendar,
@@ -48,6 +49,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
+import { downloadShowcaseQrPng, downloadShowcaseQrSvg, type QrDownloadResult } from "@/lib/showcaseShare";
+import { toast } from "sonner";
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 // Ajuste de UX: usamos nomes atemporais e status de data genéricos para evitar percepção de desatualização na vitrine pública.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
@@ -570,6 +573,8 @@ const INITIAL_CONTACT_FORM: LandingContactFormState = {
   phone: "",
   message: "",
 };
+const OFFICIAL_SMARTBUS_URL = "https://www.smartbusbr.com.br/";
+const OFFICIAL_QR_FILE_BASE_NAME = "qrcode-oficial-smartbus-br";
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const FloatingWhatsAppIcon = () => (
   <span className="inline-flex scale-[0.7] items-center justify-center">
@@ -585,8 +590,10 @@ const FloatingWhatsAppIcon = () => (
 export default function LandingPage() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState<LandingContactFormState>(INITIAL_CONTACT_FORM);
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof LandingContactFormState, string>>>({});
+  const officialQrRef = useRef<HTMLDivElement>(null);
   // CTA comercial unificado para a landing e para o botão flutuante, evitando números divergentes.
   const salesWhatsappUrl =
     buildWhatsappWaMeLink({
@@ -647,6 +654,27 @@ export default function LandingPage() {
     setContactModalOpen(false);
     setContactForm(INITIAL_CONTACT_FORM);
   };
+
+  const showOfficialQrDownloadFeedback = (result: QrDownloadResult, fileType: "SVG" | "PNG") => {
+    if (result === "ok") {
+      toast.success(`${fileType} baixado com sucesso.`);
+      return;
+    }
+    toast.error("Não foi possível gerar o QR Code para download.");
+  };
+
+  // Reuso do utilitário já existente para manter exportação SVG consistente e auditável em todo o projeto.
+  const handleDownloadOfficialQrSvg = () => {
+    const result = downloadShowcaseQrSvg(officialQrRef.current, OFFICIAL_QR_FILE_BASE_NAME);
+    showOfficialQrDownloadFeedback(result, "SVG");
+  };
+
+  // Reuso do mesmo fluxo de renderização em canvas para PNG com boa nitidez de impressão (escala 4x no utilitário).
+  const handleDownloadOfficialQrPng = async () => {
+    const result = await downloadShowcaseQrPng(officialQrRef.current, OFFICIAL_QR_FILE_BASE_NAME);
+    showOfficialQrDownloadFeedback(result, "PNG");
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <header className="relative z-20 border-b border-white/10 bg-[hsl(222_47%_11%)] shadow-[0_18px_48px_-32px_rgba(15,23,42,0.95)]">
@@ -1884,6 +1912,15 @@ export default function LandingPage() {
                   </Link>
                 </li>
                 <li>
+                  <button
+                    type="button"
+                    onClick={() => setOfficialQrModalOpen(true)}
+                    className="text-sm text-white/40 transition-colors hover:text-white"
+                  >
+                    Baixar QR Code SmartBus BR
+                  </button>
+                </li>
+                <li>
                   {/* Link direto para o zip público da marca, mantendo o download discreto no rodapé sem competir com os CTAs principais. */}
                   <a
                     href="/Logo_Smartbusbr_.zip"
@@ -1906,6 +1943,34 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      <Dialog open={officialQrModalOpen} onOpenChange={setOfficialQrModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>QR Code oficial da SmartBus BR</DialogTitle>
+            <DialogDescription>
+              Baixe o QR Code oficial que direciona para {OFFICIAL_SMARTBUS_URL}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <div ref={officialQrRef} className="rounded-lg border border-border bg-white p-4">
+                <QRCodeSVG value={OFFICIAL_SMARTBUS_URL} size={200} level="H" includeMargin={false} />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Ideal para impressão, balcão, adesivos, materiais promocionais e divulgação.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" className="flex-1" onClick={handleDownloadOfficialQrSvg}>
+                Baixar em SVG
+              </Button>
+              <Button type="button" variant="outline" className="flex-1" onClick={handleDownloadOfficialQrPng}>
+                Baixar em PNG
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <FloatingWhatsApp />
     </div>
   );
