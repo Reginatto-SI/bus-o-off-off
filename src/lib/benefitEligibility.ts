@@ -20,6 +20,32 @@ export interface BenefitEligibilityResult {
   eligibleMatches: EligibleBenefitMatch[];
 }
 
+interface BenefitEligibilityMatchRow {
+  program_id: string;
+  program_company_id: string;
+  program_name: string;
+  program_description: string | null;
+  program_status: BenefitProgram['status'];
+  benefit_type: BenefitProgram['benefit_type'];
+  benefit_value: number;
+  program_valid_from: string | null;
+  program_valid_until: string | null;
+  applies_to_all_events: boolean;
+  program_created_at: string;
+  program_updated_at: string;
+  cpf_record_id: string;
+  cpf_record_company_id: string;
+  cpf_record_program_id: string;
+  cpf: string;
+  cpf_full_name: string | null;
+  cpf_status: BenefitProgramEligibleCpf['status'];
+  cpf_valid_from: string | null;
+  cpf_valid_until: string | null;
+  cpf_notes: string | null;
+  cpf_created_at: string;
+  cpf_updated_at: string;
+}
+
 export interface BenefitPriceResolution {
   benefitApplied: boolean;
   benefitProgramId: string | null;
@@ -204,53 +230,52 @@ export async function getEligibleBenefitsByPassenger({
 
   const refDate = referenceDate.toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
-    .from('benefit_program_eligible_cpf')
-    .select(`
-      *,
-      program:benefit_programs!benefit_program_eligible_cpf_benefit_program_id_fkey!inner(*),
-      event_links:benefit_program_event_links(event_id)
-    `)
-    .eq('company_id', companyId)
-    .eq('cpf', normalizedCpf)
-    .eq('status', 'ativo')
-    .eq('program.company_id', companyId)
-    .eq('program.status', 'ativo')
-    .or(`valid_from.is.null,valid_from.lte.${refDate}`)
-    .or(`valid_until.is.null,valid_until.gte.${refDate}`)
-    .or(`program.valid_from.is.null,program.valid_from.lte.${refDate}`)
-    .or(`program.valid_until.is.null,program.valid_until.gte.${refDate}`)
-    .order('created_at', { ascending: false });
+  /**
+   * Camada única de elegibilidade (público + admin):
+   * - evita leitura direta das tabelas sensíveis pelo cliente anônimo;
+   * - centraliza as regras de status/vigência/escopo por evento no banco.
+   */
+  const { data, error } = await supabase.rpc('get_benefit_eligibility_matches', {
+    p_company_id: companyId,
+    p_event_id: eventId,
+    p_cpf: normalizedCpf,
+    p_reference_date: refDate,
+  });
 
   if (error) {
     throw new Error(`Falha ao consultar elegibilidade de benefício por CPF: ${error.message}`);
   }
 
-  const rows = (data ?? []) as unknown as Array<BenefitProgramEligibleCpf & {
-    program: BenefitProgram;
-    event_links: Array<{ event_id: string }> | null;
-  }>;
+  const rows = (data ?? []) as BenefitEligibilityMatchRow[];
 
-  const eligibleMatches = rows
-    .filter((row) => {
-      if (row.program.applies_to_all_events) return true;
-      return (row.event_links ?? []).some((link) => link.event_id === eventId);
-    })
-    .map((row) => ({
+  const eligibleMatches = rows.map((row) => ({
       cpfRecord: {
-        id: row.id,
-        company_id: row.company_id,
-        benefit_program_id: row.benefit_program_id,
+        id: row.cpf_record_id,
+        company_id: row.cpf_record_company_id,
+        benefit_program_id: row.cpf_record_program_id,
         cpf: row.cpf,
-        full_name: row.full_name,
-        status: row.status,
-        valid_from: row.valid_from,
-        valid_until: row.valid_until,
-        notes: row.notes,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
+        full_name: row.cpf_full_name,
+        status: row.cpf_status,
+        valid_from: row.cpf_valid_from,
+        valid_until: row.cpf_valid_until,
+        notes: row.cpf_notes,
+        created_at: row.cpf_created_at,
+        updated_at: row.cpf_updated_at,
       },
-      program: row.program,
+      program: {
+        id: row.program_id,
+        company_id: row.program_company_id,
+        name: row.program_name,
+        description: row.program_description,
+        status: row.program_status,
+        benefit_type: row.benefit_type,
+        benefit_value: Number(row.benefit_value),
+        valid_from: row.program_valid_from,
+        valid_until: row.program_valid_until,
+        applies_to_all_events: row.applies_to_all_events,
+        created_at: row.program_created_at,
+        updated_at: row.program_updated_at,
+      },
     }));
 
   return {

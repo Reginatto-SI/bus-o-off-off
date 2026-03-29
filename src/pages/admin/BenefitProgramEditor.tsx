@@ -1028,7 +1028,7 @@ export default function BenefitProgramEditor() {
                     <Label>Aplicar para todos os eventos?</Label>
                     <div className="flex min-h-10 items-center rounded-md border px-3 py-2">
                       <Checkbox checked={form.applies_to_all_events} onCheckedChange={(checked) => setForm({ ...form, applies_to_all_events: Boolean(checked) })} />
-                      <span className="ml-3 text-sm text-muted-foreground">Marque para não exigir vínculos específicos por evento.</span>
+                      <span className="ml-3 text-sm text-muted-foreground">Deixe esta opção marcada para aplicar o benefício em todos os eventos.</span>
                     </div>
                   </CardContent>
                 </Card>
