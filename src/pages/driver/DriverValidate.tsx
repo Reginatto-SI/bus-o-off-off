@@ -230,6 +230,7 @@ export default function DriverValidate() {
       p_action: action,
       p_device_info: navigator.userAgent,
       p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+      p_source: 'scanner',
     });
 
     if (error) {

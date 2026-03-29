@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,14 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock, Settings } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
+import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock, Settings, Check, ChevronsUpDown } from 'lucide-react';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
 import {
   DropdownMenu,
@@ -38,6 +34,7 @@ interface TripInfo {
   eventDate: string;
   vehiclePlate: string;
   transportPolicy: string;
+  tripType: 'ida' | 'volta';
 }
 
 interface BoardingKpis {
@@ -69,10 +66,28 @@ export default function DriverHome() {
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [loadingKpis, setLoadingKpis] = useState(false);
   const [operationalRoleLabel, setOperationalRoleLabel] = useState('Motorista');
+  const [tripSelectorOpen, setTripSelectorOpen] = useState(false);
+  const [preferredTripByPhase, setPreferredTripByPhase] = useState<Partial<Record<OperationalPhase, string>>>({});
 
   const activeTrip = allTrips.find(t => t.tripId === selectedTripId) ?? null;
   const applicablePhases = activeTrip ? getApplicablePhases(activeTrip.transportPolicy) : ['ida'] as OperationalPhase[];
   const phaseConfig = PHASE_CONFIG[activePhase];
+
+  const getTripsForPhase = useCallback((phase: OperationalPhase) => {
+    if (phase === 'ida') return allTrips.filter((trip) => trip.tripType === 'ida');
+    if (phase === 'reembarque') return allTrips.filter((trip) => trip.tripType === 'volta');
+    // Desembarque segue a operação da ida para evitar mistura visual com a volta.
+    return allTrips.filter((trip) => trip.tripType === 'ida');
+  }, [allTrips]);
+
+  const phaseFilteredTrips = useMemo(() => getTripsForPhase(activePhase), [getTripsForPhase, activePhase]);
+
+  const getTripOptionLabel = useCallback((trip: TripInfo) => {
+    const tripTypeLabel = trip.tripType === 'volta' ? 'Volta' : 'Ida';
+    return `${formatDateOnlyBR(trip.eventDate)} • ${trip.eventName} • ${trip.vehiclePlate} • ${tripTypeLabel}`;
+  }, []);
+
+  const selectedTripOption = phaseFilteredTrips.find((trip) => trip.tripId === selectedTripId) ?? null;
 
   /* ---------- Fetch all active trips ---------- */
   const fetchAllTrips = useCallback(async () => {
@@ -95,7 +110,7 @@ export default function DriverHome() {
     if (driverId) {
       const { data } = await supabase
         .from('trips')
-        .select('id, event_id, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
+        .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
@@ -106,7 +121,7 @@ export default function DriverHome() {
     if (!trips || trips.length === 0) {
       const { data } = await supabase
         .from('trips')
-        .select('id, event_id, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
+        .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
         .eq('company_id', activeCompanyId)
         .eq('events.status', 'a_venda')
         .order('events(date)', { ascending: true });
@@ -147,6 +162,7 @@ export default function DriverHome() {
         eventDate: trip.events.date,
         vehiclePlate: trip.vehicles.plate,
         transportPolicy: trip.events.transport_policy ?? 'ida_obrigatoria_volta_opcional',
+        tripType: trip.trip_type === 'volta' ? 'volta' : 'ida',
       }));
 
     setAllTrips(mapped);
@@ -156,9 +172,11 @@ export default function DriverHome() {
 
     if (persistedStillValid) {
       setSelectedTripId(persisted);
+      setPreferredTripByPhase((prev) => ({ ...prev, ida: persisted }));
     } else if (mapped.length > 0) {
       const firstId = mapped[0].tripId;
       setSelectedTripId(firstId);
+      setPreferredTripByPhase((prev) => ({ ...prev, ida: firstId }));
       setPersistedTripId(user.id, activeCompanyId, firstId);
     } else {
       setSelectedTripId(null);
@@ -268,9 +286,20 @@ export default function DriverHome() {
     }
   }, [selectedTripId, fetchKpis]);
 
+  useEffect(() => {
+    if (!user || !activeCompanyId) return;
+    if (selectedTripId) return;
+    if (phaseFilteredTrips.length === 0) return;
+
+    const fallbackTripId = phaseFilteredTrips[0].tripId;
+    setSelectedTripId(fallbackTripId);
+    setPersistedTripId(user.id, activeCompanyId, fallbackTripId);
+  }, [phaseFilteredTrips, selectedTripId, user, activeCompanyId]);
+
   /* ---------- Handlers ---------- */
   const handleTripChange = (tripId: string) => {
     setSelectedTripId(tripId);
+    setPreferredTripByPhase((prev) => ({ ...prev, [activePhase]: tripId }));
     if (user && activeCompanyId) {
       setPersistedTripId(user.id, activeCompanyId, tripId);
     }
@@ -281,6 +310,21 @@ export default function DriverHome() {
     if (user && activeCompanyId) {
       setPersistedPhase(user.id, activeCompanyId, phase);
     }
+
+    const phaseTrips = getTripsForPhase(phase);
+    if (phaseTrips.length > 0) {
+      const selectedStillValid = selectedTripId && phaseTrips.some((trip) => trip.tripId === selectedTripId);
+      if (!selectedStillValid) {
+        const preferredTripId = preferredTripByPhase[phase];
+        const preferredStillValid = preferredTripId && phaseTrips.some((trip) => trip.tripId === preferredTripId);
+        const nextTripId = preferredStillValid ? preferredTripId : phaseTrips[0].tripId;
+        setSelectedTripId(nextTripId);
+        if (user && activeCompanyId) {
+          setPersistedTripId(user.id, activeCompanyId, nextTripId);
+        }
+      }
+    }
+
     toast({ title: `Fase alterada para ${PHASE_CONFIG[phase].label}` });
   };
 
@@ -342,20 +386,47 @@ export default function DriverHome() {
           <p className="text-xs text-muted-foreground">Perfil operacional: {operationalRoleLabel}</p>
         </div>
 
-        {/* Event Selector (only for 2+ trips) */}
-        {!loadingTrips && allTrips.length > 1 && (
-          <Select value={selectedTripId ?? ''} onValueChange={handleTripChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o evento" />
-            </SelectTrigger>
-            <SelectContent>
-              {allTrips.map(t => (
-                <SelectItem key={t.tripId} value={t.tripId}>
-                  {formatDateOnlyBR(t.eventDate)} · {t.eventName} · {t.vehiclePlate}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Event Selector (com busca e filtro por fase ativa) */}
+        {!loadingTrips && (
+          <Popover open={tripSelectorOpen} onOpenChange={setTripSelectorOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={tripSelectorOpen}
+                className="w-full justify-between"
+              >
+                {selectedTripOption ? getTripOptionLabel(selectedTripOption) : 'Selecione a viagem'}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar por evento, data, placa ou tipo..." />
+                <CommandList>
+                  <CommandEmpty>Nenhuma viagem encontrada para esta aba.</CommandEmpty>
+                  <CommandGroup>
+                    {phaseFilteredTrips.map((trip) => {
+                      const label = getTripOptionLabel(trip);
+                      return (
+                        <CommandItem
+                          key={trip.tripId}
+                          value={`${trip.eventName} ${formatDateOnlyBR(trip.eventDate)} ${trip.vehiclePlate} ${trip.tripType} ${label}`}
+                          onSelect={() => {
+                            handleTripChange(trip.tripId);
+                            setTripSelectorOpen(false);
+                          }}
+                        >
+                          <Check className={cn('mr-2 h-4 w-4', selectedTripId === trip.tripId ? 'opacity-100' : 'opacity-0')} />
+                          <span className="truncate">{label}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         )}
 
         {/* Phase Selector */}
@@ -407,7 +478,7 @@ export default function DriverHome() {
               <div>
                 <h2 className="text-lg font-semibold">{activeTrip.eventName}</h2>
                 <p className="text-sm text-muted-foreground">
-                  {formatEventDate(activeTrip.eventDate)} · {activeTrip.vehiclePlate}
+                  {formatEventDate(activeTrip.eventDate)} · {activeTrip.vehiclePlate} · {activeTrip.tripType === 'volta' ? 'Volta' : 'Ida'}
                 </p>
               </div>
 
