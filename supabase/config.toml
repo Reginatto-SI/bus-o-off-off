@@ -4,7 +4,7 @@ project_id = "cdrcyjrvurrphnceromd"
   [functions.asaas-webhook]
     verify_jwt = false
   [functions.admin-user-auth-support]
-    verify_jwt = true
+    verify_jwt = false
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.cleanup-expired-locks]
