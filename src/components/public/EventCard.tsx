@@ -37,30 +37,22 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
   const categoryLabel = getEventCategoryLabel(event.event_category);
 
   return (
-    <Card className="overflow-hidden rounded-2xl border shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+    <Card className="group overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_10px_30px_-22px_rgba(15,23,42,0.45)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_18px_45px_-24px_rgba(15,23,42,0.55)]">
       <Link to={linkTo} className="block">
-        {/* Banner com blur letterbox */}
-        <div className="relative aspect-[16/10] sm:aspect-[3/2]">
-          {/* Comentário de responsividade: no mobile usamos proporção mais horizontal para reduzir sensação de card quadrado sem impactar desktop. */}
-          <div className="relative w-full h-full">
-              {/* Background blur */}
-              <div 
-                className="absolute inset-0 bg-cover bg-center blur-xl scale-110 opacity-60"
-                style={{ backgroundImage: `url(${imageUrl})` }}
-              />
-              {/* Imagem principal */}
-              <img
-                src={imageUrl}
-                alt={event.name}
-                className="relative w-full h-full object-contain z-10"
-              />
-            </div>
+        {/* Banner com reforço de contraste para leitura premium sem alterar conteúdo do card. */}
+        <div className="relative aspect-video">
+          <img
+            src={imageUrl}
+            alt={event.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
           
           {/* Badge Esgotado */}
           {isSoldOut && (
             <Badge 
               variant="destructive" 
-              className="absolute top-3 right-3 z-20"
+              className="absolute top-3 right-3 z-20 rounded-full px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] shadow-sm"
             >
               Esgotado
             </Badge>
@@ -68,12 +60,12 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         </div>
       </Link>
 
-      <CardContent className="space-y-3 p-4 sm:space-y-3.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em]">
+      <CardContent className="space-y-3.5 p-4 sm:space-y-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Badge variant="secondary" className="rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
             {categoryLabel}
           </Badge>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground/90">
             Compra online e embarque organizado
           </span>
         </div>
@@ -82,22 +74,22 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           <DateBadge date={event.date} className="flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <Link to={linkTo}>
-              <h3 className="text-lg font-semibold text-foreground line-clamp-2 hover:text-primary transition-colors">
+              <h3 className="text-lg font-bold leading-tight text-foreground line-clamp-2 hover:text-primary transition-colors">
                 {event.name}
               </h3>
             </Link>
             {/* Comentário de suporte: o preço fica próximo do título para facilitar leitura rápida em listas comerciais. */}
-            <p className="text-xl font-bold text-primary mt-1">
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-primary">
               {formatCurrencyBRL(event.unit_price)}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               Garanta sua passagem com antecedência e veja os detalhes do embarque antes de concluir.
             </p>
           </div>
         </div>
 
         {/* Local */}
-        <div className="text-sm text-muted-foreground">
+        <div className="rounded-xl border border-border/70 bg-muted/25 p-2.5 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 flex-shrink-0" />
             <span>{event.city}</span>
@@ -108,7 +100,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         {event.company && (
           <Link
             to={event.company && (event.company as any).public_slug ? `/empresa/${(event.company as any).public_slug}` : '#'}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-muted/40 transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
             {event.company.logo_url ? (
@@ -124,7 +116,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
                 </span>
               </div>
             )}
-            <span className="text-xs text-muted-foreground truncate hover:text-primary transition-colors">
+            <span className="text-xs font-medium text-muted-foreground truncate hover:text-primary transition-colors">
               {event.company.name}
             </span>
           </Link>
@@ -146,8 +138,8 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         )}
 
         {/* CTA */}
-        <Button 
-          className={cn("w-full h-12 text-base font-medium")}
+          <Button 
+          className={cn("h-12 w-full text-base font-semibold shadow-sm")}
           disabled={isSoldOut}
           asChild={!isSoldOut}
         >

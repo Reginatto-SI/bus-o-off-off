@@ -1303,14 +1303,15 @@ export default function LandingPage() {
                   to="/eventos"
                   className="group flex-shrink-0 w-[300px] sm:w-[340px] snap-start overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
                 >
-                  <div className="relative h-52 overflow-hidden">
+                  {/* Mantém os cards mockados da landing no mesmo padrão 16:9 dos demais banners de evento. */}
+                  <div className="relative aspect-video overflow-hidden">
                     <img
                       src={trip.image}
                       alt={trip.name}
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
-                      width={800}
-                      height={512}
+                      width={1280}
+                      height={720}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
                     <div className="absolute left-4 top-4 flex flex-wrap gap-2">
