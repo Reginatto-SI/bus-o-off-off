@@ -2652,6 +2652,39 @@ export type Database = {
           vehicle_type: string
         }[]
       }
+      get_benefit_eligibility_matches: {
+        Args: {
+          p_company_id: string
+          p_cpf: string
+          p_event_id: string
+          p_reference_date?: string
+        }
+        Returns: {
+          applies_to_all_events: boolean
+          benefit_type: string
+          benefit_value: number
+          cpf: string
+          cpf_created_at: string
+          cpf_full_name: string | null
+          cpf_notes: string | null
+          cpf_record_company_id: string
+          cpf_record_id: string
+          cpf_record_program_id: string
+          cpf_status: string
+          cpf_updated_at: string
+          cpf_valid_from: string | null
+          cpf_valid_until: string | null
+          program_company_id: string
+          program_created_at: string
+          program_description: string | null
+          program_id: string
+          program_name: string
+          program_status: string
+          program_updated_at: string
+          program_valid_from: string | null
+          program_valid_until: string | null
+        }[]
+      }
       get_sales_report_kpis: {
         Args: {
           p_company_id?: string

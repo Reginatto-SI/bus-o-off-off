@@ -717,10 +717,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         };
       } catch (error) {
         console.error('[admin-sales] benefit_validation_fallback_applied', {
+          stage: 'resolvePassengerBenefitSnapshots',
+          context: 'admin_sale_step3_or_confirm',
+          flow_origin: 'admin_sale',
+          companyId: activeCompanyId,
           seatId: passenger.seatId,
           eventId: selectedEventId,
           cpfSuffix: normalizedCpf.slice(-4),
-          error,
+          reason: 'eligibility_lookup_failed',
+          cause: error instanceof Error ? error.message : String(error),
         });
         return fallbackSnapshot;
       }

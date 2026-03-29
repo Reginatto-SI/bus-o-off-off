@@ -250,6 +250,7 @@ export default function Checkout() {
         grandTotal: 0,
         hasFeeLines: false,
         hasBenefitsApplied: false,
+        benefitDescription: null as string | null,
       };
     }
 
@@ -293,6 +294,38 @@ export default function Checkout() {
 
     const totalFees = roundCurrency(breakdown.totalFees * selectedCount);
     const grandTotal = roundCurrency(seatsSubtotalAfterBenefits + totalFees);
+    const benefitSnapshots = hasResolvedBenefitSnapshot
+      ? passengerBenefitSnapshots.filter(
+          (snapshot): snapshot is PassengerBenefitSnapshot =>
+            snapshot !== null &&
+            snapshot.benefit_applied &&
+            Number(snapshot.discount_amount) > 0,
+        )
+      : [];
+
+    const uniqueBenefitDescriptions = Array.from(
+      new Set(
+        benefitSnapshots.map((snapshot) => {
+          const typeValue =
+            snapshot.benefit_type === "percentual"
+              ? `${Number(snapshot.benefit_value ?? 0)}%`
+              : snapshot.benefit_type === "valor_fixo"
+                ? formatCurrencyBRL(Number(snapshot.benefit_value ?? 0))
+                : snapshot.benefit_type === "preco_final"
+                  ? `preço final ${formatCurrencyBRL(Number(snapshot.benefit_value ?? 0))}`
+                  : null;
+          const safeName = snapshot.benefit_program_name || "Benefício por CPF";
+          return typeValue ? `${safeName} (${typeValue})` : safeName;
+        }),
+      ),
+    );
+
+    const benefitDescription =
+      uniqueBenefitDescriptions.length === 0
+        ? null
+        : uniqueBenefitDescriptions.length === 1
+          ? uniqueBenefitDescriptions[0]
+          : `${uniqueBenefitDescriptions.length} benefícios aplicados`;
 
     return {
       originalSubtotal: roundCurrency(originalSeatsTotal),
@@ -302,6 +335,7 @@ export default function Checkout() {
       grandTotal,
       hasFeeLines: breakdown.fees.length > 0,
       hasBenefitsApplied: roundCurrency(totalBenefitDiscount) > 0,
+      benefitDescription,
     };
   }, [
     event,
@@ -766,13 +800,16 @@ export default function Checkout() {
           // Em erro técnico (RLS/query/timeout), seguimos com preço base e log detalhado.
           console.error("[checkout] benefit_validation_fallback_applied", {
             stage: "passengers_to_payment_transition",
+            context: "resolvePassengerBenefitSnapshots",
+            flow_origin: "public_checkout",
             environment: import.meta.env.MODE,
             eventId: event.id,
             companyId: event.company_id,
             seatId,
             passengerIndex: index,
             cpfMasked: maskCpfForLog(passenger.cpf),
-            cause: error,
+            reason: "eligibility_lookup_failed",
+            cause: error instanceof Error ? error.message : String(error),
           });
           return fallbackSnapshot;
         }
@@ -979,11 +1016,14 @@ export default function Checkout() {
         });
         console.error("[checkout] benefit_snapshot_shape_fallback", {
           stage: "submit_before_sale_insert",
+          context: "handleSubmit",
+          flow_origin: "public_checkout",
           environment: import.meta.env.MODE,
           eventId: event.id,
           companyId: event.company_id,
           expectedPassengers: passengers.length,
           receivedSnapshots: snapshotsToPersist.length,
+          reason: "snapshot_length_mismatch",
         });
       }
       if (snapshotsToPersist.length !== passengers.length) {
@@ -1388,26 +1428,42 @@ export default function Checkout() {
                   {selectedSeats.length || quantity}
                 </span>
               </div>
-              <div className="flex justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">Subtotal original</span>
-                <span className="font-medium text-right">
-                  {formatCurrencyBRL(checkoutSummary.originalSubtotal)}
-                </span>
-              </div>
-              {checkoutSummary.hasBenefitsApplied && (
+              {checkoutSummary.hasBenefitsApplied ? (
+                <>
+                  {/* Regra visual: só mostramos “Subtotal com benefício” quando houver desconto real aplicado. */}
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Subtotal original</span>
+                    <span className="font-medium text-right">
+                      {formatCurrencyBRL(checkoutSummary.originalSubtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Benefício aplicado</span>
+                    <span className="font-medium text-right">
+                      {checkoutSummary.benefitDescription}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Desconto benefício</span>
+                    <span className="font-medium text-right text-emerald-700">
+                      - {formatCurrencyBRL(checkoutSummary.benefitDiscountTotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Subtotal com benefício</span>
+                    <span className="font-medium text-right">
+                      {formatCurrencyBRL(checkoutSummary.subtotalAfterBenefits)}
+                    </span>
+                  </div>
+                </>
+              ) : (
                 <div className="flex justify-between gap-3 text-sm">
-                  <span className="text-muted-foreground">Desconto benefício</span>
-                  <span className="font-medium text-right text-emerald-700">
-                    - {formatCurrencyBRL(checkoutSummary.benefitDiscountTotal)}
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium text-right">
+                    {formatCurrencyBRL(checkoutSummary.subtotalAfterBenefits)}
                   </span>
                 </div>
               )}
-              <div className="flex justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">Subtotal com benefício</span>
-                <span className="font-medium text-right">
-                  {formatCurrencyBRL(checkoutSummary.subtotalAfterBenefits)}
-                </span>
-              </div>
               {checkoutSummary.hasFeeLines && (
                 <div className="flex justify-between gap-3 text-sm">
                   <span className="text-muted-foreground">
@@ -1872,11 +1928,14 @@ export default function Checkout() {
                     // inconsistência de snapshot nunca pode travar o avanço do checkout.
                     console.error("[checkout] benefit_snapshot_shape_fallback", {
                       stage: "passengers_to_payment_transition",
+                      context: "step_transition",
+                      flow_origin: "public_checkout",
                       environment: import.meta.env.MODE,
                       eventId: event?.id,
                       companyId: event?.company_id,
                       expectedPassengers: passengers.length,
                       receivedSnapshots: resolvedSnapshots.length,
+                      reason: "snapshot_length_mismatch",
                     });
                   }
 
