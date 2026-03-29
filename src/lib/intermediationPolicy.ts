@@ -31,4 +31,4 @@ export const TICKET_PLATFORM_LIABILITY_TEXT =
 
 // Rodapé obrigatório para materiais emitidos/exportados no contexto da passagem.
 export const TICKET_PDF_FOOTER_TEXT =
-  'Gerado por Reginatto SI — www.reginattosistemas.com.br — Contato: (31) 99207-4309';
+  'Gerado por — www.smartbusbr.com.br — Contato: (31) 99207-4309';

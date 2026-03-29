@@ -41,7 +41,7 @@
 
 1. **Rodapé obrigatório institucional**
    - Adicionado texto obrigatório em constante compartilhada:
-     - `Gerado por Reginatto SI — www.reginattosistemas.com.br — Contato: (31) 99207-4309`
+     - `Gerado por — www.smartbusbr.com.br — Contato: (31) 99207-4309`
    - Exibido no ticket virtual e no template canvas de PDF, mantendo consistência.
 
 2. **Consistência visual entre ticket virtual e PDF**
