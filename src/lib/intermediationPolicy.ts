@@ -28,3 +28,7 @@ export const TICKET_PLATFORM_SALES_TEXT = 'Plataforma de venda: Smartbus BR';
 
 export const TICKET_PLATFORM_LIABILITY_TEXT =
   'A Smartbus BR não é responsável pela execução do transporte, cancelamentos ou reembolsos, que são de responsabilidade da empresa organizadora.';
+
+// Rodapé obrigatório para materiais emitidos/exportados no contexto da passagem.
+export const TICKET_PDF_FOOTER_TEXT =
+  'Gerado por Reginatto SI — www.reginattosistemas.com.br — Contato: (31) 99207-4309';
