@@ -3,7 +3,6 @@ import { MapPin, MessageCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { cn } from '@/lib/utils';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
@@ -37,9 +36,9 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
     <Card className="overflow-hidden rounded-2xl border shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
       <Link to={linkTo} className="block">
         {/* Banner com blur letterbox */}
-        <div className="relative">
-          <AspectRatio ratio={3 / 2}>
-            <div className="relative w-full h-full">
+        <div className="relative aspect-[16/10] sm:aspect-[3/2]">
+          {/* Comentário de responsividade: no mobile usamos proporção mais horizontal para reduzir sensação de card quadrado sem impactar desktop. */}
+          <div className="relative w-full h-full">
               {/* Background blur */}
               <div 
                 className="absolute inset-0 bg-cover bg-center blur-xl scale-110 opacity-60"
@@ -52,7 +51,6 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
                 className="relative w-full h-full object-contain z-10"
               />
             </div>
-          </AspectRatio>
           
           {/* Badge Esgotado */}
           {isSoldOut && (
@@ -66,7 +64,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         </div>
       </Link>
 
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="space-y-3 p-4 sm:space-y-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em]">
             Viagem para evento
@@ -152,7 +150,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           {isSoldOut ? (
             <span>Esgotado</span>
           ) : (
-            <Link to={linkTo}>Ver detalhes e comprar</Link>
+            <Link to={linkTo}>Comprar passagem</Link>
           )}
         </Button>
       </CardContent>

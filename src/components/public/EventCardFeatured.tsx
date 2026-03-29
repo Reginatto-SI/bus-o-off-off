@@ -66,7 +66,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         )}
 
         {/* Conteúdo sobre o banner */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pr-32 sm:space-y-3 sm:p-4 sm:pr-40">
+        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pb-20 sm:space-y-3 sm:p-4 sm:pb-4 sm:pr-40">
+          {/* Comentário de responsividade: no mobile reservamos espaço vertical extra para o CTA principal ocupar linha própria sem competir com título/preço. */}
           <div className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             Evento em destaque
           </div>
@@ -130,21 +131,37 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
               </a>
             )}
           </div>
+
+          {/* Comentário de hierarquia: mantemos o suporte visível no mobile como ação secundária discreta, fora da área do CTA primário. */}
+          {whatsappHelpLink && (
+            <div className="sm:hidden">
+              <a
+                href={whatsappHelpLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-white/85 hover:text-white transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Ajuda no WhatsApp
+              </a>
+            </div>
+          )}
         </div>
       </Link>
 
       {/* CTA */}
-      <div className="absolute bottom-4 right-4 z-30">
+      <div className="absolute bottom-3 left-3 right-3 z-30 sm:bottom-4 sm:left-auto sm:right-4">
+        {/* Comentário de UX: no mobile o CTA ocupa linha inteira para reforçar prioridade de compra e evitar sobreposição com conteúdo textual. */}
         <Button 
           size="lg"
-          className={cn("h-12 px-6 text-base font-medium shadow-lg")}
+          className={cn("h-12 w-full px-4 text-base font-medium shadow-lg sm:w-auto sm:px-6")}
           disabled={isSoldOut}
           asChild={!isSoldOut}
         >
           {isSoldOut ? (
             <span>Esgotado</span>
           ) : (
-            <Link to={linkTo}>Comprar agora</Link>
+            <Link to={linkTo}>Comprar passagem</Link>
           )}
         </Button>
       </div>
