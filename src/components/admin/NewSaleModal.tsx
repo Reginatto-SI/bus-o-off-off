@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { useAuth } from '@/contexts/AuthContext';
