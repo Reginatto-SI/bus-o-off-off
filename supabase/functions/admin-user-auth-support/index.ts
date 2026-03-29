@@ -23,6 +23,33 @@ interface StandardResponse {
   data?: Record<string, unknown>;
 }
 
+const DEFAULT_APP_BASE_URL = "https://www.smartbusbr.com.br";
+
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function resolveAdminAuthRedirectBaseUrl(): string {
+  // Preferência explícita por variável de ambiente para suportar preview sem heurística frágil.
+  const envBaseUrl = Deno.env.get("ADMIN_AUTH_REDIRECT_BASE_URL") ?? Deno.env.get("PUBLIC_APP_URL");
+  if (envBaseUrl && envBaseUrl.trim().length > 0) {
+    return normalizeBaseUrl(envBaseUrl);
+  }
+  // Fallback seguro e determinístico: domínio oficial de produção.
+  return DEFAULT_APP_BASE_URL;
+}
+
+function resolveRedirectTo(action: SupportAction): string {
+  const baseUrl = resolveAdminAuthRedirectBaseUrl();
+  const redirectByAction: Record<Exclude<SupportAction, "get_auth_status">, string> = {
+    send_recovery: `${baseUrl}/login?flow=recovery`,
+    resend_confirmation: `${baseUrl}/login?flow=signup`,
+    generate_magic_link: `${baseUrl}/login?flow=magiclink`,
+  };
+
+  return redirectByAction[action as Exclude<SupportAction, "get_auth_status">] ?? `${baseUrl}/login`;
+}
+
 function jsonResponse(payload: StandardResponse | { error: string }, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -192,9 +219,13 @@ serve(async (req) => {
     }
 
     // 1. Generate link
+    const redirectTo = resolveRedirectTo(action);
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: emailMapping.linkType as any,
       email: targetUser.email ?? "",
+      options: {
+        redirectTo,
+      },
     });
 
     if (linkError) {
@@ -250,6 +281,7 @@ serve(async (req) => {
       const responseData: Record<string, unknown> = {
         email_sent: true,
         resend_id: emailResult.resendId,
+        redirect_to: redirectTo,
       };
 
       // For magic link, also return link data for copy
