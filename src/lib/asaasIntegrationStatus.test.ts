@@ -56,6 +56,8 @@ function buildCompany(overrides: Partial<Company> = {}): Company {
     created_at: '2026-01-01T00:00:00.000Z',
     referral_code: 'TESTE123',
     updated_at: '2026-01-01T00:00:00.000Z',
+    allow_manual_reservations: false,
+    manual_reservation_ttl_minutes: 30,
     ...overrides,
   };
 }

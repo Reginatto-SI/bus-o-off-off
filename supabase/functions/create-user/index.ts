@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { sendAuthEmailViaResend } from "../_shared/auth-email-resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,13 +30,11 @@ interface CreateUserResponse {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Get authorization header to verify requesting user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
@@ -44,12 +43,10 @@ serve(async (req) => {
       );
     }
 
-    // Create admin client with service role key
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Decode JWT payload to extract user id (safe: verify_jwt=false, permissions validated via user_roles with service_role)
     const token = authHeader.replace("Bearer ", "");
     let requestingUserId: string;
     try {
@@ -67,7 +64,6 @@ serve(async (req) => {
 
     const requestingUser = { id: requestingUserId };
 
-    // Verify requesting user is a gerente
     const { data: roles, error: rolesError } = await supabaseAdmin
       .from("user_roles")
       .select("role, company_id")
@@ -80,7 +76,6 @@ serve(async (req) => {
       );
     }
 
-    // Gerentes e developers podem criar usuários
     const isAuthorized = roles.some((r: any) => r.role === "gerente" || r.role === "developer");
     if (!isAuthorized) {
       return new Response(
@@ -89,12 +84,10 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body
     const body: CreateUserRequest = await req.json();
     const { email, name, role, status, notes, seller_id, driver_id, operational_role, company_id } = body;
-    const runtimeVersion = "2026-03-23-users-multiempresa-v2";
+    const runtimeVersion = "2026-03-29-resend-email-v1";
 
-    // Validate required fields
     if (!email || !name || !role || !company_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
@@ -102,14 +95,11 @@ serve(async (req) => {
       );
     }
 
-    // Compatibilidade retroativa: se não vier identificação explícita para role motorista,
-    // assumimos "motorista" para preservar comportamento legado.
     const resolvedOperationalRole =
       role === "motorista"
         ? (operational_role === "auxiliar_embarque" ? "auxiliar_embarque" : "motorista")
         : null;
 
-    // Verify company_id is one of the requesting user's companies (developer bypasses)
     const isDev = roles.some((r: any) => r.role === "developer");
     const userCompanyIds = roles.map((r: any) => r.company_id);
     if (!isDev && !userCompanyIds.includes(company_id)) {
@@ -119,7 +109,6 @@ serve(async (req) => {
       );
     }
 
-    // Check if user already exists
     const { data: existingUsers, error: existingError } = await supabaseAdmin.auth.admin.listUsers();
     if (existingError) {
       console.error("Error checking existing users:", existingError);
@@ -132,7 +121,6 @@ serve(async (req) => {
     const existingUser = existingUsers?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
     
     if (existingUser) {
-      // User exists - check if they already have a role in this company
       const { data: existingRole } = await supabaseAdmin
         .from("user_roles")
         .select("id")
@@ -147,7 +135,6 @@ serve(async (req) => {
         );
       }
 
-      // Add role to existing user
       const { error: roleInsertError } = await supabaseAdmin
         .from("user_roles")
         .insert({
@@ -179,14 +166,12 @@ serve(async (req) => {
       );
     }
 
-    // Generate a temporary password
     const tempPassword = crypto.randomUUID().substring(0, 12);
 
-    // Create new user with Supabase Auth Admin API
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: tempPassword,
-      email_confirm: false, // User needs to confirm email
+      email_confirm: false,
       user_metadata: { name },
     });
 
@@ -205,31 +190,20 @@ serve(async (req) => {
       );
     }
 
-    // Update the profile with status and notes (the trigger creates the profile)
-    // Wait a bit for the trigger to complete
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const warnings: string[] = [];
 
     const { error: profileUpdateError } = await supabaseAdmin
       .from("profiles")
-      .update({
-        name,
-        status,
-        notes,
-      })
+      .update({ name, status, notes })
       .eq("id", newUser.user.id);
 
     if (profileUpdateError) {
       console.error("Error updating profile:", profileUpdateError);
-      // O vínculo multiempresa oficial fica em user_roles. Se o profile não puder
-      // ser enriquecido, não devemos contaminar a empresa por fallback implícito.
       warnings.push("Perfil criado, mas não foi possível sincronizar todos os dados complementares.");
     }
 
-    // Proteção contra cadastro parcial invisível: o trigger atual não cria mais
-    // user_roles. Por isso o vínculo com a empresa precisa ser explícito e
-    // idempotente aqui, sem depender do comportamento legado do trigger.
     const { error: roleUpsertError } = await supabaseAdmin
       .from("user_roles")
       .upsert({
@@ -245,11 +219,7 @@ serve(async (req) => {
 
     if (roleUpsertError) {
       console.error("Error upserting role:", roleUpsertError);
-
-      // Sem user_roles o usuário não aparece na empresa ativa. Reverter a criação
-      // evita deixar Auth/Profile órfãos quando o vínculo obrigatório falha.
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-
       return new Response(
         JSON.stringify({
           error: "Falha ao vincular o usuário à empresa. A criação foi revertida.",
@@ -258,28 +228,27 @@ serve(async (req) => {
       );
     }
 
-    // Mantemos a geração de links legada para não alterar o onboarding nesta tarefa.
-    // Porém isso não é tratado como prova auditável de entrega de e-mail no front.
-    const { error: resetError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "recovery",
+    // Gerar link de ativação e enviar via Resend
+    const { data: signupLinkData, error: signupLinkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "signup",
       email,
     });
 
-    if (resetError) {
-      console.error("Error sending reset email:", resetError);
-      warnings.push("Não foi possível confirmar a geração do link de recuperação.");
-    }
+    if (signupLinkError || !signupLinkData?.properties?.action_link) {
+      console.error("Error generating signup link:", signupLinkError);
+      warnings.push("Não foi possível gerar o link de ativação do e-mail.");
+    } else {
+      const emailResult = await sendAuthEmailViaResend({
+        to: email,
+        type: "signup",
+        actionLink: signupLinkData.properties.action_link,
+        userName: name,
+      });
 
-    // Alternativa legada para primeiro acesso. Falha aqui não deve mascarar que o
-    // usuário foi criado e vinculado; por isso tratamos como aviso operacional.
-    const { error: magicLinkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-    });
-
-    if (magicLinkError) {
-      console.error("Error generating magic link:", magicLinkError);
-      warnings.push("Não foi possível confirmar a geração do link de primeiro acesso.");
+      if (!emailResult.success) {
+        console.error("Error sending signup email via Resend:", emailResult.error);
+        warnings.push(`Não foi possível enviar o e-mail de ativação: ${emailResult.error}`);
+      }
     }
 
     return new Response(

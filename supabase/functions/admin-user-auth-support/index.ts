@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { sendAuthEmailViaResend } from "../_shared/auth-email-resend.ts";
+import type { AuthEmailType } from "../_shared/auth-email-resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,6 +39,13 @@ function decodeJwtSub(token: string): string | null {
     return null;
   }
 }
+
+/** Maps support actions to generateLink type and email type */
+const ACTION_EMAIL_MAP: Record<string, { linkType: string; emailType: AuthEmailType }> = {
+  send_recovery: { linkType: "recovery", emailType: "recovery" },
+  resend_confirmation: { linkType: "signup", emailType: "signup" },
+  generate_magic_link: { linkType: "magiclink", emailType: "magiclink" },
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -77,29 +86,23 @@ serve(async (req) => {
       return jsonResponse({ error: "Invalid action" }, 400);
     }
 
+    // ── Authorization ──────────────────────────────────────────────────
     const { data: requesterRoles, error: requesterRolesError } = await supabaseAdmin
       .from("user_roles")
       .select("role, company_id")
       .eq("user_id", requesterUserId);
 
     if (requesterRolesError || !requesterRoles?.length) {
-      console.error("[admin-user-auth-support] requester role check failed", {
-        requesterUserId,
-        requesterRolesError,
-      });
       return jsonResponse({ error: "Requester has no roles" }, 403);
     }
 
     const isDeveloper = requesterRoles.some((r: { role: string }) => r.role === "developer");
     const isGerente = requesterRoles.some((r: { role: string }) => r.role === "gerente");
 
-    // Regra restritiva: somente gerente/developer.
     if (!isDeveloper && !isGerente) {
       return jsonResponse({ error: "Only gerentes or developers can execute this action" }, 403);
     }
 
-    // Multiempresa obrigatório: gerente só atua na empresa à qual pertence.
-    // Developer mantém bypass existente no projeto para suporte global.
     const requesterBelongsToCompany = requesterRoles.some(
       (r: { company_id: string | null }) => r.company_id === company_id,
     );
@@ -107,7 +110,7 @@ serve(async (req) => {
       return jsonResponse({ error: "Requester does not belong to the target company" }, 403);
     }
 
-    // Validação alvo: impedir operações em usuário fora do escopo da empresa alvo.
+    // ── Target validation ──────────────────────────────────────────────
     const { data: targetRole, error: targetRoleError } = await supabaseAdmin
       .from("user_roles")
       .select("id")
@@ -116,11 +119,6 @@ serve(async (req) => {
       .maybeSingle();
 
     if (targetRoleError) {
-      console.error("[admin-user-auth-support] target scope check failed", {
-        target_user_id,
-        company_id,
-        targetRoleError,
-      });
       return jsonResponse({ error: "Failed to validate target user company scope" }, 500);
     }
 
@@ -130,15 +128,12 @@ serve(async (req) => {
 
     const { data: targetAuth, error: targetAuthError } = await supabaseAdmin.auth.admin.getUserById(target_user_id);
     if (targetAuthError || !targetAuth?.user) {
-      console.error("[admin-user-auth-support] target auth lookup failed", {
-        target_user_id,
-        targetAuthError,
-      });
       return jsonResponse({ error: "Target auth user not found" }, 404);
     }
 
     const targetUser = targetAuth.user;
 
+    // ── get_auth_status ────────────────────────────────────────────────
     if (action === "get_auth_status") {
       const { data: lastEmailEvent, error: emailLogError } = await supabaseAdmin
         .from("email_send_log")
@@ -180,92 +175,115 @@ serve(async (req) => {
       });
     }
 
-    if (action === "send_recovery") {
-      const { error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "recovery",
-        email: targetUser.email ?? "",
-      });
+    // ── send_recovery / resend_confirmation / generate_magic_link ─────
+    const emailMapping = ACTION_EMAIL_MAP[action];
+    if (!emailMapping) {
+      return jsonResponse({ error: "Unsupported action" }, 400);
+    }
 
-      if (recoveryError) {
-        console.error("[admin-user-auth-support] send_recovery failed", {
-          target_user_id,
-          email: targetUser.email,
-          recoveryError,
-        });
-        return jsonResponse({ error: `Falha ao enviar redefinição de senha: ${recoveryError.message}` }, 500);
-      }
-
+    // Special case: resend_confirmation when already confirmed
+    if (action === "resend_confirmation" && targetUser.email_confirmed_at) {
       return jsonResponse({
         success: true,
         action,
-        message: "Redefinição de senha enviada com sucesso",
+        message: "Usuário já está com e-mail confirmado",
+        data: { already_confirmed: true },
       });
     }
 
-    if (action === "resend_confirmation") {
-      if (targetUser.email_confirmed_at) {
+    // 1. Generate link
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: emailMapping.linkType as any,
+      email: targetUser.email ?? "",
+    });
+
+    if (linkError) {
+      console.error(`[admin-user-auth-support] generateLink failed for ${action}`, {
+        target_user_id,
+        email: targetUser.email,
+        linkError,
+      });
+
+      const errorMessages: Record<string, string> = {
+        send_recovery: "Erro ao gerar link de recuperação de senha",
+        resend_confirmation: "Erro ao gerar link de ativação",
+        generate_magic_link: "Erro ao gerar magic link",
+      };
+
+      return jsonResponse({ error: `${errorMessages[action]}: ${linkError.message}` }, 500);
+    }
+
+    const actionLink = linkData?.properties?.action_link ?? null;
+
+    // 2. Send email via Resend
+    if (actionLink) {
+      const emailResult = await sendAuthEmailViaResend({
+        to: targetUser.email ?? "",
+        type: emailMapping.emailType,
+        actionLink,
+      });
+
+      if (!emailResult.success) {
+        console.error(`[admin-user-auth-support] Resend send failed for ${action}`, {
+          target_user_id,
+          email: targetUser.email,
+          error: emailResult.error,
+        });
+
+        const failMessages: Record<string, string> = {
+          send_recovery: "Erro ao enviar e-mail de recuperação de senha",
+          resend_confirmation: "Erro ao enviar e-mail de ativação",
+          generate_magic_link: "Erro ao enviar magic link",
+        };
+
         return jsonResponse({
-          success: true,
-          action,
-          message: "Usuário já está com e-mail confirmado",
-          data: { already_confirmed: true },
-        });
+          error: `${failMessages[action]}: ${emailResult.error}`,
+        }, 500);
       }
 
-      const { error: confirmationError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "signup",
-        email: targetUser.email ?? "",
-      });
+      const successMessages: Record<string, string> = {
+        send_recovery: "Redefinição de senha enviada com sucesso",
+        resend_confirmation: "Ativação reenviada com sucesso",
+        generate_magic_link: "Magic link enviado com sucesso",
+      };
 
-      if (confirmationError) {
-        console.error("[admin-user-auth-support] resend_confirmation failed", {
-          target_user_id,
-          email: targetUser.email,
-          confirmationError,
-        });
-        return jsonResponse({ error: `Falha ao reenviar ativação: ${confirmationError.message}` }, 500);
+      const responseData: Record<string, unknown> = {
+        email_sent: true,
+        resend_id: emailResult.resendId,
+      };
+
+      // For magic link, also return link data for copy
+      if (action === "generate_magic_link") {
+        responseData.action_link = actionLink;
+        responseData.email_otp = linkData?.properties?.email_otp ?? null;
+        responseData.hashed_token = linkData?.properties?.hashed_token ?? null;
       }
 
       return jsonResponse({
         success: true,
         action,
-        message: "Ativação reenviada com sucesso",
+        message: successMessages[action],
+        data: responseData,
       });
     }
 
-    if (action === "generate_magic_link") {
-      const { data: magicData, error: magicError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "magiclink",
-        email: targetUser.email ?? "",
-      });
+    // actionLink not available — link was generated but URL not returned
+    const fallbackMessages: Record<string, string> = {
+      send_recovery: "Link de recuperação gerado, mas URL não disponível para envio",
+      resend_confirmation: "Link de ativação gerado, mas URL não disponível para envio",
+      generate_magic_link: "Magic link gerado, mas URL não disponível para envio",
+    };
 
-      if (magicError) {
-        console.error("[admin-user-auth-support] generate_magic_link failed", {
-          target_user_id,
-          email: targetUser.email,
-          magicError,
-        });
-        return jsonResponse({ error: `Falha ao gerar magic link: ${magicError.message}` }, 500);
-      }
+    return jsonResponse({
+      success: false,
+      action,
+      message: fallbackMessages[action],
+      data: {
+        email_sent: false,
+        action_link: null,
+      },
+    });
 
-      // Mantemos retorno mínimo e explícito para evitar dependência de campos não garantidos.
-      const actionLink = magicData?.properties?.action_link ?? null;
-
-      return jsonResponse({
-        success: true,
-        action,
-        message: actionLink
-          ? "Magic link gerado com sucesso"
-          : "Magic link disparado, mas o link não está disponível para cópia neste ambiente",
-        data: {
-          action_link: actionLink,
-          email_otp: magicData?.properties?.email_otp ?? null,
-          hashed_token: magicData?.properties?.hashed_token ?? null,
-        },
-      });
-    }
-
-    return jsonResponse({ error: "Unsupported action" }, 400);
   } catch (error) {
     console.error("[admin-user-auth-support] unexpected error", error);
     const message = error instanceof Error ? error.message : "Unexpected error";
