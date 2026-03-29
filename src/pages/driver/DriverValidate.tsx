@@ -183,11 +183,14 @@ export default function DriverValidate() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
+  const [scannerStatusMessage, setScannerStatusMessage] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo>(INITIAL_DEBUG);
   const [driverPrefs, setDriverPrefs] = useState(getDriverPreferences);
   const autoResetTimerRef = useRef<number | null>(null);
+  const lastScanSuccessAtRef = useRef<number>(Date.now());
+  const scanErrorCountRef = useRef<number>(0);
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
 
@@ -213,6 +216,7 @@ export default function DriverValidate() {
     if (!qrCodeToken || processing) return;
     setProcessing(true);
     lockScannerTemporarily();
+    setScannerStatusMessage(null);
 
     const { data, error } = await supabase.rpc('validate_ticket_scan', {
       p_qr_code_token: qrCodeToken,
@@ -232,11 +236,14 @@ export default function DriverValidate() {
     }
 
     const payload = (Array.isArray(data) ? data[0] : data) as ValidationResponse | null;
+    // Feedback operacional obrigatório: ao menos uma resposta clara após leitura reconhecida.
     setOverlay(payload ?? {
       result: 'blocked', reason_code: 'invalid_response', checkout_enabled: false,
       passenger_name: null, seat_label: null, event_name: null,
       boarding_label: null, passenger_cpf_masked: null, boarding_status: null,
     });
+    lastScanSuccessAtRef.current = Date.now();
+    scanErrorCountRef.current = 0;
     setManualToken(qrCodeToken);
     setProcessing(false);
   }, [lockScannerTemporarily, processing]);
@@ -508,7 +515,13 @@ export default function DriverValidate() {
         if (token) {
           await handleValidate(token, phaseConfig.action);
         }
-      } catch { /* silent */ }
+      } catch {
+        // Não deixar falha de leitura silenciosa em campo: expor aviso curto após erros repetidos.
+        scanErrorCountRef.current += 1;
+        if (scanErrorCountRef.current >= 3) {
+          setScannerStatusMessage('Não foi possível processar a leitura. Tente novamente.');
+        }
+      }
     }, 300);
 
     return () => {
@@ -518,6 +531,25 @@ export default function DriverValidate() {
       }
     };
   }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, videoEl]);
+
+  useEffect(() => {
+    if (!cameraReady || overlay || processing) return;
+
+    const id = window.setInterval(() => {
+      if (Date.now() - lastScanSuccessAtRef.current >= 15000) {
+        setScannerStatusMessage('Câmera ativa, mas nenhum QR foi reconhecido ainda.');
+      }
+    }, 1000);
+
+    return () => window.clearInterval(id);
+  }, [cameraReady, overlay, processing]);
+
+  useEffect(() => {
+    if (!cameraReady) return;
+    if (!scannerSupported) {
+      setScannerStatusMessage('Seu dispositivo não suporta leitura automática. Use o token manual do QR.');
+    }
+  }, [cameraReady, scannerSupported]);
 
   /* ---------- Keep debug in sync ---------- */
 
@@ -546,6 +578,7 @@ export default function DriverValidate() {
       autoResetTimerRef.current = null;
     }
     setOverlay(null);
+    setScannerStatusMessage(null);
     setProcessing(false);
     // Re-read prefs in case user changed them
     setDriverPrefs(getDriverPreferences());
@@ -726,6 +759,9 @@ export default function DriverValidate() {
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
+              {scannerStatusMessage && (
+                <p className="text-xs text-amber-600">{scannerStatusMessage}</p>
+              )}
             </div>
           </CardContent>
         </Card>
