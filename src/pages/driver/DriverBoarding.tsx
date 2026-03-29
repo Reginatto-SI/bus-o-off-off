@@ -64,6 +64,7 @@ export default function DriverBoarding() {
   const [processing, setProcessing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [_tripId, setTripId] = useState<string | null>(null);
+  const [allowManualBoarding, setAllowManualBoarding] = useState(true);
 
   // Read phase from localStorage
   const activePhase: OperationalPhase = user && activeCompanyId
@@ -75,6 +76,13 @@ export default function DriverBoarding() {
     if (!user || !activeCompanyId) return;
     if (!silent) setLoadingData(true);
     if (silent) setRefreshing(true);
+
+    const { data: companySettings } = await supabase
+      .from('companies')
+      .select('allow_manual_boarding')
+      .eq('id', activeCompanyId)
+      .maybeSingle();
+    setAllowManualBoarding(companySettings?.allow_manual_boarding ?? true);
 
     const persistedTripId = getPersistedTripId(user.id, activeCompanyId);
     
@@ -284,6 +292,7 @@ export default function DriverBoarding() {
       p_action: phaseConfig.action,
       p_device_info: navigator.userAgent,
       p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+      p_source: 'manual_list',
     });
 
     if (error) {
@@ -309,6 +318,7 @@ export default function DriverBoarding() {
         already_reboarded: 'Já reembarcado',
         checkout_without_checkin: 'Desembarque sem embarque',
         reboard_without_checkout: 'Reembarque sem desembarque',
+        manual_boarding_disabled: 'Este embarque deve ser feito via QR Code',
       };
       const reason = reasonMap[result?.reason_code] ?? 'Operação bloqueada';
       toast({ title: reason, variant: 'destructive' });
@@ -325,6 +335,7 @@ export default function DriverBoarding() {
       p_action: phaseConfig.undoAction,
       p_device_info: navigator.userAgent,
       p_app_version: import.meta.env.VITE_APP_VERSION ?? 'web',
+      p_source: 'manual_list',
     });
 
     if (error) {
@@ -433,6 +444,14 @@ export default function DriverBoarding() {
               </CardContent>
             </Card>
 
+            {!allowManualBoarding && (
+              <Card className="border-amber-400/40 bg-amber-50">
+                <CardContent className="p-3">
+                  <p className="text-xs font-medium text-amber-800">Este embarque deve ser feito via QR Code</p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -494,12 +513,13 @@ export default function DriverBoarding() {
               {filteredPassengers.map(p => {
                 const done = isDone(p);
                 const actionable = isActionable(p);
+                const manualActionEnabled = actionable && allowManualBoarding;
                 return (
                   <Card
                     key={p.ticketId}
                     className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5 cursor-pointer' : ''} ${actionable ? 'cursor-pointer' : ''}`}
                     onClick={() => {
-                      if (actionable) setConfirmPassenger(p);
+                      if (manualActionEnabled) setConfirmPassenger(p);
                       else if (done) setUndoPassenger(p);
                     }}
                   >
@@ -516,11 +536,13 @@ export default function DriverBoarding() {
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           {phaseConfig.doneBadge}
                         </Badge>
-                      ) : actionable ? (
+                      ) : manualActionEnabled ? (
                         <Badge variant="outline" className="shrink-0">
                           <Clock className="mr-1 h-3 w-3" />
                           {phaseConfig.pendingBadge}
                         </Badge>
+                      ) : actionable && !allowManualBoarding ? (
+                        <Badge variant="secondary" className="shrink-0 text-xs">Via QR Code</Badge>
                       ) : (
                         <Badge variant="secondary" className="shrink-0 text-xs">
                           {p.boardingStatus === 'pendente' ? 'Pendente' :
