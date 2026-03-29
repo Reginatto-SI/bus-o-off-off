@@ -4,6 +4,7 @@ import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { DateBadge } from './DateBadge';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { getEventCategoryLabel } from '@/lib/eventCategory';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         : formatDateOnlyBR(event.date);
     })()}. Pode me ajudar?`,
   });
+  // Sincroniza destaque com a mesma regra de categoria dos cards públicos padrão.
+  const categoryLabel = getEventCategoryLabel(event.event_category);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
@@ -69,7 +72,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pb-20 sm:space-y-3 sm:p-4 sm:pb-4 sm:pr-40">
           {/* Comentário de responsividade: no mobile reservamos espaço vertical extra para o CTA principal ocupar linha própria sem competir com título/preço. */}
           <div className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
-            Evento em destaque
+            {categoryLabel}
           </div>
           {/* Nome, Data Badge e Preço */}
           <div className="flex gap-3 items-start">
