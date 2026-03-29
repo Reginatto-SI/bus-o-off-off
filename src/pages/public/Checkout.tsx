@@ -783,6 +783,27 @@ export default function Checkout() {
             originalPrice,
           });
 
+          // Log temporário de diagnóstico: trilha do benefício escolhido por passageiro no checkout público.
+          if (import.meta.env.DEV || window.localStorage.getItem("DEBUG_BENEFITS_CHECKOUT") === "1") {
+            console.info("[benefits-debug] passenger_snapshot_resolved", {
+              stage: "resolvePassengerBenefitSnapshots",
+              flow_origin: "public_checkout",
+              eventId: event.id,
+              companyId: event.company_id,
+              seatId,
+              passengerIndex: index,
+              cpfMasked: maskCpfForLog(passenger.cpf),
+              originalPrice: roundCurrency(resolved.originalPrice),
+              benefitApplied: resolved.benefitApplied,
+              benefitProgramId: resolved.benefitProgramId,
+              benefitProgramName: resolved.benefitProgramName,
+              benefitType: resolved.benefitType,
+              benefitValue: resolved.benefitValue,
+              discountAmount: roundCurrency(resolved.discountAmount),
+              finalPrice: roundCurrency(resolved.finalPrice),
+            });
+          }
+
           return {
             benefit_program_id: resolved.benefitProgramId,
             benefit_program_name: resolved.benefitProgramName,
@@ -1038,6 +1059,25 @@ export default function Checkout() {
     const totals = calculateTotalsFromSnapshots(snapshotsToPersist);
     const grossAmount = totals.grossAmount;
     const benefitTotalDiscount = totals.benefitTotalDiscount;
+
+    // Log temporário de diagnóstico: confirma payload financeiro/snapshot antes de persistir venda.
+    if (import.meta.env.DEV || window.localStorage.getItem("DEBUG_BENEFITS_CHECKOUT") === "1") {
+      console.info("[benefits-debug] submit_snapshot_and_totals", {
+        stage: "submit_before_sale_insert",
+        flow_origin: "public_checkout",
+        eventId: event.id,
+        companyId: event.company_id,
+        passengers: snapshotsToPersist.map((snapshot, idx) => ({
+          passengerIndex: idx,
+          cpfMasked: maskCpfForLog(passengers[idx]?.cpf ?? ""),
+          benefit_applied: snapshot?.benefit_applied ?? false,
+          benefit_program_name: snapshot?.benefit_program_name ?? null,
+          discount_amount: snapshot?.discount_amount ?? 0,
+          final_price: snapshot?.final_price ?? 0,
+        })),
+        totals,
+      });
+    }
 
     // === Step 1: Create temporary seat locks (15 min expiry) ===
     const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();

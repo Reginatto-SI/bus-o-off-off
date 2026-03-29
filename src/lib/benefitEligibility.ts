@@ -3,6 +3,20 @@ import { BenefitProgram, BenefitProgramEligibleCpf } from '@/types/database';
 
 export const BENEFIT_PRICING_RULE_VERSION = 'beneficio_checkout_v1';
 
+// Log temporário de diagnóstico: habilite em runtime com localStorage.DEBUG_BENEFITS_CHECKOUT = '1'.
+const shouldLogBenefitDebug = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return import.meta.env.DEV || window.localStorage.getItem('DEBUG_BENEFITS_CHECKOUT') === '1';
+};
+
+// Log temporário de diagnóstico: evita expor CPF completo em console.
+const maskCpfForDebug = (cpf: string): string => {
+  const digits = cpf.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length <= 4) return `***${digits}`;
+  return `***${digits.slice(-4)}`;
+};
+
 export interface BenefitEligibilityInput {
   companyId: string;
   eventId: string;
@@ -224,6 +238,18 @@ export async function getEligibleBenefitsByPassenger({
 }: BenefitEligibilityInput): Promise<BenefitEligibilityResult> {
   const normalizedCpf = normalizeCpfDigits(cpf);
 
+  if (shouldLogBenefitDebug()) {
+    // Log temporário de diagnóstico: confirma parâmetros efetivos enviados para elegibilidade.
+    console.info('[benefits-debug] eligibility_rpc_call', {
+      companyId,
+      eventId,
+      cpfMasked: maskCpfForDebug(normalizedCpf),
+      rawCpfLength: cpf?.replace?.(/\D/g, '').length ?? 0,
+      normalizedCpfLength: normalizedCpf.length,
+      referenceDate: referenceDate.toISOString().slice(0, 10),
+    });
+  }
+
   if (normalizedCpf.length !== 11) {
     return { normalizedCpf, eligibleMatches: [] };
   }
@@ -243,6 +269,17 @@ export async function getEligibleBenefitsByPassenger({
   });
 
   if (error) {
+    if (shouldLogBenefitDebug()) {
+      // Log temporário de diagnóstico: evidencia falha real da RPC antes do fallback no checkout.
+      console.error('[benefits-debug] eligibility_rpc_error', {
+        companyId,
+        eventId,
+        cpfMasked: maskCpfForDebug(normalizedCpf),
+        referenceDate: refDate,
+        errorCode: (error as { code?: string })?.code,
+        errorMessage: error.message,
+      });
+    }
     throw new Error(`Falha ao consultar elegibilidade de benefício por CPF: ${error.message}`);
   }
 
@@ -277,6 +314,26 @@ export async function getEligibleBenefitsByPassenger({
         updated_at: row.program_updated_at,
       },
     }));
+
+  if (shouldLogBenefitDebug()) {
+    // Log temporário de diagnóstico: mostra se houve match e quais programas foram retornados.
+    console.info('[benefits-debug] eligibility_rpc_result', {
+      companyId,
+      eventId,
+      cpfMasked: maskCpfForDebug(normalizedCpf),
+      referenceDate: refDate,
+      totalMatches: eligibleMatches.length,
+      programs: eligibleMatches.map((match) => ({
+        programId: match.program.id,
+        name: match.program.name,
+        status: match.program.status,
+        benefitType: match.program.benefit_type,
+        benefitValue: Number(match.program.benefit_value),
+        appliesToAllEvents: match.program.applies_to_all_events,
+        cpfStatus: match.cpfRecord.status,
+      })),
+    });
+  }
 
   return {
     normalizedCpf,
