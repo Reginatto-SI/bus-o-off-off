@@ -402,7 +402,6 @@ export type Database = {
           id: string
           instagram_url: string | null
           logo_url: string | null
-          manual_reservation_ttl_minutes: number
           name: string
           notes: string | null
           partner_tier: string
@@ -469,6 +468,7 @@ export type Database = {
           accent_color: string | null
           address: string | null
           address_number: string | null
+          allow_manual_reservations: boolean
           asaas_account_email_production: string | null
           asaas_account_email_sandbox: string | null
           asaas_account_id_production: string | null
@@ -499,6 +499,7 @@ export type Database = {
           legal_name: string | null
           legal_type: string
           logo_url: string | null
+          manual_reservation_ttl_minutes: number
           name: string
           notes: string | null
           phone: string | null
@@ -521,7 +522,6 @@ export type Database = {
           ticket_color: string | null
           trade_name: string | null
           updated_at: string
-          allow_manual_reservations: boolean
           use_default_cover: boolean
           website: string | null
           whatsapp: string | null
@@ -530,6 +530,7 @@ export type Database = {
           accent_color?: string | null
           address?: string | null
           address_number?: string | null
+          allow_manual_reservations?: boolean
           asaas_account_email_production?: string | null
           asaas_account_email_sandbox?: string | null
           asaas_account_id_production?: string | null
@@ -583,7 +584,6 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
-          allow_manual_reservations?: boolean
           use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null
@@ -592,6 +592,7 @@ export type Database = {
           accent_color?: string | null
           address?: string | null
           address_number?: string | null
+          allow_manual_reservations?: boolean
           asaas_account_email_production?: string | null
           asaas_account_email_sandbox?: string | null
           asaas_account_id_production?: string | null
@@ -645,7 +646,6 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
-          allow_manual_reservations?: boolean
           use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null
@@ -1454,8 +1454,8 @@ export type Database = {
           company_id: string
           created_at: string
           discount_amount: number
-          id: string
           final_price: number
+          id: string
           original_price: number
           passenger_cpf: string
           passenger_name: string
@@ -1476,8 +1476,8 @@ export type Database = {
           company_id: string
           created_at?: string
           discount_amount?: number
-          id?: string
           final_price: number
+          id?: string
           original_price: number
           passenger_cpf: string
           passenger_name: string
@@ -1498,8 +1498,8 @@ export type Database = {
           company_id?: string
           created_at?: string
           discount_amount?: number
-          id?: string
           final_price?: number
+          id?: string
           original_price?: number
           passenger_cpf?: string
           passenger_name?: string
@@ -1512,6 +1512,13 @@ export type Database = {
           trip_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sale_passengers_benefit_program_id_fkey"
+            columns: ["benefit_program_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sale_passengers_company_id_fkey"
             columns: ["company_id"]
@@ -2270,9 +2277,9 @@ export type Database = {
           company_id: string
           created_at?: string
           discount_amount?: number
-          final_price?: number
+          final_price: number
           id?: string
-          original_price?: number
+          original_price: number
           passenger_cpf: string
           passenger_name: string
           passenger_phone?: string | null
@@ -2311,6 +2318,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tickets_benefit_program_id_fkey"
+            columns: ["benefit_program_id"]
+            isOneToOne: false
+            referencedRelation: "benefit_programs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tickets_company_id_fkey"
             columns: ["company_id"]
@@ -2579,6 +2593,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      correct_sale_passenger: {
+        Args: {
+          p_company_id: string
+          p_cpf_reason: string
+          p_new_cpf: string
+          p_new_name: string
+          p_new_phone: string
+          p_ticket_id: string
+        }
+        Returns: undefined
+      }
       create_admin_notification: {
         Args: {
           p_action_link?: string
