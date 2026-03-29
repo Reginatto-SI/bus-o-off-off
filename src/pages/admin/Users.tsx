@@ -105,6 +105,10 @@ interface AuthSupportResponse {
       created_at?: string | null;
     } | null;
     action_link?: string | null;
+    redirect_to?: string | null;
+    runtime_version?: string | null;
+    email_sent?: boolean;
+    resend_id?: string | null;
   };
 }
 
