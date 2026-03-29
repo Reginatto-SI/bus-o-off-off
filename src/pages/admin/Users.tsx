@@ -1358,6 +1358,12 @@ export default function UsersPage() {
                   </p>
                 ) : null}
               </div>
+              {authStatusData?.runtime_version && (
+                <div className="rounded-md border border-dashed p-3 space-y-1">
+                  <p className="font-medium text-xs text-muted-foreground">Diagnóstico do ambiente</p>
+                  <p className="text-xs"><strong>Runtime:</strong> {authStatusData.runtime_version}</p>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
