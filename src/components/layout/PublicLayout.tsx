@@ -62,7 +62,11 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
   // evitar competição visual com os CTAs primários de compra/pagamento.
   const shouldHideFloatingWhatsApp =
     /^\/eventos\/[^/]+\/checkout(?:\/|$)/.test(location.pathname) ||
-    /^\/confirmacao(?:\/|$)/.test(location.pathname);
+    /^\/confirmacao(?:\/|$)/.test(location.pathname) ||
+    // Comentário de UX: listagens públicas já possuem CTA de suporte contextual,
+    // então ocultamos o botão flutuante para evitar colisão visual com os cards no mobile.
+    /^\/eventos(?:\/|$)/.test(location.pathname) ||
+    /^\/empresa\/[^/]+(?:\/|$)/.test(location.pathname);
 
   const handleSignOut = async () => {
     await signOut();
