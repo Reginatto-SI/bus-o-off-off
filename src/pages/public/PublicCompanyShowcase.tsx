@@ -91,7 +91,7 @@ export default function PublicCompanyShowcase() {
         supabase
           .from('events')
           .select(`
-            id, name, date, city, image_url, unit_price, status, is_archived, company_id,
+            id, name, date, city, image_url, unit_price, event_category, status, is_archived, company_id,
             company:companies!events_company_id_fkey(
               id, name, logo_url, whatsapp
             )
