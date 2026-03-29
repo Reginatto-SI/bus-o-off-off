@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const DEFAULT_APP_BASE_URL = "https://www.smartbusbr.com.br";
+const CREATE_USER_RUNTIME_VERSION = "2026-03-29-redirect-resend-v3";
+
 interface CreateUserRequest {
   email: string;
   name: string;
@@ -27,6 +30,7 @@ interface CreateUserResponse {
   result?: "created" | "linked_existing";
   warnings?: string[];
   runtime_version?: string;
+  redirect_to?: string;
 }
 
 serve(async (req) => {
@@ -86,7 +90,6 @@ serve(async (req) => {
 
     const body: CreateUserRequest = await req.json();
     const { email, name, role, status, notes, seller_id, driver_id, operational_role, company_id } = body;
-    const runtimeVersion = "2026-03-29-resend-email-v1";
 
     if (!email || !name || !role || !company_id) {
       return new Response(
@@ -160,7 +163,7 @@ serve(async (req) => {
           message: "Usuário existente vinculado à empresa",
           user_id: existingUser.id,
           result: "linked_existing",
-          runtime_version: runtimeVersion,
+          runtime_version: CREATE_USER_RUNTIME_VERSION,
         } satisfies CreateUserResponse),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -229,9 +232,18 @@ serve(async (req) => {
     }
 
     // Gerar link de ativação e enviar via Resend
+    const signupRedirectTo = `${DEFAULT_APP_BASE_URL}/login?flow=signup`;
+    console.log("[create-user] generateLink redirect resolution", {
+      redirectTo: signupRedirectTo,
+      runtime_version: CREATE_USER_RUNTIME_VERSION,
+    });
+
     const { data: signupLinkData, error: signupLinkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "signup",
       email,
+      options: {
+        redirectTo: signupRedirectTo,
+      },
     });
 
     if (signupLinkError || !signupLinkData?.properties?.action_link) {
@@ -258,7 +270,8 @@ serve(async (req) => {
         user_id: newUser.user.id,
         result: "created",
         warnings,
-        runtime_version: runtimeVersion,
+        runtime_version: CREATE_USER_RUNTIME_VERSION,
+        redirect_to: signupRedirectTo,
       } satisfies CreateUserResponse),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -24,27 +24,16 @@ interface StandardResponse {
 }
 
 const DEFAULT_APP_BASE_URL = "https://www.smartbusbr.com.br";
-const ADMIN_AUTH_SUPPORT_RUNTIME_VERSION = "2026-03-29-redirect-explicito-v2";
-
-function normalizeBaseUrl(value: string): string {
-  return value.trim().replace(/\/+$/, "");
-}
-
-function resolveAdminAuthRedirectBaseUrl(): string {
-  // Regra operacional explícita: links administrativos de auth devem usar
-  // o domínio canônico oficial para evitar herança de ambientes legados.
-  return DEFAULT_APP_BASE_URL;
-}
+const ADMIN_AUTH_SUPPORT_RUNTIME_VERSION = "2026-03-29-redirect-resend-v3";
 
 function resolveRedirectTo(action: SupportAction): string {
-  const baseUrl = resolveAdminAuthRedirectBaseUrl();
   const redirectByAction: Record<Exclude<SupportAction, "get_auth_status">, string> = {
-    send_recovery: `${baseUrl}/login?flow=recovery`,
-    resend_confirmation: `${baseUrl}/login?flow=signup`,
-    generate_magic_link: `${baseUrl}/login?flow=magiclink`,
+    send_recovery: `${DEFAULT_APP_BASE_URL}/login?flow=recovery`,
+    resend_confirmation: `${DEFAULT_APP_BASE_URL}/login?flow=signup`,
+    generate_magic_link: `${DEFAULT_APP_BASE_URL}/login?flow=magiclink`,
   };
 
-  return redirectByAction[action as Exclude<SupportAction, "get_auth_status">] ?? `${baseUrl}/login`;
+  return redirectByAction[action as Exclude<SupportAction, "get_auth_status">] ?? `${DEFAULT_APP_BASE_URL}/login`;
 }
 
 function jsonResponse(payload: StandardResponse | { error: string }, status = 200) {
@@ -195,6 +184,7 @@ serve(async (req) => {
               }
             : null,
           email_event_unavailable: Boolean(emailLogError),
+          runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
         },
       });
     }
@@ -211,11 +201,14 @@ serve(async (req) => {
         success: true,
         action,
         message: "Usuário já está com e-mail confirmado",
-        data: { already_confirmed: true },
+        data: {
+          already_confirmed: true,
+          runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
+        },
       });
     }
 
-    // 1. Generate link
+    // 1. Generate link with explicit redirectTo
     const redirectTo = resolveRedirectTo(action);
     console.log("[admin-user-auth-support] generateLink redirect resolution", {
       action,
@@ -271,7 +264,7 @@ serve(async (req) => {
 
         return jsonResponse({
           error: `${failMessages[action]}: ${emailResult.error}`,
-        }, 500);
+        } as any, 500);
       }
 
       const successMessages: Record<string, string> = {
@@ -316,6 +309,8 @@ serve(async (req) => {
       data: {
         email_sent: false,
         action_link: null,
+        redirect_to: redirectTo,
+        runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
       },
     });
 
