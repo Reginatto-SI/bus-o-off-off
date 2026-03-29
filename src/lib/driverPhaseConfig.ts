@@ -110,6 +110,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   invalid_action: 'Ação inválida',
   already_reboarded: 'Já reembarcado',
   reboard_without_checkout: 'Reembarque sem desembarque',
+  manual_boarding_disabled: 'Este embarque deve ser feito via QR Code',
   undo_not_applicable: 'Operação não pode ser desfeita nesta fase',
   rpc_error: 'Erro de comunicação ao validar a passagem.',
   invalid_response: 'Não foi possível processar a leitura. Tente novamente.',

@@ -235,6 +235,7 @@ export default function CompanyPage() {
     socio_split_percent: '3',
     // Política de reservas (Fase 1): validade padrão em horas + minutos.
     allow_manual_reservations: true,
+    allow_manual_boarding: true,
     manual_reservation_ttl_hours: '72',
     manual_reservation_ttl_minutes: '0',
   });
@@ -349,6 +350,7 @@ export default function CompanyPage() {
       socio_split_percent: String(data?.socio_split_percent ?? 3),
       // Política de reservas: UX em horas + minutos, persistência em minutos totais.
       allow_manual_reservations: data?.allow_manual_reservations ?? true,
+      allow_manual_boarding: data?.allow_manual_boarding ?? true,
       manual_reservation_ttl_hours: String(Math.floor((data?.manual_reservation_ttl_minutes ?? 4320) / 60)),
       manual_reservation_ttl_minutes: String((data?.manual_reservation_ttl_minutes ?? 4320) % 60),
     });
@@ -643,6 +645,7 @@ export default function CompanyPage() {
       platform_fee_percent: '3',
       socio_split_percent: '3',
       allow_manual_reservations: true,
+      allow_manual_boarding: true,
       manual_reservation_ttl_hours: '72',
       manual_reservation_ttl_minutes: '0',
     });
@@ -898,6 +901,7 @@ export default function CompanyPage() {
       socio_split_percent: socioSplitPercent,
       // Política de reservas: salvamos em minutos totais para manter cálculo único no backend/frontend.
       allow_manual_reservations: form.allow_manual_reservations,
+      allow_manual_boarding: form.allow_manual_boarding,
       manual_reservation_ttl_minutes: manualReservationTtlMinutes,
     };
 
@@ -1815,6 +1819,28 @@ export default function CompanyPage() {
                                 <SelectItem value="nao">Não</SelectItem>
                               </SelectContent>
                             </Select>
+                          </div>
+
+                          <div className="space-y-2 sm:col-span-1">
+                            <Label htmlFor="allow_manual_boarding">Permitir embarque manual sem QR Code</Label>
+                            <Select
+                              value={form.allow_manual_boarding ? 'sim' : 'nao'}
+                              onValueChange={(value) => {
+                                setForm((prev) => ({ ...prev, allow_manual_boarding: value === 'sim' }));
+                              }}
+                              disabled={!isGerente && !isDeveloper}
+                            >
+                              <SelectTrigger id="allow_manual_boarding">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="sim">Sim</SelectItem>
+                                <SelectItem value="nao">Não</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Quando desativado, o motorista só poderá validar passageiros pelo QR Code.
+                            </p>
                           </div>
 
                           <div className="space-y-2 sm:col-span-1">
