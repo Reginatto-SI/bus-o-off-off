@@ -512,10 +512,29 @@ serve(async (req) => {
        * o Asaas. Primeiro validamos o gateway real e, só depois, devolvemos pendência clara
        * de cadastro local para o ambiente ativo.
        */
-      if (!storedAccountId) {
-        const missingLocalAccountIdResponse: CheckResponse = {
+      // Comentário de manutenção:
+      // `account_id` local é metadado de auditoria; a operação real usa API key + wallet.
+      // Portanto, ausência de account_id não deve gerar falso negativo para o usuário.
+      const accountIdCheckBypassed = !storedAccountId;
+      if (accountIdCheckBypassed) {
+        logCheck("log", "[check-asaas-integration] local account_id missing; proceeding with non-blocking validation", {
+          company_id: companyId,
+          requested_target_environment: requestedEnvironment,
+          resolved_payment_environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          asaas_request_attempted: true,
+          error_type: "missing_local_account_id_non_blocking",
+          remote_account_id: remoteAccountId,
+        });
+      }
+
+      // Comentário de manutenção:
+      // ausência de account_id local não bloqueia, mas ausência de conta no gateway bloqueia
+      // para evitar falso positivo quando `/myAccount` retorna payload inconsistente.
+      if (!asaasAccountFound) {
+        const accountNotFoundResponse: CheckResponse = {
           status: "error",
-          integration_status: "pending",
+          integration_status: "not_found",
           environment: paymentEnv,
           diagnostic_stage: "asaas_request",
           details: {
@@ -523,27 +542,27 @@ serve(async (req) => {
             asaas_request_attempted: true,
             asaas_account_found: asaasAccountFound,
             wallet_found: walletFound,
-            account_id_matches: false,
+            account_id_matches: accountIdMatches,
             wallet_id_matches: walletIdMatches,
-            error_type: "missing_local_account_id",
+            error_type: "asaas_account_not_found",
           },
-          message: "Conta Asaas validada no gateway, mas falta salvar o identificador da conta deste ambiente no cadastro da empresa.",
+          message: "Conta Asaas não encontrada durante a verificação da integração.",
         };
 
-        logCheck("warn", "[check-asaas-integration] gateway validated account but local account_id is missing", {
+        logCheck("warn", "[check-asaas-integration] account not found in /myAccount response", {
           company_id: companyId,
           requested_target_environment: requestedEnvironment,
           resolved_payment_environment: paymentEnv,
           diagnostic_stage: "asaas_request",
           asaas_request_attempted: true,
-          error_type: "missing_local_account_id",
+          error_type: "asaas_account_not_found",
           remote_account_id: remoteAccountId,
         });
 
-        return jsonResponse(missingLocalAccountIdResponse, 200);
+        return jsonResponse(accountNotFoundResponse, 200);
       }
 
-      if (!asaasAccountFound || !accountIdMatches) {
+      if (!accountIdCheckBypassed && !accountIdMatches) {
         const accountMismatchResponse: CheckResponse = {
           status: "error",
           integration_status: "not_found",
