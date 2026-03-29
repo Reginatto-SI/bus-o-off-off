@@ -1,55 +1,58 @@
 
 
-# Plano: Corrigir Build Errors + Email com Resend
+## Plano: Padronizar Envio de E-mails via Resend
 
-## Parte 1: Corrigir 3 Build Errors
+### Diagnóstico confirmado
+- `generateLink` no `create-user` e `admin-user-auth-support` gera links mas NÃO envia e-mail
+- O `auth-email-hook` já usa Resend corretamente, mas só é acionado por fluxos nativos do Supabase Auth (signup direto, resetPasswordForEmail), não por `generateLink`
+- `RESEND_API_KEY` já está configurada como secret
 
-### 1A. BenefitPrograms.tsx (linhas 1352 e 1502)
-O `StatusBadge` aceita `StatusType` que inclui `'ativo'` e `'inativo'`, mas o código passa `'active'` / `'inactive'`.
+### Arquitetura proposta
 
-**Correção:** Trocar `'active'` por `'ativo'` e `'inactive'` por `'inativo'`, e remover `customLabel` (que não existe no componente).
-
-```tsx
-// Linha 1352
-<StatusBadge status={record.status === 'ativo' ? 'ativo' : 'inativo'} />
-
-// Linha 1502
-<StatusBadge status={program.status === 'ativo' ? 'ativo' : 'inativo'} />
+```text
+┌─────────────────────────────┐
+│  Edge Function              │
+│  (create-user /             │
+│   admin-user-auth-support)  │
+│                             │
+│  1. generateLink(type)      │
+│  2. sendAuthEmail(Resend)   │  ← NOVO helper compartilhado
+│  3. log em email_send_log   │
+│  4. retorno claro           │
+└─────────────────────────────┘
 ```
 
-### 1B. benefitEligibility.ts (linha 100)
-A query tem relação ambígua entre `benefit_programs` e `benefit_program_eligible_cpf`. Precisa hint explícito na select.
+### Etapas de implementação
 
-**Correção:** Adicionar hint de coluna na relação e usar cast via `unknown`:
+**1. Criar helper compartilhado `_shared/auth-email-resend.ts`**
+- Função `sendAuthEmailViaResend({ to, type, actionLink, userName })`
+- Monta HTML com templates inline por tipo (signup, recovery, magiclink)
+- Envia via Resend API usando `RESEND_API_KEY`
+- Registra resultado em `email_send_log` (recipient_email, template_name, status, error_message)
+- Remetente: `SmartBus BR <noreply@smartbusbr.com.br>` (já usado no auth-email-hook)
 
-```typescript
-program:benefit_programs!benefit_program_eligible_cpf_benefit_program_id_fkey(*)
-```
+**2. Ajustar `create-user/index.ts`**
+- Após criar usuário e vincular role, gerar link de signup com `generateLink({ type: 'signup' })`
+- Extrair `action_link` do resultado
+- Chamar `sendAuthEmailViaResend` com tipo `signup`
+- Incluir resultado do envio no response (sent/failed + warning se falhar)
 
-E no cast (linha 100):
-```typescript
-const rows = (data ?? []) as unknown as Array<...>
-```
+**3. Ajustar `admin-user-auth-support/index.ts`**
+- Nas ações `send_recovery`, `resend_confirmation` e `generate_magic_link`:
+  - Após `generateLink`, extrair `action_link`
+  - Chamar `sendAuthEmailViaResend` com o tipo correspondente
+  - Retornar status detalhado do envio
+- Mensagens de erro contextualizadas (nunca genéricas)
 
----
+**4. Corrigir build errors nos testes**
+- Adicionar `allow_manual_reservations` como campo obrigatório nos mocks de Company em `asaasIntegrationStatus.test.ts` e `src/test/asaasIntegrationStatus.test.ts`
 
-## Parte 2: Integração de E-mail com Resend
+**5. Deploy das Edge Functions**
+- Deploy de `create-user` e `admin-user-auth-support`
 
-### Situação atual
-O projeto já tem domínio `notify.www.smartbusbr.com.br` configurado no Lovable Cloud, com status **Pending** (DNS ainda não verificado). O `auth-email-hook` já existe e usa o sistema de fila do Lovable (`enqueue_email`). Os templates já estão padronizados com "SmartBus BR".
-
-**Causa raiz dos e-mails não chegarem:** O DNS do domínio de envio ainda não foi verificado. Enquanto o DNS não propagar, nenhum e-mail customizado é enviado.
-
-### Sobre usar Resend
-O projeto já tem infraestrutura de e-mail do Lovable Cloud configurada para `notify.www.smartbusbr.com.br`. Usar Resend no mesmo subdomínio causaria conflito de DNS (os registros NS já apontam para os nameservers do Lovable).
-
-**Opções para o usuário:**
-1. **Completar verificação DNS do Lovable Cloud** — Caminho mais simples. Sem mudança de código. Basta verificar os registros NS no provedor de domínio. Tudo já está implementado.
-2. **Desativar Lovable Emails e usar Resend** — Requer remover registros NS do domínio, desativar Lovable Emails, configurar Resend API Key como secret, e reescrever o `auth-email-hook` para chamar a API do Resend diretamente.
-
-**Recomendação:** Perguntar ao usuário qual caminho prefere antes de implementar, já que ambos são válidos mas mutuamente exclusivos no mesmo subdomínio.
-
-### Arquivos alterados
-- `src/pages/admin/BenefitPrograms.tsx` — fix StatusBadge status values
-- `src/lib/benefitEligibility.ts` — fix ambiguous relationship hint + cast
+### O que NÃO muda
+- Fluxo visual do frontend `/admin/usuarios`
+- Estrutura de roles, auth, multiempresa
+- `auth-email-hook` existente (continua funcionando para fluxos nativos)
+- Tabela `email_send_log` (já existe com estrutura adequada)
 
