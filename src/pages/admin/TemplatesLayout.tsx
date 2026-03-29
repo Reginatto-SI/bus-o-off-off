@@ -145,7 +145,18 @@ const buildFriendlyTemplateError = (error: PostgrestError | null, fallbackMessag
   if (!error) return fallbackMessage;
 
   if (error.code === '42501') return 'Você não tem permissão para alterar templates de layout.';
-  if (error.code === '23505') return 'Existem dados duplicados no layout (número de assento ou posição já utilizada).';
+  if (error.code === '23505') {
+    // Comentário: detalha violações conhecidas para reduzir suporte manual em erro de duplicidade.
+    if (error.message.includes('idx_template_layout_items_unique_seat_number')) {
+      return 'Não foi possível salvar porque existe número de assento duplicado no template. Revise os assentos repetidos.';
+    }
+
+    if (error.message.includes('template_layout_id_floor_number_row_number_column_number_key')) {
+      return 'Não foi possível salvar porque existe posição duplicada no layout (mesmo pavimento, linha e coluna).';
+    }
+
+    return 'Não foi possível salvar por duplicidade de dados no layout (assento ou posição).';
+  }
   if (error.code === '23503') return 'O template possui vínculo inválido. Atualize a página e tente novamente.';
   if (error.code === '23514') return 'Há valores fora das regras permitidas (pavimento, linha, coluna ou categoria).';
 
@@ -154,6 +165,13 @@ const buildFriendlyTemplateError = (error: PostgrestError | null, fallbackMessag
   }
 
   return fallbackMessage;
+};
+
+const buildOperationalSaveErrorMessage = (stage: string, error: PostgrestError | null, fallbackMessage: string) => {
+  if (!error) return `${fallbackMessage}. Origem: ${stage}.`;
+
+  const friendly = buildFriendlyTemplateError(error, fallbackMessage);
+  return `${friendly} Origem: ${stage}.`;
 };
 
 const logTemplateErrorInDev = (context: string, error: PostgrestError | null, metadata?: Record<string, unknown>) => {
@@ -757,25 +775,51 @@ export default function TemplatesLayout() {
       return;
     }
 
-    if (sanitizedItems.length > 0) {
-      const existingItemsByCoord = new Map(
-        (existingItems ?? []).map((item) => [
-          `${item.floor_number}-${item.row_number}-${item.column_number}`,
-          item,
-        ]),
+    const existingItemsByCoord = new Map(
+      (existingItems ?? []).map((item) => [
+        `${item.floor_number}-${item.row_number}-${item.column_number}`,
+        item,
+      ]),
+    );
+
+    const changedItems = sanitizedItems.filter((item) => {
+      const existingItem = existingItemsByCoord.get(`${item.floor_number}-${item.row_number}-${item.column_number}`);
+      if (!existingItem) return true;
+      return (
+        existingItem.seat_number !== item.seat_number
+        || existingItem.category !== item.category
+        || JSON.stringify(existingItem.tags ?? []) !== JSON.stringify(item.tags ?? [])
+        || existingItem.is_blocked !== item.is_blocked
       );
+    });
 
-      const changedItems = sanitizedItems.filter((item) => {
-        const existingItem = existingItemsByCoord.get(`${item.floor_number}-${item.row_number}-${item.column_number}`);
-        if (!existingItem) return true;
-        return (
-          existingItem.seat_number !== item.seat_number
-          || existingItem.category !== item.category
-          || JSON.stringify(existingItem.tags ?? []) !== JSON.stringify(item.tags ?? [])
-          || existingItem.is_blocked !== item.is_blocked
+    const receivedKeys = new Set(sanitizedItems.map((item) => `${item.floor_number}-${item.row_number}-${item.column_number}`));
+    const idsToDelete = (existingItems ?? [])
+      .filter((item) => !receivedKeys.has(`${item.floor_number}-${item.row_number}-${item.column_number}`))
+      .map((item) => item.id);
+
+    if (idsToDelete.length > 0) {
+      // Comentário: deletamos itens removidos antes do upsert para evitar falso 23505 ao mover assento de posição
+      // (o número segue único no template e só deve existir na coordenada final enviada pelo editor).
+      const { data: deletedItems, error: deleteItemsError } = await supabase
+        .from('template_layout_items')
+        .delete()
+        .in('id', idsToDelete)
+        .select('id');
+
+      if (deleteItemsError || (deletedItems ?? []).length !== idsToDelete.length) {
+        logTemplateErrorInDev('save-template-items-delete-missing', deleteItemsError, { templateId, idsToDeleteCount: idsToDelete.length });
+        toast.error(
+          (deletedItems ?? []).length !== idsToDelete.length
+            ? 'Falha ao atualizar layout. Origem: remoção de itens antigos (permissão parcial ou RLS).'
+            : buildOperationalSaveErrorMessage('remoção de itens antigos do layout', deleteItemsError, 'Falha ao salvar layout'),
         );
-      });
+        setSaving(false);
+        return;
+      }
+    }
 
+    if (sanitizedItems.length > 0) {
       const { data: upsertedItems, error: itemsUpsertError } = await supabase
         .from('template_layout_items')
         .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' })
@@ -783,7 +827,7 @@ export default function TemplatesLayout() {
 
       if (itemsUpsertError) {
         logTemplateErrorInDev('save-template-items-upsert', itemsUpsertError, { templateId, itemCount: sanitizedItems.length });
-        toast.error(buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
+        toast.error(buildOperationalSaveErrorMessage('persistência de itens do layout', itemsUpsertError, 'Falha ao salvar layout'));
         setSaving(false);
         return;
       }
@@ -815,30 +859,10 @@ export default function TemplatesLayout() {
             probeItem,
             persistedProbeItem,
           });
-          toast.error('Sem permissão para salvar os assentos deste template.');
+          toast.error('Falha ao salvar layout. Origem: validação pós-upsert dos itens (retorno vazio e persistência não confirmada).');
           setSaving(false);
           return;
         }
-      }
-    }
-
-    const receivedKeys = new Set(sanitizedItems.map((item) => `${item.floor_number}-${item.row_number}-${item.column_number}`));
-    const idsToDelete = (existingItems ?? [])
-      .filter((item) => !receivedKeys.has(`${item.floor_number}-${item.row_number}-${item.column_number}`))
-      .map((item) => item.id);
-
-    if (idsToDelete.length > 0) {
-      const { data: deletedItems, error: deleteItemsError } = await supabase
-        .from('template_layout_items')
-        .delete()
-        .in('id', idsToDelete)
-        .select('id');
-
-      if (deleteItemsError || (deletedItems ?? []).length !== idsToDelete.length) {
-        logTemplateErrorInDev('save-template-items-delete-missing', deleteItemsError, { templateId, idsToDeleteCount: idsToDelete.length });
-        toast.error((deletedItems ?? []).length !== idsToDelete.length ? 'Sem permissão para remover assentos antigos deste template.' : buildFriendlyTemplateError(deleteItemsError, 'Erro ao remover assentos antigos do template'));
-        setSaving(false);
-        return;
       }
     }
 
