@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Logo } from "@/components/Logo";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 
 function getRedirectByRole(role: string | null): string {
   if (role === "vendedor") return "/vendedor/minhas-vendas";
@@ -25,14 +27,21 @@ function getRedirectByRole(role: string | null): string {
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoverySuccessMessage, setRecoverySuccessMessage] = useState("");
   const [loginSuccess, setLoginSuccess] = useState(false);
   const { signIn, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const rememberEmailKey = "boo.remember_email";
   const rememberedEmailKey = "boo.remembered_email";
+  const [flowMode, setFlowMode] = useState<"default" | "recovery" | "magiclink" | "signup">("default");
+
+  const isRecoveryFlow = flowMode === "recovery";
 
   useEffect(() => {
     const shouldRememberEmail =
@@ -46,12 +55,36 @@ export default function Login() {
     setRememberEmail(shouldRememberEmail);
   }, []);
 
+  useEffect(() => {
+    // Comentário: o retorno do Supabase pode informar o tipo no hash (#type=recovery)
+    // e também controlamos por query string explícita (?flow=recovery) enviada pelo backend admin.
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const flow = searchParams.get("flow");
+    const hashType = hashParams.get("type");
+
+    if (flow === "recovery" || hashType === "recovery") {
+      setFlowMode("recovery");
+      return;
+    }
+    if (flow === "magiclink" || hashType === "magiclink") {
+      setFlowMode("magiclink");
+      return;
+    }
+    if (flow === "signup" || hashType === "signup") {
+      setFlowMode("signup");
+      return;
+    }
+    setFlowMode("default");
+  }, []);
+
   // Redirect após login bem-sucedido ou sessão existente
   useEffect(() => {
-    if (user && userRole) {
+    // Em recovery, não redirecionamos automaticamente: priorizamos concluir troca de senha.
+    if (!isRecoveryFlow && user && userRole) {
       navigate(getRedirectByRole(userRole), { replace: true });
     }
-  }, [user, userRole, navigate]);
+  }, [user, userRole, navigate, isRecoveryFlow]);
 
   if (authLoading) {
     return (
@@ -63,6 +96,109 @@ export default function Login() {
 
   // Sessão existente: aguardar role resolver antes de redirecionar
   if (user) {
+    if (isRecoveryFlow) {
+      // Em fluxo de recovery com sessão ativa, mantemos a tela para o usuário definir a nova senha.
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background px-4">
+          <div className="w-full max-w-md space-y-3">
+            <Card className="w-full animate-fade-in">
+              <CardHeader className="text-center">
+                <div className="mx-auto mb-4">
+                  <Logo size="xl" />
+                </div>
+                <CardDescription>
+                  Defina sua nova senha para concluir a recuperação de acesso.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recoverySuccessMessage && (
+                  <Alert className="mb-4">
+                    <AlertDescription>{recoverySuccessMessage}</AlertDescription>
+                  </Alert>
+                )}
+                {error && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <form
+                  className="space-y-4"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setError("");
+                    setRecoverySuccessMessage("");
+
+                    if (!newPassword || newPassword.length < 6) {
+                      setError("A nova senha deve ter pelo menos 6 caracteres.");
+                      return;
+                    }
+
+                    if (newPassword !== confirmNewPassword) {
+                      setError("As senhas não coincidem.");
+                      return;
+                    }
+
+                    setRecoveryLoading(true);
+                    const { error: updateError } = await supabase.auth.updateUser({
+                      password: newPassword,
+                    });
+
+                    if (updateError) {
+                      setError("Não foi possível atualizar a senha. Solicite um novo link e tente novamente.");
+                      setRecoveryLoading(false);
+                      return;
+                    }
+
+                    await supabase.auth.signOut();
+                    setFlowMode("default");
+                    setNewPassword("");
+                    setConfirmNewPassword("");
+                    setRecoverySuccessMessage("Senha atualizada com sucesso. Faça login com sua nova senha.");
+                    toast.success("Senha redefinida com sucesso.");
+                    setRecoveryLoading(false);
+                  }}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">Nova senha</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-new-password">Confirmar nova senha</Label>
+                    <Input
+                      id="confirm-new-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={recoveryLoading}>
+                    {recoveryLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Atualizando senha...
+                      </>
+                    ) : (
+                      "Salvar nova senha"
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
     if (!userRole) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
@@ -125,6 +261,18 @@ export default function Login() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {isRecoveryFlow && (
+                <Alert>
+                  <AlertDescription>
+                    Se você abriu um link de recuperação e esta tela não avançou automaticamente, solicite um novo link de redefinição.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {recoverySuccessMessage && (
+                <Alert>
+                  <AlertDescription>{recoverySuccessMessage}</AlertDescription>
+                </Alert>
+              )}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />

@@ -23,6 +23,30 @@ interface StandardResponse {
   data?: Record<string, unknown>;
 }
 
+const DEFAULT_APP_BASE_URL = "https://www.smartbusbr.com.br";
+const ADMIN_AUTH_SUPPORT_RUNTIME_VERSION = "2026-03-29-redirect-explicito-v2";
+
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function resolveAdminAuthRedirectBaseUrl(): string {
+  // Regra operacional explícita: links administrativos de auth devem usar
+  // o domínio canônico oficial para evitar herança de ambientes legados.
+  return DEFAULT_APP_BASE_URL;
+}
+
+function resolveRedirectTo(action: SupportAction): string {
+  const baseUrl = resolveAdminAuthRedirectBaseUrl();
+  const redirectByAction: Record<Exclude<SupportAction, "get_auth_status">, string> = {
+    send_recovery: `${baseUrl}/login?flow=recovery`,
+    resend_confirmation: `${baseUrl}/login?flow=signup`,
+    generate_magic_link: `${baseUrl}/login?flow=magiclink`,
+  };
+
+  return redirectByAction[action as Exclude<SupportAction, "get_auth_status">] ?? `${baseUrl}/login`;
+}
+
 function jsonResponse(payload: StandardResponse | { error: string }, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -192,9 +216,18 @@ serve(async (req) => {
     }
 
     // 1. Generate link
+    const redirectTo = resolveRedirectTo(action);
+    console.log("[admin-user-auth-support] generateLink redirect resolution", {
+      action,
+      redirectTo,
+      runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
+    });
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: emailMapping.linkType as any,
       email: targetUser.email ?? "",
+      options: {
+        redirectTo,
+      },
     });
 
     if (linkError) {
@@ -250,6 +283,8 @@ serve(async (req) => {
       const responseData: Record<string, unknown> = {
         email_sent: true,
         resend_id: emailResult.resendId,
+        redirect_to: redirectTo,
+        runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
       };
 
       // For magic link, also return link data for copy
