@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { getEventCategoryLabel } from '@/lib/eventCategory';
 import { EventWithCompany } from '@/types/database';
 import { DateBadge } from './DateBadge';
 
@@ -31,6 +32,9 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         : formatDateOnlyBR(event.date);
     })()}. Pode me ajudar?`,
   });
+  // Correção do bug: o badge público passa a usar a categoria real do evento (event_category),
+  // substituindo o texto genérico fixo que ocultava a classificação cadastrada no admin.
+  const categoryLabel = getEventCategoryLabel(event.event_category);
 
   return (
     <Card className="overflow-hidden rounded-2xl border shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
@@ -67,7 +71,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
       <CardContent className="space-y-3 p-4 sm:space-y-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em]">
-            Viagem para evento
+            {categoryLabel}
           </Badge>
           <span className="text-xs text-muted-foreground">
             Compra online e embarque organizado
