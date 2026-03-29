@@ -304,6 +304,26 @@ const PASSENGER_STEPS = [
     desc: "A equipe confere presença com mais agilidade e reduz filas no embarque.",
   },
 ];
+// Fidelização em linguagem comercial: comunica recorrência e aumento de vendas sem expor termos técnicos internos.
+const CUSTOMER_LOYALTY_BENEFITS = [
+  {
+    icon: Users,
+    title: "Controle total",
+    // Copy ajustada para linguagem comercial e leiga (sem termos técnicos como "CPFs elegíveis").
+    desc: "Escolha quais clientes vão receber desconto e controle quando esse benefício estará ativo.",
+  },
+  {
+    icon: Gift,
+    title: "Descontos inteligentes",
+    desc: "Aplique descontos automaticamente na compra, sem erros ou necessidade de operação manual.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Fidelização real",
+    // Copy ajustada para destacar benefício comercial em linguagem simples.
+    desc: "Incentive seus clientes a comprar novamente e fortaleça o relacionamento com quem viaja sempre com você.",
+  },
+];
 // Pilar comercial principal: reforça benefícios concretos da operação sem expor linguagem interna de produto.
 const PLATFORM_PILLARS = [
   {
@@ -1388,6 +1408,53 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      <section className="bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-10 text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Transforme clientes em passageiros recorrentes
+            </h2>
+            <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
+              {/* Copy ajustada para remover linguagem técnica e reforçar recompra. */}
+              Crie descontos personalizados para seus melhores clientes e aumente a recompra.
+            </p>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-3">
+            {CUSTOMER_LOYALTY_BENEFITS.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-md"
+              >
+                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <item.icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">{item.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-3 text-sm text-foreground shadow-sm">
+            <span className="font-semibold text-primary">Exemplo:</span>{" "}
+            {/* Exemplo ajustado para tom comercial simples e direto. */}
+            Seus clientes mais frequentes recebem 5% de desconto automaticamente na compra.
+          </div>
+          <div className="mt-8 flex justify-center">
+            <Button
+              type="button"
+              className="h-12 px-8 text-sm font-semibold"
+              onClick={() =>
+                document.getElementById("landing-main-cta")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+            >
+              Quero fidelizar meus clientes
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </section>
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1422,7 +1489,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-      <section className="relative overflow-hidden py-16 sm:py-20">
+      <section id="landing-main-cta" className="relative overflow-hidden py-16 sm:py-20">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/5" />
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Nova seção comercial posicionada após os benefícios operacionais para ampliar a narrativa de valor sem criar fluxo novo. */}
