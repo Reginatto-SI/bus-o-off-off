@@ -11,7 +11,8 @@ interface GenerateTicketPdfParams {
 
 export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: GenerateTicketPdfParams) {
   if (ticketElement) {
-    // Captura o DOM real da passagem virtual para garantir PDF fiel ao visual em tela.
+    // Fonte de verdade visual da passagem: o próprio TicketCard em tela.
+    // Benefício é por ticket/CPF individual e esta captura não pode bloquear a emissão.
     const domCanvas = await html2canvas(ticketElement, {
       backgroundColor: '#ffffff',
       useCORS: true,
@@ -49,7 +50,8 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
   qrCanvas.height = qrImg.height;
   qrCtx?.drawImage(qrImg, 0, 0);
 
-  // Mantém o mesmo visual do ticket virtual com escala alta para impressão.
+  // Fallback seguro: mesmo sem DOM, renderizamos o template oficial (incluindo bloco de benefício
+  // quando existir no ticket individual) sem quebrar geração de PDF.
   const ticketCanvas = await renderTicketVisual(ticket, qrCanvas, { width: 1200, backgroundColor: '#ffffff' });
   const ticketImg = ticketCanvas.toDataURL('image/png', 1.0);
 

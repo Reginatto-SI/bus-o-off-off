@@ -14,7 +14,12 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatCurrencyBRL } from '@/lib/currency';
-import { getTicketTransportOperatedByText, TICKET_PLATFORM_LIABILITY_TEXT, TICKET_PLATFORM_SALES_TEXT } from '@/lib/intermediationPolicy';
+import {
+  getTicketTransportOperatedByText,
+  TICKET_PDF_FOOTER_TEXT,
+  TICKET_PLATFORM_LIABILITY_TEXT,
+  TICKET_PLATFORM_SALES_TEXT,
+} from '@/lib/intermediationPolicy';
 
 export interface TicketCardData {
   ticketId: string;
@@ -488,6 +493,8 @@ export function TicketCard({
               <p>{getTicketTransportOperatedByText(ticket.companyName || 'empresa organizadora')}</p>
               <p>{TICKET_PLATFORM_SALES_TEXT}</p>
               <p>{TICKET_PLATFORM_LIABILITY_TEXT}</p>
+              {/* Rodapé institucional obrigatório também no ticket virtual para manter consistência com o PDF da passagem. */}
+              <p>{TICKET_PDF_FOOTER_TEXT}</p>
             </div>
 
             {/* Fee breakdown */}

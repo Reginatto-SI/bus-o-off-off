@@ -62,6 +62,10 @@ import { CalculationSimulationCard } from '@/components/admin/CalculationSimulat
 import { cn } from '@/lib/utils';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
+import {
+  BENEFIT_PRICING_RULE_VERSION,
+  resolvePassengerBenefitPrice,
+} from '@/lib/benefitEligibility';
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
@@ -90,6 +94,17 @@ interface PassengerData {
   name: string;
   cpf: string;
   phone: string;
+}
+
+interface PassengerBenefitSnapshot {
+  benefit_program_id: string | null;
+  benefit_program_name: string | null;
+  benefit_type: 'percentual' | 'valor_fixo' | 'preco_final' | null;
+  benefit_value: number | null;
+  original_price: number;
+  discount_amount: number;
+  final_price: number;
+  benefit_applied: boolean;
 }
 
 interface ConfirmationTicketData {
@@ -121,6 +136,10 @@ function formatDurationLabel(totalMinutes: number) {
   const hours = Math.floor(safeMinutes / 60);
   const minutes = safeMinutes % 60;
   return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}min`;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }
 
 interface TripAvailabilitySummary {
@@ -218,6 +237,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // Step 3: Passengers
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
+  const [passengerBenefitSnapshots, setPassengerBenefitSnapshots] = useState<Array<PassengerBenefitSnapshot | null>>([]);
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [observation, setObservation] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
@@ -288,6 +308,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setSelectedBoardingId('');
       setSelectedSeats([]);
       setPassengers([]);
+      setPassengerBenefitSnapshots([]);
       setPaymentMethod('pix');
       setObservation('');
       setBlockReason('manutencao');
@@ -579,6 +600,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       };
     });
     setPassengers(newPassengers);
+    setPassengerBenefitSnapshots(newPassengers.map(() => null));
     if (selectedEvent) {
       setUnitPrice(formatCurrencyBRL(selectedEvent.unit_price));
     }
@@ -590,6 +612,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     if (field === 'cpf') formatted = formatCpfMask(value);
     else if (field === 'phone') formatted = formatPhoneMask(value);
     setPassengers((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: formatted } : p)));
+    if (field === 'cpf') {
+      // Benefício é estritamente por CPF individual; ao trocar o CPF, invalidamos
+      // apenas o snapshot daquele passageiro para evitar reutilização indevida entre CPFs.
+      setPassengerBenefitSnapshots((prev) => prev.map((snapshot, i) => (i === index ? null : snapshot)));
+    }
   };
 
   // ── Validation ──
@@ -632,6 +659,113 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       totalSale: subtotal + totalServiceFee,
     };
   }, [activeTab, unitPrice, passengers.length, eventFees]);
+
+  const getPassengerBasePrice = (seatId: string, basePrice: number, usesCatPricing: boolean) => {
+    if (!usesCatPricing) return roundCurrency(basePrice);
+    const seat = seats.find((s) => s.id === seatId);
+    if (!seat) return roundCurrency(basePrice);
+    return roundCurrency(categoryPricesMap.get(seat.category) ?? basePrice);
+  };
+
+  const resolvePassengerBenefitSnapshots = async (params: {
+    basePrice: number;
+    usesCatPricing: boolean;
+  }): Promise<PassengerBenefitSnapshot[]> => {
+    const { basePrice, usesCatPricing } = params;
+
+    // Regra de segurança: benefício nunca pode bloquear venda administrativa.
+    // Em falha técnica de elegibilidade, persistimos fallback com preço base.
+    const snapshots = await Promise.all(passengers.map(async (passenger) => {
+      const originalPrice = getPassengerBasePrice(passenger.seatId, basePrice, usesCatPricing);
+      const fallbackSnapshot: PassengerBenefitSnapshot = {
+        benefit_program_id: null,
+        benefit_program_name: null,
+        benefit_type: null,
+        benefit_value: null,
+        original_price: originalPrice,
+        discount_amount: 0,
+        final_price: originalPrice,
+        benefit_applied: false,
+      };
+
+      if (!activeCompanyId || !selectedEventId || activeTab === 'bloqueio') {
+        return fallbackSnapshot;
+      }
+
+      const normalizedCpf = passenger.cpf.replace(/\D/g, '');
+      if (normalizedCpf.length !== 11) {
+        return fallbackSnapshot;
+      }
+
+      try {
+        const resolved = await resolvePassengerBenefitPrice({
+          companyId: activeCompanyId,
+          eventId: selectedEventId,
+          cpf: normalizedCpf,
+          originalPrice,
+        });
+
+        return {
+          benefit_program_id: resolved.benefitProgramId,
+          benefit_program_name: resolved.benefitProgramName,
+          benefit_type: resolved.benefitType,
+          benefit_value: resolved.benefitValue,
+          original_price: roundCurrency(resolved.originalPrice),
+          discount_amount: roundCurrency(resolved.discountAmount),
+          final_price: roundCurrency(resolved.finalPrice),
+          benefit_applied: resolved.benefitApplied,
+        };
+      } catch (error) {
+        console.error('[admin-sales] benefit_validation_fallback_applied', {
+          seatId: passenger.seatId,
+          eventId: selectedEventId,
+          cpfSuffix: normalizedCpf.slice(-4),
+          error,
+        });
+        return fallbackSnapshot;
+      }
+    }));
+
+    return snapshots;
+  };
+
+  const adminCheckoutSummary = useMemo(() => {
+    const snapshots = passengerBenefitSnapshots.filter((snapshot): snapshot is PassengerBenefitSnapshot => snapshot !== null);
+    if (!snapshots.length) return null;
+
+    const originalSubtotal = roundCurrency(snapshots.reduce((sum, snapshot) => sum + snapshot.original_price, 0));
+    const benefitDiscountTotal = roundCurrency(snapshots.reduce((sum, snapshot) => sum + snapshot.discount_amount, 0));
+    const subtotalAfterBenefits = roundCurrency(snapshots.reduce((sum, snapshot) => sum + snapshot.final_price, 0));
+    const hasBenefitsApplied = snapshots.some((snapshot) => snapshot.benefit_applied && snapshot.discount_amount > 0);
+
+    return {
+      originalSubtotal,
+      benefitDiscountTotal,
+      subtotalAfterBenefits,
+      hasBenefitsApplied,
+    };
+  }, [passengerBenefitSnapshots]);
+
+  useEffect(() => {
+    if (step !== 3 || activeTab === 'bloqueio' || !selectedEventId || passengers.length === 0) {
+      return;
+    }
+
+    const isManual = activeTab === 'manual';
+    const basePrice = isManual ? parseCurrencyInputBRL(unitPrice) : (selectedEvent?.unit_price ?? 0);
+    if (!Number.isFinite(basePrice) || basePrice < 0) return;
+
+    const usesCatPricing = Boolean((selectedEvent as any)?.use_category_pricing) && categoryPricesMap.size > 0;
+    let cancelled = false;
+
+    void resolvePassengerBenefitSnapshots({ basePrice, usesCatPricing }).then((snapshots) => {
+      if (!cancelled) setPassengerBenefitSnapshots(snapshots);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, activeTab, selectedEventId, selectedEvent, passengers, unitPrice, categoryPricesMap]);
 
   // ── Build TicketCardData for confirmation ──
   const buildTicketCardData = (ticket: TicketRecord): TicketCardData => {
@@ -716,18 +850,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const basePrice = isManual ? parseCurrencyInputBRL(unitPrice) : (selectedEvent?.unit_price ?? 0);
       const usesCatPricing = Boolean((selectedEvent as any)?.use_category_pricing) && categoryPricesMap.size > 0;
 
-      // Per-seat total when category pricing is active
-      const getSeatCatPrice = (seatId: string): number => {
-        if (!usesCatPricing) return basePrice;
-        const seat = seats.find((s) => s.id === seatId);
-        if (!seat) return basePrice;
-        return categoryPricesMap.get(seat.category) ?? basePrice;
-      };
-
       const quantity = passengers.length;
-      const seatsTotal = usesCatPricing
-        ? selectedSeats.reduce((sum, seatId) => sum + getSeatCatPrice(seatId), 0)
-        : basePrice * quantity;
+      const resolvedSnapshots = isBlock
+        ? passengers.map((passenger) => {
+          const originalPrice = getPassengerBasePrice(passenger.seatId, basePrice, usesCatPricing);
+          return {
+            benefit_program_id: null,
+            benefit_program_name: null,
+            benefit_type: null,
+            benefit_value: null,
+            original_price: originalPrice,
+            discount_amount: 0,
+            final_price: originalPrice,
+            benefit_applied: false,
+          } satisfies PassengerBenefitSnapshot;
+        })
+        : await resolvePassengerBenefitSnapshots({ basePrice, usesCatPricing });
+      setPassengerBenefitSnapshots(resolvedSnapshots);
+
+      const seatsTotal = roundCurrency(resolvedSnapshots.reduce((sum, snapshot) => sum + snapshot.final_price, 0));
+      const benefitTotalDiscount = roundCurrency(resolvedSnapshots.reduce((sum, snapshot) => sum + snapshot.discount_amount, 0));
       const feeBreakdown = calculateFees(basePrice, eventFees);
       const grossTotal = isBlock ? 0 : seatsTotal + (feeBreakdown.totalFees * quantity);
 
@@ -779,6 +921,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           unit_price: isBlock ? 0 : basePrice,
           status: isBlock ? 'bloqueado' : 'reservado',
           gross_amount: grossTotal,
+          benefit_total_discount: isBlock ? 0 : benefitTotalDiscount,
           company_id: activeCompanyId,
           seller_id: selectedSellerId && selectedSellerId !== '__none__' ? selectedSellerId : null,
           sale_origin: saleOrigin,
@@ -806,7 +949,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       });
 
       // 2. Insert tickets
-      const ticketRows = passengers.map((p) => ({
+      const ticketRows = passengers.map((p, index) => {
+        const snapshot = resolvedSnapshots[index];
+        return ({
         sale_id: saleId,
         trip_id: selectedTripId,
         seat_id: p.seatId,
@@ -816,17 +961,19 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         passenger_phone: p.phone?.replace(/\D/g, '') || null,
         boarding_status: 'pendente',
         company_id: activeCompanyId,
-        // Venda manual/reserva não usa motor de benefício por CPF nesta etapa.
-        benefit_program_id: null,
-        benefit_program_name: null,
-        benefit_type: null,
-        benefit_value: null,
-        original_price: basePrice,
-        discount_amount: 0,
-        final_price: basePrice,
-        benefit_applied: false,
-        pricing_rule_version: 'beneficio_checkout_v1',
-      }));
+        // Benefício aplicado por CPF individual: cada ticket persiste seu próprio snapshot.
+        // Nunca é por compra; apenas o CPF elegível recebe desconto e exibição de benefício.
+        benefit_program_id: snapshot?.benefit_program_id ?? null,
+        benefit_program_name: snapshot?.benefit_program_name ?? null,
+        benefit_type: snapshot?.benefit_type ?? null,
+        benefit_value: snapshot?.benefit_value ?? null,
+        original_price: snapshot?.original_price ?? basePrice,
+        discount_amount: snapshot?.discount_amount ?? 0,
+        final_price: snapshot?.final_price ?? basePrice,
+        benefit_applied: snapshot?.benefit_applied ?? false,
+        pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
+      });
+      });
       const { error: ticketError } = await supabase.from('tickets').insert(ticketRows as any);
       if (ticketError) throw ticketError;
 
@@ -851,7 +998,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           discount_amount: 0,
           final_price: 0,
           benefit_applied: false,
-          pricing_rule_version: 'beneficio_checkout_v1',
+          pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
         }));
 
         const { error: returnTicketError } = await supabase.from('tickets').insert(returnTicketRows as any);
@@ -932,6 +1079,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     setStep(1);
     setSelectedSeats([]);
     setPassengers([]);
+    setPassengerBenefitSnapshots([]);
     setObservation('');
     setConfirmationData(null);
     setCreatedSaleSummary(null);
@@ -1426,7 +1574,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     {activeTab !== 'bloqueio' && (
                       <div className="space-y-4">
                         <h3 className="text-sm font-medium">Dados dos passageiros ({passengers.length})</h3>
-                        {passengers.map((p, i) => (
+                        {passengers.map((p, i) => {
+                          const passengerSnapshot = passengerBenefitSnapshots[i];
+                          return (
                           <div key={p.seatId} className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
@@ -1473,8 +1623,28 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                 />
                               </div>
                             </div>
+                            {passengerSnapshot?.benefit_applied && (
+                              <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs space-y-1">
+                                <p className="font-medium text-emerald-800">Benefício aplicado</p>
+                                {passengerSnapshot.benefit_program_name && (
+                                  <p className="text-emerald-900">{passengerSnapshot.benefit_program_name}</p>
+                                )}
+                                <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                  <span>Desconto</span>
+                                  <span className="font-medium">- {formatCurrencyBRL(passengerSnapshot.discount_amount)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                  <span>Preço original</span>
+                                  <span>{formatCurrencyBRL(passengerSnapshot.original_price)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 text-emerald-900">
+                                  <span>Preço final</span>
+                                  <span className="font-semibold">{formatCurrencyBRL(passengerSnapshot.final_price)}</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
 
@@ -1488,6 +1658,27 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         </div>
                         <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                           <p>⚠️ Bloqueio apenas impede a venda do assento. Não gera passagem nem cobrança.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
+                    {activeTab !== 'bloqueio' && adminCheckoutSummary && (
+                      <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo financeiro da venda</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal original</span>
+                          <span>{formatCurrencyBRL(adminCheckoutSummary.originalSubtotal)}</span>
+                        </div>
+                        {adminCheckoutSummary.hasBenefitsApplied && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Descontos de benefícios</span>
+                            <span className="font-medium text-emerald-700">- {formatCurrencyBRL(adminCheckoutSummary.benefitDiscountTotal)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-sm font-medium">
+                          <span>Subtotal com benefício</span>
+                          <span>{formatCurrencyBRL(adminCheckoutSummary.subtotalAfterBenefits)}</span>
                         </div>
                       </div>
                     )}
