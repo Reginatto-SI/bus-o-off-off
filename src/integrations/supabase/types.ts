@@ -402,6 +402,7 @@ export type Database = {
           id: string
           instagram_url: string | null
           logo_url: string | null
+          manual_reservation_ttl_minutes: number
           name: string
           notes: string | null
           partner_tier: string
@@ -520,6 +521,7 @@ export type Database = {
           ticket_color: string | null
           trade_name: string | null
           updated_at: string
+          allow_manual_reservations: boolean
           use_default_cover: boolean
           website: string | null
           whatsapp: string | null
@@ -558,6 +560,7 @@ export type Database = {
           legal_name?: string | null
           legal_type?: string
           logo_url?: string | null
+          manual_reservation_ttl_minutes?: number
           name: string
           notes?: string | null
           phone?: string | null
@@ -580,6 +583,7 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
+          allow_manual_reservations?: boolean
           use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null
@@ -618,6 +622,7 @@ export type Database = {
           legal_name?: string | null
           legal_type?: string
           logo_url?: string | null
+          manual_reservation_ttl_minutes?: number
           name?: string
           notes?: string | null
           phone?: string | null
@@ -640,6 +645,7 @@ export type Database = {
           ticket_color?: string | null
           trade_name?: string | null
           updated_at?: string
+          allow_manual_reservations?: boolean
           use_default_cover?: boolean
           website?: string | null
           whatsapp?: string | null

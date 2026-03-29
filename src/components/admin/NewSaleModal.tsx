@@ -52,6 +52,7 @@ import {
 import { toast } from 'sonner';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { formatDateOnlyBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
@@ -64,10 +65,9 @@ import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
 
-// Reservas administrativas precisam de validade própria para não herdarem o TTL curto
-// do checkout público nem ficarem eternas. Mantemos a duração centralizada no fluxo
-// de criação manual para que a fonte de verdade entre no banco já no nascimento da venda.
-const MANUAL_RESERVATION_TTL_HOURS = 72;
+// Fallback conservador: se a empresa ainda não tiver política explícita salva, mantemos 72h
+// para não quebrar compatibilidade com reservas administrativas existentes.
+const DEFAULT_MANUAL_RESERVATION_TTL_MINUTES = 72 * 60;
 
 interface TripWithDetails extends Trip {
   vehicle?: Vehicle;
@@ -101,6 +101,25 @@ interface NewSaleModalProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   company?: any;
+}
+
+function resolveManualReservationPolicy(company?: any) {
+  const rawTtl = Number(company?.manual_reservation_ttl_minutes);
+  const ttlMinutes = Number.isFinite(rawTtl) && rawTtl > 0
+    ? Math.floor(rawTtl)
+    : DEFAULT_MANUAL_RESERVATION_TTL_MINUTES;
+
+  return {
+    allowManualReservations: company?.allow_manual_reservations !== false,
+    ttlMinutes,
+  };
+}
+
+function formatDurationLabel(totalMinutes: number) {
+  const safeMinutes = Math.max(1, Math.floor(totalMinutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+  return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}min`;
 }
 
 interface TripAvailabilitySummary {
@@ -245,6 +264,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const soldSeats = tripAvailabilitySummary.sold;
   const blockedSeats = tripAvailabilitySummary.blocked;
   const availableSeats = Math.max(totalSeats - soldSeats - reservedSeats - blockedSeats, 0);
+  const manualReservationPolicy = useMemo(() => resolveManualReservationPolicy(company), [company]);
+  const reservationDurationLabel = useMemo(
+    () => formatDurationLabel(manualReservationPolicy.ttlMinutes),
+    [manualReservationPolicy.ttlMinutes],
+  );
+  const nextReservationExpiryPreview = useMemo(
+    () => new Date(Date.now() + manualReservationPolicy.ttlMinutes * 60 * 1000),
+    [manualReservationPolicy.ttlMinutes],
+  );
 
   // ── Reset on open/close ──
   useEffect(() => {
@@ -704,7 +732,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       const selectedBoarding = boardingOptions.find((b) => b.id === selectedBoardingId);
       const manualReservationExpiresAt = !isBlock
-        ? new Date(Date.now() + MANUAL_RESERVATION_TTL_HOURS * 60 * 60 * 1000).toISOString()
+        ? new Date(Date.now() + manualReservationPolicy.ttlMinutes * 60 * 1000).toISOString()
         : null;
 
       // ── Cálculo da taxa da plataforma para vendas manuais ──
@@ -723,6 +751,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
       if (!runtimePaymentEnvironment) {
         toast.error('Ambiente de pagamento ainda não foi resolvido. Tente novamente em alguns segundos.');
+        return;
+      }
+
+      if (activeTab === 'reserva' && !manualReservationPolicy.allowManualReservations) {
+        toast.error('Reservas manuais estão desabilitadas para esta empresa em /admin/empresa.');
         return;
       }
 
@@ -999,7 +1032,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
             <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
               <TabsTrigger value="manual">Venda Manual</TabsTrigger>
-              <TabsTrigger value="reserva">Reserva</TabsTrigger>
+              <TabsTrigger value="reserva" disabled={!manualReservationPolicy.allowManualReservations}>Reserva</TabsTrigger>
               <TabsTrigger value="bloqueio">Bloquear Poltrona</TabsTrigger>
             </TabsList>
 
@@ -1258,6 +1291,12 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     {/* Tab-specific fields */}
                     {activeTab === 'manual' && (
                       <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            A venda manual nasce como <strong>reservada</strong> e expira em <strong>{reservationDurationLabel}</strong> ({format(nextReservationExpiryPreview, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}) até a confirmação financeira.
+                          </AlertDescription>
+                        </Alert>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-2">
                             <Label>Forma de recebimento *</Label>
@@ -1324,6 +1363,12 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                     {activeTab === 'reserva' && (
                       <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            Reserva temporária com validade de <strong>{reservationDurationLabel}</strong>. Expiração prevista para <strong>{format(nextReservationExpiryPreview, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</strong>.
+                          </AlertDescription>
+                        </Alert>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Vendedor (opcional)</Label>

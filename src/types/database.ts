@@ -106,6 +106,9 @@ export interface Company {
   // Comissionamento variável
   platform_fee_percent: number;
   socio_split_percent: number;
+  // Política de reservas administrativas por empresa (Fase 1)
+  allow_manual_reservations: boolean;
+  manual_reservation_ttl_minutes: number;
   // Vitrine pública (Fase 1)
   cover_image_url: string | null;
   use_default_cover: boolean;
