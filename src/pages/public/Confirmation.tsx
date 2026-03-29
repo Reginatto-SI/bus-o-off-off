@@ -59,6 +59,7 @@ export default function Confirmation() {
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [isReopeningInvoice, setIsReopeningInvoice] = useState(false);
   const [lastVerificationAt, setLastVerificationAt] = useState<Date | null>(null);
   const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
@@ -222,6 +223,47 @@ export default function Confirmation() {
     }
   }, [id, toast]);
 
+  const handleReopenAsaasInvoice = useCallback(async () => {
+    if (!id) return;
+
+    setIsReopeningInvoice(true);
+    // Telemetria mínima: rastrear intenção de reabrir a cobrança existente sem expor URL sensível.
+    console.info('[confirmation] reopen-asaas-invoice:click', { sale_id: id });
+
+    try {
+      // Regra funcional: reutilizamos a mesma cobrança já vinculada à venda.
+      // Não recriamos cobrança nem alteramos status por esta ação.
+      const { data, error } = await supabase.functions.invoke('get-asaas-payment-link', {
+        body: { sale_id: id },
+      });
+      if (error) throw error;
+
+      const invoiceUrl = typeof data?.url === 'string' ? data.url : null;
+      if (!invoiceUrl) {
+        toast({
+          title: 'Não foi possível localizar a cobrança desta reserva. Tente atualizar o status ou refazer o acesso pelo link de pagamento.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const openedTab = window.open(invoiceUrl, '_blank', 'noopener,noreferrer');
+      if (!openedTab) {
+        toast({
+          title: 'Não foi possível abrir a cobrança automaticamente. Verifique o bloqueador de pop-up do navegador.',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Não foi possível localizar a cobrança desta reserva. Tente atualizar o status ou refazer o acesso pelo link de pagamento.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsReopeningInvoice(false);
+    }
+  }, [id, toast]);
+
   // Polling para confirmação de pagamento (works for both pendente_pagamento and reservado)
   useEffect(() => {
     if (!id || !sale) return;
@@ -377,6 +419,51 @@ export default function Confirmation() {
 
   const isPaid = sale.status === 'pago';
   const isPendingPayment = sale.status === 'pendente_pagamento';
+  const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && paymentSuccess);
+  // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
+  const canReopenAsaasInvoice = isAwaitingPayment && Boolean(sale.asaas_payment_id);
+
+  const paymentPendingActions = (
+    <>
+      <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full sm:w-auto"
+          onClick={verifyPaymentStatus}
+          disabled={isVerifyingPayment}
+        >
+          {isVerifyingPayment ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Atualizar status do pagamento
+        </Button>
+        {canReopenAsaasInvoice && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={handleReopenAsaasInvoice}
+            disabled={isReopeningInvoice}
+          >
+            {isReopeningInvoice ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <ExternalLink className="h-4 w-4 mr-2" />
+            )}
+            Reabrir cobrança
+          </Button>
+        )}
+      </div>
+      {lastVerificationAt && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Última tentativa: {new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(lastVerificationAt)}
+        </p>
+      )}
+    </>
+  );
 
   return (
     <PublicLayout>
@@ -391,7 +478,7 @@ export default function Confirmation() {
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado!</h1>
               <p className="text-muted-foreground">Seu pagamento foi confirmado e suas passagens estão garantidas.</p>
             </>
-          ) : (isPendingPayment || (sale.status === 'reservado' && paymentSuccess)) && !pollingTimedOut ? (
+          ) : isAwaitingPayment && !pollingTimedOut ? (
             <>
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
@@ -403,25 +490,7 @@ export default function Confirmation() {
               <p className="text-xs text-muted-foreground mt-2">
                 Você pode fechar esta página — sua passagem será gerada mesmo assim.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={verifyPaymentStatus}
-                disabled={isVerifyingPayment}
-              >
-                {isVerifyingPayment ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Atualizar status do pagamento
-              </Button>
-              {lastVerificationAt && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Última tentativa: {new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(lastVerificationAt)}
-                </p>
-              )}
+              {paymentPendingActions}
             </>
           ) : (isPendingPayment || paymentSuccess) && pollingTimedOut ? (
             <>
@@ -430,25 +499,7 @@ export default function Confirmation() {
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento em Processamento</h1>
               <p className="text-muted-foreground">Seu pagamento está sendo processado pelo banco. Sua passagem será gerada automaticamente quando confirmado.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={verifyPaymentStatus}
-                disabled={isVerifyingPayment}
-              >
-                {isVerifyingPayment ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Atualizar status do pagamento
-              </Button>
-              {lastVerificationAt && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Última tentativa: {new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(lastVerificationAt)}
-                </p>
-              )}
+              {paymentPendingActions}
             </>
           ) : sale.status === 'cancelado' ? (
             <>
