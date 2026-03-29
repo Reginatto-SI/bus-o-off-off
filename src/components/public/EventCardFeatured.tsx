@@ -58,23 +58,32 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           </Badge>
         )}
 
-        {/* Conteúdo do banner focado no essencial para leitura rápida no mobile. */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-2 p-3 pb-3 sm:space-y-3 sm:p-4 sm:pb-4 sm:pr-40">
+        {/* Conteúdo do banner com pilha vertical no mobile para evitar disputa entre data, título e preço. */}
+        {/* Ajuste fino de UX: mais respiro vertical no mobile sem alterar a estrutura do destaque. */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-3.5 p-3 pb-4 sm:space-y-3 sm:p-4 sm:pr-40">
           <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             {categoryLabel}
           </div>
 
-          <div className="flex gap-3 items-start">
-            <DateBadge date={event.date} className="flex-shrink-0 bg-card/95 backdrop-blur-sm" />
-            <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-extrabold leading-tight text-white line-clamp-2 sm:text-xl">
+          {/* Separação explícita entre badge e conteúdo principal para reduzir sensação de bloco comprimido. */}
+          <div className="mt-1 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-start sm:gap-3">
+            <DateBadge
+              date={event.date}
+              className="w-fit flex-shrink-0 bg-card/95 backdrop-blur-sm"
+            />
+            <div className="min-w-0 flex-1 space-y-1">
+              {/* Clamp e quebra controlada seguram títulos extensos sem sobrepor data/preço no mobile. */}
+              <h3 className="text-base font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
                 {event.name}
               </h3>
+              {/* Mobile recebe cidade dentro do bloco principal para manter contexto sem comprimir o rodapé. */}
+              <p className="text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">{event.city}</p>
               {/* Comentário de manutenção: a descrição curta é ocultada no mobile para preservar hierarquia visual do destaque. */}
               <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
               </p>
-              <p className="mt-1 text-2xl font-extrabold tracking-tight text-primary">
+              {/* Preço com tamanho controlado no mobile para reduzir colisão visual em telas estreitas. */}
+              <p className="text-lg font-extrabold leading-tight tracking-tight text-primary sm:text-2xl">
                 {formatCurrencyBRL(event.unit_price)}
               </p>
             </div>
