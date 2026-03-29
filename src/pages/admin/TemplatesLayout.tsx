@@ -781,16 +781,16 @@ export default function TemplatesLayout() {
         .upsert(sanitizedItems, { onConflict: 'template_layout_id,floor_number,row_number,column_number' })
         .select('id');
 
-      if (itemsUpsertError || (upsertedItems ?? []).length === 0) {
+      if (itemsUpsertError) {
         logTemplateErrorInDev('save-template-items-upsert', itemsUpsertError, { templateId, itemCount: sanitizedItems.length });
-        // Comentário: protege contra cenário de 0 linhas afetadas por RLS sem erro SQL explícito.
-        toast.error((upsertedItems ?? []).length === 0 ? 'Sem permissão para salvar os assentos deste template.' : buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
+        toast.error(buildFriendlyTemplateError(itemsUpsertError, 'Erro ao salvar mapa do template'));
         setSaving(false);
         return;
       }
 
       if ((upsertedItems ?? []).length === 0 && changedItems.length > 0) {
-        // Comentário: alguns ambientes podem retornar payload vazio no upsert; validamos persistência real para evitar falso bloqueio.
+        // Comentário: alguns ambientes retornam payload vazio no upsert mesmo com persistência concluída.
+        // Validamos no banco antes de assumir bloqueio por permissão para evitar falso negativo ao usuário autorizado.
         const probeItem = changedItems[0];
         const { data: persistedProbeItem, error: probeError } = await supabase
           .from('template_layout_items')

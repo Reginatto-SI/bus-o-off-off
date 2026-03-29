@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode, useRef, useC
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { UserRole, Profile, Company } from '@/types/database';
+import { canAccessTemplatesLayoutByUserId } from '@/lib/templatesLayoutAccess';
 
 interface AuthContextType {
   user: User | null;
@@ -30,9 +31,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Usuário multiempresa com permissão especial: deve permanecer developer em qualquer empresa ativa.
   const FORCED_DEVELOPER_USER_ID = '27add21e-ade9-436a-9ec2-185a3d7819cc';
-  // Exceção operacional: usuário sócio com acesso técnico total APENAS à tela de templates de layout.
-  const TEMPLATES_LAYOUT_EXCEPTION_USER_ID = 'f1ba5ea7-2d3d-4171-b651-c1917655e5b1';
-
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -299,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Developer herda acesso de gerente automaticamente
   const isDeveloper = userRole === 'developer';
   // Exceção pontual sem trocar role técnica: mantém escopo limitado à rota /admin/templates-layout.
-  const canAccessTemplatesLayout = isDeveloper || user?.id === TEMPLATES_LAYOUT_EXCEPTION_USER_ID;
+  const canAccessTemplatesLayout = isDeveloper || canAccessTemplatesLayoutByUserId(user?.id);
   const isGerente = userRole === 'gerente' || isDeveloper;
   const isOperador = userRole === 'operador';
   const isVendedor = userRole === 'vendedor';
