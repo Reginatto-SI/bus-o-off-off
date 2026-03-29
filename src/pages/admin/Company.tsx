@@ -1248,6 +1248,13 @@ export default function CompanyPage() {
                       <span className="min-w-0 truncate">Redes Sociais</span>
                     </TabsTrigger>
                     <TabsTrigger
+                      value="configuracoes"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <Settings className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Configurações</span>
+                    </TabsTrigger>
+                    <TabsTrigger
                       value="pagamentos"
                       className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
                     >
@@ -1789,7 +1796,7 @@ export default function CompanyPage() {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="pagamentos" className="mt-0">
+                  <TabsContent value="configuracoes" className="mt-0">
                     <div className="space-y-6">
                       <div className="rounded-lg border p-4 space-y-4">
                         <div className="flex items-center justify-between gap-2">
@@ -1880,6 +1887,44 @@ export default function CompanyPage() {
                           Exemplos: 00h40, 01h30, 06h00, 24h00, 72h00. O sistema sempre exige duração maior que zero.
                         </p>
                       </div>
+
+                      <div className="rounded-lg border p-4 space-y-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-medium">Política de Embarque</h3>
+                          <Badge variant="outline">Admin</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Define se o motorista pode validar passageiros manualmente na lista, sem leitura de QR Code.
+                        </p>
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                          <div className="space-y-2 sm:col-span-1">
+                            <Label htmlFor="allow_manual_boarding">Permitir embarque manual sem QR Code</Label>
+                            <Select
+                              value={form.allow_manual_boarding ? 'sim' : 'nao'}
+                              onValueChange={(value) => {
+                                setForm((prev) => ({ ...prev, allow_manual_boarding: value === 'sim' }));
+                              }}
+                              disabled={!isGerente && !isDeveloper}
+                            >
+                              <SelectTrigger id="allow_manual_boarding">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="sim">Sim</SelectItem>
+                                <SelectItem value="nao">Não</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Quando desativado, o motorista só poderá validar passageiros pelo QR Code.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="pagamentos" className="mt-0">
+                    <div className="space-y-6">
 
                       {/* Comissionamento da Plataforma — Developer Only */}
                       {isDeveloper && (() => {

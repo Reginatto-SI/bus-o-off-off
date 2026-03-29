@@ -67,21 +67,20 @@ export default function DriverHome() {
   const [loadingKpis, setLoadingKpis] = useState(false);
   const [operationalRoleLabel, setOperationalRoleLabel] = useState('Motorista');
   const [tripSelectorOpen, setTripSelectorOpen] = useState(false);
+  const [preferredTripByPhase, setPreferredTripByPhase] = useState<Partial<Record<OperationalPhase, string>>>({});
 
   const activeTrip = allTrips.find(t => t.tripId === selectedTripId) ?? null;
   const applicablePhases = activeTrip ? getApplicablePhases(activeTrip.transportPolicy) : ['ida'] as OperationalPhase[];
   const phaseConfig = PHASE_CONFIG[activePhase];
 
-  const phaseFilteredTrips = useMemo(() => {
-    if (activePhase === 'ida') {
-      return allTrips.filter((trip) => trip.tripType === 'ida');
-    }
-    if (activePhase === 'reembarque') {
-      return allTrips.filter((trip) => trip.tripType === 'volta');
-    }
+  const getTripsForPhase = useCallback((phase: OperationalPhase) => {
+    if (phase === 'ida') return allTrips.filter((trip) => trip.tripType === 'ida');
+    if (phase === 'reembarque') return allTrips.filter((trip) => trip.tripType === 'volta');
     // Desembarque segue a operação da ida para evitar mistura visual com a volta.
     return allTrips.filter((trip) => trip.tripType === 'ida');
-  }, [allTrips, activePhase]);
+  }, [allTrips]);
+
+  const phaseFilteredTrips = useMemo(() => getTripsForPhase(activePhase), [getTripsForPhase, activePhase]);
 
   const getTripOptionLabel = useCallback((trip: TripInfo) => {
     const tripTypeLabel = trip.tripType === 'volta' ? 'Volta' : 'Ida';
@@ -173,9 +172,11 @@ export default function DriverHome() {
 
     if (persistedStillValid) {
       setSelectedTripId(persisted);
+      setPreferredTripByPhase((prev) => ({ ...prev, ida: persisted }));
     } else if (mapped.length > 0) {
       const firstId = mapped[0].tripId;
       setSelectedTripId(firstId);
+      setPreferredTripByPhase((prev) => ({ ...prev, ida: firstId }));
       setPersistedTripId(user.id, activeCompanyId, firstId);
     } else {
       setSelectedTripId(null);
@@ -287,19 +288,18 @@ export default function DriverHome() {
 
   useEffect(() => {
     if (!user || !activeCompanyId) return;
+    if (selectedTripId) return;
     if (phaseFilteredTrips.length === 0) return;
 
-    const selectedStillValid = selectedTripId && phaseFilteredTrips.some((trip) => trip.tripId === selectedTripId);
-    if (!selectedStillValid) {
-      const fallbackTripId = phaseFilteredTrips[0].tripId;
-      setSelectedTripId(fallbackTripId);
-      setPersistedTripId(user.id, activeCompanyId, fallbackTripId);
-    }
+    const fallbackTripId = phaseFilteredTrips[0].tripId;
+    setSelectedTripId(fallbackTripId);
+    setPersistedTripId(user.id, activeCompanyId, fallbackTripId);
   }, [phaseFilteredTrips, selectedTripId, user, activeCompanyId]);
 
   /* ---------- Handlers ---------- */
   const handleTripChange = (tripId: string) => {
     setSelectedTripId(tripId);
+    setPreferredTripByPhase((prev) => ({ ...prev, [activePhase]: tripId }));
     if (user && activeCompanyId) {
       setPersistedTripId(user.id, activeCompanyId, tripId);
     }
@@ -311,16 +311,13 @@ export default function DriverHome() {
       setPersistedPhase(user.id, activeCompanyId, phase);
     }
 
-    const phaseTrips = phase === 'ida'
-      ? allTrips.filter((trip) => trip.tripType === 'ida')
-      : phase === 'reembarque'
-        ? allTrips.filter((trip) => trip.tripType === 'volta')
-        : allTrips.filter((trip) => trip.tripType === 'ida');
-
+    const phaseTrips = getTripsForPhase(phase);
     if (phaseTrips.length > 0) {
       const selectedStillValid = selectedTripId && phaseTrips.some((trip) => trip.tripId === selectedTripId);
       if (!selectedStillValid) {
-        const nextTripId = phaseTrips[0].tripId;
+        const preferredTripId = preferredTripByPhase[phase];
+        const preferredStillValid = preferredTripId && phaseTrips.some((trip) => trip.tripId === preferredTripId);
+        const nextTripId = preferredStillValid ? preferredTripId : phaseTrips[0].tripId;
         setSelectedTripId(nextTripId);
         if (user && activeCompanyId) {
           setPersistedTripId(user.id, activeCompanyId, nextTripId);

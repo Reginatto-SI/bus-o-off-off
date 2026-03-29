@@ -73,3 +73,54 @@
 ## Dúvidas/decisões pontuais documentadas
 
 - Para **Desembarque**, a regra final ficou alinhada à simplificação operacional: mostrar apenas trips de `ida` para evitar duplicidade visual com `volta`.
+
+
+## Ajuste incremental — preservação da trip ao trocar de aba
+
+### Causa da troca automática indesejada
+- A seleção era forçada em dois pontos:
+  1. `handlePhaseChange`, que trocava para a primeira trip compatível quando a atual não batia com a nova fase;
+  2. `useEffect` reativo em `phaseFilteredTrips`, que também aplicava fallback automático quando detectava incompatibilidade.
+- Com isso, mesmo após escolha manual, a navegação de abas podia "reiniciar" para a primeira opção.
+
+### Lógica ajustada
+- Mantido o filtro por fase (`Ida`/`Desembarque` => `ida`, `Reembarque` => `volta`).
+- Adicionado estado local de preferência por fase (`preferredTripByPhase`) para guardar a última escolha manual do motorista em cada aba.
+- Ao trocar de aba:
+  1. tenta manter a trip atual se ela for compatível;
+  2. se não for compatível, tenta recuperar a preferência já escolhida para a fase de destino;
+  3. só então usa a primeira opção da fase como fallback mínimo.
+- O `useEffect` deixou de trocar seleção por incompatibilidade; ele só define fallback quando não existe nenhuma trip selecionada.
+
+### Resultado de UX
+- A escolha manual passa a ter prioridade real.
+- Menos trocas silenciosas de trip ao alternar abas.
+- Persistência em storage continua ativa para fase/trip selecionadas.
+
+### Cenários com fallback automático (ainda existentes, de forma controlada)
+- Não há trip selecionada no estado atual e existem trips válidas na fase.
+- A fase mudou e:
+  - a trip atual não é compatível,
+  - não existe preferência válida salva para a fase de destino.
+
+
+## Reorganização de UI — /admin/empresa
+
+### Por que a configuração saiu de `Pagamentos`
+- `allow_manual_boarding` e política de reservas são regras operacionais da empresa e não regras financeiras.
+- A aba `Pagamentos` passa a ficar focada em temas financeiros (taxas, split, gateway), reduzindo mistura conceitual.
+
+### Nova aba criada
+- Foi criada a aba **`Configurações`** em `/admin/empresa`.
+
+### Parametrizações que ficaram na nova aba
+- **Política de Reservas**
+  - Permitir reservas manuais
+  - Horas (TTL)
+  - Minutos (TTL)
+- **Política de Embarque**
+  - Permitir embarque manual sem QR Code
+
+### Estrutura preparada para crescimento
+- A nova aba usa cards separados por domínio operacional, permitindo adicionar futuras parametrizações sem poluir a aba de pagamentos.
+- Nenhuma lógica funcional foi alterada (somente reorganização de interface/admin).
