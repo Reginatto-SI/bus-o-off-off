@@ -97,6 +97,14 @@ interface OnboardingChecklistStatus {
 }
 
 type OnboardingPopupMode = 'welcome' | 'event_cta' | 'none';
+type OnboardingStage =
+  | 'initial'
+  | 'vehicle_done'
+  | 'driver_done'
+  | 'boarding_done'
+  | 'event_done'
+  | 'published_done'
+  | 'active';
 
 /* ═══════════════════════════════════════════════════
    Constantes de cores para gráficos (semânticas)
@@ -170,7 +178,7 @@ export default function Dashboard() {
 
   /* ─── Onboarding inicial ───────────────────────────────
      Comentário: esta leitura usa dados reais por empresa (company_id)
-     nas tabelas events, vehicles, event_boarding_locations e sales.
+     nas tabelas events, vehicles, boarding_locations e sales.
      Não existe estado fake: o checklist sempre reflete o banco atual. */
   const { data: onboardingLightStatus, isLoading: onboardingLightLoading } = useQuery({
     // Otimização: leitura leve primeiro (sem joins pesados) para o card aparecer cedo.
@@ -196,27 +204,25 @@ export default function Dashboard() {
     },
   });
 
-  const shouldEnableOnboardingHeavy = Boolean(
-    activeCompanyId &&
-    onboardingLightStatus?.hasVehicle &&
-    onboardingLightStatus?.hasDriver
-  );
+  // Regra determinística: consultas de onboarding não dependem de pré-requisitos entre si.
+  // Cada etapa é avaliada por existência de dados essenciais da própria empresa ativa.
+  const shouldEnableOnboardingHeavy = Boolean(activeCompanyId);
   const { data: onboardingHeavyStatus, isLoading: onboardingHeavyLoading } = useQuery({
-    // Otimização: joins mais custosos só quando já existem pré-requisitos operacionais.
+    // Regra simples e auditável: contagens diretas por company_id, sem dependências implícitas.
     queryKey: ['dashboard-onboarding-heavy', activeCompanyId],
     enabled: shouldEnableOnboardingHeavy,
     queryFn: async (): Promise<Pick<OnboardingChecklistStatus, 'hasBoardingConfig' | 'hasPublishedEvent'>> => {
       const [{ count: boardingCount }, { count: publishedEventsCount }] = await Promise.all([
-        // Endurecimento: só conta embarque que está realmente vinculado a evento válido da própria empresa.
+        // "Configurar embarque": concluído quando existe ao menos 1 local ativo da empresa.
         supabase
-          .from('event_boarding_locations')
-          .select('id, events!inner(id)', { count: 'exact', head: true })
+          .from('boarding_locations')
+          .select('id', { count: 'exact', head: true })
           .eq('company_id', activeCompanyId!)
-          .eq('events.company_id', activeCompanyId!),
-        // Endurecimento: "publicar viagem" exige evento à venda + não arquivado + vínculo operacional mínimo.
+          .eq('status', 'ativo'),
+        // "Publicar viagem": concluído quando existe ao menos 1 evento ativo em venda da empresa.
         supabase
           .from('events')
-          .select('id, trips!inner(id), event_boarding_locations!inner(id)', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('company_id', activeCompanyId!)
           .eq('status', 'a_venda')
           .eq('is_archived', false),
@@ -244,6 +250,7 @@ export default function Dashboard() {
       {
         key: 'vehicle',
         label: 'Cadastrar veículo',
+        description: 'Cadastre pelo menos um veículo para começar a operar suas viagens.',
         done: onboardingStatus.hasVehicle,
         isLoading: onboardingLoading,
         href: '/admin/frota',
@@ -251,6 +258,7 @@ export default function Dashboard() {
       {
         key: 'driver',
         label: 'Cadastrar motorista',
+        description: 'Cadastre motoristas para vincular às viagens e liberar a operação.',
         done: onboardingStatus.hasDriver,
         isLoading: onboardingLoading,
         href: '/admin/motoristas',
@@ -258,14 +266,16 @@ export default function Dashboard() {
       {
         key: 'boarding',
         label: 'Configurar embarque',
+        description: 'Cadastre locais de embarque para definir onde os passageiros irão embarcar.',
         done: onboardingStatus.hasBoardingConfig,
         // Validação pesada carregada depois para não segurar a pintura inicial do card.
-        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
+        isLoading: onboardingHeavyLoading,
         href: '/admin/locais',
       },
       {
         key: 'event',
         label: 'Criar primeiro evento',
+        description: 'Crie seu primeiro evento para disponibilizar passagens para venda.',
         done: onboardingStatus.hasEvent,
         isLoading: onboardingLoading,
         href: '/admin/eventos?novo=1',
@@ -273,20 +283,22 @@ export default function Dashboard() {
       {
         key: 'publish',
         label: 'Publicar viagem',
+        description: 'Publique a viagem para liberar a venda de passagens.',
         done: onboardingStatus.hasPublishedEvent,
-        isLoading: shouldEnableOnboardingHeavy && onboardingHeavyLoading,
+        isLoading: onboardingHeavyLoading,
         href: '/admin/eventos',
       },
       {
         key: 'sale',
         label: 'Fazer primeira venda',
+        description: 'Realize sua primeira venda para iniciar sua operação no sistema.',
         done: onboardingStatus.hasPaidSale,
         isLoading: onboardingLoading,
         // Mantido: /admin/vendas abre o modal de nova venda via `novaVenda=1` (fluxo já suportado pela tela de vendas).
         href: '/admin/vendas?novaVenda=1&aba=manual',
       },
     ],
-    [onboardingLoading, onboardingStatus, onboardingHeavyLoading, shouldEnableOnboardingHeavy]
+    [onboardingLoading, onboardingStatus, onboardingHeavyLoading]
   );
   // Nova ordem operacional explícita: veículo → motorista → embarque → evento → publicação → venda.
   const nextOnboardingStep = useMemo(
@@ -301,6 +313,67 @@ export default function Dashboard() {
     [onboardingItems]
   );
 
+  // Estágio contextual do onboarding derivado dos mesmos booleanos reais do checklist.
+  // Importante: este estágio não cria regra nova; apenas melhora a comunicação da jornada atual.
+  const onboardingStage = useMemo<OnboardingStage>(() => {
+    if (onboardingStatus.hasPaidSale) return 'active';
+    if (onboardingStatus.hasPublishedEvent) return 'published_done';
+    if (onboardingStatus.hasEvent) return 'event_done';
+    if (onboardingStatus.hasBoardingConfig) return 'boarding_done';
+    if (onboardingStatus.hasDriver) return 'driver_done';
+    if (onboardingStatus.hasVehicle) return 'vehicle_done';
+    return 'initial';
+  }, [onboardingStatus]);
+
+  // Conteúdo contextual por estágio: orienta sem inventar dependências novas.
+  const onboardingStageContent = useMemo(() => {
+    const stageMap: Record<OnboardingStage, { title: string; description: string; ctaLabel?: string }> = {
+      initial: {
+        title: 'Comece configurando sua operação',
+        description: 'Cadastre os dados básicos da empresa para preparar seu ambiente de vendas.',
+        ctaLabel: 'Cadastrar veículo',
+      },
+      vehicle_done: {
+        title: 'Ótimo, o primeiro veículo já foi cadastrado',
+        description: 'Agora cadastre motoristas para poder organizar melhor sua operação.',
+        ctaLabel: 'Cadastrar motorista',
+      },
+      driver_done: {
+        title: 'Sua base operacional está quase pronta',
+        description: 'Agora configure os locais de embarque para definir onde os passageiros poderão embarcar.',
+        ctaLabel: 'Configurar embarque',
+      },
+      boarding_done: {
+        title: 'Estrutura pronta para começar a vender',
+        description: 'Agora crie seu primeiro evento para disponibilizar passagens no sistema.',
+        ctaLabel: 'Criar evento',
+      },
+      event_done: {
+        title: 'Seu primeiro evento já foi criado',
+        description: 'Falta apenas publicar a viagem para liberar a venda de passagens.',
+        ctaLabel: 'Publicar viagem',
+      },
+      published_done: {
+        title: 'Tudo pronto para vender',
+        description: 'Seu evento já está em venda. Agora realize a primeira venda para iniciar sua operação.',
+        ctaLabel: 'Fazer primeira venda',
+      },
+      active: {
+        title: 'Operação iniciada com sucesso',
+        description: 'Sua empresa já realizou vendas. Agora acompanhe a operação e continue expandindo.',
+        ctaLabel: 'Ver vendas',
+      },
+    };
+    return stageMap[onboardingStage];
+  }, [onboardingStage]);
+
+  // Encerramento explícito do onboarding: todas as etapas concluídas = experiência finalizada.
+  const onboardingCompletedCount = useMemo(
+    () => onboardingItems.filter((item) => item.done).length,
+    [onboardingItems]
+  );
+  const isOnboardingCompleted = onboardingCompletedCount >= onboardingItems.length;
+
   useEffect(() => {
     // Reavalia popup ao trocar empresa ativa.
     lastPopupModeRef.current = null;
@@ -308,6 +381,12 @@ export default function Dashboard() {
   }, [activeCompanyId]);
 
   useEffect(() => {
+    // Regra de produto: onboarding concluído encerra card/popup e não deve reaparecer.
+    if (isOnboardingCompleted) {
+      setOnboardingPopupOpen(false);
+      return;
+    }
+
     // Popup contextual:
     // - estágio inicial: boas-vindas e orientação do passo a passo (sem pressionar criação de evento).
     // - estágio pronto para evento: CTA direto só quando "Criar primeiro evento" for o próximo passo lógico.
@@ -342,19 +421,18 @@ export default function Dashboard() {
     setOnboardingPopupOpen(!dismissedWelcome);
   }, [
     onboardingEventCtaDismissKey,
+    isOnboardingCompleted,
     onboardingLightLoading,
     onboardingStatus,
     onboardingWelcomeDismissKey,
     nextOnboardingStep?.key,
   ]);
 
-  // Comentário: progresso calculado em tempo real a partir dos 6 passos do checklist.
-  const onboardingCompletedCount = useMemo(
-    () => onboardingItems.filter((item) => item.done).length,
-    [onboardingItems]
-  );
   const shouldShowOnboardingCard =
-    enabled && (onboardingLoading || onboardingCompletedCount < onboardingItems.length);
+    enabled &&
+    (onboardingLoading ||
+      onboardingHeavyLoading ||
+      onboardingCompletedCount < onboardingItems.length);
 
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
@@ -636,12 +714,12 @@ export default function Dashboard() {
               <DialogTitle>
                 {nextOnboardingStep?.key === 'event'
                   ? 'Tudo pronto para criar seu primeiro evento?'
-                  : 'Boas-vindas! Vamos preparar sua operação?'}
+                  : 'Boas-vindas! Vamos iniciar sua operação com segurança?'}
               </DialogTitle>
               <DialogDescription>
                 {nextOnboardingStep?.key === 'event'
-                  ? 'Você já concluiu os cadastros essenciais. Agora faz sentido criar seu primeiro evento e avançar para publicação.'
-                  : 'Siga o passo a passo recomendado no dashboard para configurar sua operação com segurança antes de publicar e vender.'}
+                  ? 'Você já concluiu a base operacional. Agora vale criar seu primeiro evento para avançar para publicação e vendas.'
+                  : 'Use o passo a passo do dashboard para configurar sua base operacional antes de publicar viagens e iniciar as vendas.'}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:gap-0">
@@ -687,16 +765,31 @@ export default function Dashboard() {
                   {onboardingCompletedCount} de {onboardingItems.length} concluídos
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Siga estas etapas para preparar sua operação e começar a vender.
+              <p className={`text-sm ${onboardingStage === 'active' ? 'text-emerald-700' : 'text-muted-foreground'}`}>
+                {onboardingStageContent.title}
               </p>
+              <p className="text-xs text-muted-foreground">{onboardingStageContent.description}</p>
               {!nextOnboardingStep && (onboardingLoading || onboardingHeavyLoading) ? (
                 <p className="text-xs text-muted-foreground">Calculando próximo passo recomendado...</p>
               ) : nextOnboardingStep ? (
                 <p className="text-xs text-muted-foreground">
                   Próximo passo recomendado: <span className="font-medium text-foreground">{nextOnboardingStep.label}</span>
                 </p>
+              ) : onboardingStage === 'active' ? (
+                <p className="text-xs text-emerald-700">Nenhum passo obrigatório pendente.</p>
               ) : null}
+              {!onboardingLoading && !onboardingHeavyLoading && (
+                <Button
+                  asChild
+                  size="sm"
+                  className="w-fit"
+                  variant={onboardingStage === 'active' ? 'outline' : 'default'}
+                >
+                  <Link to={nextOnboardingStep?.href ?? '/admin/vendas'}>
+                    {nextOnboardingStep ? onboardingStageContent.ctaLabel ?? nextOnboardingStep.label : 'Ver vendas'}
+                  </Link>
+                </Button>
+              )}
               <Progress value={(onboardingCompletedCount / onboardingItems.length) * 100} className="h-2" />
             </CardHeader>
             <CardContent className="space-y-2">
@@ -719,13 +812,16 @@ export default function Dashboard() {
                     className="h-auto w-full justify-between rounded-lg border px-3 py-3"
                   >
                     <Link to={item.href}>
-                      <span className="flex items-center gap-2 text-sm">
+                      <span className="flex items-start gap-2 text-sm">
                         {item.done ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                         ) : (
-                          <Circle className="h-4 w-4 text-muted-foreground" />
+                          <Circle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
-                        <span>{item.label}</span>
+                        <span className="flex flex-col items-start gap-0.5">
+                          <span>{item.label}</span>
+                          <span className="text-xs font-normal text-muted-foreground">{item.description}</span>
+                        </span>
                       </span>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         {item.done ? 'Ver' : 'Ir agora'}
