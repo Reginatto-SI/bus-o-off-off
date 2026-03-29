@@ -1828,27 +1828,8 @@ export default function CompanyPage() {
                             </Select>
                           </div>
 
-                          <div className="space-y-2 sm:col-span-1">
-                            <Label htmlFor="allow_manual_boarding">Permitir embarque manual sem QR Code</Label>
-                            <Select
-                              value={form.allow_manual_boarding ? 'sim' : 'nao'}
-                              onValueChange={(value) => {
-                                setForm((prev) => ({ ...prev, allow_manual_boarding: value === 'sim' }));
-                              }}
-                              disabled={!isGerente && !isDeveloper}
-                            >
-                              <SelectTrigger id="allow_manual_boarding">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="sim">Sim</SelectItem>
-                                <SelectItem value="nao">Não</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                              Quando desativado, o motorista só poderá validar passageiros pelo QR Code.
-                            </p>
-                          </div>
+                          {/* Campo removido deste card para evitar duplicidade visual.
+                              A fonte de verdade de allow_manual_boarding permanece no card "Política de Embarque". */}
 
                           <div className="space-y-2 sm:col-span-1">
                             <Label htmlFor="manual_reservation_ttl_hours">Horas</Label>

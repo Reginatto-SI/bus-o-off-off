@@ -1,4 +1,4 @@
-import { Bell, Building2, ChevronDown, LogOut, User, Check, AlertTriangle, CheckCircle2, Info, Siren, Share2 } from 'lucide-react';
+import { Bell, Building2, ChevronDown, LogOut, User, Check, AlertTriangle, CheckCircle2, Info, Siren } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
 import { Button } from '@/components/ui/button';
@@ -125,21 +125,7 @@ export function AdminHeader() {
       </div>
 
       <div className="flex items-center gap-2 xl:gap-4">
-      {/*
-        CTA discreto de crescimento: reforça a feature de indicações como ação operacional do sistema.
-        O estilo outline/ghost mantém o header limpo e ajuda a aumentar o uso da rota de indicação sem competir com notificações e perfil.
-      */}
-      <Button
-        asChild
-        variant="outline"
-        size="sm"
-        className="hidden border-border/70 bg-background/70 text-muted-foreground hover:bg-muted xl:inline-flex"
-      >
-        <Link to="/admin/indicacoes">
-          <Share2 className="h-4 w-4" />
-          <span>Indique e Ganhe</span>
-        </Link>
-      </Button>
+      {/* CTA "Indique e Ganhe" ocultado no header global por decisão de produto. */}
 
       {/* Version indicator */}
       <VersionIndicator />
