@@ -63,24 +63,25 @@ serve(async (req) => {
     // Asaas exige mínimo de R$ 5,00 para billingType UNDEFINED.
     const ASAAS_MIN_CHARGE = 5.0;
     if (feeAmount < ASAAS_MIN_CHARGE) {
-      await supabaseAdmin
-        .from("sales")
-        .update({
-          platform_fee_status: "waived",
-          platform_fee_paid_at: null,
-        })
-        .eq("id", sale.id);
-
+      // Defesa em profundidade: o frontend já bloqueia a criação da venda manual abaixo do mínimo,
+      // porém este backend mantém proteção explícita para chamadas indiretas/legadas fora do fluxo esperado.
+      // Regra oficial atual: não gerar novos casos `waived` para taxa manual < R$ 5,00.
       await supabaseAdmin.from("sale_logs").insert({
         sale_id: sale.id,
-        action: "platform_fee_waived",
-        description: `Taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}). Taxa marcada como dispensada.`,
+        action: "platform_fee_minimum_blocked",
+        description: `Tentativa bloqueada: taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}).`,
         company_id: sale.company_id,
       });
 
       return new Response(
-        JSON.stringify({ waived: true, message: "Taxa dispensada (abaixo do mínimo do gateway)" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error:
+            "Não é possível gerar cobrança: taxa da plataforma abaixo do mínimo permitido no Asaas (R$ 5,00).",
+          error_code: "platform_fee_below_minimum",
+          minimum_amount: ASAAS_MIN_CHARGE,
+          fee_amount: feeAmount,
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

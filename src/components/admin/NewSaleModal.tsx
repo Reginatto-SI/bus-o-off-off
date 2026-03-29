@@ -73,6 +73,7 @@ type SaleTab = 'manual' | 'reserva' | 'bloqueio';
 // Fallback conservador: se a empresa ainda não tiver política explícita salva, mantemos 72h
 // para não quebrar compatibilidade com reservas administrativas existentes.
 const DEFAULT_MANUAL_RESERVATION_TTL_MINUTES = 72 * 60;
+const ASAAS_MIN_PLATFORM_FEE_AMOUNT = 5;
 
 interface TripWithDetails extends Trip {
   vehicle?: Vehicle;
@@ -888,6 +889,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const platformFeeAmount = hasPlatformFee
         ? Math.round(grossTotal * (platformFeePercent / 100) * 100) / 100
         : null;
+
+      // Regra financeira oficial: o Asaas não permite cobrança abaixo de R$ 5,00.
+      // Para evitar criar reserva manual sem monetização válida da plataforma,
+      // bloqueamos a venda antes de inserir qualquer dado em sales/tickets/logs.
+      if (isManual && hasPlatformFee && platformFeeAmount !== null && platformFeeAmount < ASAAS_MIN_PLATFORM_FEE_AMOUNT) {
+        toast.error(
+          'Não é possível criar esta venda manual porque a taxa da plataforma calculada ficou abaixo do mínimo permitido para cobrança no Asaas (R$ 5,00). Ajuste o valor da venda antes de continuar.'
+        );
+        return;
+      }
 
       // Determinar sale_origin para rastreabilidade
       const saleOrigin = isBlock ? 'admin_block' : (isManual ? 'admin_manual' : 'admin_manual');
