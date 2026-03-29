@@ -98,19 +98,19 @@ export function getApplicablePhases(transportPolicy: string): OperationalPhase[]
  * Reason code messages for the scanner overlay.
  */
 export const REASON_MESSAGES: Record<string, string> = {
-  ok: 'Operação realizada com sucesso',
-  invalid_qr: 'QR inválido',
-  already_checked_in: 'Já embarcado',
+  ok: 'Leitura válida e operação concluída.',
+  invalid_qr: 'QR Code inválido ou não reconhecido.',
+  already_checked_in: 'Passagem já validada anteriormente.',
   sale_cancelled: 'Venda cancelada',
   sale_not_paid: 'Pagamento não confirmado',
   checkout_without_checkin: 'Desembarque sem embarque',
   already_checked_out: 'Desembarque já registrado',
   checkout_disabled: 'Desembarque desabilitado para este evento',
-  not_allowed_company: 'Passagem de outra empresa',
+  not_allowed_company: 'Esta passagem não pertence à sua empresa.',
   invalid_action: 'Ação inválida',
   already_reboarded: 'Já reembarcado',
   reboard_without_checkout: 'Reembarque sem desembarque',
   undo_not_applicable: 'Operação não pode ser desfeita nesta fase',
-  rpc_error: 'Erro de comunicação',
-  invalid_response: 'Resposta inválida',
+  rpc_error: 'Erro de comunicação ao validar a passagem.',
+  invalid_response: 'Não foi possível processar a leitura. Tente novamente.',
 };
