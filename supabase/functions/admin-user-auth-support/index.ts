@@ -24,18 +24,15 @@ interface StandardResponse {
 }
 
 const DEFAULT_APP_BASE_URL = "https://www.smartbusbr.com.br";
+const ADMIN_AUTH_SUPPORT_RUNTIME_VERSION = "2026-03-29-redirect-explicito-v2";
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
 
 function resolveAdminAuthRedirectBaseUrl(): string {
-  // Preferência explícita por variável de ambiente para suportar preview sem heurística frágil.
-  const envBaseUrl = Deno.env.get("ADMIN_AUTH_REDIRECT_BASE_URL") ?? Deno.env.get("PUBLIC_APP_URL");
-  if (envBaseUrl && envBaseUrl.trim().length > 0) {
-    return normalizeBaseUrl(envBaseUrl);
-  }
-  // Fallback seguro e determinístico: domínio oficial de produção.
+  // Regra operacional explícita: links administrativos de auth devem usar
+  // o domínio canônico oficial para evitar herança de ambientes legados.
   return DEFAULT_APP_BASE_URL;
 }
 
@@ -220,6 +217,11 @@ serve(async (req) => {
 
     // 1. Generate link
     const redirectTo = resolveRedirectTo(action);
+    console.log("[admin-user-auth-support] generateLink redirect resolution", {
+      action,
+      redirectTo,
+      runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
+    });
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: emailMapping.linkType as any,
       email: targetUser.email ?? "",
@@ -282,6 +284,7 @@ serve(async (req) => {
         email_sent: true,
         resend_id: emailResult.resendId,
         redirect_to: redirectTo,
+        runtime_version: ADMIN_AUTH_SUPPORT_RUNTIME_VERSION,
       };
 
       // For magic link, also return link data for copy
