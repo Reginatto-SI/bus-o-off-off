@@ -2,6 +2,12 @@ import { formatDateOnlyBR, formatPurchaseDateTimeBR } from '@/lib/date';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { formatBoardingDateTime } from '@/lib/utils';
 import { formatCurrencyBRL } from '@/lib/currency';
+import {
+  getTicketTransportOperatedByText,
+  TICKET_PDF_FOOTER_TEXT,
+  TICKET_PLATFORM_LIABILITY_TEXT,
+  TICKET_PLATFORM_SALES_TEXT,
+} from '@/lib/intermediationPolicy';
 
 interface TicketVisualRenderOptions {
   width?: number;
@@ -96,7 +102,8 @@ export async function renderTicketVisual(
   const partnersBlockHeight = partnersCount > 0 ? 40 + partnersRows * 56 : 0;
   const sponsorsBlockHeight = sponsorsCount > 0 ? 40 + sponsorsRows * 56 : 0;
 
-  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + (benefitRows * 22) + (hasBenefitInfo ? 28 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight;
+  const institutionalFooterHeight = 118;
+  const height = 920 + (feeRows * 26) + (hasFees ? 40 : 0) + (benefitRows * 22) + (hasBenefitInfo ? 28 : 0) + vehicleInfoHeight + seatMetaHeight + partnersBlockHeight + sponsorsBlockHeight + institutionalFooterHeight;
   const padding = 24;
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -455,6 +462,28 @@ export async function renderTicketVisual(
       ctx.fillText(`Desconto: - ${formatCurrencyBRL(Number(ticket.benefitDiscountAmount ?? 0))}`, cardX + 34, y);
     }
   }
+
+  // Fonte de verdade visual compartilhada com o ticket virtual:
+  // benefício sempre é por CPF/ticket individual e o rodapé institucional
+  // deve aparecer sem bloquear geração de imagem/PDF.
+  y += 10;
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 30, y);
+  ctx.lineTo(cardX + cardW - 30, y);
+  ctx.stroke();
+  y += 20;
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '400 16px Inter, Arial, sans-serif';
+  ctx.fillText(getTicketTransportOperatedByText(ticket.companyName || 'empresa organizadora'), cardX + 34, y);
+  y += 22;
+  ctx.fillText(TICKET_PLATFORM_SALES_TEXT, cardX + 34, y);
+  y += 22;
+  ctx.fillText(TICKET_PLATFORM_LIABILITY_TEXT, cardX + 34, y);
+  y += 22;
+  ctx.fillText(TICKET_PDF_FOOTER_TEXT, cardX + 34, y);
 
   // Fee breakdown section
   if (ticket.fees && ticket.fees.length > 0) {
