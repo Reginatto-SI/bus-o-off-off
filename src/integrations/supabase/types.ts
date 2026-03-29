@@ -468,6 +468,7 @@ export type Database = {
           accent_color: string | null
           address: string | null
           address_number: string | null
+          allow_manual_boarding: boolean
           allow_manual_reservations: boolean
           asaas_account_email_production: string | null
           asaas_account_email_sandbox: string | null
@@ -530,6 +531,7 @@ export type Database = {
           accent_color?: string | null
           address?: string | null
           address_number?: string | null
+          allow_manual_boarding?: boolean
           allow_manual_reservations?: boolean
           asaas_account_email_production?: string | null
           asaas_account_email_sandbox?: string | null
@@ -592,6 +594,7 @@ export type Database = {
           accent_color?: string | null
           address?: string | null
           address_number?: string | null
+          allow_manual_boarding?: boolean
           allow_manual_reservations?: boolean
           asaas_account_email_production?: string | null
           asaas_account_email_sandbox?: string | null
@@ -2151,6 +2154,7 @@ export type Database = {
           sale_id: string | null
           ticket_id: string | null
           trip_id: string | null
+          validation_source: string
           validated_at: string
           validated_by_driver_id: string | null
           validated_by_user_id: string | null
@@ -2168,6 +2172,7 @@ export type Database = {
           sale_id?: string | null
           ticket_id?: string | null
           trip_id?: string | null
+          validation_source?: string
           validated_at?: string
           validated_by_driver_id?: string | null
           validated_by_user_id?: string | null
@@ -2185,6 +2190,7 @@ export type Database = {
           sale_id?: string | null
           ticket_id?: string | null
           trip_id?: string | null
+          validation_source?: string
           validated_at?: string
           validated_by_driver_id?: string | null
           validated_by_user_id?: string | null
@@ -2844,6 +2850,7 @@ export type Database = {
           p_app_version?: string
           p_device_info?: string
           p_qr_code_token: string
+          p_source?: string
         }
         Returns: {
           boarding_label: string

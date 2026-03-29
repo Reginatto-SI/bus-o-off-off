@@ -108,6 +108,8 @@ export interface Company {
   socio_split_percent: number;
   // Política de reservas administrativas por empresa (Fase 1)
   allow_manual_reservations: boolean;
+  // Embarque manual sem leitura de QR Code na lista de passageiros do motorista.
+  allow_manual_boarding: boolean;
   manual_reservation_ttl_minutes: number;
   // Vitrine pública (Fase 1)
   cover_image_url: string | null;
