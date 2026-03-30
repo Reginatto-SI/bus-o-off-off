@@ -6,10 +6,19 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+
+const HERO_BADGE_FALLBACKS = [
+  'Passagens para eventos',
+  'Embarque organizado',
+  'Compra segura',
+  'Atendimento rápido',
+] as const;
+const HERO_BADGE_MAX_CHARS = 60;
 
 interface EditHeroModalProps {
   open: boolean;
@@ -18,7 +27,13 @@ interface EditHeroModalProps {
   currentCoverUrl: string | null;
   useDefaultCover: boolean;
   currentBackgroundStyle: string;
-  onSave: (data: { cover_image_url: string | null; use_default_cover: boolean; background_style: string }) => void;
+  currentHeroBadgeLabels: string[] | null;
+  onSave: (data: {
+    cover_image_url: string | null;
+    use_default_cover: boolean;
+    background_style: string;
+    hero_badge_labels: string[] | null;
+  }) => void;
 }
 
 const STYLE_OPTIONS = [
@@ -33,11 +48,21 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const DEFAULT_SHOWCASE_COVER_URL = '/assets/vitrine/Img_padrao_vitrine.png';
 
 export function EditHeroModal({
-  open, onOpenChange, companyId, currentCoverUrl, useDefaultCover, currentBackgroundStyle, onSave,
+  open,
+  onOpenChange,
+  companyId,
+  currentCoverUrl,
+  useDefaultCover,
+  currentBackgroundStyle,
+  currentHeroBadgeLabels,
+  onSave,
 }: EditHeroModalProps) {
   const [coverUrl, setCoverUrl] = useState(currentCoverUrl ?? '');
   const [useDefault, setUseDefault] = useState(useDefaultCover);
   const [bgStyle, setBgStyle] = useState(currentBackgroundStyle);
+  const [heroBadgeLabels, setHeroBadgeLabels] = useState<string[]>(
+    HERO_BADGE_FALLBACKS.map((fallback, index) => currentHeroBadgeLabels?.[index]?.trim() || fallback),
+  );
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -47,6 +72,10 @@ export function EditHeroModal({
       setCoverUrl(currentCoverUrl ?? '');
       setUseDefault(useDefaultCover);
       setBgStyle(currentBackgroundStyle);
+      // Reaproveita o modal de aparência para manter o mesmo fluxo já existente de edição da vitrine.
+      setHeroBadgeLabels(
+        HERO_BADGE_FALLBACKS.map((fallback, index) => currentHeroBadgeLabels?.[index]?.trim() || fallback),
+      );
     }
     onOpenChange(isOpen);
   };
@@ -99,10 +128,16 @@ export function EditHeroModal({
 
   const handleSave = async () => {
     setSaving(true);
+    const sanitizedBadgeLabels = HERO_BADGE_FALLBACKS.map((fallback, index) => {
+      const value = heroBadgeLabels[index]?.trim();
+      return value || fallback;
+    });
     const payload = {
       cover_image_url: coverUrl.trim() || null,
       use_default_cover: useDefault,
       background_style: bgStyle,
+      // Persistência por empresa: o update mantém o isolamento multi-tenant já aplicado em companies.
+      hero_badge_labels: sanitizedBadgeLabels,
     };
 
     const { error } = await supabase
@@ -201,6 +236,28 @@ export function EditHeroModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Etiquetas do centro da hero: editáveis no mesmo fluxo visual de aparência já existente */}
+          <div className="space-y-2">
+            <Label>Etiquetas centrais da hero</Label>
+            <div className="space-y-2">
+              {HERO_BADGE_FALLBACKS.map((fallback, index) => (
+                <Input
+                  key={fallback}
+                  value={heroBadgeLabels[index] ?? ''}
+                  maxLength={HERO_BADGE_MAX_CHARS}
+                  placeholder={fallback}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setHeroBadgeLabels((prev) => prev.map((item, itemIndex) => (itemIndex === index ? value : item)));
+                  }}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Edite cada etiqueta individualmente. Se um campo ficar vazio, usamos o texto padrão sem quebrar o layout.
+            </p>
           </div>
         </div>
 
