@@ -21,6 +21,13 @@ import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShar
 import { filterEventsByTerm } from '@/lib/eventSearch';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
+const HERO_BADGE_FALLBACKS = [
+  'Passagens para eventos',
+  'Embarque organizado',
+  'Compra segura',
+  'Atendimento rápido',
+] as const;
+
 // Tipo mínimo para patrocinadores públicos (whitelist estrita de campos)
 interface PublicSponsor {
   id: string;
@@ -36,7 +43,7 @@ interface PublicSponsor {
 type PublicCompanyData = Pick<
   Company,
   'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'primary_color' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style' | 'whatsapp'
-  | 'social_instagram' | 'social_facebook' | 'social_tiktok' | 'social_youtube' | 'social_telegram' | 'social_twitter' | 'social_website'
+  | 'social_instagram' | 'social_facebook' | 'social_tiktok' | 'social_youtube' | 'social_telegram' | 'social_twitter' | 'social_website' | 'hero_badge_labels'
 >;
 
 export default function PublicCompanyShowcase() {
@@ -70,7 +77,7 @@ export default function PublicCompanyShowcase() {
       // Query estrita: somente campos necessários para a vitrine (sem select('*'))
       const { data: companyData } = await supabase
         .from('companies')
-        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style, whatsapp, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website')
+        .select('id, name, trade_name, logo_url, public_slug, primary_color, cover_image_url, use_default_cover, intro_text, background_style, whatsapp, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website, hero_badge_labels')
         .eq('public_slug', normalizedNick)
         .maybeSingle();
 
@@ -199,13 +206,33 @@ export default function PublicCompanyShowcase() {
     return null;
   };
 
+  // Comentário de manutenção: centraliza ícones para evitar hardcode repetido no render da hero.
+  const heroBadgeIcons = [Ticket, MapPin, ShieldCheck, MessageCircle] as const;
+  const heroBadges = HERO_BADGE_FALLBACKS
+    .map((fallback, index) => {
+      const label = company?.hero_badge_labels?.[index]?.trim();
+      // Mantém comportamento atual: 4ª etiqueta só aparece quando há WhatsApp configurado.
+      if (index === 3 && !companyWhatsappLink) return null;
+      return {
+        icon: heroBadgeIcons[index],
+        label: label || fallback,
+      };
+    })
+    .filter((item): item is { icon: typeof Ticket; label: string } => item !== null);
+
   // Callbacks dos modais — atualizam state local sem refetch
-  const handleHeroSave = (data: { cover_image_url: string | null; use_default_cover: boolean; background_style: string }) => {
+  const handleHeroSave = (data: {
+    cover_image_url: string | null;
+    use_default_cover: boolean;
+    background_style: string;
+    hero_badge_labels: string[] | null;
+  }) => {
     setCompany((prev) => prev ? {
       ...prev,
       cover_image_url: data.cover_image_url,
       use_default_cover: data.use_default_cover,
       background_style: data.background_style as PublicCompanyData['background_style'],
+      hero_badge_labels: data.hero_badge_labels,
     } : prev);
   };
 
@@ -404,14 +431,11 @@ export default function PublicCompanyShowcase() {
                 {/* Comentário de suporte: selos curtos reforçam confiança comercial sem inventar métricas ou alterar fluxo. */}
                 {!loading && (
                   <div className="flex flex-wrap items-center justify-center gap-2">
-                    {[
-                      { icon: Ticket, label: 'Passagens para eventos' },
-                      { icon: MapPin, label: 'Embarque organizado' },
-                      { icon: ShieldCheck, label: 'Compra segura' },
-                      ...(companyWhatsappLink ? [{ icon: MessageCircle, label: 'Atendimento rápido' }] : []),
-                    ].map(({ icon: Icon, label }) => (
+                    {/* Fallback seguro por etiqueta: mantém UI estável mesmo com campos vazios no banco. */}
+                    {heroBadges.map(({ icon: Icon, label }, index) => (
                       <span
-                        key={label}
+                        // Chave estável por posição: evita colisão quando duas etiquetas tiverem o mesmo texto.
+                        key={`hero-badge-${index}`}
                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
                           hasCover
                             ? 'border-white/20 bg-white/10 text-white backdrop-blur-sm'
@@ -805,6 +829,7 @@ export default function PublicCompanyShowcase() {
             currentCoverUrl={company.cover_image_url}
             useDefaultCover={company.use_default_cover}
             currentBackgroundStyle={company.background_style}
+            currentHeroBadgeLabels={company.hero_badge_labels}
             onSave={handleHeroSave}
           />
           <EditIntroModal

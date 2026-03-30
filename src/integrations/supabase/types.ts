@@ -494,6 +494,7 @@ export type Database = {
           document: string | null
           document_number: string | null
           email: string | null
+          hero_badge_labels: string[] | null
           id: string
           intro_text: string | null
           is_active: boolean
@@ -557,6 +558,7 @@ export type Database = {
           document?: string | null
           document_number?: string | null
           email?: string | null
+          hero_badge_labels?: string[] | null
           id?: string
           intro_text?: string | null
           is_active?: boolean
@@ -620,6 +622,7 @@ export type Database = {
           document?: string | null
           document_number?: string | null
           email?: string | null
+          hero_badge_labels?: string[] | null
           id?: string
           intro_text?: string | null
           is_active?: boolean
