@@ -77,7 +77,10 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
                 {event.name}
               </h3>
               {/* Mobile recebe cidade dentro do bloco principal para manter contexto sem comprimir o rodapé. */}
-              <p className="text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">{event.city}</p>
+              <p className="flex items-center gap-1 text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">
+                <MapPin className="h-3 w-3 flex-shrink-0" />
+                {event.city}
+              </p>
               {/* Comentário de manutenção: a descrição curta é ocultada no mobile para preservar hierarquia visual do destaque. */}
               <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
