@@ -1572,9 +1572,17 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-      <section className="bg-muted/40 py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+      {/*
+        ⚠️ Seção de indicação (SmartGain) desativada temporariamente.
+        Motivo: estratégia de produto / landing simplificada.
+
+        NÃO remover este código.
+        Pode ser reativado futuramente apenas restaurando a renderização.
+      */}
+      {false && (
+        <section className="bg-muted/40 py-16 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Gift className="h-3.5 w-3.5" />
@@ -1636,8 +1644,9 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
       <section className="relative overflow-hidden py-16 sm:py-20">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
         <div className="absolute right-0 top-0 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
