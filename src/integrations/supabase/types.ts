@@ -2154,10 +2154,10 @@ export type Database = {
           sale_id: string | null
           ticket_id: string | null
           trip_id: string | null
-          validation_source: string
           validated_at: string
           validated_by_driver_id: string | null
           validated_by_user_id: string | null
+          validation_source: string
         }
         Insert: {
           action: string
@@ -2172,10 +2172,10 @@ export type Database = {
           sale_id?: string | null
           ticket_id?: string | null
           trip_id?: string | null
-          validation_source?: string
           validated_at?: string
           validated_by_driver_id?: string | null
           validated_by_user_id?: string | null
+          validation_source?: string
         }
         Update: {
           action?: string
@@ -2190,10 +2190,10 @@ export type Database = {
           sale_id?: string | null
           ticket_id?: string | null
           trip_id?: string | null
-          validation_source?: string
           validated_at?: string
           validated_by_driver_id?: string | null
           validated_by_user_id?: string | null
+          validation_source?: string
         }
         Relationships: [
           {
@@ -2636,6 +2636,39 @@ export type Database = {
         Args: { p_company_id: string; p_window_hours?: number }
         Returns: number
       }
+      get_benefit_eligibility_matches: {
+        Args: {
+          p_company_id: string
+          p_cpf: string
+          p_event_id: string
+          p_reference_date?: string
+        }
+        Returns: {
+          applies_to_all_events: boolean
+          benefit_type: string
+          benefit_value: number
+          cpf: string
+          cpf_created_at: string
+          cpf_full_name: string
+          cpf_notes: string
+          cpf_record_company_id: string
+          cpf_record_id: string
+          cpf_record_program_id: string
+          cpf_status: string
+          cpf_updated_at: string
+          cpf_valid_from: string
+          cpf_valid_until: string
+          program_company_id: string
+          program_created_at: string
+          program_description: string
+          program_id: string
+          program_name: string
+          program_status: string
+          program_updated_at: string
+          program_valid_from: string
+          program_valid_until: string
+        }[]
+      }
       get_boarding_manifest_rows: {
         Args: { p_company_id: string; p_event_id: string; p_trip_id?: string }
         Returns: {
@@ -2656,39 +2689,6 @@ export type Database = {
           trip_id: string
           vehicle_plate: string
           vehicle_type: string
-        }[]
-      }
-      get_benefit_eligibility_matches: {
-        Args: {
-          p_company_id: string
-          p_cpf: string
-          p_event_id: string
-          p_reference_date?: string
-        }
-        Returns: {
-          applies_to_all_events: boolean
-          benefit_type: string
-          benefit_value: number
-          cpf: string
-          cpf_created_at: string
-          cpf_full_name: string | null
-          cpf_notes: string | null
-          cpf_record_company_id: string
-          cpf_record_id: string
-          cpf_record_program_id: string
-          cpf_status: string
-          cpf_updated_at: string
-          cpf_valid_from: string | null
-          cpf_valid_until: string | null
-          program_company_id: string
-          program_created_at: string
-          program_description: string | null
-          program_id: string
-          program_name: string
-          program_status: string
-          program_updated_at: string
-          program_valid_from: string | null
-          program_valid_until: string | null
         }[]
       }
       get_sales_report_kpis: {
@@ -2844,26 +2844,46 @@ export type Database = {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean
       }
-      validate_ticket_scan: {
-        Args: {
-          p_action: string
-          p_app_version?: string
-          p_device_info?: string
-          p_qr_code_token: string
-          p_source?: string
-        }
-        Returns: {
-          boarding_label: string
-          boarding_status: string
-          checkout_enabled: boolean
-          event_name: string
-          passenger_cpf_masked: string
-          passenger_name: string
-          reason_code: string
-          result: string
-          seat_label: string
-        }[]
-      }
+      validate_ticket_scan:
+        | {
+            Args: {
+              p_action: string
+              p_app_version?: string
+              p_device_info?: string
+              p_qr_code_token: string
+            }
+            Returns: {
+              boarding_label: string
+              boarding_status: string
+              checkout_enabled: boolean
+              event_name: string
+              passenger_cpf_masked: string
+              passenger_name: string
+              reason_code: string
+              result: string
+              seat_label: string
+            }[]
+          }
+        | {
+            Args: {
+              p_action: string
+              p_app_version?: string
+              p_device_info?: string
+              p_qr_code_token: string
+              p_source?: string
+            }
+            Returns: {
+              boarding_label: string
+              boarding_status: string
+              checkout_enabled: boolean
+              event_name: string
+              passenger_cpf_masked: string
+              passenger_name: string
+              reason_code: string
+              result: string
+              seat_label: string
+            }[]
+          }
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"
