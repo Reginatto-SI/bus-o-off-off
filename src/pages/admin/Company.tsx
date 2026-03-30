@@ -2082,7 +2082,7 @@ export default function CompanyPage() {
                               </div>
                             </div>
                             <p className="text-sm text-green-700">
-                              Sua conta está conectada e pronta para receber pagamentos via Pix e Cartão.
+                              Sua conta está conectada para recebimentos online. O Pix só é liberado quando houver chave ativa validada no ambiente operacional.
                               {/* Comentário de regra de negócio: o desconto total exibido ao usuário
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
                               A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3) + (company?.socio_split_percent ?? 3)).toFixed(1)}%</strong> de comissão sobre cada venda online.
