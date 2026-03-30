@@ -37,8 +37,8 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   return (
     <div className="group relative overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_16px_40px_-24px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_55px_-24px_rgba(15,23,42,0.6)]">
       <Link to={linkTo} className="block">
-        {/* Mobile com proporção um pouco mais alta para dar respiro ao conteúdo principal do destaque. */}
-        <div className="relative aspect-[3/4] sm:aspect-video">
+        {/* Mobile usa banner mais alto para evitar que o destaque pareça "espremido" quando o título for maior. */}
+        <div className="relative aspect-[4/5] sm:aspect-video">
           <img
             src={imageUrl}
             alt={event.name}
@@ -46,6 +46,17 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           />
           {/* Overlay escuro mantido para preservar legibilidade dos textos sobre o banner. */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
+
+          {/* Mobile: categoria e data ficam sobre o banner sem sobrecarregar o bloco de conteúdo textual. */}
+          <div className="absolute inset-x-0 bottom-0 z-30 flex items-end justify-between gap-2 p-4 sm:hidden">
+            <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
+              {categoryLabel}
+            </div>
+            <DateBadge
+              date={event.date}
+              className="w-fit flex-shrink-0 bg-card/95 backdrop-blur-sm"
+            />
+          </div>
         </div>
 
         {/* Badge Esgotado */}
@@ -58,35 +69,25 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
           </Badge>
         )}
 
-        {/* Conteúdo do banner com pilha vertical no mobile para evitar disputa entre data, título e preço. */}
-        {/* Ajuste fino de UX: mais respiro vertical no mobile sem alterar a estrutura do destaque. */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-4 p-4 pb-5 sm:space-y-3 sm:p-4 sm:pr-40">
+        {/* Desktop mantém conteúdo sobre o banner para preservar padrão visual já consolidado. */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 hidden space-y-3 p-4 sm:block sm:pr-40">
           <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             {categoryLabel}
           </div>
 
-          {/* Separação explícita entre badge e conteúdo principal para reduzir sensação de bloco comprimido. */}
-          <div className="mt-1 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-start sm:gap-3">
+          <div className="flex items-start gap-3">
             <DateBadge
               date={event.date}
               className="w-fit flex-shrink-0 bg-card/95 backdrop-blur-sm"
             />
             <div className="min-w-0 flex-1 space-y-1">
-              {/* Clamp e quebra controlada seguram títulos extensos sem sobrepor data/preço no mobile. */}
               <h3 className="text-lg font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
                 {event.name}
               </h3>
-              {/* Mobile recebe cidade dentro do bloco principal para manter contexto sem comprimir o rodapé. */}
-              <p className="flex items-center gap-1 text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">
-                <MapPin className="h-3 w-3 flex-shrink-0" />
-                {event.city}
-              </p>
-              {/* Comentário de manutenção: a descrição curta é ocultada no mobile para preservar hierarquia visual do destaque. */}
               <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
               </p>
-              {/* Preço com tamanho controlado no mobile para reduzir colisão visual em telas estreitas. */}
-              <p className="text-lg font-extrabold leading-tight tracking-tight text-primary sm:text-2xl">
+              <p className="text-2xl font-extrabold leading-tight tracking-tight text-primary">
                 {formatCurrencyBRL(event.unit_price)}
               </p>
             </div>
@@ -137,8 +138,14 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         </div>
       </Link>
 
-      {/* No mobile o bloco de ação sai do banner para reduzir competição visual e aumentar respiro. */}
-      <div className="space-y-2 p-4 pt-3 sm:hidden">
+      {/* Mobile vira teaser + ação: só título, preço e CTA para reduzir densidade visual. */}
+      <div className="space-y-3 p-4 sm:hidden">
+        <h3 className="text-xl font-extrabold leading-tight text-foreground line-clamp-2 break-words">
+          {event.name}
+        </h3>
+        <p className="text-2xl font-extrabold leading-tight tracking-tight text-primary">
+          {formatCurrencyBRL(event.unit_price)}
+        </p>
         <Button
           size="lg"
           className={cn('h-12 w-full px-4 text-base font-semibold shadow-lg')}
@@ -151,18 +158,6 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             <Link to={linkTo}>Comprar passagem</Link>
           )}
         </Button>
-
-        {whatsappHelpLink && (
-          <a
-            href={whatsappHelpLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            Ajuda no WhatsApp
-          </a>
-        )}
       </div>
 
       {/* Desktop mantém CTA sobre o banner para preservar destaque comercial já conhecido. */}
