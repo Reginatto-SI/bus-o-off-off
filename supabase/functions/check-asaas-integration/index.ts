@@ -5,8 +5,6 @@ import {
   type PaymentEnvironment,
   resolveEnvironmentFromHost,
 } from "../_shared/runtime-env.ts";
-import { logSaleIntegrationEvent } from "../_shared/payment-observability.ts";
-import { ensurePixReadiness } from "../_shared/asaas-pix-readiness.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,10 +42,29 @@ type CheckResponse = {
     account_id_matches: boolean;
     wallet_id_matches: boolean;
     onboarding_complete: boolean;
+    local_pix_ready: boolean;
+    gateway_pix_ready: boolean;
+    pix_readiness_divergent: boolean;
     pix_ready: boolean;
     pix_readiness_action?: string;
     pix_last_checked_at?: string;
     pix_last_error?: string | null;
+    pix_total_keys?: number;
+    pix_active_keys?: number;
+    pix_key_statuses?: string[];
+    pix_key_types?: string[];
+    account_status?: string | null;
+    account_substatus?: {
+      commercial: string | null;
+      bank: string | null;
+      documentation: string | null;
+      general: string | null;
+    } | null;
+    local_metadata_warning?: string | null;
+    api_key_fingerprint?: string | null;
+    checked_at?: string;
+    gateway_wallet_id?: string | null;
+    gateway_account_id?: string | null;
     asaas_http_status?: number;
     error_type?: string;
   };
@@ -63,6 +80,44 @@ function jsonResponse(body: CheckResponse, status = 200) {
 
 function normalizeCompanyField(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeAsaasList(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
+  if (payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).data)) {
+    return (payload as Record<string, unknown>).data as Record<string, unknown>[];
+  }
+  return [];
+}
+
+function normalizeUpperText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+async function buildApiKeyFingerprint(apiKey: string | null): Promise<string | null> {
+  if (!apiKey) return null;
+  const prefix = apiKey.slice(0, 4);
+  const encoded = new TextEncoder().encode(apiKey);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  const bytes = Array.from(new Uint8Array(digest)).slice(0, 4);
+  const shortHash = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${prefix}...#${shortHash}`;
+}
+
+function resolveAccountSubstatus(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return { commercial: null, bank: null, documentation: null, general: null };
+  }
+
+  const source = payload as Record<string, unknown>;
+  return {
+    commercial: normalizeUpperText(source.commercial) ?? normalizeUpperText(source.commercialStatus),
+    bank: normalizeUpperText(source.bank) ?? normalizeUpperText(source.bankAccount),
+    documentation: normalizeUpperText(source.documentation) ?? normalizeUpperText(source.documentationStatus),
+    general: normalizeUpperText(source.general) ?? normalizeUpperText(source.status),
+  };
 }
 
 function getEnvironmentCompanyFields(environment: PaymentEnvironment) {
@@ -111,6 +166,9 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
     account_id_matches: false,
     wallet_id_matches: false,
     onboarding_complete: companyConfig[envFields.onboardingComplete] === true,
+    local_pix_ready: companyConfig[envFields.pixReady] === true,
+    gateway_pix_ready: false,
+    pix_readiness_divergent: false,
     pix_ready: companyConfig[envFields.pixReady] === true,
     pix_readiness_action: "not_checked",
     pix_last_checked_at: typeof companyConfig[envFields.pixLastCheckedAt] === "string"
@@ -119,70 +177,12 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
     pix_last_error: typeof companyConfig[envFields.pixLastError] === "string"
       ? String(companyConfig[envFields.pixLastError])
       : null,
+    local_metadata_warning: null,
   };
 }
 
 function logCheck(level: "log" | "warn" | "error", message: string, payload: Record<string, unknown>) {
   console[level](message, payload);
-}
-
-async function persistPixReadinessStatus(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
-  companyId: string;
-  paymentEnv: PaymentEnvironment;
-  envFields: ReturnType<typeof getEnvironmentCompanyFields>;
-  readiness: Awaited<ReturnType<typeof ensurePixReadiness>>;
-}) {
-  const checkedAt = new Date().toISOString();
-
-  await params.supabaseAdmin
-    .from("companies")
-    .update({
-      [params.envFields.pixReady]: params.readiness.ready,
-      [params.envFields.pixLastCheckedAt]: checkedAt,
-      [params.envFields.pixLastError]: params.readiness.ready
-        ? null
-        : `${params.readiness.errorCode ?? "pix_not_ready"}:${params.readiness.errorMessage ?? "unknown"}`,
-    })
-    .eq("id", params.companyId);
-
-  await logSaleIntegrationEvent({
-    supabaseAdmin: params.supabaseAdmin,
-    saleId: null,
-    companyId: params.companyId,
-    paymentEnvironment: params.paymentEnv,
-    environmentDecisionSource: "check-asaas-integration",
-    environmentHostDetected: null,
-    provider: "asaas",
-    direction: "outgoing_request",
-    eventType: "company_pix_readiness",
-    processingStatus: params.readiness.ready
-      ? "success"
-      : params.readiness.action === "evp_creation_failed" || params.readiness.action === "query_failed"
-        ? "failed"
-        : "warning",
-    resultCategory: params.readiness.ready ? "success" : "error",
-    incidentCode: params.readiness.ready ? null : params.readiness.errorCode ?? "pix_readiness_failed",
-    warningCode: null,
-    message: params.readiness.ready
-      ? `Readiness Pix validado via check-asaas-integration (action=${params.readiness.action})`
-      : `Readiness Pix não validado via check-asaas-integration (action=${params.readiness.action})`,
-    payloadJson: {
-      action: params.readiness.action,
-      queried: params.readiness.queried,
-      auto_create_attempted: params.readiness.autoCreateAttempted,
-      active_key_count: params.readiness.activeKeyCount,
-      keys_sample: params.readiness.keysSample,
-    },
-    responseJson: {
-      ready: params.readiness.ready,
-      error_code: params.readiness.errorCode ?? null,
-      error_message: params.readiness.errorMessage ?? null,
-      http_status_list: params.readiness.httpStatusList ?? null,
-      http_status_create: params.readiness.httpStatusCreate ?? null,
-      checked_at: checkedAt,
-    },
-  });
 }
 
 serve(async (req) => {
@@ -495,6 +495,8 @@ serve(async (req) => {
         return jsonResponse(gatewayFailureResponse, 200);
       }
 
+      const checkedAt = new Date().toISOString();
+      const apiKeyFingerprint = await buildApiKeyFingerprint(apiKey);
       const accountData = await asaasResponse.json();
       const remoteAccountId = normalizeCompanyField(accountData?.id ?? null);
       const remoteWalletId = normalizeCompanyField(accountData?.walletId ?? accountData?.wallet?.id ?? null);
@@ -503,6 +505,18 @@ serve(async (req) => {
       const asaasAccountFound = Boolean(remoteAccountId);
       const walletFound = Boolean(remoteWalletId);
       const onboardingComplete = details.onboarding_complete;
+      let confirmedWalletId = remoteWalletId;
+      let accountStatus: string | null = null;
+      let accountSubstatus: {
+        commercial: string | null;
+        bank: string | null;
+        documentation: string | null;
+        general: string | null;
+      } | null = null;
+      let pixTotalKeys = 0;
+      let pixActiveKeys = 0;
+      const pixStatuses = new Set<string>();
+      const pixTypes = new Set<string>();
 
       /**
        * Comentário de manutenção:
@@ -516,6 +530,9 @@ serve(async (req) => {
       // `account_id` local é metadado de auditoria; a operação real usa API key + wallet.
       // Portanto, ausência de account_id não deve gerar falso negativo para o usuário.
       const accountIdCheckBypassed = !storedAccountId;
+      const localMetadataWarning = accountIdCheckBypassed
+        ? "Pendência cadastral local: account_id do ambiente não está salvo na empresa."
+        : null;
       if (accountIdCheckBypassed) {
         logCheck("log", "[check-asaas-integration] local account_id missing; proceeding with non-blocking validation", {
           company_id: companyId,
@@ -628,20 +645,94 @@ serve(async (req) => {
         return jsonResponse(walletMismatchResponse, 200);
       }
 
-      const pixReadiness = await ensurePixReadiness({
-        asaasBaseUrl,
-        accessToken: apiKey!,
-        environment: paymentEnv,
-        allowAutoCreateEvp: true,
+      /**
+       * Comentário de diagnóstico:
+       * as chamadas abaixo são estritamente de leitura para auditoria operacional do Pix.
+       * Não criamos chave, não alteramos conta e não executamos endpoints de escrita.
+       */
+      const [statusRes, walletsRes, pixActiveRes, pixAllRes] = await Promise.all([
+        fetch(`${asaasBaseUrl}/myAccount/status/`, { headers: { access_token: apiKey! } }),
+        fetch(`${asaasBaseUrl}/wallets/`, { headers: { access_token: apiKey! } }),
+        fetch(`${asaasBaseUrl}/pix/addressKeys?status=ACTIVE`, { headers: { access_token: apiKey! } }),
+        fetch(`${asaasBaseUrl}/pix/addressKeys`, { headers: { access_token: apiKey! } }),
+      ]);
+
+      if (!statusRes.ok || !walletsRes.ok || !pixActiveRes.ok || !pixAllRes.ok) {
+        const gatewayFailureResponse: CheckResponse = {
+          status: "error",
+          integration_status: "communication_error",
+          environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          details: {
+            ...details,
+            asaas_request_attempted: true,
+            api_key_fingerprint: apiKeyFingerprint,
+            checked_at: checkedAt,
+            gateway_account_id: remoteAccountId,
+            gateway_wallet_id: remoteWalletId,
+            error_type: "asaas_diagnostic_query_failed",
+            pix_readiness_action: "query_failed",
+            pix_last_checked_at: checkedAt,
+            pix_last_error: "Falha ao consultar diagnóstico operacional do Pix no Asaas.",
+            local_metadata_warning: localMetadataWarning,
+          },
+          message: "Pix indisponível: erro ao consultar Asaas.",
+        };
+
+        logCheck("warn", "[check-asaas-integration] read-only diagnostic query failed", {
+          company_id: companyId,
+          environment: paymentEnv,
+          status_http: statusRes.status,
+          wallets_http: walletsRes.status,
+          pix_active_http: pixActiveRes.status,
+          pix_all_http: pixAllRes.status,
+        });
+
+        return jsonResponse(gatewayFailureResponse, 200);
+      }
+
+      const statusData = await statusRes.json();
+      const statusRecord = statusData && typeof statusData === "object"
+        ? (statusData as Record<string, unknown>)
+        : null;
+      accountStatus = normalizeUpperText(statusRecord?.status) ?? normalizeUpperText(statusRecord?.generalStatus);
+      accountSubstatus = resolveAccountSubstatus(statusRecord);
+
+      const walletsData = await walletsRes.json();
+      const walletsList = normalizeAsaasList(walletsData);
+      const walletCandidates = walletsList
+        .map((item) => normalizeCompanyField(item.id ?? item.walletId ?? null))
+        .filter((value): value is string => Boolean(value));
+      const matchedWallet = walletCandidates.find((walletId) => walletId === storedWalletId);
+      confirmedWalletId = matchedWallet ?? walletCandidates[0] ?? confirmedWalletId;
+
+      const pixActiveData = await pixActiveRes.json();
+      pixActiveKeys = normalizeAsaasList(pixActiveData).length;
+
+      const pixAllData = await pixAllRes.json();
+      const allPixKeys = normalizeAsaasList(pixAllData);
+      pixTotalKeys = allPixKeys.length;
+      allPixKeys.forEach((item) => {
+        const status = normalizeUpperText(item.status);
+        const type = normalizeUpperText(item.type);
+        if (status) pixStatuses.add(status);
+        if (type) pixTypes.add(type);
       });
 
-      await persistPixReadinessStatus({
-        supabaseAdmin,
-        companyId,
-        paymentEnv,
-        envFields,
-        readiness: pixReadiness,
-      });
+      const gatewayPixReady = pixActiveKeys > 0;
+      const pixReadinessDivergent = gatewayPixReady !== details.local_pix_ready;
+      const pixFinalError = gatewayPixReady
+        ? null
+        : "Conta Asaas sem chave Pix ACTIVE no ambiente consultado.";
+      const accountApproved = onboardingComplete && accountStatus !== "PENDING" && accountStatus !== "REJECTED";
+      const pixReadyForOperations = gatewayPixReady && accountApproved;
+      const pixConclusion = !accountApproved
+        ? "Pix indisponível: conta não aprovada."
+        : !gatewayPixReady
+          ? "Pix indisponível: sem chave ACTIVE."
+          : pixReadinessDivergent
+            ? "Pix indisponível: divergência entre estado local e gateway."
+            : "Pix operacional neste ambiente.";
 
       if (!onboardingComplete) {
         const pendingResponse: CheckResponse = {
@@ -656,15 +747,27 @@ serve(async (req) => {
             wallet_found: walletFound,
             account_id_matches: accountIdMatches,
             wallet_id_matches: walletIdMatches,
-            pix_ready: pixReadiness.ready,
-            pix_readiness_action: pixReadiness.action,
-            pix_last_checked_at: new Date().toISOString(),
-            pix_last_error: pixReadiness.errorMessage ?? null,
+            local_pix_ready: details.local_pix_ready,
+            gateway_pix_ready: gatewayPixReady,
+            pix_readiness_divergent: pixReadinessDivergent,
+            pix_ready: pixReadyForOperations,
+            pix_readiness_action: "already_ready",
+            pix_last_checked_at: checkedAt,
+            pix_last_error: pixFinalError,
+            pix_total_keys: pixTotalKeys,
+            pix_active_keys: pixActiveKeys,
+            pix_key_statuses: Array.from(pixStatuses),
+            pix_key_types: Array.from(pixTypes),
+            account_status: accountStatus,
+            account_substatus: accountSubstatus,
+            api_key_fingerprint: apiKeyFingerprint,
+            checked_at: checkedAt,
+            gateway_wallet_id: confirmedWalletId,
+            gateway_account_id: remoteAccountId,
+            local_metadata_warning: localMetadataWarning,
             error_type: "onboarding_pending",
           },
-          message: pixReadiness.ready
-            ? "Conta Asaas encontrada e credenciais válidas, mas o onboarding ainda está pendente no cadastro da empresa."
-            : "Conta Asaas encontrada, porém o Pix ainda não está pronto para recebimento. Finalize o onboarding e valide a chave Pix da conta.",
+          message: "Pix indisponível: conta não aprovada.",
         };
 
         logCheck("warn", "[check-asaas-integration] onboarding pending after Asaas validation", {
@@ -680,8 +783,8 @@ serve(async (req) => {
       }
 
       const successResponse: CheckResponse = {
-        status: "ok",
-        integration_status: "valid",
+        status: pixReadyForOperations ? "ok" : "error",
+        integration_status: pixReadyForOperations ? "valid" : "pending",
         environment: paymentEnv,
         diagnostic_stage: "asaas_request",
         details: {
@@ -691,14 +794,26 @@ serve(async (req) => {
           wallet_found: walletFound,
           account_id_matches: accountIdMatches,
           wallet_id_matches: walletIdMatches,
-          pix_ready: pixReadiness.ready,
-          pix_readiness_action: pixReadiness.action,
-          pix_last_checked_at: new Date().toISOString(),
-          pix_last_error: pixReadiness.errorMessage ?? null,
+          local_pix_ready: details.local_pix_ready,
+          gateway_pix_ready: gatewayPixReady,
+          pix_readiness_divergent: pixReadinessDivergent,
+          pix_ready: pixReadyForOperations,
+          pix_readiness_action: "already_ready",
+          pix_last_checked_at: checkedAt,
+          pix_last_error: pixFinalError,
+          pix_total_keys: pixTotalKeys,
+          pix_active_keys: pixActiveKeys,
+          pix_key_statuses: Array.from(pixStatuses),
+          pix_key_types: Array.from(pixTypes),
+          account_status: accountStatus,
+          account_substatus: accountSubstatus,
+          api_key_fingerprint: apiKeyFingerprint,
+          checked_at: checkedAt,
+          gateway_wallet_id: confirmedWalletId,
+          gateway_account_id: remoteAccountId,
+          local_metadata_warning: localMetadataWarning,
         },
-        message: pixReadiness.ready
-          ? "Integração Asaas validada com sucesso."
-          : "Integração Asaas válida, mas o Pix ainda não está pronto. A plataforma tentou criar uma chave EVP automaticamente e registrou o resultado.",
+        message: pixConclusion,
       };
 
       logCheck("log", "[check-asaas-integration] Asaas integration validated successfully", {
