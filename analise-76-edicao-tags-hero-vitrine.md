@@ -42,3 +42,8 @@
    - **Empresa com WhatsApp:** 4ª etiqueta aparece normalmente.
    - **Campos vazios:** fallback por posição mantém texto padrão sem quebra visual.
    - **Textos iguais entre etiquetas:** não há conflito de render por key (agora baseada em índice).
+
+4. **Melhoria visual adicional no modal (UX)**
+   - Na seção "Etiquetas centrais da hero", cada input passou a exibir ícone fixo à esquerda, reaproveitando o mesmo mapeamento por posição da hero pública:
+     1) Ticket, 2) MapPin, 3) ShieldCheck, 4) MessageCircle.
+   - A lógica de edição/persistência permaneceu inalterada (ajuste exclusivamente visual).

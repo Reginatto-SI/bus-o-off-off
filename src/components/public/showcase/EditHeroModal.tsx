@@ -10,7 +10,16 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin, MessageCircle, ShieldCheck, Ticket } from 'lucide-react';
+
+const HERO_BADGE_FALLBACKS = [
+  'Passagens para eventos',
+  'Embarque organizado',
+  'Compra segura',
+  'Atendimento rápido',
+] as const;
+const HERO_BADGE_ICONS = [Ticket, MapPin, ShieldCheck, MessageCircle] as const;
+const HERO_BADGE_MAX_CHARS = 60;
 
 const HERO_BADGE_FALLBACKS = [
   'Passagens para eventos',
@@ -242,18 +251,24 @@ export function EditHeroModal({
           <div className="space-y-2">
             <Label>Etiquetas centrais da hero</Label>
             <div className="space-y-2">
-              {HERO_BADGE_FALLBACKS.map((fallback, index) => (
-                <Input
-                  key={fallback}
-                  value={heroBadgeLabels[index] ?? ''}
-                  maxLength={HERO_BADGE_MAX_CHARS}
-                  placeholder={fallback}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setHeroBadgeLabels((prev) => prev.map((item, itemIndex) => (itemIndex === index ? value : item)));
-                  }}
-                />
-              ))}
+              {HERO_BADGE_FALLBACKS.map((fallback, index) => {
+                const Icon = HERO_BADGE_ICONS[index];
+                return (
+                  <div key={`hero-badge-input-${index}`} className="flex items-center gap-2">
+                    {/* Ícones fixos por posição para espelhar exatamente o mapeamento visual já usado na hero pública. */}
+                    <Icon className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                    <Input
+                      value={heroBadgeLabels[index] ?? ''}
+                      maxLength={HERO_BADGE_MAX_CHARS}
+                      placeholder={fallback}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setHeroBadgeLabels((prev) => prev.map((item, itemIndex) => (itemIndex === index ? value : item)));
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
             <p className="text-xs text-muted-foreground">
               Edite cada etiqueta individualmente. Se um campo ficar vazio, usamos o texto padrão sem quebrar o layout.
