@@ -116,6 +116,7 @@ export interface Company {
   use_default_cover: boolean;
   intro_text: string | null;
   background_style: 'solid' | 'subtle_gradient' | 'cover_overlay';
+  hero_badge_labels: string[] | null;
   // Redes sociais
   social_instagram: string | null;
   social_facebook: string | null;
