@@ -29,10 +29,17 @@ function normalizeAsaasList(payload: unknown): JsonRecord[] {
   return [];
 }
 
-function isPixKeyOperational(status: unknown) {
-  if (typeof status !== "string") return true;
+function normalizePixKeyStatus(status: unknown): string | null {
+  if (typeof status !== "string") return null;
   const normalized = status.trim().toUpperCase();
-  return !["DELETED", "REMOVED", "INACTIVE", "DISABLED"].includes(normalized);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function isPixKeyOperational(status: unknown) {
+  // Correção pontual (somente Pix): consideramos apta para cobrança apenas chave ACTIVE.
+  // Status ausente/desconhecido agora não gera falso positivo de readiness.
+  const normalized = normalizePixKeyStatus(status);
+  return normalized === "ACTIVE";
 }
 
 function pickError(payload: unknown): { code: string | null; message: string | null } {
@@ -92,12 +99,30 @@ export async function ensurePixReadiness(params: {
   }
 
   const keys = normalizeAsaasList(listData);
-  const activeKeys = keys.filter((item) => isPixKeyOperational(item?.status));
+  const unexpectedStatuses = new Set<string>();
+  const activeKeys = keys.filter((item) => {
+    const normalizedStatus = normalizePixKeyStatus(item?.status);
+    if (normalizedStatus && normalizedStatus !== "ACTIVE") {
+      unexpectedStatuses.add(normalizedStatus);
+    }
+    if (!normalizedStatus) {
+      unexpectedStatuses.add("MISSING_STATUS");
+    }
+    return isPixKeyOperational(item?.status);
+  });
   const keysSample = keys.slice(0, 5).map((item) => ({
     id: typeof item?.id === "string" ? item.id : null,
     status: typeof item?.status === "string" ? item.status : null,
     type: typeof item?.type === "string" ? item.type : null,
   }));
+
+  if (unexpectedStatuses.size > 0) {
+    console.warn("[asaas-pix-readiness] non-operational pix key statuses detected", {
+      environment: params.environment,
+      statuses: Array.from(unexpectedStatuses),
+      total_keys: keys.length,
+    });
+  }
 
   if (activeKeys.length > 0) {
     return {

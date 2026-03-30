@@ -966,6 +966,32 @@ serve(async (req) => {
     }
 
     if (!paymentRes.ok) {
+      const gatewayErrorCode = String(paymentData?.errors?.[0]?.code ?? "");
+      const gatewayErrorDescription = String(
+        paymentData?.errors?.[0]?.description ?? "unknown_error",
+      );
+      const pixKeyUnavailableOnGateway =
+        billingType === "PIX" &&
+        (
+          gatewayErrorCode === "invalid_billingType" ||
+          gatewayErrorDescription
+            .toLowerCase()
+            .includes("não há nenhuma chave pix disponível para receber cobranças")
+        );
+
+      if (pixKeyUnavailableOnGateway) {
+        // Observabilidade isolada ao Pix: logamos divergência entre readiness persistido e retorno real do gateway.
+        logPaymentTrace("warn", "create-asaas-payment", "pix_key_unavailable_on_gateway", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentEnv,
+          billing_type: billingType,
+          company_pix_ready_persisted: companyPixReadyByEnvironment,
+          asaas_error_code: gatewayErrorCode || null,
+          asaas_error_description: gatewayErrorDescription,
+        });
+      }
+
       await insertIntegrationLog(
         "failed",
         "Erro ao criar cobrança no Asaas",
