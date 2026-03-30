@@ -38,7 +38,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
     <div className="group relative overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_16px_40px_-24px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_55px_-24px_rgba(15,23,42,0.6)]">
       <Link to={linkTo} className="block">
         {/* Mobile com proporção um pouco mais alta para dar respiro ao conteúdo principal do destaque. */}
-        <div className="relative aspect-[4/3] sm:aspect-video">
+        <div className="relative aspect-[3/4] sm:aspect-video">
           <img
             src={imageUrl}
             alt={event.name}
