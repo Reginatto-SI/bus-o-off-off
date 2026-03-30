@@ -493,7 +493,7 @@ export function AsaasDiagnosticPanel({
             <span className="font-medium">Pendência cadastral local: </span>
             <span>{localMetadataWarning}</span>
           </div>
-        </div>
+        )}
 
         <div className="rounded border bg-background p-3 text-xs space-y-1">
           <p className="font-medium">Conta Asaas</p>

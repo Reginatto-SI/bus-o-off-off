@@ -390,7 +390,7 @@ async function ensureAsaasWebhook(params: {
  * auditável já usada pelo projeto, sem criar estrutura paralela só para webhook Asaas.
  */
 async function persistAsaasWebhookAttempt(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   flowType: AsaasWebhookFlowType;
@@ -398,39 +398,41 @@ async function persistAsaasWebhookAttempt(params: {
     | AsaasWebhookEnsureResult
     | {
       ok: false;
-      action: "failed";
+      skipped?: boolean;
+      action?: "failed";
       reason: string;
       webhookUrl?: string | null;
       webhookId?: string | null;
       details?: unknown;
     };
 }) {
-  const action = params.result.ok
-    ? params.result.action
-    : params.result.action === "failed"
+  const r = params.result as any;
+  const action = r.ok
+    ? r.action
+    : r.action === "failed"
       ? "failed"
       : "skipped";
 
-  const processingStatus = params.result.ok
+  const processingStatus = r.ok
     ? "success"
-    : params.result.action === "failed"
+    : r.action === "failed"
       ? "failed"
       : "warning";
 
-  const resultCategory = params.result.ok
+  const resultCategory = r.ok
     ? "success"
-    : params.result.action === "failed"
+    : r.action === "failed"
       ? "error"
       : "warning";
 
-  const incidentCode = !params.result.ok
-    ? params.result.action === "failed"
+  const incidentCode = !r.ok
+    ? r.action === "failed"
       ? "company_webhook_auto_config_failed"
       : "company_webhook_auto_config_skipped"
     : null;
 
-  const warningCode = !params.result.ok && params.result.action !== "failed"
-    ? params.result.reason
+  const warningCode = !r.ok && r.action !== "failed"
+    ? r.reason
     : null;
 
   const webhookUrl = "webhookUrl" in params.result ? params.result.webhookUrl ?? null : null;
@@ -473,7 +475,7 @@ async function persistAsaasWebhookAttempt(params: {
 }
 
 async function persistCompanyPixReadinessAttempt(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   flowType: string;
@@ -528,7 +530,7 @@ async function persistCompanyPixReadinessAttempt(params: {
 }
 
 async function syncCompanyPixReadiness(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   asaasBaseUrl: string;
@@ -902,7 +904,7 @@ serve(async (req) => {
         endpoint: verificationEndpoint,
         wallet_id_preview: maskSensitiveValue(String(companyConfig[envFields.walletId] || "")),
         account_id_preview: maskSensitiveValue(String(companyConfig[envFields.accountId] || "")),
-        token_preview: maskSensitiveValue(verificationToken),
+        token_preview: maskSensitiveValue(verificationToken as string),
       });
 
       try {
