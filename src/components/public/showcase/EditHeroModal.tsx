@@ -21,14 +21,6 @@ const HERO_BADGE_FALLBACKS = [
 const HERO_BADGE_ICONS = [Ticket, MapPin, ShieldCheck, MessageCircle] as const;
 const HERO_BADGE_MAX_CHARS = 60;
 
-const HERO_BADGE_FALLBACKS = [
-  'Passagens para eventos',
-  'Embarque organizado',
-  'Compra segura',
-  'Atendimento rápido',
-] as const;
-const HERO_BADGE_MAX_CHARS = 60;
-
 interface EditHeroModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

@@ -827,10 +827,10 @@ serve(async (req) => {
       `${asaasBaseUrl}/customers?cpfCnpj=${customerCpf}`,
       { headers: { access_token: companyApiKey } },
     );
-    const searchData = (await safeJson(searchRes)) as Record<
-      string,
-      unknown
-    > | null;
+    const searchData = (await safeJson(searchRes)) as {
+      data?: Array<{ id?: string }>;
+      [key: string]: unknown;
+    } | null;
     if (!searchData) {
       console.error(
         "[create-asaas-payment] Asaas customer search returned empty response",
@@ -858,8 +858,15 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro ao buscar cliente no Asaas" }, 400);
     }
 
-    if (searchData?.data?.length > 0) {
-      customerId = searchData.data[0].id;
+    const existingCustomers = Array.isArray(searchData?.data)
+      ? searchData.data
+      : [];
+
+    if (
+      existingCustomers.length > 0 &&
+      typeof existingCustomers[0]?.id === "string"
+    ) {
+      customerId = existingCustomers[0].id;
     } else {
       const createCustomerRes = await fetch(`${asaasBaseUrl}/customers`, {
         method: "POST",

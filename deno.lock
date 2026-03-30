@@ -86,6 +86,7 @@
         "npm:jsdom@^20.0.3",
         "npm:jspdf-autotable@^5.0.7",
         "npm:jspdf@^4.1.0",
+        "npm:jsqr@^1.4.0",
         "npm:lovable-tagger@^1.1.13",
         "npm:lucide-react@0.462",
         "npm:next-themes@0.3",

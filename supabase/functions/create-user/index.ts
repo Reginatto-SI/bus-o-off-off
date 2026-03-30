@@ -49,7 +49,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAdmin = createClient<any>(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "");
     let requestingUserId: string;
@@ -241,6 +241,7 @@ serve(async (req) => {
     const { data: signupLinkData, error: signupLinkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "signup",
       email,
+      password: tempPassword,
       options: {
         redirectTo: signupRedirectTo,
       },

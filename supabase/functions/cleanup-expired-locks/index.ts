@@ -46,7 +46,7 @@ function logCleanup(level: CleanupLogLevel, context: CleanupContext) {
 }
 
 async function insertSaleLogsSafely(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   logs: Array<{
     sale_id: string;
     action: string;
@@ -90,7 +90,7 @@ serve(async (req) => {
   const executionId = crypto.randomUUID();
 
   try {
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = createClient<any>(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
