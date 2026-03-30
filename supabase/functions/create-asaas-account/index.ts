@@ -904,7 +904,7 @@ serve(async (req) => {
         endpoint: verificationEndpoint,
         wallet_id_preview: maskSensitiveValue(String(companyConfig[envFields.walletId] || "")),
         account_id_preview: maskSensitiveValue(String(companyConfig[envFields.accountId] || "")),
-        token_preview: maskSensitiveValue(verificationToken),
+        token_preview: maskSensitiveValue(verificationToken as string),
       });
 
       try {
