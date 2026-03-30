@@ -530,7 +530,7 @@ async function persistCompanyPixReadinessAttempt(params: {
 }
 
 async function syncCompanyPixReadiness(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   asaasBaseUrl: string;
