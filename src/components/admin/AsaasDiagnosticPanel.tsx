@@ -58,6 +58,7 @@ type AsaasIntegrationCheckResponse = {
       documentation: string | null;
       general: string | null;
     } | null;
+    local_metadata_warning?: string | null;
     api_key_fingerprint?: string | null;
     checked_at?: string;
     gateway_wallet_id?: string | null;
@@ -99,11 +100,18 @@ function formatList(values?: string[]) {
 
 function getPixOperationalMessage(params: {
   hasQueryError: boolean;
-  gatewayPixReady: boolean;
+  hasGatewayPixDiagnosis: boolean;
+  gatewayPixReady?: boolean;
   accountApproved: boolean;
+  localMetadataWarning: string | null;
   divergent: boolean;
 }) {
   if (params.hasQueryError) return 'Pix indisponível: erro ao consultar Asaas';
+  if (!params.hasGatewayPixDiagnosis) {
+    return params.localMetadataWarning
+      ? 'Pendência cadastral local impede consolidação completa'
+      : 'Diagnóstico Pix incompleto: falta consolidar dados do gateway';
+  }
   if (!params.gatewayPixReady) return 'Pix indisponível: sem chave ACTIVE';
   if (!params.accountApproved) return 'Pix indisponível: conta não aprovada';
   if (params.divergent) return 'Pix indisponível: divergência entre estado local e gateway';
@@ -129,15 +137,21 @@ export function AsaasDiagnosticPanel({
   const currentCheck = result?.checkResponse ?? lastAsaasCheck;
   const details = currentCheck?.details;
   const localPixReady = details?.local_pix_ready ?? persistedPixReady;
-  const gatewayPixReady = details?.gateway_pix_ready ?? false;
+  const gatewayPixReady = details?.gateway_pix_ready;
   const divergent = details?.pix_readiness_divergent ?? false;
+  const localMetadataWarning = details?.local_metadata_warning ?? null;
+  const hasGatewayPixDiagnosis = typeof details?.gateway_pix_ready === 'boolean'
+    && typeof details?.pix_total_keys === 'number'
+    && typeof details?.pix_active_keys === 'number';
   const accountStatus = (details?.account_status ?? '').toUpperCase();
   const accountApproved = Boolean(details?.onboarding_complete) && accountStatus !== 'PENDING' && accountStatus !== 'REJECTED';
   const hasQueryError = currentCheck?.integration_status === 'communication_error' || currentCheck?.status === 'error' && currentCheck?.details.error_type === 'asaas_diagnostic_query_failed';
   const finalMessage = getPixOperationalMessage({
     hasQueryError,
+    hasGatewayPixDiagnosis,
     gatewayPixReady,
     accountApproved,
+    localMetadataWarning,
     divergent,
   });
 
@@ -470,8 +484,36 @@ export function AsaasDiagnosticPanel({
         <div className="rounded border bg-background p-3 text-xs space-y-1">
           <p className="font-medium">Comparativo de readiness (local x gateway)</p>
           <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
+          <p>Readiness consultado no gateway: <strong>{typeof gatewayPixReady === 'boolean' ? (gatewayPixReady ? 'Pronto' : 'Pendente') : 'Não consolidado'}</strong></p>
+          <p>Divergência detectada: <strong>{divergent ? 'Sim' : 'Não'}</strong></p>
+        </div>
+
+        {localMetadataWarning && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <span className="font-medium">Pendência cadastral local: </span>
+            <span>{localMetadataWarning}</span>
+          </div>
+        </div>
+
+        <div className="rounded border bg-background p-3 text-xs space-y-1">
+          <p className="font-medium">Conta Asaas</p>
+          <p>Status da conta: <strong>{details?.account_status ?? '—'}</strong></p>
+          <p>Substatus comercial: <strong>{details?.account_substatus?.commercial ?? '—'}</strong></p>
+          <p>Substatus banco: <strong>{details?.account_substatus?.bank ?? '—'}</strong></p>
+          <p>Substatus documentação: <strong>{details?.account_substatus?.documentation ?? '—'}</strong></p>
+          <p>Substatus geral: <strong>{details?.account_substatus?.general ?? '—'}</strong></p>
+        </div>
+
+        <div className="rounded border bg-background p-3 text-xs space-y-1">
+          <p className="font-medium">Comparativo de readiness (local x gateway)</p>
+          <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
           <p>Readiness consultado no gateway: <strong>{gatewayPixReady ? 'Pronto' : 'Pendente'}</strong></p>
           <p>Divergência detectada: <strong>{divergent ? 'Sim' : 'Não'}</strong></p>
+        </div>
+
+        <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">
+          <span className="font-medium">Conclusão operacional: </span>
+          <span>{finalMessage}</span>
         </div>
 
         <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">

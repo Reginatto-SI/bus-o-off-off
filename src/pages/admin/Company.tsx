@@ -91,6 +91,7 @@ type AsaasIntegrationCheckResponse = {
       documentation: string | null;
       general: string | null;
     } | null;
+    local_metadata_warning?: string | null;
     api_key_fingerprint?: string | null;
     checked_at?: string;
     gateway_wallet_id?: string | null;

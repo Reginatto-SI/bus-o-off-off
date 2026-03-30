@@ -60,6 +60,7 @@ type CheckResponse = {
       documentation: string | null;
       general: string | null;
     } | null;
+    local_metadata_warning?: string | null;
     api_key_fingerprint?: string | null;
     checked_at?: string;
     gateway_wallet_id?: string | null;
@@ -176,6 +177,7 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
     pix_last_error: typeof companyConfig[envFields.pixLastError] === "string"
       ? String(companyConfig[envFields.pixLastError])
       : null,
+    local_metadata_warning: null,
   };
 }
 
@@ -528,6 +530,9 @@ serve(async (req) => {
       // `account_id` local é metadado de auditoria; a operação real usa API key + wallet.
       // Portanto, ausência de account_id não deve gerar falso negativo para o usuário.
       const accountIdCheckBypassed = !storedAccountId;
+      const localMetadataWarning = accountIdCheckBypassed
+        ? "Pendência cadastral local: account_id do ambiente não está salvo na empresa."
+        : null;
       if (accountIdCheckBypassed) {
         logCheck("log", "[check-asaas-integration] local account_id missing; proceeding with non-blocking validation", {
           company_id: companyId,
@@ -669,6 +674,7 @@ serve(async (req) => {
             pix_readiness_action: "query_failed",
             pix_last_checked_at: checkedAt,
             pix_last_error: "Falha ao consultar diagnóstico operacional do Pix no Asaas.",
+            local_metadata_warning: localMetadataWarning,
           },
           message: "Pix indisponível: erro ao consultar Asaas.",
         };
@@ -758,6 +764,7 @@ serve(async (req) => {
             checked_at: checkedAt,
             gateway_wallet_id: confirmedWalletId,
             gateway_account_id: remoteAccountId,
+            local_metadata_warning: localMetadataWarning,
             error_type: "onboarding_pending",
           },
           message: "Pix indisponível: conta não aprovada.",
@@ -804,6 +811,7 @@ serve(async (req) => {
           checked_at: checkedAt,
           gateway_wallet_id: confirmedWalletId,
           gateway_account_id: remoteAccountId,
+          local_metadata_warning: localMetadataWarning,
         },
         message: pixConclusion,
       };
