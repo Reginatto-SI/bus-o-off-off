@@ -46,6 +46,7 @@ function buildCompany(overrides: Partial<Company>): Company {
     use_default_cover: true,
     intro_text: null,
     background_style: 'solid',
+    hero_badge_labels: null,
     social_instagram: null,
     social_facebook: null,
     social_tiktok: null,
