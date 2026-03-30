@@ -138,7 +138,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
       </Link>
 
       {/* No mobile o bloco de ação sai do banner para reduzir competição visual e aumentar respiro. */}
-      <div className="space-y-2 p-3 pt-2 sm:hidden">
+      <div className="space-y-2 p-4 pt-3 sm:hidden">
         <Button
           size="lg"
           className={cn('h-12 w-full px-4 text-base font-semibold shadow-lg')}
