@@ -38,7 +38,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
     <div className="group relative overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_16px_40px_-24px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_55px_-24px_rgba(15,23,42,0.6)]">
       <Link to={linkTo} className="block">
         {/* Mobile com proporção um pouco mais alta para dar respiro ao conteúdo principal do destaque. */}
-        <div className="relative aspect-[4/3] sm:aspect-video">
+        <div className="relative aspect-[3/4] sm:aspect-video">
           <img
             src={imageUrl}
             alt={event.name}
@@ -60,7 +60,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
         {/* Conteúdo do banner com pilha vertical no mobile para evitar disputa entre data, título e preço. */}
         {/* Ajuste fino de UX: mais respiro vertical no mobile sem alterar a estrutura do destaque. */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-3.5 p-3 pb-4 sm:space-y-3 sm:p-4 sm:pr-40">
+        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-4 p-4 pb-5 sm:space-y-3 sm:p-4 sm:pr-40">
           <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             {categoryLabel}
           </div>
@@ -73,11 +73,14 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             />
             <div className="min-w-0 flex-1 space-y-1">
               {/* Clamp e quebra controlada seguram títulos extensos sem sobrepor data/preço no mobile. */}
-              <h3 className="text-base font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
+              <h3 className="text-lg font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
                 {event.name}
               </h3>
               {/* Mobile recebe cidade dentro do bloco principal para manter contexto sem comprimir o rodapé. */}
-              <p className="text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">{event.city}</p>
+              <p className="flex items-center gap-1 text-xs leading-snug text-white/85 line-clamp-1 sm:hidden">
+                <MapPin className="h-3 w-3 flex-shrink-0" />
+                {event.city}
+              </p>
               {/* Comentário de manutenção: a descrição curta é ocultada no mobile para preservar hierarquia visual do destaque. */}
               <p className="mt-1 hidden text-sm text-white/80 sm:block">
                 Reserve sua vaga com antecedência e veja os detalhes antes de finalizar a compra.
@@ -135,7 +138,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
       </Link>
 
       {/* No mobile o bloco de ação sai do banner para reduzir competição visual e aumentar respiro. */}
-      <div className="space-y-2 p-3 pt-2 sm:hidden">
+      <div className="space-y-2 p-4 pt-3 sm:hidden">
         <Button
           size="lg"
           className={cn('h-12 w-full px-4 text-base font-semibold shadow-lg')}
