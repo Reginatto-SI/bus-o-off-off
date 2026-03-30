@@ -73,7 +73,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             />
             <div className="min-w-0 flex-1 space-y-1">
               {/* Clamp e quebra controlada seguram títulos extensos sem sobrepor data/preço no mobile. */}
-              <h3 className="text-base font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
+              <h3 className="text-lg font-extrabold leading-snug text-white line-clamp-2 break-words sm:text-xl sm:leading-tight">
                 {event.name}
               </h3>
               {/* Mobile recebe cidade dentro do bloco principal para manter contexto sem comprimir o rodapé. */}
