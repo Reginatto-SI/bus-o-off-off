@@ -475,7 +475,7 @@ async function persistAsaasWebhookAttempt(params: {
 }
 
 async function persistCompanyPixReadinessAttempt(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
   flowType: string;
