@@ -493,7 +493,28 @@ export function AsaasDiagnosticPanel({
             <span className="font-medium">Pendência cadastral local: </span>
             <span>{localMetadataWarning}</span>
           </div>
-        )}
+        </div>
+
+        <div className="rounded border bg-background p-3 text-xs space-y-1">
+          <p className="font-medium">Conta Asaas</p>
+          <p>Status da conta: <strong>{details?.account_status ?? '—'}</strong></p>
+          <p>Substatus comercial: <strong>{details?.account_substatus?.commercial ?? '—'}</strong></p>
+          <p>Substatus banco: <strong>{details?.account_substatus?.bank ?? '—'}</strong></p>
+          <p>Substatus documentação: <strong>{details?.account_substatus?.documentation ?? '—'}</strong></p>
+          <p>Substatus geral: <strong>{details?.account_substatus?.general ?? '—'}</strong></p>
+        </div>
+
+        <div className="rounded border bg-background p-3 text-xs space-y-1">
+          <p className="font-medium">Comparativo de readiness (local x gateway)</p>
+          <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
+          <p>Readiness consultado no gateway: <strong>{gatewayPixReady ? 'Pronto' : 'Pendente'}</strong></p>
+          <p>Divergência detectada: <strong>{divergent ? 'Sim' : 'Não'}</strong></p>
+        </div>
+
+        <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">
+          <span className="font-medium">Conclusão operacional: </span>
+          <span>{finalMessage}</span>
+        </div>
 
         <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">
           <span className="font-medium">Conclusão operacional: </span>
