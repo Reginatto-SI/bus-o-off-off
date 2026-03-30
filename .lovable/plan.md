@@ -1,58 +1,26 @@
 
 
-## Plano: Padronizar Envio de E-mails via Resend
+## Analysis
 
-### Diagnóstico confirmado
-- `generateLink` no `create-user` e `admin-user-auth-support` gera links mas NÃO envia e-mail
-- O `auth-email-hook` já usa Resend corretamente, mas só é acionado por fluxos nativos do Supabase Auth (signup direto, resetPasswordForEmail), não por `generateLink`
-- `RESEND_API_KEY` já está configurada como secret
+**Component:** `EventCardFeatured` — used identically in both `/empresa/:slug` (via `PublicCompanyShowcase`) and `/eventos` (via `PublicEvents`), always through `EventsCarousel`. Both contexts share the exact same component and carousel wrapper. There are no divergences to reconcile.
 
-### Arquitetura proposta
+**Root cause:** On mobile, the banner uses `aspect-[4/3]` with all content (category badge, date, title, city, price) overlaid via `absolute bottom-0` positioning inside a relatively short image area. The overlay content competes for vertical space, resulting in the cramped, unprofessional appearance visible in the screenshot. The CTA button sits below the image in a separate `p-3 pt-2` block with minimal padding.
 
-```text
-┌─────────────────────────────┐
-│  Edge Function              │
-│  (create-user /             │
-│   admin-user-auth-support)  │
-│                             │
-│  1. generateLink(type)      │
-│  2. sendAuthEmail(Resend)   │  ← NOVO helper compartilhado
-│  3. log em email_send_log   │
-│  4. retorno claro           │
-└─────────────────────────────┘
-```
+**Desktop is fine** because `aspect-video` (16/9) gives a wide canvas, and the content is laid out horizontally with `sm:flex-row`.
 
-### Etapas de implementação
+## Plan
 
-**1. Criar helper compartilhado `_shared/auth-email-resend.ts`**
-- Função `sendAuthEmailViaResend({ to, type, actionLink, userName })`
-- Monta HTML com templates inline por tipo (signup, recovery, magiclink)
-- Envia via Resend API usando `RESEND_API_KEY`
-- Registra resultado em `email_send_log` (recipient_email, template_name, status, error_message)
-- Remetente: `SmartBus BR <noreply@smartbusbr.com.br>` (já usado no auth-email-hook)
+### Single file change: `src/components/public/EventCardFeatured.tsx`
 
-**2. Ajustar `create-user/index.ts`**
-- Após criar usuário e vincular role, gerar link de signup com `generateLink({ type: 'signup' })`
-- Extrair `action_link` do resultado
-- Chamar `sendAuthEmailViaResend` com tipo `signup`
-- Incluir resultado do envio no response (sent/failed + warning se falhar)
+1. **Increase mobile banner height** — change `aspect-[4/3]` to `aspect-[3/4]` (portrait orientation), keeping `sm:aspect-video` for desktop. This gives ~33% more vertical space for the overlay content on mobile.
 
-**3. Ajustar `admin-user-auth-support/index.ts`**
-- Nas ações `send_recovery`, `resend_confirmation` e `generate_magic_link`:
-  - Após `generateLink`, extrair `action_link`
-  - Chamar `sendAuthEmailViaResend` com o tipo correspondente
-  - Retornar status detalhado do envio
-- Mensagens de erro contextualizadas (nunca genéricas)
+2. **Increase mobile overlay spacing** — change the overlay container's mobile spacing from `space-y-3.5 p-3 pb-4` to `space-y-4 p-4 pb-5`, giving more breathing room between category badge, date+title block, and price.
 
-**4. Corrigir build errors nos testes**
-- Adicionar `allow_manual_reservations` como campo obrigatório nos mocks de Company em `asaasIntegrationStatus.test.ts` e `src/test/asaasIntegrationStatus.test.ts`
+3. **Improve mobile title size** — bump mobile title from `text-base` to `text-lg` to reinforce the "featured" identity vs common cards.
 
-**5. Deploy das Edge Functions**
-- Deploy de `create-user` e `admin-user-auth-support`
+4. **Increase mobile CTA block padding** — change the below-banner CTA section from `p-3 pt-2` to `p-4 pt-3` for better separation from the image.
 
-### O que NÃO muda
-- Fluxo visual do frontend `/admin/usuarios`
-- Estrutura de roles, auth, multiempresa
-- `auth-email-hook` existente (continua funcionando para fluxos nativos)
-- Tabela `email_send_log` (já existe com estrutura adequada)
+5. **Add subtle city styling on mobile** — add a small `MapPin` icon inline with the city text on mobile (currently just plain text) to match the desktop treatment and add visual polish.
+
+No changes to `EventsCarousel`, `EventCard`, desktop layout, or any other file. Both `/empresa/:slug` and `/eventos` will benefit automatically since they share the same component.
 
