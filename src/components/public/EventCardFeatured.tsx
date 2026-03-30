@@ -60,7 +60,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
         {/* Conteúdo do banner com pilha vertical no mobile para evitar disputa entre data, título e preço. */}
         {/* Ajuste fino de UX: mais respiro vertical no mobile sem alterar a estrutura do destaque. */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-3.5 p-3 pb-4 sm:space-y-3 sm:p-4 sm:pr-40">
+        <div className="absolute bottom-0 left-0 right-0 z-30 space-y-4 p-4 pb-5 sm:space-y-3 sm:p-4 sm:pr-40">
           <div className="inline-flex items-center rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/95 backdrop-blur-sm">
             {categoryLabel}
           </div>
