@@ -73,10 +73,28 @@ type AsaasIntegrationCheckResponse = {
     account_id_matches: boolean;
     wallet_id_matches: boolean;
     onboarding_complete: boolean;
+    local_pix_ready?: boolean;
+    gateway_pix_ready?: boolean;
+    pix_readiness_divergent?: boolean;
     pix_ready: boolean;
     pix_readiness_action?: string;
     pix_last_checked_at?: string;
     pix_last_error?: string | null;
+    pix_total_keys?: number;
+    pix_active_keys?: number;
+    pix_key_statuses?: string[];
+    pix_key_types?: string[];
+    account_status?: string | null;
+    account_substatus?: {
+      commercial: string | null;
+      bank: string | null;
+      documentation: string | null;
+      general: string | null;
+    } | null;
+    api_key_fingerprint?: string | null;
+    checked_at?: string;
+    gateway_wallet_id?: string | null;
+    gateway_account_id?: string | null;
     asaas_http_status?: number;
     error_type?: string;
   };
@@ -2239,6 +2257,9 @@ export default function CompanyPage() {
                         asaasStatus={asaasStatus}
                         editingId={editingId}
                         asaasSnapshot={asaasSnapshot}
+                        lastAsaasCheck={lastAsaasCheck}
+                        persistedPixReady={persistedPixReady}
+                        persistedPixLastError={persistedPixLastError ?? null}
                       />
                     )}
                   </TabsContent>
