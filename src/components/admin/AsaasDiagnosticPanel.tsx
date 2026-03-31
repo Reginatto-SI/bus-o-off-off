@@ -481,13 +481,6 @@ export function AsaasDiagnosticPanel({
           <p>Substatus geral: <strong>{details?.account_substatus?.general ?? '—'}</strong></p>
         </div>
 
-        <div className="rounded border bg-background p-3 text-xs space-y-1">
-          <p className="font-medium">Comparativo de readiness (local x gateway)</p>
-          <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
-          <p>Readiness consultado no gateway: <strong>{typeof gatewayPixReady === 'boolean' ? (gatewayPixReady ? 'Pronto' : 'Pendente') : 'Não consolidado'}</strong></p>
-          <p>Divergência detectada: <strong>{divergent ? 'Sim' : 'Não'}</strong></p>
-        </div>
-
         {localMetadataWarning && (
           <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
             <span className="font-medium">Pendência cadastral local: </span>
@@ -495,27 +488,18 @@ export function AsaasDiagnosticPanel({
           </div>
         )}
 
-        <div className="rounded border bg-background p-3 text-xs space-y-1">
-          <p className="font-medium">Conta Asaas</p>
-          <p>Status da conta: <strong>{details?.account_status ?? '—'}</strong></p>
-          <p>Substatus comercial: <strong>{details?.account_substatus?.commercial ?? '—'}</strong></p>
-          <p>Substatus banco: <strong>{details?.account_substatus?.bank ?? '—'}</strong></p>
-          <p>Substatus documentação: <strong>{details?.account_substatus?.documentation ?? '—'}</strong></p>
-          <p>Substatus geral: <strong>{details?.account_substatus?.general ?? '—'}</strong></p>
-        </div>
-
+        {/* Correção etapa 1: removemos duplicidade literal de blocos no card para evitar
+            leitura ambígua e manter uma única fonte visual por seção. */}
         <div className="rounded border bg-background p-3 text-xs space-y-1">
           <p className="font-medium">Comparativo de readiness (local x gateway)</p>
           <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
-          <p>Readiness consultado no gateway: <strong>{gatewayPixReady ? 'Pronto' : 'Pendente'}</strong></p>
+          {/* Correção etapa 1: ausência de dado do gateway NÃO deve ser tratada como pendência real.
+              `undefined`/não consolidado agora é exibido sempre como "Não consolidado". */}
+          <p>Readiness consultado no gateway: <strong>{typeof gatewayPixReady === 'boolean' ? (gatewayPixReady ? 'Pronto' : 'Pendente') : 'Não consolidado'}</strong></p>
           <p>Divergência detectada: <strong>{divergent ? 'Sim' : 'Não'}</strong></p>
         </div>
 
-        <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">
-          <span className="font-medium">Conclusão operacional: </span>
-          <span>{finalMessage}</span>
-        </div>
-
+        {/* Correção etapa 1: conclusão operacional deve aparecer uma única vez para evitar duplicidade. */}
         <div className="rounded border border-primary/30 bg-primary/5 p-3 text-sm">
           <span className="font-medium">Conclusão operacional: </span>
           <span>{finalMessage}</span>
