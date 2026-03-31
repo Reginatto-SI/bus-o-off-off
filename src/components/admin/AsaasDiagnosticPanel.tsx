@@ -136,6 +136,8 @@ export function AsaasDiagnosticPanel({
 
   const currentCheck = result?.checkResponse ?? lastAsaasCheck;
   const details = currentCheck?.details;
+  const hasPrimaryDiagnosisInSession = Boolean(result?.checkResponse);
+  const hasRemoteDiagnosticData = Boolean(currentCheck);
   const localPixReady = details?.local_pix_ready ?? persistedPixReady;
   const gatewayPixReady = details?.gateway_pix_ready;
   const divergent = details?.pix_readiness_divergent ?? false;
@@ -154,6 +156,11 @@ export function AsaasDiagnosticPanel({
     localMetadataWarning,
     divergent,
   });
+  const remoteDataSourceLabel = hasPrimaryDiagnosisInSession
+    ? 'Consultado agora no gateway'
+    : hasRemoteDiagnosticData
+      ? 'Última consulta disponível'
+      : 'Ainda não consultado nesta sessão';
 
   const handleTestConnection = async () => {
     if (!editingId || !runtimeEnvironment) {
@@ -430,6 +437,23 @@ export function AsaasDiagnosticPanel({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 pb-4 space-y-3">
+        <div className="rounded border border-dashed bg-background p-3 text-xs space-y-2">
+          <p className="font-medium">Origem dos dados exibidos</p>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary" className="text-[11px]">
+              Persistido localmente: snapshot da empresa
+            </Badge>
+            <Badge variant={hasPrimaryDiagnosisInSession ? 'default' : 'outline'} className="text-[11px]">
+              Remoto (gateway): {remoteDataSourceLabel}
+            </Badge>
+          </div>
+          {!hasPrimaryDiagnosisInSession && (
+            <p className="text-muted-foreground">
+              Ainda não analisado nesta sessão. Exibindo snapshot local e último diagnóstico disponível até nova análise.
+            </p>
+          )}
+        </div>
+
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <div>
             <span className="text-muted-foreground">Ambiente: </span>
@@ -462,6 +486,7 @@ export function AsaasDiagnosticPanel({
 
         <div className="rounded border bg-background p-3 text-xs space-y-2">
           <p className="font-medium">Diagnóstico Pix</p>
+          <p className="text-muted-foreground">Fonte remota: {remoteDataSourceLabel}</p>
           <div className="grid gap-1 sm:grid-cols-2">
             <p>Total de chaves: <strong>{details?.pix_total_keys ?? 0}</strong></p>
             <p>Chaves ACTIVE: <strong>{details?.pix_active_keys ?? 0}</strong></p>
@@ -474,6 +499,7 @@ export function AsaasDiagnosticPanel({
 
         <div className="rounded border bg-background p-3 text-xs space-y-1">
           <p className="font-medium">Conta Asaas</p>
+          <p className="text-muted-foreground">Fonte remota: {remoteDataSourceLabel}</p>
           <p>Status da conta: <strong>{details?.account_status ?? '—'}</strong></p>
           <p>Substatus comercial: <strong>{details?.account_substatus?.commercial ?? '—'}</strong></p>
           <p>Substatus banco: <strong>{details?.account_substatus?.bank ?? '—'}</strong></p>
@@ -492,6 +518,7 @@ export function AsaasDiagnosticPanel({
             leitura ambígua e manter uma única fonte visual por seção. */}
         <div className="rounded border bg-background p-3 text-xs space-y-1">
           <p className="font-medium">Comparativo de readiness (local x gateway)</p>
+          <p className="text-muted-foreground">Local: persistido na empresa • Remoto: {remoteDataSourceLabel}</p>
           <p>Readiness local persistido: <strong>{localPixReady ? 'Pronto' : 'Pendente'}</strong></p>
           {/* Correção etapa 1: ausência de dado do gateway NÃO deve ser tratada como pendência real.
               `undefined`/não consolidado agora é exibido sempre como "Não consolidado". */}
@@ -505,16 +532,22 @@ export function AsaasDiagnosticPanel({
           <span>{finalMessage}</span>
         </div>
 
-        <div className="flex gap-2">
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Ação principal: execute a análise completa do developer antes de usar ações auxiliares.
+          </p>
+          <div className="flex flex-wrap gap-2">
+          {/* Etapa 2: mantemos o mesmo handler `handleTestConnection` para a ação principal
+              e evitamos fluxo paralelo de diagnóstico no frontend. */}
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={handleTestConnection}
             disabled={testing || !editingId || !runtimeEnvironment}
           >
             {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-            Verificar Pix agora
+            Analisar diagnóstico do desenvolvedor
           </Button>
           <Button
             type="button"
@@ -532,6 +565,7 @@ export function AsaasDiagnosticPanel({
               Copiar diagnóstico Pix
             </Button>
           )}
+          </div>
         </div>
 
         {result && (
@@ -563,7 +597,7 @@ export function AsaasDiagnosticPanel({
             {result.rawResponse && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                  Resposta bruta (JSON)
+                  Detalhes técnicos (JSON bruto)
                 </summary>
                 <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 font-mono text-[10px]">
                   {JSON.stringify(result.rawResponse, null, 2)}
