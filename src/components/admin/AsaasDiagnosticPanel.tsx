@@ -138,6 +138,7 @@ export function AsaasDiagnosticPanel({
   const details = currentCheck?.details;
   const hasPrimaryDiagnosisInSession = Boolean(result?.checkResponse);
   const hasRemoteDiagnosticData = Boolean(currentCheck);
+  const hasSessionAttempt = Boolean(result);
   const localPixReady = details?.local_pix_ready ?? persistedPixReady;
   const gatewayPixReady = details?.gateway_pix_ready;
   const divergent = details?.pix_readiness_divergent ?? false;
@@ -161,6 +162,26 @@ export function AsaasDiagnosticPanel({
     : hasRemoteDiagnosticData
       ? 'Última consulta disponível'
       : 'Ainda não consultado nesta sessão';
+  // Etapa 3: resumo operacional compacto no topo.
+  // Esta camada só resume o estado já existente no componente (sem criar nova regra backend).
+  const sessionQueryLabel = hasSessionAttempt ? 'Sim' : 'Não';
+  const gatewayReturnLabel = !hasSessionAttempt
+    ? 'Ainda não consultado'
+    : hasQueryError
+      ? 'Falha na consulta'
+      : hasGatewayPixDiagnosis
+        ? 'Completo'
+        : 'Parcial';
+  const operationalSituationLabel = !hasSessionAttempt
+    ? 'Aguardando análise'
+    : hasQueryError || !hasGatewayPixDiagnosis
+      ? 'Inconclusiva'
+      : gatewayPixReady && accountApproved && !divergent
+        ? 'Pix pronto'
+        : 'Pix indisponível';
+  const summarySupportMessage = hasSessionAttempt && !hasQueryError && !hasGatewayPixDiagnosis
+    ? 'Consulta executada, mas o gateway não retornou dados suficientes para consolidar o diagnóstico.'
+    : null;
 
   const handleTestConnection = async () => {
     if (!editingId || !runtimeEnvironment) {
@@ -437,6 +458,20 @@ export function AsaasDiagnosticPanel({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 pb-4 space-y-3">
+        <div className="rounded border border-primary/30 bg-primary/5 p-3 text-xs space-y-2">
+          <p className="font-medium">Resumo operacional</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <p>Consulta na sessão: <strong>{sessionQueryLabel}</strong></p>
+            <p>Retorno do gateway: <strong>{gatewayReturnLabel}</strong></p>
+            <p>Situação operacional: <strong>{operationalSituationLabel}</strong></p>
+          </div>
+          {summarySupportMessage && (
+            <p className="text-muted-foreground">
+              {summarySupportMessage}
+            </p>
+          )}
+        </div>
+
         <div className="rounded border border-dashed bg-background p-3 text-xs space-y-2">
           <p className="font-medium">Origem dos dados exibidos</p>
           <div className="flex flex-wrap gap-2">
