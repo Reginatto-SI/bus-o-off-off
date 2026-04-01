@@ -964,17 +964,20 @@ serve(async (req) => {
         );
       }
       if (!createCustomerRes.ok) {
+        const customerErrorDesc = customerData?.errors?.[0]?.description ?? null;
+
         await insertIntegrationLog(
           "failed",
-          "Erro ao criar cliente no Asaas",
-          { cpfCnpj: customerCpf },
-          customerData,
+          `Erro ao criar cliente no Asaas (HTTP ${createCustomerRes.status})`,
+          { externalReference: sale.id },
+          { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText, error_description: customerErrorDesc },
+          null,
+          "CUSTOMER_CREATE_HTTP_ERROR",
         );
         return jsonResponse(
           {
-            error:
-              customerData?.errors?.[0]?.description ||
-              "Erro ao criar cliente no Asaas",
+            error: customerErrorDesc || "Erro ao criar cliente no Asaas",
+            error_code: "customer_create_http_error",
           },
           400,
         );
