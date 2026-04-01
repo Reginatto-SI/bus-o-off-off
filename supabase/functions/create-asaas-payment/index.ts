@@ -938,8 +938,25 @@ serve(async (req) => {
 
       const customerData = await safeJson(createCustomerRes);
       if (!customerData) {
+        await insertIntegrationLog(
+          "failed",
+          `Resposta vazia ao criar cliente no Asaas (HTTP ${createCustomerRes.status})`,
+          { externalReference: sale.id },
+          { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText },
+          null,
+          "CUSTOMER_CREATE_EMPTY_RESPONSE",
+        );
+
+        logPaymentTrace("error", "create-asaas-payment", "customer_create_empty_response", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          http_status: createCustomerRes.status,
+          http_status_text: createCustomerRes.statusText,
+          payment_environment: paymentEnv,
+        });
+
         return jsonResponse(
-          { error: "Resposta vazia ao criar cliente no Asaas" },
+          { error: "Resposta vazia ao criar cliente no Asaas", error_code: "customer_create_empty_response" },
           502,
         );
       }
