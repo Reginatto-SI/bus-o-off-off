@@ -895,19 +895,22 @@ serve(async (req) => {
     }
 
     if (!searchRes.ok) {
-      console.error("[create-asaas-payment] Asaas customer search error", {
+      logPaymentTrace("error", "create-asaas-payment", "customer_search_http_error", {
         sale_id: sale.id,
         company_id: sale.company_id,
-        status: searchRes.status,
-        response: searchData,
+        http_status: searchRes.status,
+        http_status_text: searchRes.statusText,
+        payment_environment: paymentEnv,
       });
       await insertIntegrationLog(
         "failed",
-        "Erro ao buscar cliente no Asaas",
-        { cpfCnpj: customerCpf, externalReference: sale.id },
-        searchData,
+        `Erro ao buscar cliente no Asaas (HTTP ${searchRes.status})`,
+        { externalReference: sale.id },
+        { http_status: searchRes.status, http_status_text: searchRes.statusText },
+        null,
+        "CUSTOMER_SEARCH_HTTP_ERROR",
       );
-      return jsonResponse({ error: "Erro ao buscar cliente no Asaas" }, 400);
+      return jsonResponse({ error: "Erro ao buscar cliente no Asaas", error_code: "customer_search_http_error" }, 400);
     }
 
     const existingCustomers = Array.isArray(searchData?.data)
