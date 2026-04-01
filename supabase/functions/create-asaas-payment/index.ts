@@ -823,39 +823,94 @@ serve(async (req) => {
 
     let customerId: string | null = null;
 
-    const searchRes = await fetch(
-      `${asaasBaseUrl}/customers?cpfCnpj=${customerCpf}`,
-      { headers: { access_token: companyApiKey } },
-    );
-    const searchData = (await safeJson(searchRes)) as {
+    // Retry conservador: até 2 tentativas apenas quando body vazio/inválido ou erro de rede.
+    const maxSearchAttempts = 2;
+    let searchRes: Response | null = null;
+    let searchData: {
       data?: Array<{ id?: string }>;
       [key: string]: unknown;
-    } | null;
+    } | null = null;
+
+    for (let attempt = 1; attempt <= maxSearchAttempts; attempt++) {
+      try {
+        searchRes = await fetch(
+          `${asaasBaseUrl}/customers?cpfCnpj=${customerCpf}`,
+          { headers: { access_token: companyApiKey } },
+        );
+        searchData = (await safeJson(searchRes)) as typeof searchData;
+      } catch (networkErr) {
+        logPaymentTrace("warn", "create-asaas-payment", "customer_search_network_error", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          attempt,
+          error_message: networkErr instanceof Error ? networkErr.message : String(networkErr),
+          payment_environment: paymentEnv,
+        });
+        searchRes = null;
+        searchData = null;
+      }
+
+      // Se obteve body parseável (mesmo que erro HTTP 4xx/5xx), não faz retry — segue fluxo existente.
+      if (searchData !== null) break;
+
+      if (attempt < maxSearchAttempts) {
+        logPaymentTrace("warn", "create-asaas-payment", "customer_search_empty_retrying", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          attempt,
+          http_status: searchRes?.status ?? null,
+          http_status_text: searchRes?.statusText ?? null,
+          payment_environment: paymentEnv,
+        });
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
     if (!searchData) {
-      console.error(
-        "[create-asaas-payment] Asaas customer search returned empty response",
-        { sale_id: sale.id, status: searchRes.status },
+      const httpStatus = searchRes?.status ?? null;
+      const httpStatusText = searchRes?.statusText ?? null;
+
+      await insertIntegrationLog(
+        "failed",
+        `Resposta vazia ao buscar cliente no Asaas (HTTP ${httpStatus ?? "sem resposta"}, ${maxSearchAttempts} tentativa(s))`,
+        { externalReference: sale.id, attempts: maxSearchAttempts },
+        { http_status: httpStatus, http_status_text: httpStatusText },
+        null,
+        "CUSTOMER_SEARCH_EMPTY_RESPONSE",
       );
+
+      logPaymentTrace("error", "create-asaas-payment", "customer_search_empty_final", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        http_status: httpStatus,
+        http_status_text: httpStatusText,
+        payment_environment: paymentEnv,
+        attempts: maxSearchAttempts,
+      });
+
       return jsonResponse(
-        { error: "Resposta vazia ao buscar cliente no Asaas" },
+        { error: "Resposta vazia ao buscar cliente no Asaas", error_code: "customer_search_empty_response" },
         502,
       );
     }
 
     if (!searchRes.ok) {
-      console.error("[create-asaas-payment] Asaas customer search error", {
+      logPaymentTrace("error", "create-asaas-payment", "customer_search_http_error", {
         sale_id: sale.id,
         company_id: sale.company_id,
-        status: searchRes.status,
-        response: searchData,
+        http_status: searchRes.status,
+        http_status_text: searchRes.statusText,
+        payment_environment: paymentEnv,
       });
       await insertIntegrationLog(
         "failed",
-        "Erro ao buscar cliente no Asaas",
-        { cpfCnpj: customerCpf, externalReference: sale.id },
-        searchData,
+        `Erro ao buscar cliente no Asaas (HTTP ${searchRes.status})`,
+        { externalReference: sale.id },
+        { http_status: searchRes.status, http_status_text: searchRes.statusText },
+        null,
+        "CUSTOMER_SEARCH_HTTP_ERROR",
       );
-      return jsonResponse({ error: "Erro ao buscar cliente no Asaas" }, 400);
+      return jsonResponse({ error: "Erro ao buscar cliente no Asaas", error_code: "customer_search_http_error" }, 400);
     }
 
     const existingCustomers = Array.isArray(searchData?.data)
@@ -886,23 +941,43 @@ serve(async (req) => {
 
       const customerData = await safeJson(createCustomerRes);
       if (!customerData) {
+        await insertIntegrationLog(
+          "failed",
+          `Resposta vazia ao criar cliente no Asaas (HTTP ${createCustomerRes.status})`,
+          { externalReference: sale.id },
+          { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText },
+          null,
+          "CUSTOMER_CREATE_EMPTY_RESPONSE",
+        );
+
+        logPaymentTrace("error", "create-asaas-payment", "customer_create_empty_response", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          http_status: createCustomerRes.status,
+          http_status_text: createCustomerRes.statusText,
+          payment_environment: paymentEnv,
+        });
+
         return jsonResponse(
-          { error: "Resposta vazia ao criar cliente no Asaas" },
+          { error: "Resposta vazia ao criar cliente no Asaas", error_code: "customer_create_empty_response" },
           502,
         );
       }
       if (!createCustomerRes.ok) {
+        const customerErrorDesc = customerData?.errors?.[0]?.description ?? null;
+
         await insertIntegrationLog(
           "failed",
-          "Erro ao criar cliente no Asaas",
-          { cpfCnpj: customerCpf },
-          customerData,
+          `Erro ao criar cliente no Asaas (HTTP ${createCustomerRes.status})`,
+          { externalReference: sale.id },
+          { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText, error_description: customerErrorDesc },
+          null,
+          "CUSTOMER_CREATE_HTTP_ERROR",
         );
         return jsonResponse(
           {
-            error:
-              customerData?.errors?.[0]?.description ||
-              "Erro ao criar cliente no Asaas",
+            error: customerErrorDesc || "Erro ao criar cliente no Asaas",
+            error_code: "customer_create_http_error",
           },
           400,
         );
