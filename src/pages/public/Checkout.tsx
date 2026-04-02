@@ -886,6 +886,45 @@ export default function Checkout() {
     };
   };
 
+  const preserveCheckoutFailureTrace = (params: {
+    saleId: string;
+    stage: string;
+    errorCode: string | null;
+    errorMessage: string;
+  }) => {
+    const trace = {
+      sale_id: params.saleId,
+      company_id: event?.company_id ?? null,
+      payment_environment: runtimePaymentEnvironment ?? null,
+      payment_method: paymentMethod,
+      timestamp: new Date().toISOString(),
+      error_code: params.errorCode,
+      message: params.errorMessage,
+      stage: params.stage,
+    };
+
+    // Comentário de suporte: persistimos apenas diagnóstico mínimo em sessionStorage
+    // para preservar rastreabilidade local antes do rollback apagar a venda.
+    try {
+      sessionStorage.setItem(
+        "smartbus:last_checkout_payment_failure",
+        JSON.stringify(trace),
+      );
+    } catch (storageError) {
+      console.warn("[checkout] failure trace storage unavailable", {
+        sale_id: params.saleId,
+        stage: params.stage,
+        error: storageError instanceof Error
+          ? storageError.message
+          : String(storageError),
+      });
+    }
+
+    // Comentário de suporte: log estruturado em console para captura imediata
+    // do sale_id e correlação operacional durante reprodução controlada.
+    console.error("[checkout] payment_failure_trace_before_rollback", trace);
+  };
+
   // Submit purchase — new flow: seat_locks + sale_passengers + pendente_pagamento + new tab
   const handleSubmit = async () => {
     if (!validatePassengers()) {
@@ -1308,6 +1347,16 @@ export default function Checkout() {
       }
 
       // Generic error — rollback everything
+      preserveCheckoutFailureTrace({
+        saleId: sale.id,
+        stage: "create_asaas_payment_response_error",
+        errorCode: typeof errorCode === "string" ? errorCode : null,
+        errorMessage:
+          typeof errorMessage === "string" && errorMessage.trim().length > 0
+            ? errorMessage
+            : "Erro ao iniciar pagamento. Tente novamente.",
+      });
+
       toast.error(
         errorMessage || "Erro ao iniciar pagamento. Tente novamente.",
       );
@@ -1320,6 +1369,13 @@ export default function Checkout() {
       return;
     } catch (err) {
       // Network error or edge function unavailable — fallback to confirmation
+      preserveCheckoutFailureTrace({
+        saleId: sale.id,
+        stage: "create_asaas_payment_invoke_exception",
+        errorCode: "checkout_payment_invoke_exception",
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+
       console.log(
         "Asaas checkout not available, falling back to confirmation:",
         err,
