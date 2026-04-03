@@ -26,7 +26,8 @@ import { toast } from 'sonner';
 
 interface SellerQRCodeModalProps {
   sellerName: string;
-  shortCode: string;
+  shortCode?: string;
+  qrLinkOverride?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -34,15 +35,24 @@ interface SellerQRCodeModalProps {
 export function SellerQRCodeModal({
   sellerName,
   shortCode,
+  qrLinkOverride,
   open,
   onOpenChange,
 }: SellerQRCodeModalProps) {
   const qrRef = useRef<HTMLDivElement>(null);
 
-  // Link curto completo: {origin}/v/{short_code}
-  const shortLink = `${window.location.origin}/v/${shortCode}`;
+  /**
+   * Reuso do mesmo modal para vendedor e representante:
+   * - vendedor segue com link curto `/v/{short_code}`
+   * - representante injeta `qrLinkOverride` com link oficial já validado pela tela
+   */
+  const shortLink = qrLinkOverride ?? (shortCode ? `${window.location.origin}/v/${shortCode}` : '');
 
   const handleCopyLink = () => {
+    if (!shortLink) {
+      toast.error('Link indisponível para cópia');
+      return;
+    }
     navigator.clipboard.writeText(shortLink).then(
       () => toast.success('Link copiado!'),
       () => toast.error('Falha ao copiar link')
@@ -54,6 +64,10 @@ export function SellerQRCodeModal({
    * Serializa o elemento SVG do DOM e cria um Blob para download.
    */
   const handleDownloadSVG = () => {
+    if (!shortLink) {
+      toast.error('Link indisponível para gerar SVG');
+      return;
+    }
     const svgElement = qrRef.current?.querySelector('svg');
     if (!svgElement) {
       toast.error('Erro ao gerar SVG');
@@ -81,6 +95,10 @@ export function SellerQRCodeModal({
    * Renderiza o SVG em um canvas e exporta como PNG.
    */
   const handleDownloadPNG = () => {
+    if (!shortLink) {
+      toast.error('Link indisponível para gerar PNG');
+      return;
+    }
     const svgElement = qrRef.current?.querySelector('svg');
     if (!svgElement) {
       toast.error('Erro ao gerar PNG');
