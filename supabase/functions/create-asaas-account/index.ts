@@ -12,6 +12,10 @@ import {
   logSaleIntegrationEvent,
 } from "../_shared/payment-observability.ts";
 import { ensurePixReadiness, type PixReadinessResult } from "../_shared/asaas-pix-readiness.ts";
+import {
+  extractAccountIdFromAsaasPayload,
+  extractWalletIdFromAsaasPayload,
+} from "../_shared/asaas-account-payload.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,126 +61,6 @@ function summarizeAsaasPayload(value: unknown) {
   };
 }
 
-function extractWalletIdFromAsaasPayload(payload: unknown): string | null {
-  /**
-   * Comentário de manutenção:
-   * o Asaas já foi consumido aqui em formatos diferentes (`walletId`, `wallet.id`, `id`).
-   * Mantemos a ordem conservadora e ampliamos apenas alguns caminhos adjacentes de payload
-   * para melhorar a resiliência sem transformar esse fluxo em parser genérico.
-   */
-  const visited = new Set<unknown>();
-
-  const read = (value: unknown): string | null => {
-    if (!value || typeof value !== "object") return null;
-    if (visited.has(value)) return null;
-    visited.add(value);
-
-    const record = value as Record<string, unknown>;
-    const directCandidates = [
-      record.walletId,
-      record.wallet_id,
-      record.id,
-    ];
-
-    for (const candidate of directCandidates) {
-      if (typeof candidate === "string" && candidate.trim().length > 0) {
-        return candidate.trim();
-      }
-    }
-
-    if (record.wallet && typeof record.wallet === "object") {
-      const walletRecord = record.wallet as Record<string, unknown>;
-      const nestedWalletId = walletRecord.id ?? walletRecord.walletId ?? walletRecord.wallet_id;
-      if (typeof nestedWalletId === "string" && nestedWalletId.trim().length > 0) {
-        return nestedWalletId.trim();
-      }
-    }
-
-    const nestedCandidates = [
-      record.data,
-      record.account,
-      record.owner,
-      Array.isArray(record.items) ? record.items[0] : null,
-      Array.isArray(record.data) ? record.data[0] : null,
-    ];
-
-    for (const candidate of nestedCandidates) {
-      const nestedWalletId = read(candidate);
-      if (nestedWalletId) return nestedWalletId;
-    }
-
-    return null;
-  };
-
-  return read(payload);
-}
-
-type ResolvedAccountId = {
-  value: string | null;
-  source: string | null;
-};
-
-function extractAccountIdFromAsaasPayload(
-  payload: unknown,
-  options?: { allowGenericNestedId?: boolean },
-): ResolvedAccountId {
-  /**
-   * Comentário de manutenção:
-   * o `account_id` estava ficando nulo porque o vínculo por API Key aceitava apenas
-   * `myAccount.id`. Em alguns payloads reais o identificador pode aparecer aninhado
-   * em estruturas já usadas pelo fluxo atual (`account`, `owner`, `data`, `items`).
-   * Mantemos uma ordem conservadora:
-   * 1) prioriza `id` explícito do payload principal;
-   * 2) depois tenta aliases semânticos de conta;
-   * 3) por último, só quando permitido, aceita `id` genérico aninhado.
-   * Isso evita confundir walletId com accountId e reaproveita apenas fontes já lidas
-   * pelo próprio fluxo atual (`/myAccount` e fallbacks já existentes).
-   */
-  const visited = new Set<unknown>();
-
-  const read = (value: unknown, path: string, allowGenericId: boolean): ResolvedAccountId => {
-    if (!value || typeof value !== "object") return { value: null, source: null };
-    if (visited.has(value)) return { value: null, source: null };
-    visited.add(value);
-
-    const record = value as Record<string, unknown>;
-    const directCandidates: Array<{ value: unknown; source: string }> = [
-      { value: record.accountId, source: `${path}.accountId` },
-      { value: record.account_id, source: `${path}.account_id` },
-    ];
-
-    if (allowGenericId) {
-      directCandidates.unshift({ value: record.id, source: `${path}.id` });
-    }
-
-    for (const candidate of directCandidates) {
-      if (typeof candidate.value === "string" && candidate.value.trim().length > 0) {
-        return { value: candidate.value.trim(), source: candidate.source };
-      }
-    }
-
-    const nestedCandidates: Array<{ value: unknown; path: string; allowGenericId?: boolean }> = [
-      { value: record.account, path: `${path}.account`, allowGenericId: true },
-      { value: record.owner, path: `${path}.owner`, allowGenericId: true },
-      { value: record.data, path: `${path}.data`, allowGenericId: false },
-      { value: Array.isArray(record.items) ? record.items[0] : null, path: `${path}.items[0]`, allowGenericId: false },
-      { value: Array.isArray(record.data) ? record.data[0] : null, path: `${path}.data[0]`, allowGenericId: false },
-    ];
-
-    for (const candidate of nestedCandidates) {
-      const nestedResult = read(
-        candidate.value,
-        candidate.path,
-        candidate.allowGenericId ?? options?.allowGenericNestedId ?? false,
-      );
-      if (nestedResult.value) return nestedResult;
-    }
-
-    return { value: null, source: null };
-  };
-
-  return read(payload, "payload", true);
-}
 
 function buildWalletDiagnosticMessage(params: {
   environment: PaymentEnvironment;

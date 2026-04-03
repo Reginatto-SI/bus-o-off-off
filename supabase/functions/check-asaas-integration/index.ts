@@ -5,6 +5,10 @@ import {
   type PaymentEnvironment,
   resolveEnvironmentFromHost,
 } from "../_shared/runtime-env.ts";
+import {
+  extractAccountIdFromAsaasPayload,
+  extractWalletIdFromAsaasPayload,
+} from "../_shared/asaas-account-payload.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -183,6 +187,18 @@ function buildBaseDetails(companyConfig: Record<string, unknown>, envFields: Ret
 
 function logCheck(level: "log" | "warn" | "error", message: string, payload: Record<string, unknown>) {
   console[level](message, payload);
+}
+
+function formatOperationalErrorMessage(params: {
+  base: string;
+  environment: PaymentEnvironment;
+  walletId?: string | null;
+  accountId?: string | null;
+}) {
+  const environmentLabel = params.environment === "production" ? "Produção" : "Sandbox";
+  const walletLine = params.walletId ? `Wallet utilizada: ${params.walletId}` : "Wallet utilizada: não informada";
+  const accountLine = params.accountId ? `Account ID utilizado: ${params.accountId}` : "Account ID utilizado: não informado";
+  return `${params.base}\nAmbiente: ${environmentLabel}\n${walletLine}\n${accountLine}`;
 }
 
 serve(async (req) => {
@@ -498,8 +514,35 @@ serve(async (req) => {
       const checkedAt = new Date().toISOString();
       const apiKeyFingerprint = await buildApiKeyFingerprint(apiKey);
       const accountData = await asaasResponse.json();
-      const remoteAccountId = normalizeCompanyField(accountData?.id ?? null);
-      const remoteWalletId = normalizeCompanyField(accountData?.walletId ?? accountData?.wallet?.id ?? null);
+      const remoteAccountResolution = extractAccountIdFromAsaasPayload(accountData);
+      const remoteAccountId = normalizeCompanyField(remoteAccountResolution.value);
+      let remoteWalletId = normalizeCompanyField(extractWalletIdFromAsaasPayload(accountData));
+      // Comentário de manutenção: alguns payloads de /myAccount não trazem wallet no topo.
+      // Reutilizamos /wallets como fallback de leitura para evitar falso "wallet_not_found".
+      if (!remoteWalletId) {
+        try {
+          const walletsLookupRes = await fetch(`${asaasBaseUrl}/wallets/`, {
+            headers: { access_token: apiKey! },
+          });
+          if (walletsLookupRes.ok) {
+            const walletsLookupData = await walletsLookupRes.json();
+            const walletCandidates = normalizeAsaasList(walletsLookupData)
+              .map((item) => normalizeCompanyField(item.id ?? item.walletId ?? null))
+              .filter((value): value is string => Boolean(value));
+            remoteWalletId = walletCandidates.find((walletId) => walletId === storedWalletId) ?? walletCandidates[0] ?? null;
+          }
+        } catch (walletLookupError) {
+          logCheck("warn", "[check-asaas-integration] wallet lookup fallback failed", {
+            company_id: companyId,
+            requested_target_environment: requestedEnvironment,
+            resolved_payment_environment: paymentEnv,
+            diagnostic_stage: "asaas_request",
+            asaas_request_attempted: true,
+            error_type: "wallet_lookup_fallback_failed",
+            error_message: walletLookupError instanceof Error ? walletLookupError.message : String(walletLookupError),
+          });
+        }
+      }
       const accountIdMatches = Boolean(remoteAccountId && storedAccountId && remoteAccountId === storedAccountId);
       const walletIdMatches = Boolean(remoteWalletId && storedWalletId && remoteWalletId === storedWalletId);
       const asaasAccountFound = Boolean(remoteAccountId);
@@ -574,8 +617,15 @@ serve(async (req) => {
           asaas_request_attempted: true,
           error_type: "asaas_account_not_found",
           remote_account_id: remoteAccountId,
+          remote_account_id_source: remoteAccountResolution.source,
         });
 
+        accountNotFoundResponse.message = formatOperationalErrorMessage({
+          base: "Verificação falhou. Resultado: conta não encontrada no Asaas.",
+          environment: paymentEnv,
+          walletId: storedWalletId,
+          accountId: storedAccountId,
+        });
         return jsonResponse(accountNotFoundResponse, 200);
       }
 
@@ -606,8 +656,15 @@ serve(async (req) => {
           error_type: "account_id_mismatch",
           stored_account_id: storedAccountId,
           remote_account_id: remoteAccountId,
+          remote_account_id_source: remoteAccountResolution.source,
         });
 
+        accountMismatchResponse.message = formatOperationalErrorMessage({
+          base: "Verificação falhou. Resultado: account_id divergente entre empresa e gateway.",
+          environment: paymentEnv,
+          walletId: storedWalletId,
+          accountId: storedAccountId,
+        });
         return jsonResponse(accountMismatchResponse, 200);
       }
 
@@ -642,6 +699,14 @@ serve(async (req) => {
           remote_wallet_id: remoteWalletId,
         });
 
+        walletMismatchResponse.message = formatOperationalErrorMessage({
+          base: walletFound
+            ? "Verificação falhou. Resultado: wallet divergente entre empresa e gateway."
+            : "Verificação falhou. Resultado: wallet não encontrada no Asaas.",
+          environment: paymentEnv,
+          walletId: storedWalletId,
+          accountId: storedAccountId,
+        });
         return jsonResponse(walletMismatchResponse, 200);
       }
 
