@@ -126,6 +126,59 @@ function isFinancialReversalAsaasStatus(value: unknown): boolean {
   );
 }
 
+const ASAAS_CONFIRMATION_EVENTS = new Set([
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_RECEIVED",
+]);
+
+const ASAAS_CRITICAL_REVERSAL_EVENTS = new Set([
+  "PAYMENT_REFUNDED",
+  "PAYMENT_PARTIALLY_REFUNDED",
+]);
+
+const ASAAS_RISK_IN_PROGRESS_EVENTS = new Set([
+  "PAYMENT_CHARGEBACK_REQUESTED",
+  "PAYMENT_CHARGEBACK_DISPUTE",
+  "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+]);
+
+const ASAAS_PREPAID_FAILURE_EVENTS = new Set([
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+]);
+
+const ASAAS_SUPPORTED_EVENTS = new Set([
+  "PAYMENT_AUTHORIZED",
+  "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
+  "PAYMENT_CREATED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_ANTICIPATED",
+  "PAYMENT_DELETED",
+  "PAYMENT_REFUNDED",
+  "PAYMENT_REFUND_DENIED",
+  "PAYMENT_CHARGEBACK_REQUESTED",
+  "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  "PAYMENT_DUNNING_REQUESTED",
+  "PAYMENT_BANK_SLIP_VIEWED",
+  "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+  "PAYMENT_SPLIT_CANCELLED",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED",
+  "PAYMENT_AWAITING_RISK_ANALYSIS",
+  "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+  "PAYMENT_UPDATED",
+  "PAYMENT_RECEIVED",
+  "PAYMENT_OVERDUE",
+  "PAYMENT_RESTORED",
+  "PAYMENT_REFUND_IN_PROGRESS",
+  "PAYMENT_RECEIVED_IN_CASH_UNDONE",
+  "PAYMENT_CHARGEBACK_DISPUTE",
+  "PAYMENT_DUNNING_RECEIVED",
+  "PAYMENT_BANK_SLIP_CANCELLED",
+  "PAYMENT_CHECKOUT_VIEWED",
+  "PAYMENT_PARTIALLY_REFUNDED",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK",
+]);
+
 /**
  * Busca o payment_environment da venda no banco.
  * Hardening Step 5: sem ambiente persistido, o webhook não processa o evento.
@@ -464,17 +517,7 @@ serve(async (req) => {
     }
 
     const saleId = externalReference;
-    const supportedEvents = [
-      "PAYMENT_CONFIRMED",
-      "PAYMENT_RECEIVED",
-      "PAYMENT_OVERDUE",
-      "PAYMENT_DELETED",
-      "PAYMENT_UPDATED",
-      "PAYMENT_RESTORED",
-      "PAYMENT_REFUNDED",
-    ];
-
-    if (!supportedEvents.includes(eventType)) {
+    if (!ASAAS_SUPPORTED_EVENTS.has(eventType)) {
       const ignoredEventResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
@@ -654,17 +697,32 @@ serve(async (req) => {
     let result: ProcessingResult;
 
     const normalizedAsaasStatus = normalizeAsaasStatus(payment?.status);
-    const shouldTreatAsConfirmed =
-      isConfirmedAsaasStatus(normalizedAsaasStatus) ||
-      eventType === "PAYMENT_CONFIRMED" ||
-      eventType === "PAYMENT_RECEIVED";
-    const shouldTreatAsFailure =
-      isFinancialReversalAsaasStatus(normalizedAsaasStatus) ||
-      eventType === "PAYMENT_OVERDUE" ||
-      eventType === "PAYMENT_DELETED" ||
-      eventType === "PAYMENT_REFUNDED";
+    const hasExplicitConfirmationEvent = ASAAS_CONFIRMATION_EVENTS.has(eventType);
+    const hasExplicitCriticalReversalEvent = ASAAS_CRITICAL_REVERSAL_EVENTS.has(
+      eventType,
+    );
+    const hasExplicitRiskInProgressEvent = ASAAS_RISK_IN_PROGRESS_EVENTS.has(
+      eventType,
+    );
+    const hasExplicitPrepaidFailureEvent = ASAAS_PREPAID_FAILURE_EVENTS.has(
+      eventType,
+    );
 
-    if (shouldTreatAsConfirmed) {
+    /**
+     * Prioridade explícita de decisão:
+     * 1) evento oficial do Asaas (fonte primária)
+     * 2) fallback por payment.status (conservador, para retrocompatibilidade)
+     *
+     * Isso reduz dependência de heurística genérica quando o gateway já informa
+     * diretamente chargeback/disputa/estorno por eventType.
+     */
+    if (
+      hasExplicitConfirmationEvent ||
+      (!hasExplicitCriticalReversalEvent &&
+        !hasExplicitRiskInProgressEvent &&
+        !hasExplicitPrepaidFailureEvent &&
+        isConfirmedAsaasStatus(normalizedAsaasStatus))
+    ) {
       result = await processPaymentConfirmed(
         supabaseAdmin,
         sale,
@@ -672,7 +730,26 @@ serve(async (req) => {
         eventType,
         requestPayload?.dateCreated ?? null,
       );
-    } else if (shouldTreatAsFailure) {
+    } else if (
+      hasExplicitCriticalReversalEvent ||
+      (!hasExplicitRiskInProgressEvent &&
+        !hasExplicitPrepaidFailureEvent &&
+        isFinancialReversalAsaasStatus(normalizedAsaasStatus))
+    ) {
+      result = await processPaymentFailed(
+        supabaseAdmin,
+        sale,
+        payment,
+        eventType,
+      );
+    } else if (hasExplicitRiskInProgressEvent) {
+      result = await processPaymentRiskInProgress(
+        supabaseAdmin,
+        sale,
+        payment,
+        eventType,
+      );
+    } else if (hasExplicitPrepaidFailureEvent) {
       result = await processPaymentFailed(
         supabaseAdmin,
         sale,
@@ -1175,7 +1252,8 @@ async function processPaymentFailed(
   if (sale.status === "pago") {
     const isPostPaidFinancialReversal =
       isFinancialReversalAsaasStatus(asaasStatusNormalized) ||
-      eventType === "PAYMENT_REFUNDED";
+      eventType === "PAYMENT_REFUNDED" ||
+      eventType === "PAYMENT_PARTIALLY_REFUNDED";
 
     if (!isPostPaidFinancialReversal) {
       /**
@@ -1520,6 +1598,77 @@ async function processPaymentFailed(
     responseBody: { received: true, processed: true, sale_id: saleId },
     saleId,
     companyId: sale.company_id,
+  };
+}
+
+async function processPaymentRiskInProgress(
+  supabaseAdmin: ReturnType<typeof createClient<any>>,
+  sale: any,
+  payment: any,
+  eventType: string,
+): Promise<ProcessingResult> {
+  const saleId = sale.id;
+  const asaasStatusNormalized = normalizeAsaasStatus(payment?.status);
+
+  // Eventos explícitos de chargeback/disputa "em andamento":
+  // prioridade é observabilidade + rastreabilidade sem ação destrutiva automática.
+  await supabaseAdmin
+    .from("sales")
+    .update({ asaas_payment_status: asaasStatusNormalized || payment.status })
+    .eq("id", saleId)
+    .eq("company_id", sale.company_id);
+
+  const { data: ticketsData } = await supabaseAdmin
+    .from("tickets")
+    .select("id, boarding_status")
+    .eq("sale_id", saleId)
+    .eq("company_id", sale.company_id);
+
+  const hasConsumedBoarding = (ticketsData ?? []).some((ticket) =>
+    (ticket.boarding_status ?? "pendente") !== "pendente"
+  );
+
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId,
+    companyId: sale.company_id,
+    action: hasConsumedBoarding
+      ? "financial_reversal_post_paid_after_boarding"
+      : "financial_risk_post_paid_under_review",
+    source: "asaas-webhook",
+    result: "warning",
+    paymentEnvironment: sale.payment_environment ?? null,
+    errorCode: hasConsumedBoarding
+      ? "post_paid_reversal_after_boarding"
+      : "financial_reversal_under_review",
+    detail:
+      `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+  });
+
+  return {
+    status: "warning",
+    resultCategory: "warning",
+    httpStatus: 200,
+    message: hasConsumedBoarding
+      ? `Risco financeiro pós-pago detectado após embarque para venda ${saleId}`
+      : `Risco financeiro em andamento detectado para venda ${saleId} (sem cancelamento automático)`,
+    responseBody: {
+      received: true,
+      processed: true,
+      sale_id: saleId,
+      incident_code: hasConsumedBoarding
+        ? "post_paid_reversal_after_boarding"
+        : "financial_reversal_under_review",
+      operational_action: hasConsumedBoarding
+        ? "kept_history_and_flagged_risk"
+        : "risk_logged_without_destructive_transition",
+      no_automatic_refund: true,
+    },
+    saleId,
+    companyId: sale.company_id,
+    incidentCode: hasConsumedBoarding
+      ? "post_paid_reversal_after_boarding"
+      : "financial_reversal_under_review",
   };
 }
 
