@@ -46,6 +46,24 @@ function resolveAsaasConfirmedAtFromPayment(paymentData: any): string {
   return new Date().toISOString();
 }
 
+function normalizeAsaasStatus(value: unknown): string {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+function isFinancialReversalAsaasStatus(value: unknown): boolean {
+  const status = normalizeAsaasStatus(value);
+  if (!status) return false;
+  if (status === "REFUNDED" || status === "REFUND_REQUESTED") {
+    return true;
+  }
+
+  return (
+    status.includes("CHARGEBACK") ||
+    status.includes("DISPUTE") ||
+    status.includes("CONTEST")
+  );
+}
+
 function jsonResponse(body: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(body), {
     status,
@@ -62,8 +80,9 @@ serve(async (req) => {
   let saleIdFromRequest: string | null = null;
 
   try {
-    const { sale_id } = await req.json();
+    const { sale_id, force_revalidate } = await req.json();
     saleIdFromRequest = typeof sale_id === "string" ? sale_id : null;
+    const forceRevalidate = force_revalidate === true;
 
     if (!saleIdFromRequest) {
       return jsonResponse({ error: "sale_id is required" }, 400);
@@ -179,7 +198,7 @@ serve(async (req) => {
       });
     };
 
-    if (sale.status === "pago") {
+    if (sale.status === "pago" && !forceRevalidate) {
       const finalization = await finalizeConfirmedPayment({
         supabaseAdmin,
         sale,
@@ -393,7 +412,153 @@ serve(async (req) => {
       return jsonResponse({ paymentStatus: sale.status, detail: "Could not verify with Asaas" }, 200);
     }
 
-    const asaasStatus = paymentData.status;
+    const asaasStatus = normalizeAsaasStatus(paymentData.status) || paymentData.status;
+
+    if (sale.status === "pago" && forceRevalidate && isFinancialReversalAsaasStatus(asaasStatus)) {
+      const { data: ticketsData } = await supabaseAdmin
+        .from("tickets")
+        .select("id, boarding_status")
+        .eq("sale_id", sale.id)
+        .eq("company_id", sale.company_id);
+
+      const hasConsumedBoarding = (ticketsData ?? []).some((ticket) =>
+        (ticket.boarding_status ?? "pendente") !== "pendente"
+      );
+
+      if (hasConsumedBoarding) {
+        /**
+         * Revalidação manual (fallback):
+         * quando a venda já foi utilizada no embarque, preservamos histórico operacional
+         * e sinalizamos risco financeiro explícito. Não há reembolso/split automático.
+         */
+        await supabaseAdmin
+          .from("sales")
+          .update({ asaas_payment_status: asaasStatus })
+          .eq("id", sale.id)
+          .eq("company_id", sale.company_id);
+
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: sale.id,
+          companyId: sale.company_id,
+          action: "financial_reversal_post_paid_after_boarding",
+          source: "verify-payment-status",
+          result: "warning",
+          paymentEnvironment: paymentContext.environment,
+          errorCode: "post_paid_reversal_after_boarding",
+          detail: `manual_revalidate=true|asaas_status=${asaasStatus}|manual_refund_required_no_split_rollback`,
+        });
+
+        await persistVerifyLog({
+          processingStatus: "warning",
+          resultCategory: "warning",
+          message: "Revalidação detectou reversão financeira após embarque; risco registrado sem apagar histórico",
+          incidentCode: "post_paid_reversal_after_boarding",
+          httpStatus: 200,
+          responseJson: {
+            paymentStatus: sale.status,
+            asaas_status: asaasStatus,
+            operational_action: "kept_history_and_flagged_risk",
+            no_automatic_refund: true,
+          },
+          payloadJson: { sale_id: sale.id, force_revalidate: true, asaas_payment_id: sale.asaas_payment_id },
+        });
+
+        return jsonResponse({
+          paymentStatus: sale.status,
+          asaas_status: asaasStatus,
+          operational_action: "kept_history_and_flagged_risk",
+          no_automatic_refund: true,
+        }, 200);
+      }
+
+      const { data: cancelledSale, error: cancelError } = await supabaseAdmin
+        .from("sales")
+        .update({
+          status: "cancelado",
+          cancel_reason: `Reversão financeira (${asaasStatus}) detectada em revalidação manual; venda invalidada operacionalmente. Reembolso/split permanece manual pela empresa.`,
+          cancelled_at: new Date().toISOString(),
+          asaas_payment_status: asaasStatus,
+        })
+        .eq("id", sale.id)
+        .eq("company_id", sale.company_id)
+        .eq("status", "pago")
+        .select("id")
+        .maybeSingle();
+
+      if (cancelError) {
+        await persistVerifyLog({
+          processingStatus: "failed",
+          resultCategory: "error",
+          message: "Falha ao cancelar venda paga durante revalidação de reversão financeira",
+          incidentCode: "post_paid_reversal_cancellation_failed",
+          httpStatus: 500,
+          responseJson: {
+            error: "post_paid_reversal_cancellation_failed",
+            paymentStatus: sale.status,
+          },
+          payloadJson: { sale_id: sale.id, force_revalidate: true, asaas_payment_id: sale.asaas_payment_id },
+        });
+
+        return jsonResponse({
+          error: "post_paid_reversal_cancellation_failed",
+          paymentStatus: sale.status,
+        }, 500);
+      }
+
+      if (cancelledSale) {
+        await supabaseAdmin
+          .from("tickets")
+          .delete()
+          .eq("sale_id", sale.id)
+          .eq("company_id", sale.company_id);
+        await supabaseAdmin
+          .from("seat_locks")
+          .delete()
+          .eq("sale_id", sale.id)
+          .eq("company_id", sale.company_id);
+        await supabaseAdmin
+          .from("sale_passengers")
+          .delete()
+          .eq("sale_id", sale.id)
+          .eq("company_id", sale.company_id);
+      }
+
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "financial_reversal_post_paid_cancelled",
+        source: "verify-payment-status",
+        result: cancelledSale ? "success" : "ignored",
+        paymentEnvironment: paymentContext.environment,
+        detail: `manual_revalidate=true|asaas_status=${asaasStatus}|manual_refund_required_no_split_rollback`,
+      });
+
+      await persistVerifyLog({
+        processingStatus: cancelledSale ? "success" : "ignored",
+        resultCategory: cancelledSale ? "success" : "ignored",
+        message: cancelledSale
+          ? "Revalidação manual detectou reversão e cancelou venda paga antes do embarque"
+          : "Revalidação detectou reversão, mas venda já havia mudado de estado",
+        incidentCode: cancelledSale ? "post_paid_reversal_cancelled_before_boarding" : "race_condition_sale_state_changed",
+        httpStatus: 200,
+        responseJson: {
+          paymentStatus: cancelledSale ? "cancelado" : sale.status,
+          asaas_status: asaasStatus,
+          operational_action: cancelledSale ? "cancelled_before_boarding" : "state_already_changed",
+          no_automatic_refund: true,
+        },
+        payloadJson: { sale_id: sale.id, force_revalidate: true, asaas_payment_id: sale.asaas_payment_id },
+      });
+
+      return jsonResponse({
+        paymentStatus: cancelledSale ? "cancelado" : sale.status,
+        asaas_status: asaasStatus,
+        operational_action: cancelledSale ? "cancelled_before_boarding" : "state_already_changed",
+        no_automatic_refund: true,
+      }, 200);
+    }
 
     if (asaasStatus === "CONFIRMED" || asaasStatus === "RECEIVED" || asaasStatus === "RECEIVED_IN_CASH") {
       const confirmedAt = resolveAsaasConfirmedAtFromPayment(paymentData);
