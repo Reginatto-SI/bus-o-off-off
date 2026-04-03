@@ -814,7 +814,7 @@ export default function RepresentativeDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Ledger de comissões</CardTitle>
               <CardDescription>Últimos lançamentos em representative_commissions</CardDescription>
