@@ -23,5 +23,7 @@ project_id = "cdrcyjrvurrphnceromd"
     verify_jwt = false
   [functions.ticket-lookup]
     verify_jwt = false
+  [functions.register-representative]
+    verify_jwt = false
   [functions.verify-payment-status]
     verify_jwt = false

@@ -1316,6 +1316,184 @@ export type Database = {
           },
         ]
       }
+      representative_commissions: {
+        Row: {
+          available_at: string | null
+          base_amount: number
+          blocked_reason: string | null
+          commission_amount: number
+          commission_percent: number
+          company_id: string
+          created_at: string
+          id: string
+          paid_at: string | null
+          payment_environment: string
+          representative_id: string
+          sale_id: string
+          status: Database["public"]["Enums"]["representative_commission_status"]
+          updated_at: string
+        }
+        Insert: {
+          available_at?: string | null
+          base_amount: number
+          blocked_reason?: string | null
+          commission_amount: number
+          commission_percent: number
+          company_id: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          payment_environment: string
+          representative_id: string
+          sale_id: string
+          status: Database["public"]["Enums"]["representative_commission_status"]
+          updated_at?: string
+        }
+        Update: {
+          available_at?: string | null
+          base_amount?: number
+          blocked_reason?: string | null
+          commission_amount?: number
+          commission_percent?: number
+          company_id?: string
+          created_at?: string
+          id?: string
+          paid_at?: string | null
+          payment_environment?: string
+          representative_id?: string
+          sale_id?: string
+          status?: Database["public"]["Enums"]["representative_commission_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "representative_commissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "representative_commissions_representative_id_fkey"
+            columns: ["representative_id"]
+            isOneToOne: false
+            referencedRelation: "representatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "representative_commissions_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: true
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      representative_company_links: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          link_source: Database["public"]["Enums"]["representative_link_source"]
+          linked_at: string
+          locked: boolean
+          representative_id: string
+          source_code: string
+          source_context: Json | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          link_source?: Database["public"]["Enums"]["representative_link_source"]
+          linked_at?: string
+          locked?: boolean
+          representative_id: string
+          source_code: string
+          source_context?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          link_source?: Database["public"]["Enums"]["representative_link_source"]
+          linked_at?: string
+          locked?: boolean
+          representative_id?: string
+          source_code?: string
+          source_context?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "representative_company_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "representative_company_links_representative_id_fkey"
+            columns: ["representative_id"]
+            isOneToOne: false
+            referencedRelation: "representatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      representatives: {
+        Row: {
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          commission_percent: number
+          created_at: string
+          document_number: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          referral_link: string | null
+          representative_code: string
+          status: Database["public"]["Enums"]["representative_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          created_at?: string
+          document_number?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          referral_link?: string | null
+          representative_code: string
+          status?: Database["public"]["Enums"]["representative_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          created_at?: string
+          document_number?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          referral_link?: string | null
+          representative_code?: string
+          status?: Database["public"]["Enums"]["representative_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       sale_integration_logs: {
         Row: {
           asaas_event_id: string | null
@@ -1336,6 +1514,7 @@ export type Database = {
           payment_id: string | null
           processing_status: string
           provider: string
+          representative_id: string | null
           response_json: Json | null
           result_category: string | null
           sale_id: string | null
@@ -1360,6 +1539,7 @@ export type Database = {
           payment_id?: string | null
           processing_status: string
           provider: string
+          representative_id?: string | null
           response_json?: Json | null
           result_category?: string | null
           sale_id?: string | null
@@ -1384,6 +1564,7 @@ export type Database = {
           payment_id?: string | null
           processing_status?: string
           provider?: string
+          representative_id?: string | null
           response_json?: Json | null
           result_category?: string | null
           sale_id?: string | null
@@ -1395,6 +1576,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_integration_logs_representative_id_fkey"
+            columns: ["representative_id"]
+            isOneToOne: false
+            referencedRelation: "representatives"
             referencedColumns: ["id"]
           },
           {
@@ -1586,6 +1774,7 @@ export type Database = {
           platform_fee_total: number | null
           platform_net_amount: number | null
           quantity: number
+          representative_id: string | null
           reservation_expires_at: string | null
           sale_origin: string
           seller_id: string | null
@@ -1625,6 +1814,7 @@ export type Database = {
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity: number
+          representative_id?: string | null
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
@@ -1664,6 +1854,7 @@ export type Database = {
           platform_fee_total?: number | null
           platform_net_amount?: number | null
           quantity?: number
+          representative_id?: string | null
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
@@ -1693,6 +1884,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_representative_id_fkey"
+            columns: ["representative_id"]
+            isOneToOne: false
+            referencedRelation: "representatives"
             referencedColumns: ["id"]
           },
           {
@@ -2639,6 +2837,7 @@ export type Database = {
         Args: { p_company_id: string; p_window_hours?: number }
         Returns: number
       }
+      generate_representative_code: { Args: never; Returns: string }
       get_benefit_eligibility_matches: {
         Args: {
           p_company_id: string
@@ -2843,6 +3042,13 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
+      upsert_representative_commission_for_sale: {
+        Args: { p_sale_id: string; p_source?: string }
+        Returns: {
+          action: string
+          status: Database["public"]["Enums"]["representative_commission_status"]
+        }[]
+      }
       user_belongs_to_company: {
         Args: { _company_id: string; _user_id: string }
         Returns: boolean
@@ -2890,6 +3096,17 @@ export type Database = {
     }
     Enums: {
       event_status: "rascunho" | "a_venda" | "encerrado"
+      representative_commission_status:
+        | "pendente"
+        | "disponivel"
+        | "bloqueada"
+        | "paga"
+      representative_link_source: "url_ref" | "codigo_manual" | "admin_ajuste"
+      representative_status:
+        | "ativo"
+        | "inativo"
+        | "bloqueado"
+        | "pendente_validacao"
       sale_status:
         | "pendente_pagamento"
         | "reservado"
@@ -3027,6 +3244,19 @@ export const Constants = {
   public: {
     Enums: {
       event_status: ["rascunho", "a_venda", "encerrado"],
+      representative_commission_status: [
+        "pendente",
+        "disponivel",
+        "bloqueada",
+        "paga",
+      ],
+      representative_link_source: ["url_ref", "codigo_manual", "admin_ajuste"],
+      representative_status: [
+        "ativo",
+        "inativo",
+        "bloqueado",
+        "pendente_validacao",
+      ],
       sale_status: [
         "pendente_pagamento",
         "reservado",

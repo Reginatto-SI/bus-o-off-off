@@ -73,7 +73,13 @@ export default function RepresentativeRegistration() {
       );
 
       if (fnError || !data?.success) {
-        setError(data?.error || fnError?.message || 'Não foi possível concluir seu cadastro agora.');
+        const technicalDetail = data?.error || fnError?.message || 'Resposta inesperada da função';
+        console.error('[register-representative] Falha no cadastro:', {
+          etapa: 'invoke_edge_function',
+          funcao: 'register-representative',
+          erro: technicalDetail,
+        });
+        setError('Não foi possível concluir seu cadastro agora. Tente novamente em instantes.');
         setLoading(false);
         return;
       }
@@ -103,8 +109,13 @@ export default function RepresentativeRegistration() {
       // o redirecionamento direto para o painel mantém consistência com o login existente.
       navigate('/representante/painel');
     } catch (unknownError) {
-      const parsedError = unknownError instanceof Error ? unknownError.message : 'Erro inesperado. Tente novamente.';
-      setError(parsedError);
+      const technicalDetail = unknownError instanceof Error ? unknownError.message : String(unknownError);
+      console.error('[register-representative] Erro inesperado:', {
+        etapa: 'handleSubmit',
+        funcao: 'register-representative',
+        erro: technicalDetail,
+      });
+      setError('Não foi possível concluir seu cadastro agora. Tente novamente em instantes.');
     } finally {
       setLoading(false);
     }
