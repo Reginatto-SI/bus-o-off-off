@@ -457,7 +457,7 @@ export default function RepresentativeDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 md:gap-5">
+      <main className="mx-auto grid w-full min-w-0 max-w-7xl gap-4 overflow-hidden px-4 py-5 md:gap-5">
         {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
         <section className="order-1 grid gap-4 lg:grid-cols-3">
           {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
