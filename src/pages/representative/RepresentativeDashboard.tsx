@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { Logo } from '@/components/Logo';
+import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
 import {
   RepresentativeCompanyLink,
   RepresentativeCommission,
@@ -28,7 +30,6 @@ import {
   Building2,
   Wallet,
   Download,
-  QrCode,
   ClipboardList,
   Megaphone,
   TrendingUp,
@@ -37,7 +38,6 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrencyBRL } from '@/lib/currency';
-import { QRCodeCanvas } from 'qrcode.react';
 
 type LedgerStatusFilter = 'todos' | 'pendente' | 'bloqueada' | 'paga';
 type LedgerPeriodFilter = '30' | '90' | 'all';
@@ -61,6 +61,7 @@ export default function RepresentativeDashboard() {
   const [periodFilter, setPeriodFilter] = useState<LedgerPeriodFilter>('30');
   const [pageSize, setPageSize] = useState<10 | 20 | 50>(10);
   const [page, setPage] = useState(1);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
 
   useEffect(() => {
     if (!representativeProfile?.id) {
@@ -362,22 +363,13 @@ export default function RepresentativeDashboard() {
     }
   };
 
-  /**
-   * QR Code usa exatamente o link oficial já exibido no painel.
-   * Mantemos geração no frontend com `qrcode.react` para evitar nova dependência de backend.
-   */
-  const downloadQrCode = () => {
-    const canvas = document.getElementById('representative-link-qrcode') as HTMLCanvasElement | null;
-    if (!canvas || !officialLink) {
-      toast.error('QR Code indisponível para download no momento.');
+  // Fluxo substituído: botão de QR abre modal padrão (preview grande + download SVG/PNG), igual ao vendedor.
+  const openQrModal = () => {
+    if (!officialLink) {
+      toast.error('Link oficial indisponível para gerar QR Code.');
       return;
     }
-
-    const dataUrl = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = `qr-representante-${representativeProfile?.representative_code ?? 'oficial'}.png`;
-    link.click();
+    setQrModalOpen(true);
   };
 
   const getStatusLabel = (status: RepresentativeCommissionStatus) => {
@@ -411,103 +403,52 @@ export default function RepresentativeDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <p className="text-sm text-muted-foreground">Painel do Representante</p>
-            <h1 className="text-xl font-semibold">Olá, {representativeProfile.name}</h1>
+    <div className="min-h-screen bg-background">
+      {/* Header alinhado ao padrão do vendedor: mantém logomarca + identificação + ação de sair no topo. */}
+      <header className="bg-card border-b px-4 py-3 sticky top-0 z-30">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Logo size="sm" />
+            <div>
+              <p className="text-xs text-muted-foreground">Painel do Representante</p>
+              <h1 className="text-base font-semibold sm:text-lg">{representativeProfile.name}</h1>
+            </div>
           </div>
-          <Button variant="outline" onClick={signOut}>
+          <Button variant="ghost" size="sm" onClick={signOut}>
             <LogOut className="mr-2 h-4 w-4" />
             Sair
           </Button>
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-7xl gap-6 px-6 py-6">
-        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardDescription>Performance comercial</CardDescription>
-              <CardTitle className="text-base">Visão consolidada do seu resultado</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
-                <p className="text-xl font-semibold">{kpis.totalCompanies}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Empresas ativas</p>
-                <p className="text-xl font-semibold">{kpis.activeCompanies}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Comissão gerada</p>
-                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionGenerated)}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Comissão paga</p>
-                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionPaid)}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Pendente / bloqueada</p>
-                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Vendas associadas</p>
-                <p className="text-xl font-semibold">{kpis.totalSalesAssociated}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardDescription>Identidade</CardDescription>
-              <CardTitle className="text-base">Dados do representante</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Nome</span>
-                <span className="font-medium text-right">{representativeProfile.name}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant={representativeProfile.status === 'ativo' ? 'default' : 'secondary'}>
-                  {representativeProfile.status}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Código oficial</span>
-                <span className="font-semibold">{representativeProfile.representative_code}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="md:col-span-2">
-            <CardHeader>
+      <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 md:gap-5">
+        {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
+        <section className="grid gap-4 lg:grid-cols-3">
+          {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
+          <Card className="lg:col-span-2 border-primary/30 shadow-sm">
+            <CardHeader className="pb-3">
               <CardDescription>Link oficial de indicação</CardDescription>
-              <CardTitle className="text-base">Compartilhamento comercial</CardTitle>
+              <CardTitle className="text-lg">Compartilhamento comercial</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">Compartilhe esse link para indicar empresas e acelerar sua conversão.</p>
               <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-                <p className="text-sm font-medium">Compartilhe e comece a indicar empresas</p>
+                <p className="text-sm font-semibold">Sua ação principal é compartilhar seu link oficial.</p>
                 <p className="text-xs text-muted-foreground">
-                  Envie seu link oficial com uma mensagem curta para WhatsApp e facilite o primeiro contato comercial.
+                  Use o link, código e mensagem pronta para iniciar novas indicações de empresas.
                 </p>
               </div>
-              <div className="rounded-lg border bg-background p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
-                  <Badge variant="secondary" className="font-mono">
-                    {representativeProfile.representative_code}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                  <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate font-medium">{officialLink || 'Link oficial não disponível'}</span>
+              <div className="grid gap-3">
+                <div className="rounded-lg border bg-background p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
+                    <Badge variant="secondary" className="font-mono">
+                      {representativeProfile.representative_code}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                    <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="truncate font-medium">{officialLink || 'Link oficial não disponível'}</span>
+                  </div>
                 </div>
               </div>
 
@@ -524,15 +465,68 @@ export default function RepresentativeDashboard() {
                   <Megaphone className="mr-2 h-4 w-4" />
                   {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
                 </Button>
-                <Button variant="outline" onClick={downloadQrCode} disabled={!officialLink}>
+                <Button variant="outline" onClick={openQrModal} disabled={!officialLink}>
                   <Download className="mr-2 h-4 w-4" />
-                  Baixar QR Code
+                  Ver QR Code
                 </Button>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="flex items-center gap-3 rounded-md border bg-background p-3 w-fit">
-                <QrCode className="h-4 w-4 text-muted-foreground self-start mt-1" />
-                <QRCodeCanvas id="representative-link-qrcode" value={officialLink || 'about:blank'} size={108} includeMargin />
+          <Card>
+            <CardHeader>
+              <CardDescription>Identidade</CardDescription>
+              <CardTitle className="text-base">Resumo do representante</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Nome</span>
+                <span className="font-medium text-right">{representativeProfile.name}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant={representativeProfile.status === 'ativo' ? 'default' : 'secondary'}>
+                  {representativeProfile.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Código oficial</span>
+                <span className="font-semibold font-mono">{representativeProfile.representative_code}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-4">
+          <Card>
+            <CardHeader>
+              <CardDescription>Performance comercial</CardDescription>
+              <CardTitle className="text-base">Visão consolidada do seu resultado</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
+                <p className="text-2xl font-semibold leading-none mt-1">{kpis.totalCompanies}</p>
+              </div>
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Empresas ativas</p>
+                <p className="text-2xl font-semibold leading-none mt-1">{kpis.activeCompanies}</p>
+              </div>
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Comissão gerada</p>
+                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionGenerated)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Comissão paga</p>
+                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionPaid)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Pendente / bloqueada</p>
+                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-4">
+                <p className="text-xs text-muted-foreground">Vendas associadas</p>
+                <p className="text-2xl font-semibold leading-none mt-1">{kpis.totalSalesAssociated}</p>
               </div>
             </CardContent>
           </Card>
@@ -559,6 +553,12 @@ export default function RepresentativeDashboard() {
               <CardTitle className="text-base">Checklist rápido do representante</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Checklist com progresso explícito para facilitar leitura de pendências e bloqueios sem alterar regra. */}
+              <div className="rounded-md border bg-muted/40 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  {activationChecklist.filter((item) => item.done).length} de {activationChecklist.length} etapas concluídas
+                </p>
+              </div>
               {activationChecklist.map((item) => (
                 <div key={item.label} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
                   <div className="space-y-1">
@@ -631,7 +631,8 @@ export default function RepresentativeDashboard() {
                   ))}
                   {companyLinks.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3} className="text-muted-foreground">
+                      {/* Estado vazio mais orientado à ação comercial para evitar aparência de tela "fria". */}
+                      <TableCell colSpan={3} className="text-muted-foreground py-6">
                         <div className="flex items-start gap-2">
                           <TrendingUp className="mt-0.5 h-4 w-4" />
                           <div>
@@ -724,7 +725,8 @@ export default function RepresentativeDashboard() {
                   ))}
                   {filteredCommissions.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-muted-foreground">
+                      {/* Estado vazio melhorado: mantém contexto de negócio e indica próximo passo. */}
+                      <TableCell colSpan={7} className="text-muted-foreground py-6">
                         {commissions.length === 0 ? (
                           <div className="flex items-start gap-2">
                             <ClipboardList className="mt-0.5 h-4 w-4" />
@@ -764,6 +766,15 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
       </main>
+
+      {/* Reaproveitamento direto do modal do vendedor para manter o mesmo comportamento de preview e download. */}
+      {/* Qualidade do download corrigida por herdar o fluxo SVG + PNG em alta resolução (canvas escalado) do padrão existente. */}
+      <SellerQRCodeModal
+        sellerName={representativeProfile.name}
+        qrLinkOverride={officialLink}
+        open={qrModalOpen}
+        onOpenChange={setQrModalOpen}
+      />
     </div>
   );
 }
