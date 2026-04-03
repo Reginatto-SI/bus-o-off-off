@@ -20,7 +20,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, LogOut, Copy, Link as LinkIcon, Building2, Wallet, Download, QrCode } from 'lucide-react';
+import {
+  Loader2,
+  LogOut,
+  Copy,
+  Link as LinkIcon,
+  Building2,
+  Wallet,
+  Download,
+  QrCode,
+  ClipboardList,
+  Megaphone,
+  TrendingUp,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -43,6 +55,8 @@ export default function RepresentativeDashboard() {
   const [companyLinks, setCompanyLinks] = useState<RepresentativeCompanyLink[]>([]);
   const [commissions, setCommissions] = useState<RepresentativeCommission[]>([]);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [messageCopied, setMessageCopied] = useState(false);
   const [statusFilter, setStatusFilter] = useState<LedgerStatusFilter>('todos');
   const [periodFilter, setPeriodFilter] = useState<LedgerPeriodFilter>('30');
   const [pageSize, setPageSize] = useState<10 | 20 | 50>(10);
@@ -127,6 +141,29 @@ export default function RepresentativeDashboard() {
       commissionPaid: totalsByStatus.paid,
       commissionPendingOrBlocked: totalsByStatus.pending + totalsByStatus.blocked,
       blockedCount: commissions.filter((item) => item.status === 'bloqueada').length,
+      totalSalesAssociated: commissions.length,
+    };
+  }, [commissions, companyLinks]);
+
+  const conversionIndicators = useMemo(() => {
+    /**
+     * Indicadores de conversão usam apenas contagens/somas sobre os dados já carregados
+     * (company_links + representative_commissions), sem qualquer tracking novo.
+     */
+    const now = new Date();
+    const cutoff30 = new Date(now);
+    cutoff30.setDate(cutoff30.getDate() - 30);
+
+    const linksLast30Days = companyLinks.filter((link) => new Date(link.linked_at) >= cutoff30).length;
+    const commissionLast30Days = commissions
+      .filter((item) => new Date(item.created_at) >= cutoff30)
+      .reduce((acc, item) => acc + item.commission_amount, 0);
+    const ledgerRecentCount = commissions.filter((item) => new Date(item.created_at) >= cutoff30).length;
+
+    return {
+      linksLast30Days,
+      commissionLast30Days,
+      ledgerRecentCount,
     };
   }, [commissions, companyLinks]);
 
@@ -162,11 +199,6 @@ export default function RepresentativeDashboard() {
     const start = (page - 1) * pageSize;
     return filteredCommissions.slice(start, start + pageSize);
   }, [filteredCommissions, page, pageSize]);
-
-  const companiesSorted = useMemo(
-    () => [...companyLinks].sort((a, b) => new Date(b.linked_at).getTime() - new Date(a.linked_at).getTime()),
-    [companyLinks]
-  );
 
   const alerts = useMemo(() => {
     const messages: { title: string; description: string; icon: 'wallet' | 'company' | 'status' }[] = [];
@@ -227,6 +259,67 @@ export default function RepresentativeDashboard() {
     }, {});
   }, [commissions]);
 
+  const companiesSorted = useMemo(() => {
+    /**
+     * Refino leve de conversão: listamos primeiro empresas com maior comissão gerada
+     * para facilitar leitura de retorno comercial sem criar ranking complexo.
+     */
+    return [...companyLinks].sort((a, b) => {
+      const commissionA = companyCommissionById[a.company_id]?.commission ?? 0;
+      const commissionB = companyCommissionById[b.company_id]?.commission ?? 0;
+      if (commissionA !== commissionB) return commissionB - commissionA;
+      return new Date(b.linked_at).getTime() - new Date(a.linked_at).getTime();
+    });
+  }, [companyCommissionById, companyLinks]);
+
+  const activationChecklist = useMemo(() => {
+    /**
+     * Checklist operacional com regras explícitas da Fase 6:
+     * - wallet: presença de wallet sandbox ou produção no perfil
+     * - empresas vinculadas: existência em representative_company_links
+     * - comissões bloqueadas: leitura direta do status no ledger
+     * - link oficial: existência de referral_link resolvido no perfil
+     */
+    const walletConfigured = Boolean(representativeProfile?.asaas_wallet_id_sandbox || representativeProfile?.asaas_wallet_id_production);
+    const hasLinkedCompanies = companyLinks.length > 0;
+    const hasBlockedCommissions = commissions.some((item) => item.status === 'bloqueada');
+    const hasOfficialLink = Boolean(officialLink);
+
+    return [
+      {
+        label: 'Link oficial disponível',
+        done: hasOfficialLink,
+        helpText: hasOfficialLink ? 'Pronto para divulgação.' : 'Valide com o suporte se o link não aparecer.',
+      },
+      {
+        label: 'Carteira de recebimento cadastrada',
+        done: walletConfigured,
+        helpText: walletConfigured ? 'Wallet encontrada no cadastro.' : 'Cadastre a wallet para evitar bloqueios.',
+      },
+      {
+        label: 'Primeira empresa vinculada',
+        done: hasLinkedCompanies,
+        helpText: hasLinkedCompanies
+          ? 'Você já possui vínculo(s) ativo(s) para comissão.'
+          : 'Compartilhe seu link oficial para trazer sua primeira empresa.',
+      },
+      {
+        label: 'Sem comissões bloqueadas',
+        done: !hasBlockedCommissions,
+        helpText: hasBlockedCommissions ? 'Há comissões bloqueadas aguardando tratativa.' : 'Nenhum bloqueio encontrado no ledger.',
+      },
+    ];
+  }, [commissions, companyLinks.length, officialLink, representativeProfile?.asaas_wallet_id_production, representativeProfile?.asaas_wallet_id_sandbox]);
+
+  /**
+   * Mensagem pronta curta e comercial para WhatsApp.
+   * Mantemos o texto no frontend para facilitar evolução de copy sem alterar backend.
+   */
+  const readyToShareMessage = useMemo(() => {
+    if (!officialLink) return '';
+    return `Olá! Sou representante da Smartbus BR.\nA plataforma ajuda empresas de transporte a vender passagens e organizar operações com mais controle.\nSe fizer sentido para você, conheça por este link oficial: ${officialLink}`;
+  }, [officialLink]);
+
   const copyOfficialLink = async () => {
     if (!officialLink) return;
 
@@ -238,6 +331,34 @@ export default function RepresentativeDashboard() {
     } catch (error) {
       console.error('clipboard.writeText failed', error);
       toast.error('Não foi possível copiar o link neste dispositivo.');
+    }
+  };
+
+  const copyRepresentativeCode = async () => {
+    if (!representativeProfile?.representative_code) return;
+
+    try {
+      await navigator.clipboard.writeText(representativeProfile.representative_code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 1800);
+      toast.success('Código do representante copiado com sucesso.');
+    } catch (error) {
+      console.error('clipboard.writeText failed for representative code', error);
+      toast.error('Não foi possível copiar o código neste dispositivo.');
+    }
+  };
+
+  const copyReadyMessage = async () => {
+    if (!readyToShareMessage) return;
+
+    try {
+      await navigator.clipboard.writeText(readyToShareMessage);
+      setMessageCopied(true);
+      setTimeout(() => setMessageCopied(false), 1800);
+      toast.success('Mensagem pronta copiada com sucesso.');
+    } catch (error) {
+      console.error('clipboard.writeText failed for ready message', error);
+      toast.error('Não foi possível copiar a mensagem neste dispositivo.');
     }
   };
 
@@ -305,6 +426,41 @@ export default function RepresentativeDashboard() {
       </header>
 
       <main className="mx-auto grid w-full max-w-7xl gap-6 px-6 py-6">
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardDescription>Performance comercial</CardDescription>
+              <CardTitle className="text-base">Visão consolidada do seu resultado</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
+                <p className="text-xl font-semibold">{kpis.totalCompanies}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Empresas ativas</p>
+                <p className="text-xl font-semibold">{kpis.activeCompanies}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Comissão gerada</p>
+                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionGenerated)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Comissão paga</p>
+                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionPaid)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Pendente / bloqueada</p>
+                <p className="text-lg font-semibold">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Vendas associadas</p>
+                <p className="text-xl font-semibold">{kpis.totalSalesAssociated}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         <section className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader>
@@ -336,6 +492,12 @@ export default function RepresentativeDashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">Compartilhe esse link para indicar empresas e acelerar sua conversão.</p>
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                <p className="text-sm font-medium">Compartilhe e comece a indicar empresas</p>
+                <p className="text-xs text-muted-foreground">
+                  Envie seu link oficial com uma mensagem curta para WhatsApp e facilite o primeiro contato comercial.
+                </p>
+              </div>
               <div className="rounded-lg border bg-background p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
@@ -353,6 +515,14 @@ export default function RepresentativeDashboard() {
                 <Button onClick={copyOfficialLink} disabled={!officialLink} className="min-w-40">
                   <Copy className="mr-2 h-4 w-4" />
                   {linkCopied ? 'Copiado!' : 'Copiar link oficial'}
+                </Button>
+                <Button variant="outline" onClick={copyRepresentativeCode}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {codeCopied ? 'Código copiado!' : 'Copiar código'}
+                </Button>
+                <Button variant="outline" onClick={copyReadyMessage} disabled={!readyToShareMessage}>
+                  <Megaphone className="mr-2 h-4 w-4" />
+                  {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
                 </Button>
                 <Button variant="outline" onClick={downloadQrCode} disabled={!officialLink}>
                   <Download className="mr-2 h-4 w-4" />
@@ -382,41 +552,43 @@ export default function RepresentativeDashboard() {
           </section>
         )}
 
-        <section className="grid gap-4 md:grid-cols-5">
+        <section className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Empresas</CardDescription>
-              <CardTitle className="text-2xl">{kpis.totalCompanies}</CardTitle>
+            <CardHeader>
+              <CardDescription>Ativação operacional</CardDescription>
+              <CardTitle className="text-base">Checklist rápido do representante</CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Total vinculadas</CardContent>
+            <CardContent className="space-y-3">
+              {activationChecklist.map((item) => (
+                <div key={item.label} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                  </div>
+                  <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
+                </div>
+              ))}
+            </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Empresas ativas</CardDescription>
-              <CardTitle className="text-2xl">{kpis.activeCompanies}</CardTitle>
+            <CardHeader>
+              <CardDescription>Indicadores simples de conversão (30 dias)</CardDescription>
+              <CardTitle className="text-base">Acompanhamento recente</CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Com status ativo</CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Comissão gerada</CardDescription>
-              <CardTitle className="text-xl">{formatCurrencyBRL(kpis.commissionGenerated)}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Somatório do ledger</CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Comissão paga</CardDescription>
-              <CardTitle className="text-xl">{formatCurrencyBRL(kpis.commissionPaid)}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Status paga</CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Pendente / bloqueada</CardDescription>
-              <CardTitle className="text-xl">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Aguardando tratativa</CardContent>
+            <CardContent className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
+                <p className="text-xl font-semibold">{conversionIndicators.linksLast30Days}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Comissões no período</p>
+                <p className="text-lg font-semibold">{formatCurrencyBRL(conversionIndicators.commissionLast30Days)}</p>
+              </div>
+              <div className="rounded-md border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Lançamentos no ledger</p>
+                <p className="text-xl font-semibold">{conversionIndicators.ledgerRecentCount}</p>
+              </div>
+            </CardContent>
           </Card>
         </section>
 
@@ -460,7 +632,13 @@ export default function RepresentativeDashboard() {
                   {companyLinks.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-muted-foreground">
-                        Nenhuma empresa vinculada até o momento.
+                        <div className="flex items-start gap-2">
+                          <TrendingUp className="mt-0.5 h-4 w-4" />
+                          <div>
+                            <p className="font-medium">Nenhuma empresa vinculada até o momento.</p>
+                            <p className="text-xs">Compartilhe seu link oficial para trazer sua primeira empresa.</p>
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
@@ -547,7 +725,17 @@ export default function RepresentativeDashboard() {
                   {filteredCommissions.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-muted-foreground">
-                        Nenhum lançamento encontrado com os filtros selecionados.
+                        {commissions.length === 0 ? (
+                          <div className="flex items-start gap-2">
+                            <ClipboardList className="mt-0.5 h-4 w-4" />
+                            <div>
+                              <p className="font-medium">Você ainda não possui comissões registradas.</p>
+                              <p className="text-xs">Assim que suas empresas começarem a vender, suas comissões aparecerão aqui.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          'Nenhum lançamento encontrado com os filtros selecionados.'
+                        )}
                       </TableCell>
                     </TableRow>
                   )}
