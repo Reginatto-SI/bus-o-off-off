@@ -423,21 +423,37 @@ export default function RepresentativeDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header alinhado ao padrão do vendedor: mantém logomarca + identificação + ação de sair no topo. */}
-      <header className="bg-card border-b px-4 py-3 sticky top-0 z-30">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Logo size="sm" />
-            <div>
-              <p className="text-xs text-muted-foreground">Painel do Representante</p>
-              <h1 className="text-base font-semibold sm:text-lg">{representativeProfile.name}</h1>
-            </div>
+    <div className="min-h-screen overflow-x-hidden bg-background">
+      {/* Header mobile-first: no mobile quebramos em 2 linhas para evitar compressão entre marca, título e ação. */}
+      <header className="sticky top-0 z-30 border-b bg-card px-3 py-2.5 sm:px-4 sm:py-3">
+        <div className="mx-auto w-full max-w-7xl">
+          {/* Linha 1 (mobile): marca à esquerda e sair à direita; desktop mantém composição horizontal original. */}
+          <div className="flex items-center justify-between sm:hidden">
+            <Logo size="sm" className="max-w-[108px]" />
+            <Button variant="ghost" size="sm" onClick={signOut} className="h-9 gap-1.5 px-2.5">
+              <LogOut className="h-4 w-4 shrink-0" />
+              <span className="text-xs">Sair</span>
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={signOut} className="shrink-0">
-            <LogOut className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Sair</span>
-          </Button>
+          {/* Linha 2 (mobile): contexto textual com melhor leitura e sem disputa de espaço. */}
+          <div className="mt-1.5 min-w-0 sm:hidden">
+            <p className="text-xs text-muted-foreground">Painel do Representante</p>
+            <h1 className="truncate text-lg font-semibold leading-tight">{representativeProfile.name}</h1>
+          </div>
+
+          <div className="hidden min-w-0 items-center justify-between sm:flex">
+            <div className="flex min-w-0 items-center gap-3">
+              <Logo size="sm" />
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Painel do Representante</p>
+                <h1 className="truncate text-base font-semibold sm:text-lg">{representativeProfile.name}</h1>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={signOut} className="h-10 px-3">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Sair</span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -459,15 +475,15 @@ export default function RepresentativeDashboard() {
               </div>
               <div className="grid gap-3">
                 <div className="rounded-lg border bg-background p-3">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
-                    <Badge variant="secondary" className="font-mono">
+                  <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
+                    <Badge variant="secondary" className="shrink-0 font-mono">
                       {representativeProfile.representative_code}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                    <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate font-medium">{officialLink || 'Link oficial não disponível'}</span>
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                    <LinkIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 truncate font-medium">{officialLink || 'Link oficial não disponível'}</span>
                   </div>
                 </div>
               </div>
@@ -718,9 +734,9 @@ export default function RepresentativeDashboard() {
               <div className="space-y-3 md:hidden">
                 {companiesSorted.map((link) => (
                   <div key={`mobile-company-${link.id}`} className="rounded-md border bg-background p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{link.company?.trade_name || link.company?.name || 'Empresa'}</p>
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate text-sm font-medium">{link.company?.trade_name || link.company?.name || 'Empresa'}</p>
                         <p className="text-xs text-muted-foreground">
                           {companyCommissionById[link.company_id]?.sales ?? 0} venda(s) · {formatCurrencyBRL(companyCommissionById[link.company_id]?.commission ?? 0)} em comissão
                         </p>
@@ -852,7 +868,7 @@ export default function RepresentativeDashboard() {
               <div className="space-y-3 md:hidden">
                 {paginatedCommissions.map((item) => (
                   <div key={`mobile-ledger-${item.id}`} className="rounded-md border bg-background p-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
                       <div>
                         <p className="text-xs text-muted-foreground">Comissão</p>
                         <p className="text-lg font-semibold">{formatCurrencyBRL(item.commission_amount)}</p>
@@ -862,9 +878,9 @@ export default function RepresentativeDashboard() {
                     <p className="mt-2 text-xs text-muted-foreground">
                       {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     </p>
-                    <div className="mt-2 space-y-1 text-sm">
-                      <p className="font-medium">{item.company?.trade_name || item.company?.name || 'Empresa'}</p>
-                      <p className="text-xs text-muted-foreground">Venda: <span className="font-mono">{item.sale?.id || item.sale_id}</span></p>
+                    <div className="mt-2 min-w-0 space-y-1 text-sm">
+                      <p className="truncate font-medium">{item.company?.trade_name || item.company?.name || 'Empresa'}</p>
+                      <p className="truncate text-xs text-muted-foreground">Venda: <span className="font-mono">{item.sale?.id || item.sale_id}</span></p>
                       <p className="text-xs text-muted-foreground">
                         Base: {formatCurrencyBRL(item.base_amount)} · Percentual: {item.commission_percent}%
                       </p>
