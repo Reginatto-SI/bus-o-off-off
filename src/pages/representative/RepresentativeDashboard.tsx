@@ -723,7 +723,7 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="order-4 grid gap-4 lg:grid-cols-2 lg:order-5">
+        <section className="order-4 min-w-0 grid gap-4 lg:grid-cols-2 lg:order-5">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Empresas vinculadas</CardTitle>
