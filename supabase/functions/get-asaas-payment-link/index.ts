@@ -16,6 +16,14 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
+type AsaasPaymentSummary = {
+  id?: string;
+  invoiceUrl?: string | null;
+  status?: string | null;
+  billingType?: string | null;
+  externalReference?: string | null;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -47,7 +55,10 @@ serve(async (req) => {
       company_id: sale.company_id,
       payment_environment: sale.payment_environment,
       sale_status: sale.status,
+      has_asaas_payment_id: Boolean(sale.asaas_payment_id),
     };
+
+    logPaymentTrace("info", "get-asaas-payment-link", "reopen_requested", saleContext);
 
     if (sale.status === "pago") {
       logPaymentTrace("info", "get-asaas-payment-link", "reopen_blocked_paid_sale", {
@@ -77,15 +88,6 @@ serve(async (req) => {
       return jsonResponse({ url: null, reason: "sale_status_not_reopenable" }, 200);
     }
 
-    if (!sale.asaas_payment_id) {
-      logPaymentTrace("info", "get-asaas-payment-link", "reopen_blocked_missing_payment_id", {
-        ...saleContext,
-        reason: "missing_asaas_payment_id",
-      });
-
-      return jsonResponse({ url: null, reason: "missing_asaas_payment_id" }, 200);
-    }
-
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .select("asaas_api_key_production, asaas_api_key_sandbox")
@@ -96,14 +98,26 @@ serve(async (req) => {
       return jsonResponse({ error: "Company not found" }, 404);
     }
 
-    const paymentContext = resolvePaymentContext(sale.payment_environment, {
-      asaasApiKeyProduction: company.asaas_api_key_production,
-      asaasApiKeySandbox: company.asaas_api_key_sandbox,
-      asaasWalletIdProduction: null,
-      asaasWalletIdSandbox: null,
-    });
+    let paymentContext;
+    try {
+      paymentContext = resolvePaymentContext({
+        mode: "verify",
+        sale: { payment_environment: sale.payment_environment },
+        company: {
+          asaas_api_key_production: company.asaas_api_key_production,
+          asaas_api_key_sandbox: company.asaas_api_key_sandbox,
+        },
+      });
+    } catch (contextError) {
+      logPaymentTrace("error", "get-asaas-payment-link", "payment_context_unresolved", {
+        ...saleContext,
+        reason: "payment_environment_unresolved",
+        error_message: contextError instanceof Error ? contextError.message : String(contextError),
+      });
+      return jsonResponse({ url: null, reason: "payment_environment_unresolved" }, 200);
+    }
 
-    if (!paymentContext.ok || !paymentContext.apiKey) {
+    if (!paymentContext.apiKey) {
       logPaymentTrace("error", "get-asaas-payment-link", "payment_context_unresolved", {
         ...saleContext,
         reason: "missing_company_asaas_api_key",
@@ -112,38 +126,145 @@ serve(async (req) => {
       return jsonResponse({ url: null, reason: "missing_company_asaas_api_key" }, 200);
     }
 
-    const asaasResponse = await fetch(`${paymentContext.baseUrl}/payments/${sale.asaas_payment_id}`, {
-      headers: { access_token: paymentContext.apiKey },
-    });
+    let resolvedPayment: AsaasPaymentSummary | null = null;
+    let resolvedPaymentId: string | null = null;
+    let reopenStrategy: "by_payment_id" | "by_external_reference" = "by_payment_id";
 
-    if (!asaasResponse.ok) {
-      logPaymentTrace("warning", "get-asaas-payment-link", "payment_fetch_failed", {
-        ...saleContext,
-        asaas_payment_id: sale.asaas_payment_id,
-        http_status: asaasResponse.status,
-        reason: "payment_fetch_failed",
+    if (sale.asaas_payment_id) {
+      // Caminho principal: cobrança já vinculada por payment_id.
+      const asaasResponse = await fetch(`${paymentContext.baseUrl}/payments/${sale.asaas_payment_id}`, {
+        headers: { access_token: paymentContext.apiKey },
       });
 
-      return jsonResponse({ url: null, reason: "payment_fetch_failed" }, 200);
+      if (!asaasResponse.ok) {
+        const reason = asaasResponse.status === 404
+          ? "payment_not_found_on_gateway"
+          : "payment_fetch_failed";
+        logPaymentTrace("warning", "get-asaas-payment-link", "payment_fetch_failed", {
+          ...saleContext,
+          asaas_payment_id: sale.asaas_payment_id,
+          http_status: asaasResponse.status,
+          reason,
+        });
+
+        return jsonResponse({ url: null, reason }, 200);
+      }
+
+      const paymentData = await asaasResponse.json();
+      resolvedPayment = paymentData as AsaasPaymentSummary;
+      resolvedPaymentId = typeof resolvedPayment?.id === "string" ? resolvedPayment.id : sale.asaas_payment_id;
+    } else {
+      // Fallback legado: busca determinística por externalReference oficial (sale.id).
+      reopenStrategy = "by_external_reference";
+      logPaymentTrace("info", "get-asaas-payment-link", "legacy_fallback_started", {
+        ...saleContext,
+        fallback_external_reference: sale.id,
+      });
+
+      const searchResponse = await fetch(
+        `${paymentContext.baseUrl}/payments?externalReference=${encodeURIComponent(sale.id)}&limit=10`,
+        { headers: { access_token: paymentContext.apiKey } },
+      );
+
+      if (!searchResponse.ok) {
+        logPaymentTrace("warning", "get-asaas-payment-link", "legacy_fallback_search_failed", {
+          ...saleContext,
+          http_status: searchResponse.status,
+          reason: "payment_search_failed",
+        });
+        return jsonResponse({ url: null, reason: "payment_search_failed" }, 200);
+      }
+
+      const searchData = await searchResponse.json();
+      const payments = Array.isArray(searchData?.data)
+        ? (searchData.data as AsaasPaymentSummary[])
+        : [];
+      const strictMatches = payments.filter((payment) =>
+        typeof payment?.id === "string" && payment.externalReference === sale.id
+      );
+
+      if (strictMatches.length === 0) {
+        logPaymentTrace("info", "get-asaas-payment-link", "legacy_fallback_not_found", {
+          ...saleContext,
+          reason: "no_payment_found_by_external_reference",
+          candidate_count: payments.length,
+        });
+        return jsonResponse({ url: null, reason: "no_payment_found_by_external_reference" }, 200);
+      }
+
+      if (strictMatches.length > 1) {
+        logPaymentTrace("warning", "get-asaas-payment-link", "legacy_fallback_ambiguous", {
+          ...saleContext,
+          reason: "multiple_payments_for_external_reference",
+          candidate_count: strictMatches.length,
+        });
+        return jsonResponse({ url: null, reason: "multiple_payments_for_external_reference" }, 200);
+      }
+
+      resolvedPayment = strictMatches[0];
+      resolvedPaymentId = resolvedPayment.id ?? null;
+
+      if (!resolvedPaymentId) {
+        logPaymentTrace("warning", "get-asaas-payment-link", "legacy_fallback_missing_payment_id", {
+          ...saleContext,
+          reason: "payment_missing_id_in_gateway_payload",
+        });
+        return jsonResponse({ url: null, reason: "payment_missing_id_in_gateway_payload" }, 200);
+      }
+
+      // Persistência defensiva: só vincula id recuperado quando a venda ainda está sem asaas_payment_id.
+      const { error: persistError } = await supabaseAdmin
+        .from("sales")
+        .update({
+          asaas_payment_id: resolvedPaymentId,
+          asaas_payment_status: resolvedPayment?.status ?? null,
+        })
+        .eq("id", sale.id)
+        .is("asaas_payment_id", null);
+
+      if (persistError) {
+        logPaymentTrace("warning", "get-asaas-payment-link", "legacy_fallback_persist_failed", {
+          ...saleContext,
+          reason: "legacy_payment_id_persist_failed",
+          recovered_asaas_payment_id: resolvedPaymentId,
+          error_message: persistError.message,
+        });
+      } else {
+        logPaymentTrace("info", "get-asaas-payment-link", "legacy_fallback_persisted_payment_id", {
+          ...saleContext,
+          reason: "legacy_payment_id_persisted",
+          recovered_asaas_payment_id: resolvedPaymentId,
+        });
+      }
     }
 
-    const paymentData = await asaasResponse.json();
-    const invoiceUrl = typeof paymentData?.invoiceUrl === "string" ? paymentData.invoiceUrl : null;
-
+    const invoiceUrl = typeof resolvedPayment?.invoiceUrl === "string" ? resolvedPayment.invoiceUrl : null;
     if (!invoiceUrl) {
       logPaymentTrace("warning", "get-asaas-payment-link", "reopen_url_missing_on_payment_payload", {
         ...saleContext,
-        asaas_payment_id: sale.asaas_payment_id,
+        asaas_payment_id: resolvedPaymentId,
         reason: "missing_invoice_url",
-        asaas_status: paymentData?.status ?? null,
+        asaas_status: resolvedPayment?.status ?? null,
+        reopen_strategy: reopenStrategy,
       });
     }
 
+    logPaymentTrace("info", "get-asaas-payment-link", "reopen_resolved", {
+      ...saleContext,
+      asaas_payment_id: resolvedPaymentId,
+      has_invoice_url: Boolean(invoiceUrl),
+      asaas_status: resolvedPayment?.status ?? null,
+      reopen_strategy: reopenStrategy,
+    });
+
     return jsonResponse({
-      // Fonte de verdade: URL da cobrança já existente no Asaas para este payment_id.
+      // Fonte de verdade: URL da cobrança existente no Asaas (payment_id direto ou fallback por externalReference).
       url: invoiceUrl,
-      paymentStatus: paymentData?.status ?? null,
-      billingType: paymentData?.billingType ?? null,
+      reason: invoiceUrl ? null : "missing_invoice_url",
+      paymentStatus: resolvedPayment?.status ?? null,
+      billingType: resolvedPayment?.billingType ?? null,
+      asaasPaymentId: resolvedPaymentId,
+      reopenStrategy,
     }, 200);
   } catch (error) {
     logPaymentTrace("error", "get-asaas-payment-link", "unexpected_error", {

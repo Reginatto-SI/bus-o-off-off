@@ -223,6 +223,39 @@ export default function Confirmation() {
     }
   }, [id, toast]);
 
+  const getReopenInvoiceErrorMessage = useCallback((reason: unknown) => {
+    switch (reason) {
+      case 'missing_asaas_payment_id':
+        return 'Esta reserva não possui identificador de cobrança vinculado. Refaça o acesso pelo link de pagamento.';
+      case 'missing_company_asaas_api_key':
+        return 'A empresa desta reserva está sem configuração de cobrança para este ambiente. Contate o suporte.';
+      case 'payment_not_found_on_gateway':
+        return 'A cobrança vinculada não foi encontrada no gateway de pagamento. Refaça o acesso pelo link de pagamento.';
+      case 'no_payment_found_by_external_reference':
+        return 'Esta reserva legada não possui cobrança localizável pela referência oficial. Refaça o acesso pelo link de pagamento.';
+      case 'multiple_payments_for_external_reference':
+        return 'Foram encontradas múltiplas cobranças para esta reserva e não é seguro escolher automaticamente. Contate o suporte.';
+      case 'payment_search_failed':
+        return 'Não foi possível buscar cobranças por referência no gateway neste momento. Tente novamente em instantes.';
+      case 'payment_environment_unresolved':
+        return 'O ambiente de pagamento desta reserva está inconsistente. Refaça o acesso pelo link de pagamento ou contate o suporte.';
+      case 'payment_missing_id_in_gateway_payload':
+        return 'A cobrança foi encontrada, mas sem identificador válido para vinculação segura.';
+      case 'missing_invoice_url':
+        return 'A cobrança foi localizada, mas sem link público disponível. Atualize o status do pagamento ou contate o suporte.';
+      case 'sale_paid_not_reopenable':
+        return 'Esta reserva já está com pagamento confirmado. Atualize a página para visualizar sua passagem.';
+      case 'sale_cancelled_not_reopenable':
+        return 'Esta reserva foi cancelada e não possui cobrança reabrível.';
+      case 'sale_status_not_reopenable':
+        return 'O status atual desta reserva não permite reabrir cobrança.';
+      case 'payment_fetch_failed':
+        return 'Não foi possível consultar a cobrança no gateway agora. Tente novamente em instantes.';
+      default:
+        return 'Não foi possível localizar a cobrança desta reserva. Tente atualizar o status ou refazer o acesso pelo link de pagamento.';
+    }
+  }, []);
+
   const handleReopenAsaasInvoice = useCallback(async () => {
     if (!id) return;
 
@@ -240,8 +273,13 @@ export default function Confirmation() {
 
       const invoiceUrl = typeof data?.url === 'string' ? data.url : null;
       if (!invoiceUrl) {
+        console.warn('[confirmation] reopen-asaas-invoice:unavailable', {
+          sale_id: id,
+          reason: (data as any)?.reason ?? null,
+          payment_status: (data as any)?.paymentStatus ?? null,
+        });
         toast({
-          title: 'Não foi possível localizar a cobrança desta reserva. Tente atualizar o status ou refazer o acesso pelo link de pagamento.',
+          title: getReopenInvoiceErrorMessage((data as any)?.reason),
           variant: 'destructive',
         });
         return;
@@ -254,7 +292,8 @@ export default function Confirmation() {
           variant: 'destructive',
         });
       }
-    } catch {
+    } catch (error) {
+      console.error('[confirmation] reopen-asaas-invoice:error', { sale_id: id, error });
       toast({
         title: 'Não foi possível localizar a cobrança desta reserva. Tente atualizar o status ou refazer o acesso pelo link de pagamento.',
         variant: 'destructive',
@@ -262,7 +301,7 @@ export default function Confirmation() {
     } finally {
       setIsReopeningInvoice(false);
     }
-  }, [id, toast]);
+  }, [getReopenInvoiceErrorMessage, id, toast]);
 
   // Polling para confirmação de pagamento (works for both pendente_pagamento and reservado)
   useEffect(() => {
