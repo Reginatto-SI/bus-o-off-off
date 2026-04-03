@@ -520,7 +520,7 @@ export default function RepresentativeDashboard() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">Nome</span>
-                <span className="font-medium text-right">{representativeProfile.name}</span>
+                <span className="min-w-0 truncate font-medium text-right">{representativeProfile.name}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">Status</span>
