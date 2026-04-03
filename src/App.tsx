@@ -41,6 +41,7 @@ import DriverHome from "./pages/driver/DriverHome";
 import DriverValidate from "./pages/driver/DriverValidate";
 import DriverBoarding from "./pages/driver/DriverBoarding";
 import DriverPreferences from "./pages/driver/DriverPreferences";
+import RepresentativeDashboard from "./pages/representative/RepresentativeDashboard";
 
 // Public pages
 import PublicEvents from "./pages/public/PublicEvents";
@@ -103,6 +104,9 @@ const App = () => (
             <Route path="/motorista/validar" element={<DriverValidate />} />
             <Route path="/motorista/embarque" element={<DriverBoarding />} />
             <Route path="/motorista/preferencias" element={<DriverPreferences />} />
+
+            {/* Representative Portal (área exclusiva, fora do admin) */}
+            <Route path="/representante/painel" element={<RepresentativeDashboard />} />
 
             {/* Admin Panel */}
             {/* Redireciona a rota base do admin para o dashboard mantendo o layout e guardas atuais. */}

@@ -1,4 +1,6 @@
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
+export type RepresentativeStatus = 'ativo' | 'inativo' | 'bloqueado' | 'pendente_validacao';
+export type RepresentativeCommissionStatus = 'pendente' | 'disponivel' | 'bloqueada' | 'paga';
 export type EventStatus = 'rascunho' | 'a_venda' | 'encerrado';
 export type EventCategory = 'evento' | 'excursao' | 'bate_e_volta' | 'viagem' | 'caravana';
 export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
@@ -149,6 +151,56 @@ export interface Profile {
   company_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Representative {
+  id: string;
+  user_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  document_number: string | null;
+  status: RepresentativeStatus;
+  representative_code: string;
+  referral_link: string | null;
+  asaas_wallet_id_production: string | null;
+  asaas_wallet_id_sandbox: string | null;
+  commission_percent: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RepresentativeCompanyLink {
+  id: string;
+  company_id: string;
+  representative_id: string;
+  link_source: 'url_ref' | 'codigo_manual' | 'admin_ajuste';
+  source_code: string;
+  source_context: Record<string, unknown> | null;
+  linked_at: string;
+  locked: boolean;
+  created_at: string;
+  updated_at: string;
+  company?: Pick<Company, 'id' | 'name' | 'trade_name' | 'is_active'> | null;
+}
+
+export interface RepresentativeCommission {
+  id: string;
+  company_id: string;
+  representative_id: string;
+  sale_id: string;
+  payment_environment: 'sandbox' | 'production';
+  base_amount: number;
+  commission_percent: number;
+  commission_amount: number;
+  status: RepresentativeCommissionStatus;
+  available_at: string | null;
+  paid_at: string | null;
+  blocked_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  company?: Pick<Company, 'id' | 'name' | 'trade_name'> | null;
+  sale?: { id: string } | null;
 }
 
 export interface UserRoleRecord {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { UserRole, Profile, Company } from '@/types/database';
+import { UserRole, Profile, Company, Representative } from '@/types/database';
 import { canAccessTemplatesLayoutByUserId } from '@/lib/templatesLayoutAccess';
 
 interface AuthContextType {
@@ -24,6 +24,8 @@ interface AuthContextType {
   isDeveloper: boolean;
   canAccessTemplatesLayout: boolean;
   canViewFinancials: boolean;
+  representativeProfile: Representative | null;
+  isRepresentative: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [representativeProfile, setRepresentativeProfile] = useState<Representative | null>(null);
 
   const resolveEffectiveRole = (userId: string, role: UserRole): UserRole => {
     // Regra de negócio obrigatória: este usuário nunca pode assumir gerente/operador.
@@ -85,6 +88,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!rolesData || rolesData.length === 0) {
+        /**
+         * Fase 3 representantes:
+         * quando não há user_roles, ainda pode existir um representante autenticado
+         * via representatives.user_id. Mantemos isso separado do admin para evitar
+         * misturar experiência administrativa com painel comercial do representante.
+         */
+        const { data: representativeData, error: representativeError } = await supabase
+          .from('representatives' as never)
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (representativeError) {
+          console.error('Erro ao carregar representante (representatives.select)', {
+            code: representativeError.code,
+            message: representativeError.message,
+            details: representativeError.details,
+            hint: representativeError.hint,
+          });
+        }
+
+        setRepresentativeProfile((representativeData as Representative | null) ?? null);
         // Sem vínculos — limpa estado e finaliza
         setUserCompanies([]);
         setActiveCompanyId(null);
@@ -93,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSellerId(null);
         return; // finally → setLoading(false)
       }
+
+      // Qualquer usuário com user_roles ativos não entra no fluxo de painel exclusivo de representante.
+      setRepresentativeProfile(null);
 
       const companyIds = rolesData.map((role: any) => role.company_id).filter(Boolean);
 
@@ -207,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveCompany(null);
       setUserRole(null);
       setSellerId(null);
+      setRepresentativeProfile(null);
     } finally {
       // Bug fix: loading só é false DEPOIS que todos os dados foram resolvidos.
       // Isso evita que AdminLayout veja userRole=null enquanto fetchUserData ainda roda.
@@ -231,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setActiveCompanyId(null);
           setActiveCompany(null);
           setUserCompanies([]);
+          setRepresentativeProfile(null);
           setLoading(false);
         }
       }
@@ -301,6 +331,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isGerente = userRole === 'gerente' || isDeveloper;
   const isOperador = userRole === 'operador';
   const isVendedor = userRole === 'vendedor';
+  const isRepresentative = !!representativeProfile;
   const canViewFinancials = userRole === 'gerente' || isDeveloper;
 
   return (
@@ -325,6 +356,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isDeveloper,
         canAccessTemplatesLayout,
         canViewFinancials,
+        representativeProfile,
+        isRepresentative,
       }}
     >
       {children}
