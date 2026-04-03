@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Loader2,
   LogOut,
@@ -33,11 +34,14 @@ import {
   ClipboardList,
   Megaphone,
   TrendingUp,
+  ChevronDown,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { cn } from '@/lib/utils';
 
 type LedgerStatusFilter = 'todos' | 'pendente' | 'bloqueada' | 'paga';
 type LedgerPeriodFilter = '30' | '90' | 'all';
@@ -62,6 +66,9 @@ export default function RepresentativeDashboard() {
   const [pageSize, setPageSize] = useState<10 | 20 | 50>(10);
   const [page, setPage] = useState(1);
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
+  const [checklistExpanded, setChecklistExpanded] = useState(false);
+  const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
 
   useEffect(() => {
     if (!representativeProfile?.id) {
@@ -248,6 +255,19 @@ export default function RepresentativeDashboard() {
     return messages;
   }, [commissions.length, companyLinks.length, filteredCommissions.length, kpis.blockedCount, representativeProfile]);
 
+  const prioritizedAlerts = useMemo(() => {
+    const priorityByIcon: Record<'wallet' | 'company' | 'status', number> = {
+      wallet: 0,
+      status: 1,
+      company: 2,
+    };
+
+    return [...alerts].sort((a, b) => priorityByIcon[a.icon] - priorityByIcon[b.icon]);
+  }, [alerts]);
+
+  const mobileVisibleAlerts = prioritizedAlerts.slice(0, 2);
+  const mobileHiddenAlerts = prioritizedAlerts.slice(2);
+
 
   const companyCommissionById = useMemo(() => {
     // Origem dos indicadores por empresa: soma direta de `representative_commissions` já carregado no painel.
@@ -414,16 +434,16 @@ export default function RepresentativeDashboard() {
               <h1 className="text-base font-semibold sm:text-lg">{representativeProfile.name}</h1>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={signOut}>
+          <Button variant="ghost" size="sm" onClick={signOut} className="shrink-0">
             <LogOut className="mr-2 h-4 w-4" />
-            Sair
+            <span className="hidden sm:inline">Sair</span>
           </Button>
         </div>
       </header>
 
       <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 md:gap-5">
         {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className="order-1 grid gap-4 lg:grid-cols-3">
           {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
           <Card className="lg:col-span-2 border-primary/30 shadow-sm">
             <CardHeader className="pb-3">
@@ -452,23 +472,26 @@ export default function RepresentativeDashboard() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={copyOfficialLink} disabled={!officialLink} className="min-w-40">
+              {/* Mobile-first: CTA principal em largura total para reduzir competição com ações secundárias. */}
+              <div className="space-y-2">
+                <Button onClick={copyOfficialLink} disabled={!officialLink} className="h-11 w-full sm:w-auto sm:min-w-48">
                   <Copy className="mr-2 h-4 w-4" />
                   {linkCopied ? 'Copiado!' : 'Copiar link oficial'}
                 </Button>
-                <Button variant="outline" onClick={copyRepresentativeCode}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  {codeCopied ? 'Código copiado!' : 'Copiar código'}
-                </Button>
-                <Button variant="outline" onClick={copyReadyMessage} disabled={!readyToShareMessage}>
-                  <Megaphone className="mr-2 h-4 w-4" />
-                  {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
-                </Button>
-                <Button variant="outline" onClick={openQrModal} disabled={!officialLink}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Ver QR Code
-                </Button>
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
+                  <Button variant="outline" onClick={copyRepresentativeCode} className="h-10 w-full sm:w-auto">
+                    <Copy className="mr-2 h-4 w-4" />
+                    {codeCopied ? 'Código copiado!' : 'Copiar código'}
+                  </Button>
+                  <Button variant="outline" onClick={copyReadyMessage} disabled={!readyToShareMessage} className="h-10 w-full sm:w-auto">
+                    <Megaphone className="mr-2 h-4 w-4" />
+                    {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
+                  </Button>
+                  <Button variant="outline" onClick={openQrModal} disabled={!officialLink} className="h-10 w-full sm:w-auto">
+                    <Download className="mr-2 h-4 w-4" />
+                    Ver QR Code
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -497,44 +520,46 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="grid gap-4">
+        <section className="order-2 grid gap-4">
           <Card>
             <CardHeader>
               <CardDescription>Performance comercial</CardDescription>
               <CardTitle className="text-base">Visão consolidada do seu resultado</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              <div className="rounded-md border bg-background p-4">
+            {/* KPI mais compacto no mobile para reduzir sensação de mural de mini-cards. */}
+            <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
-                <p className="text-2xl font-semibold leading-none mt-1">{kpis.totalCompanies}</p>
+                <p className="mt-1 text-xl font-semibold leading-none sm:text-2xl">{kpis.totalCompanies}</p>
               </div>
-              <div className="rounded-md border bg-background p-4">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Empresas ativas</p>
-                <p className="text-2xl font-semibold leading-none mt-1">{kpis.activeCompanies}</p>
+                <p className="mt-1 text-xl font-semibold leading-none sm:text-2xl">{kpis.activeCompanies}</p>
               </div>
-              <div className="rounded-md border bg-background p-4">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Comissão gerada</p>
-                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionGenerated)}</p>
+                <p className="mt-1 text-lg font-semibold leading-none sm:text-xl">{formatCurrencyBRL(kpis.commissionGenerated)}</p>
               </div>
-              <div className="rounded-md border bg-background p-4">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Comissão paga</p>
-                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionPaid)}</p>
+                <p className="mt-1 text-lg font-semibold leading-none sm:text-xl">{formatCurrencyBRL(kpis.commissionPaid)}</p>
               </div>
-              <div className="rounded-md border bg-background p-4">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Pendente / bloqueada</p>
-                <p className="text-xl font-semibold leading-none mt-1">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</p>
+                <p className="mt-1 text-lg font-semibold leading-none sm:text-xl">{formatCurrencyBRL(kpis.commissionPendingOrBlocked)}</p>
               </div>
-              <div className="rounded-md border bg-background p-4">
+              <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Vendas associadas</p>
-                <p className="text-2xl font-semibold leading-none mt-1">{kpis.totalSalesAssociated}</p>
+                <p className="mt-1 text-xl font-semibold leading-none sm:text-2xl">{kpis.totalSalesAssociated}</p>
               </div>
             </CardContent>
           </Card>
         </section>
 
         {alerts.length > 0 && (
-          <section className="grid gap-3">
-            {alerts.map((item, index) => (
+          <section className="order-3 grid gap-2 sm:gap-3">
+            {/* Compactação mobile: exibimos alertas prioritários primeiro e permitimos expandir os demais. */}
+            {mobileVisibleAlerts.map((item, index) => (
               <Alert key={`${item.title}-${index}`}>
                 {item.icon === 'wallet' && <Wallet className="h-4 w-4" />}
                 {item.icon === 'company' && <Building2 className="h-4 w-4" />}
@@ -543,10 +568,49 @@ export default function RepresentativeDashboard() {
                 <AlertDescription>{item.description}</AlertDescription>
               </Alert>
             ))}
+            {mobileHiddenAlerts.length > 0 && (
+              <>
+                <div className="md:hidden">
+                  <Collapsible open={alertsExpanded} onOpenChange={setAlertsExpanded}>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-9 w-full justify-between">
+                        <span className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4" />
+                          {alertsExpanded ? 'Ocultar alertas adicionais' : `Ver ${mobileHiddenAlerts.length} alerta(s) adicional(is)`}
+                        </span>
+                        <ChevronDown className={cn('h-4 w-4 transition-transform', alertsExpanded && 'rotate-180')} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2 space-y-2">
+                      {mobileHiddenAlerts.map((item, index) => (
+                        <Alert key={`${item.title}-mobile-${index}`}>
+                          {item.icon === 'wallet' && <Wallet className="h-4 w-4" />}
+                          {item.icon === 'company' && <Building2 className="h-4 w-4" />}
+                          {item.icon === 'status' && <Building2 className="h-4 w-4" />}
+                          <AlertTitle>{item.title}</AlertTitle>
+                          <AlertDescription>{item.description}</AlertDescription>
+                        </Alert>
+                      ))}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+                <div className="hidden md:grid md:gap-3">
+                  {mobileHiddenAlerts.map((item, index) => (
+                    <Alert key={`${item.title}-desktop-${index}`}>
+                      {item.icon === 'wallet' && <Wallet className="h-4 w-4" />}
+                      {item.icon === 'company' && <Building2 className="h-4 w-4" />}
+                      {item.icon === 'status' && <Building2 className="h-4 w-4" />}
+                      <AlertTitle>{item.title}</AlertTitle>
+                      <AlertDescription>{item.description}</AlertDescription>
+                    </Alert>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
         )}
 
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="order-6 grid gap-4 lg:order-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardDescription>Ativação operacional</CardDescription>
@@ -559,15 +623,39 @@ export default function RepresentativeDashboard() {
                   {activationChecklist.filter((item) => item.done).length} de {activationChecklist.length} etapas concluídas
                 </p>
               </div>
-              {activationChecklist.map((item) => (
-                <div key={item.label} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.helpText}</p>
+              {/* Compactação mobile: checklist expansível para reduzir altura sem perder conteúdo. */}
+              <div className="md:hidden">
+                <Collapsible open={checklistExpanded} onOpenChange={setChecklistExpanded}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 w-full justify-between">
+                      <span>{checklistExpanded ? 'Ocultar checklist' : 'Ver checklist completo'}</span>
+                      <ChevronDown className={cn('h-4 w-4 transition-transform', checklistExpanded && 'rotate-180')} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 space-y-3">
+                    {activationChecklist.map((item) => (
+                      <div key={`mobile-${item.label}`} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">{item.label}</p>
+                          <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                        </div>
+                        <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+              <div className="hidden space-y-3 md:block">
+                {activationChecklist.map((item) => (
+                  <div key={item.label} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                    </div>
+                    <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
                   </div>
-                  <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
-                </div>
-              ))}
+                ))}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -575,76 +663,138 @@ export default function RepresentativeDashboard() {
               <CardDescription>Indicadores simples de conversão (30 dias)</CardDescription>
               <CardTitle className="text-base">Acompanhamento recente</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
-                <p className="text-xl font-semibold">{conversionIndicators.linksLast30Days}</p>
+            <CardContent className="space-y-3">
+              {/* Compactação mobile: indicadores em expansão opcional; desktop mantém visual direto. */}
+              <div className="md:hidden">
+                <Collapsible open={indicatorsExpanded} onOpenChange={setIndicatorsExpanded}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 w-full justify-between">
+                      <span>{indicatorsExpanded ? 'Ocultar indicadores' : 'Ver indicadores dos últimos 30 dias'}</span>
+                      <ChevronDown className={cn('h-4 w-4 transition-transform', indicatorsExpanded && 'rotate-180')} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 grid gap-2">
+                    <div className="rounded-md border bg-background p-3">
+                      <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
+                      <p className="text-xl font-semibold">{conversionIndicators.linksLast30Days}</p>
+                    </div>
+                    <div className="rounded-md border bg-background p-3">
+                      <p className="text-xs text-muted-foreground">Comissões no período</p>
+                      <p className="text-lg font-semibold">{formatCurrencyBRL(conversionIndicators.commissionLast30Days)}</p>
+                    </div>
+                    <div className="rounded-md border bg-background p-3">
+                      <p className="text-xs text-muted-foreground">Lançamentos no ledger</p>
+                      <p className="text-xl font-semibold">{conversionIndicators.ledgerRecentCount}</p>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Comissões no período</p>
-                <p className="text-lg font-semibold">{formatCurrencyBRL(conversionIndicators.commissionLast30Days)}</p>
-              </div>
-              <div className="rounded-md border bg-background p-3">
-                <p className="text-xs text-muted-foreground">Lançamentos no ledger</p>
-                <p className="text-xl font-semibold">{conversionIndicators.ledgerRecentCount}</p>
+              <div className="hidden grid-cols-3 gap-3 md:grid">
+                <div className="rounded-md border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
+                  <p className="text-xl font-semibold">{conversionIndicators.linksLast30Days}</p>
+                </div>
+                <div className="rounded-md border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">Comissões no período</p>
+                  <p className="text-lg font-semibold">{formatCurrencyBRL(conversionIndicators.commissionLast30Days)}</p>
+                </div>
+                <div className="rounded-md border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">Lançamentos no ledger</p>
+                  <p className="text-xl font-semibold">{conversionIndicators.ledgerRecentCount}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="order-4 grid gap-4 lg:grid-cols-2 lg:order-5">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Empresas vinculadas</CardTitle>
               <CardDescription>Vínculos oficiais em representative_company_links</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Vínculo</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {companiesSorted.map((link) => (
-                    <TableRow key={link.id}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium">{link.company?.trade_name || link.company?.name || 'Empresa'}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {companyCommissionById[link.company_id]?.sales ?? 0} venda(s) ·{' '}
-                            {formatCurrencyBRL(companyCommissionById[link.company_id]?.commission ?? 0)} em comissão
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(link.linked_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={link.company?.is_active ? 'default' : 'secondary'}>
-                          {link.company?.is_active ? 'Ativa' : 'Inativa'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {companyLinks.length === 0 && (
+              {/* Mobile-first: lista em cards para evitar rolagem horizontal e leitura fragmentada. */}
+              <div className="space-y-3 md:hidden">
+                {companiesSorted.map((link) => (
+                  <div key={`mobile-company-${link.id}`} className="rounded-md border bg-background p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{link.company?.trade_name || link.company?.name || 'Empresa'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {companyCommissionById[link.company_id]?.sales ?? 0} venda(s) · {formatCurrencyBRL(companyCommissionById[link.company_id]?.commission ?? 0)} em comissão
+                        </p>
+                      </div>
+                      <Badge variant={link.company?.is_active ? 'default' : 'secondary'}>
+                        {link.company?.is_active ? 'Ativa' : 'Inativa'}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Vínculo: {format(new Date(link.linked_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                ))}
+                {companyLinks.length === 0 && (
+                  <div className="rounded-md border bg-muted/20 p-3 text-muted-foreground">
+                    <div className="flex items-start gap-2">
+                      <TrendingUp className="mt-0.5 h-4 w-4" />
+                      <div>
+                        <p className="font-medium">Nenhuma empresa vinculada até o momento.</p>
+                        <p className="text-xs">Compartilhe seu link oficial para trazer sua primeira empresa.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      {/* Estado vazio mais orientado à ação comercial para evitar aparência de tela "fria". */}
-                      <TableCell colSpan={3} className="text-muted-foreground py-6">
-                        <div className="flex items-start gap-2">
-                          <TrendingUp className="mt-0.5 h-4 w-4" />
-                          <div>
-                            <p className="font-medium">Nenhuma empresa vinculada até o momento.</p>
-                            <p className="text-xs">Compartilhe seu link oficial para trazer sua primeira empresa.</p>
-                          </div>
-                        </div>
-                      </TableCell>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Vínculo</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {companiesSorted.map((link) => (
+                      <TableRow key={link.id}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">{link.company?.trade_name || link.company?.name || 'Empresa'}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {companyCommissionById[link.company_id]?.sales ?? 0} venda(s) ·{' '}
+                              {formatCurrencyBRL(companyCommissionById[link.company_id]?.commission ?? 0)} em comissão
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(link.linked_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={link.company?.is_active ? 'default' : 'secondary'}>
+                            {link.company?.is_active ? 'Ativa' : 'Inativa'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {companyLinks.length === 0 && (
+                      <TableRow>
+                        {/* Estado vazio mais orientado à ação comercial para evitar aparência de tela "fria". */}
+                        <TableCell colSpan={3} className="text-muted-foreground py-6">
+                          <div className="flex items-start gap-2">
+                            <TrendingUp className="mt-0.5 h-4 w-4" />
+                            <div>
+                              <p className="font-medium">Nenhuma empresa vinculada até o momento.</p>
+                              <p className="text-xs">Compartilhe seu link oficial para trazer sua primeira empresa.</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -654,11 +804,12 @@ export default function RepresentativeDashboard() {
               <CardDescription>Últimos lançamentos em representative_commissions</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
+              {/* Filtros mantidos com mesma lógica; apenas distribuição mais confortável para toque no mobile. */}
+              <div className="grid gap-2 sm:gap-3 md:grid-cols-3">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Status</p>
                   <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as LedgerStatusFilter)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -672,7 +823,7 @@ export default function RepresentativeDashboard() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Período</p>
                   <Select value={periodFilter} onValueChange={(value) => setPeriodFilter(value as LedgerPeriodFilter)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -685,7 +836,7 @@ export default function RepresentativeDashboard() {
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Itens por página</p>
                   <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value) as 10 | 20 | 50)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -697,64 +848,107 @@ export default function RepresentativeDashboard() {
                 </div>
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Venda</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Base</TableHead>
-                    <TableHead>%</TableHead>
-                    <TableHead>Comissão</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedCommissions.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.sale?.id || item.sale_id}</TableCell>
-                      <TableCell>{item.company?.trade_name || item.company?.name || 'Empresa'}</TableCell>
-                      <TableCell>{formatCurrencyBRL(item.base_amount)}</TableCell>
-                      <TableCell>{item.commission_percent}%</TableCell>
-                      <TableCell>{formatCurrencyBRL(item.commission_amount)}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(item.status)}>{getStatusLabel(item.status)}</Badge>
-                      </TableCell>
-                      <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredCommissions.length === 0 && (
-                    <TableRow>
-                      {/* Estado vazio melhorado: mantém contexto de negócio e indica próximo passo. */}
-                      <TableCell colSpan={7} className="text-muted-foreground py-6">
-                        {commissions.length === 0 ? (
-                          <div className="flex items-start gap-2">
-                            <ClipboardList className="mt-0.5 h-4 w-4" />
-                            <div>
-                              <p className="font-medium">Você ainda não possui comissões registradas.</p>
-                              <p className="text-xs">Assim que suas empresas começarem a vender, suas comissões aparecerão aqui.</p>
-                            </div>
-                          </div>
-                        ) : (
-                          'Nenhum lançamento encontrado com os filtros selecionados.'
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              {/* Mobile-first: lançamentos em cards para leitura vertical com foco em comissão/status/data. */}
+              <div className="space-y-3 md:hidden">
+                {paginatedCommissions.map((item) => (
+                  <div key={`mobile-ledger-${item.id}`} className="rounded-md border bg-background p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Comissão</p>
+                        <p className="text-lg font-semibold">{formatCurrencyBRL(item.commission_amount)}</p>
+                      </div>
+                      <Badge variant={getStatusVariant(item.status)}>{getStatusLabel(item.status)}</Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {format(new Date(item.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                    <div className="mt-2 space-y-1 text-sm">
+                      <p className="font-medium">{item.company?.trade_name || item.company?.name || 'Empresa'}</p>
+                      <p className="text-xs text-muted-foreground">Venda: <span className="font-mono">{item.sale?.id || item.sale_id}</span></p>
+                      <p className="text-xs text-muted-foreground">
+                        Base: {formatCurrencyBRL(item.base_amount)} · Percentual: {item.commission_percent}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {filteredCommissions.length === 0 && (
+                  <div className="rounded-md border bg-muted/20 p-3 text-muted-foreground">
+                    {commissions.length === 0 ? (
+                      <div className="flex items-start gap-2">
+                        <ClipboardList className="mt-0.5 h-4 w-4" />
+                        <div>
+                          <p className="font-medium">Você ainda não possui comissões registradas.</p>
+                          <p className="text-xs">Assim que suas empresas começarem a vender, suas comissões aparecerão aqui.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm">Nenhum lançamento encontrado com os filtros selecionados.</p>
+                    )}
+                  </div>
+                )}
+              </div>
 
-              <div className="flex items-center justify-between gap-3 border-t pt-3">
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Venda</TableHead>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Base</TableHead>
+                      <TableHead>%</TableHead>
+                      <TableHead>Comissão</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Data</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedCommissions.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-mono text-xs">{item.sale?.id || item.sale_id}</TableCell>
+                        <TableCell>{item.company?.trade_name || item.company?.name || 'Empresa'}</TableCell>
+                        <TableCell>{formatCurrencyBRL(item.base_amount)}</TableCell>
+                        <TableCell>{item.commission_percent}%</TableCell>
+                        <TableCell>{formatCurrencyBRL(item.commission_amount)}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusVariant(item.status)}>{getStatusLabel(item.status)}</Badge>
+                        </TableCell>
+                        <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredCommissions.length === 0 && (
+                      <TableRow>
+                        {/* Estado vazio melhorado: mantém contexto de negócio e indica próximo passo. */}
+                        <TableCell colSpan={7} className="text-muted-foreground py-6">
+                          {commissions.length === 0 ? (
+                            <div className="flex items-start gap-2">
+                              <ClipboardList className="mt-0.5 h-4 w-4" />
+                              <div>
+                                <p className="font-medium">Você ainda não possui comissões registradas.</p>
+                                <p className="text-xs">Assim que suas empresas começarem a vender, suas comissões aparecerão aqui.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            'Nenhum lançamento encontrado com os filtros selecionados.'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <p className="text-xs text-muted-foreground">
                   {filteredCommissions.length} resultado(s) · página {Math.min(page, totalPages)} de {totalPages}
                 </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
+                <div className="grid grid-cols-2 gap-2 sm:flex">
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
                     Anterior
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-9"
                     onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                     disabled={page >= totalPages}
                   >
