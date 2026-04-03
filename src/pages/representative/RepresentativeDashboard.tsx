@@ -423,7 +423,7 @@ export default function RepresentativeDashboard() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background">
+    <div className="min-h-screen w-full max-w-full bg-background">
       {/* Header mobile-first: no mobile quebramos em 2 linhas para evitar compressão entre marca, título e ação. */}
       <header className="sticky top-0 z-30 border-b bg-card px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="mx-auto w-full max-w-7xl">
@@ -457,11 +457,11 @@ export default function RepresentativeDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-5 md:gap-5">
+      <main className="mx-auto grid w-full min-w-0 max-w-7xl gap-4 overflow-hidden px-4 py-5 md:gap-5">
         {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
-        <section className="order-1 grid gap-4 lg:grid-cols-3">
+        <section className="order-1 min-w-0 grid gap-4 lg:grid-cols-3">
           {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
-          <Card className="lg:col-span-2 border-primary/30 shadow-sm">
+          <Card className="min-w-0 overflow-hidden lg:col-span-2 border-primary/30 shadow-sm">
             <CardHeader className="pb-3">
               <CardDescription>Link oficial de indicação</CardDescription>
               <CardTitle className="text-lg">Compartilhamento comercial</CardTitle>
@@ -473,7 +473,7 @@ export default function RepresentativeDashboard() {
                   Use o link, código e mensagem pronta para iniciar novas indicações de empresas.
                 </p>
               </div>
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-3">
                 <div className="rounded-lg border bg-background p-3">
                   <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
                     <span className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
@@ -512,7 +512,7 @@ export default function RepresentativeDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardDescription>Identidade</CardDescription>
               <CardTitle className="text-base">Resumo do representante</CardTitle>
@@ -520,7 +520,7 @@ export default function RepresentativeDashboard() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">Nome</span>
-                <span className="font-medium text-right">{representativeProfile.name}</span>
+                <span className="min-w-0 truncate font-medium text-right">{representativeProfile.name}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">Status</span>
@@ -536,7 +536,7 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="order-2 grid gap-4">
+        <section className="order-2 min-w-0 grid gap-4">
           <Card>
             <CardHeader>
               <CardDescription>Performance comercial</CardDescription>
@@ -626,7 +626,7 @@ export default function RepresentativeDashboard() {
           </section>
         )}
 
-        <section className="order-6 grid gap-4 lg:order-4 lg:grid-cols-2">
+        <section className="order-6 min-w-0 grid gap-4 lg:order-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardDescription>Ativação operacional</CardDescription>
@@ -723,8 +723,8 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="order-4 grid gap-4 lg:grid-cols-2 lg:order-5">
-          <Card>
+        <section className="order-4 min-w-0 grid gap-4 lg:grid-cols-2 lg:order-5">
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Empresas vinculadas</CardTitle>
               <CardDescription>Vínculos oficiais em representative_company_links</CardDescription>
@@ -814,7 +814,7 @@ export default function RepresentativeDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Ledger de comissões</CardTitle>
               <CardDescription>Últimos lançamentos em representative_commissions</CardDescription>
