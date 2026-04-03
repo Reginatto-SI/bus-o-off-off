@@ -184,6 +184,7 @@ serve(async (req) => {
   const payment = requestPayload?.payment ?? null;
   const paymentId = payment?.id ?? null;
   const externalReference = payment?.externalReference ?? null;
+  const asaasAccountId = requestPayload?.account?.id ?? null;
 
   console.log(
     JSON.stringify({
@@ -206,9 +207,75 @@ serve(async (req) => {
       ? rawSaleId.replace("platform_fee_", "")
       : rawSaleId;
 
+    /**
+     * Blindagem mínima e conservadora:
+     * antes de resolver ambiente da venda, ignoramos com 200 apenas eventos
+     * claramente fora do escopo SmartBus (sem referência, referência vazia
+     * ou referência fora dos padrões oficiais `uuid` / `platform_fee_<uuid>`).
+     *
+     * Isso evita retry infinito no Asaas para cobranças externas à operação
+     * de vendas SmartBus, sem relaxar validações para referências válidas.
+     */
+    /**
+     * Refinamento de validação:
+     * o regex anterior (`/^[0-9a-fA-F-]{36}$/`) era permissivo e aceitava
+     * qualquer combinação hex/hífen com 36 caracteres, mesmo sem estrutura
+     * real de UUID. Usamos padrão UUID canônico (versões 1-5) para reduzir
+     * falso-positivo e melhorar previsibilidade/auditabilidade da triagem.
+     * Risco mitigado: classificar referência inválida como "potencial venda".
+     */
+    const hasUuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(actualSaleId);
+    const isClearlyOutsideSmartbusScope = !actualSaleId || !hasUuidPattern;
+    if (isClearlyOutsideSmartbusScope) {
+      const reason = !externalReference
+        ? "missing_external_reference"
+        : "invalid_external_reference_scope";
+      const outsideScopeResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message: `Evento fora do escopo SmartBus ignorado (${reason})`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason,
+          incident_code: "webhook_event_outside_smartbus_scope",
+          external_reference: externalReference,
+          account_id: asaasAccountId,
+        },
+        saleId: actualSaleId || null,
+        eventType,
+        paymentId,
+        externalReference,
+        incidentCode: "webhook_event_outside_smartbus_scope",
+      };
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...outsideScopeResult,
+        payload: requestPayload,
+      });
+
+      logPaymentTrace("warn", "asaas-webhook", "webhook_event_outside_smartbus_scope", {
+        event_type: eventType,
+        asaas_payment_id: paymentId,
+        external_reference: externalReference,
+        asaas_account_id: asaasAccountId,
+        reason,
+      });
+
+      return jsonResponse(
+        outsideScopeResult.httpStatus,
+        outsideScopeResult.responseBody,
+      );
+    }
+
     // Pré-Step 5: webhook só segue quando o ambiente da venda foi determinado de forma explícita.
     let saleEnv: PaymentEnvironment | null = null;
-    if (actualSaleId && /^[0-9a-fA-F-]{36}$/.test(actualSaleId)) {
+    if (actualSaleId && hasUuidPattern) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
     }
 
