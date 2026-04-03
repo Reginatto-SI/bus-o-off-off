@@ -17,6 +17,7 @@ interface RegisterCompanyRequest {
   phone: string;
   password: string;
   referral_code?: string | null;
+  representative_code?: string | null;
 }
 
 serve(async (req) => {
@@ -41,6 +42,7 @@ serve(async (req) => {
       phone,
       password,
       referral_code,
+      representative_code,
     } = body;
 
     // Validate required fields
@@ -77,6 +79,7 @@ serve(async (req) => {
 
     const normalizedDocument = document_number.replace(/\D/g, "");
     const normalizedReferralCode = referral_code?.trim().toUpperCase() || null;
+    const normalizedRepresentativeCode = representative_code?.trim().toUpperCase() || null;
     if (legal_type === "PJ" && normalizedDocument.length !== 14) {
       return new Response(
         JSON.stringify({ error: "CNPJ deve ter 14 dígitos" }),
@@ -179,6 +182,8 @@ serve(async (req) => {
 
     // Comentário de manutenção: o vínculo oficial do referral nasce somente após a empresa
     // indicada existir no banco. Clique, URL e sessão nunca criam o vínculo sozinhos.
+    let companyReferralLinked = false;
+
     if (normalizedReferralCode) {
       const { data: referrerCompany, error: referrerLookupError } = await supabaseAdmin
         .from("companies")
@@ -226,6 +231,79 @@ serve(async (req) => {
             });
           } else {
             console.error("Error creating company referral:", referralInsertError);
+          }
+        } else {
+          companyReferralLinked = true;
+        }
+      }
+    }
+
+    /**
+     * Fase complementar (garantia do representative_code):
+     * - `representative_code` é o caminho oficial e prioritário para vínculo com representante.
+     * - `referral_code` continua reservado ao referral entre empresas.
+     * - fallback via `referral_code` é transição controlada e restrita para códigos
+     *   no formato oficial de representante (prefixo REP) quando o referral entre empresas
+     *   não foi consumido.
+     */
+    const hasLegacyRepresentativeFallback =
+      !normalizedRepresentativeCode &&
+      !companyReferralLinked &&
+      Boolean(normalizedReferralCode && /^REP[A-Z0-9]{7}$/.test(normalizedReferralCode));
+
+    const representativeCodeCandidate =
+      normalizedRepresentativeCode ||
+      (hasLegacyRepresentativeFallback ? normalizedReferralCode : null);
+
+    if (representativeCodeCandidate) {
+      const { data: representative, error: representativeLookupError } = await supabaseAdmin
+        .from("representatives")
+        .select("id, representative_code")
+        .eq("representative_code", representativeCodeCandidate)
+        .eq("status", "ativo")
+        .maybeSingle();
+
+      if (representativeLookupError) {
+        console.error("Error resolving representative code:", representativeLookupError);
+      } else if (!representative) {
+        console.log("[register-company] representative_code ignored because it was not found or inactive", {
+          representative_code: representativeCodeCandidate,
+          company_id: companyId,
+        });
+      } else {
+        const representativeLinkSource =
+          normalizedRepresentativeCode
+            ? "codigo_manual"
+            : "url_ref";
+
+        const { error: representativeLinkError } = await supabaseAdmin
+          .from("representative_company_links")
+          .insert({
+            company_id: companyId,
+            representative_id: representative.id,
+            source_code: representativeCodeCandidate,
+            link_source: representativeLinkSource,
+            source_context: {
+              captured_via: "register-company",
+              request_origin: req.headers.get("origin"),
+              request_referer: req.headers.get("referer"),
+              user_agent: req.headers.get("user-agent"),
+              used_field: normalizedRepresentativeCode
+                ? "representative_code"
+                : "referral_code_legacy_fallback",
+            },
+            linked_at: new Date().toISOString(),
+            locked: true,
+          });
+
+        if (representativeLinkError) {
+          if ((representativeLinkError as { code?: string | null }).code === "23505") {
+            console.log("[register-company] representative link ignored because company already has official representative", {
+              company_id: companyId,
+              representative_code: representativeCodeCandidate,
+            });
+          } else {
+            console.error("Error creating representative company link:", representativeLinkError);
           }
         }
       }

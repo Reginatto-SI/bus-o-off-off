@@ -346,6 +346,48 @@ export async function finalizeConfirmedPayment(params: {
     };
   }
 
+  /**
+   * Fase 1 representantes:
+   * a comissão nasce APENAS após confirmação real de pagamento (venda paga)
+   * e passa por função idempotente no banco para evitar duplicidade por sale_id.
+   */
+  const { data: commissionRows, error: commissionError } = await supabaseAdmin
+    .rpc("upsert_representative_commission_for_sale", {
+      p_sale_id: sale.id,
+      p_source: source,
+    });
+
+  if (commissionError) {
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "representative_commission_failed",
+      source,
+      result: "error",
+      paymentEnvironment: sale.payment_environment ?? null,
+      errorCode: "representative_commission_upsert_failed",
+      detail: commissionError.message,
+    });
+  } else {
+    const commissionRow = Array.isArray(commissionRows)
+      ? commissionRows[0]
+      : null;
+
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "representative_commission_processed",
+      source,
+      result: "success",
+      paymentEnvironment: sale.payment_environment ?? null,
+      detail: commissionRow
+        ? `action=${commissionRow.action};status=${commissionRow.status ?? "n/a"}`
+        : "action=none",
+    });
+  }
+
   const { error: seatLockError } = await supabaseAdmin
     .from("seat_locks")
     .delete()
