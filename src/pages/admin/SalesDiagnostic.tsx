@@ -1888,12 +1888,45 @@ export default function SalesDiagnostic() {
     return () => window.clearTimeout(cleanupTimer);
   }, [newSaleIds]);
 
-  const handleCopyToClipboard = useCallback(async (label: string, value: string) => {
+  const safeDetailSalePayload = useMemo(() => {
+    if (!detailSale) return null;
+
+    const safe = { ...(detailSale as unknown as Record<string, unknown>) };
+    delete safe.event;
+    delete safe.company;
+    return safe;
+  }, [detailSale]);
+
+  const buildTechnicalDiagnosticPayload = useCallback(() => {
+    if (!detailSale) return null;
+
+    return {
+      sale_id: detailSale.id,
+      copied_at: new Date().toISOString(),
+      environment: detailSale.payment_environment ?? runtimePaymentEnvironment ?? 'sandbox',
+      // Reutilizamos o mesmo "safe payload" já exibido no modal para manter consistência entre visualização e cópia.
+      sale_raw: safeDetailSalePayload,
+      // Mantemos arrays vazios explicitamente para indicar ausência de evidência técnica, e não um campo omitido por erro.
+      sale_logs: detailLogs.length > 0
+        ? { items: detailLogs }
+        : { items: [], note: 'Nenhum log registrado para esta venda.' },
+      integration_logs: detailIntegrationLogs.length > 0
+        ? { items: detailIntegrationLogs }
+        : { items: [], note: 'Nenhum log técnico encontrado para esta venda.' },
+      company_operational_asaas: detailCompanyOperationalAsaas ?? null,
+    };
+  }, [detailCompanyOperationalAsaas, detailIntegrationLogs, detailLogs, detailSale, runtimePaymentEnvironment, safeDetailSalePayload]);
+
+  const handleCopyToClipboard = useCallback(async (
+    label: string,
+    value: string,
+    options?: { successMessage?: string; errorMessage?: string },
+  ) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copiado com sucesso.`);
+      toast.success(options?.successMessage ?? `${label} copiado com sucesso.`);
     } catch {
-      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+      toast.error(options?.errorMessage ?? `Não foi possível copiar ${label.toLowerCase()}.`);
     }
   }, []);
 
@@ -3118,6 +3151,28 @@ export default function SalesDiagnostic() {
                       <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <FileJson className="h-4 w-4" />
                         Payloads Técnicos
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="ml-auto h-8"
+                          onClick={() => {
+                            const consolidatedPayload = buildTechnicalDiagnosticPayload();
+                            if (!consolidatedPayload) return;
+
+                            void handleCopyToClipboard(
+                              'diagnóstico técnico',
+                              JSON.stringify(consolidatedPayload, null, 2),
+                              {
+                                successMessage: 'Diagnóstico copiado para a área de transferência',
+                                errorMessage: 'Não foi possível copiar o diagnóstico',
+                              }
+                            );
+                          }}
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copiar diagnóstico técnico
+                        </Button>
                       </h3>
 
                       {/* Causa do runtime: estes blocos já usavam o Collapsible padrão do projeto,
@@ -3130,17 +3185,7 @@ export default function SalesDiagnostic() {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <pre className="mt-2 rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
-                            {JSON.stringify(
-                              (() => {
-                                const safe = { ...(detailSale as unknown as Record<string, unknown>) };
-                                // Remove sensitive/internal fields
-                                delete safe.event;
-                                delete safe.company;
-                                return safe;
-                              })(),
-                              null,
-                              2
-                            )}
+                            {JSON.stringify(safeDetailSalePayload, null, 2)}
                           </pre>
                         </CollapsibleContent>
                       </Collapsible>
