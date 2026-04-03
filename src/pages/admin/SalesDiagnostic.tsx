@@ -90,6 +90,7 @@ interface DiagnosticSale extends Omit<Sale, 'event'> {
   ticket_count?: number;
   active_lock_count?: number;
   latest_lock_expires_at?: string | null;
+  external_reference?: string | null;
 }
 
 type OperationalCategory = 'saudavel' | 'atencao' | 'divergencia' | 'pago' | 'cancelado';
