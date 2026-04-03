@@ -697,10 +697,49 @@ export default function CompanyPage() {
 
   const asaasStatusBadge = {
     connected: { label: 'Conectado', className: 'bg-green-100 text-green-700 border-green-200' },
-    partially_configured: { label: 'Configuração pendente', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+    partially_configured: { label: 'Configurado', className: 'bg-amber-100 text-amber-800 border-amber-200' },
     inconsistent: { label: 'Inconsistente', className: 'bg-destructive/10 text-destructive border-destructive/20' },
     not_configured: { label: 'Não conectado', className: '' },
   }[asaasStatus];
+  // Comentário de suporte: reutilizamos apenas o último check no mesmo ambiente operacional
+  // para evitar mistura de diagnóstico entre produção e sandbox.
+  const lastAsaasCheckForCurrentEnvironment = runtimePaymentEnvironment
+    && lastAsaasCheck?.environment === runtimePaymentEnvironment
+    ? lastAsaasCheck
+    : null;
+  const lastAsaasCheckAtLabel = (() => {
+    const checkedAt = lastAsaasCheckForCurrentEnvironment?.details.checked_at;
+    if (!checkedAt) return 'Ainda não executada nesta sessão';
+    const parsedDate = new Date(checkedAt);
+    if (Number.isNaN(parsedDate.getTime())) return checkedAt;
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }).format(parsedDate);
+  })();
+  const lastAsaasCheckResultLabel = (() => {
+    if (!lastAsaasCheckForCurrentEnvironment) return 'Sem verificação recente';
+    if (lastAsaasCheckForCurrentEnvironment.status === 'ok') return 'Validado';
+    if (lastAsaasCheckForCurrentEnvironment.integration_status === 'pending') return 'Pendente';
+    if (lastAsaasCheckForCurrentEnvironment.integration_status === 'incomplete') return 'Configuração incompleta';
+    return 'Com erro';
+  })();
+  const lastAsaasCheckErrorReason = (() => {
+    if (!lastAsaasCheckForCurrentEnvironment || lastAsaasCheckForCurrentEnvironment.status === 'ok') return null;
+    // Comentário de UX operacional: resumimos no primeiro bloco da mensagem para leitura rápida no card.
+    return lastAsaasCheckForCurrentEnvironment.message.split('\n')[0]?.trim() || 'Falha na última verificação.';
+  })();
+  // Comentário de suporte: mantemos o snapshot local como base "Configurado/Conectado"
+  // e elevamos para "Validado/Com erro" somente quando há verificação manual do mesmo ambiente.
+  const asaasOperationalBadge = (() => {
+    if (lastAsaasCheckForCurrentEnvironment?.status === 'ok') {
+      return { label: 'Validado', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+    }
+    if (lastAsaasCheckForCurrentEnvironment?.status === 'error') {
+      return { label: 'Com erro', className: 'bg-destructive/10 text-destructive border-destructive/20' };
+    }
+    return asaasStatusBadge;
+  })();
 
   const persistedPixReady = runtimePaymentEnvironment === 'production'
     ? Boolean(company?.asaas_pix_ready_production)
@@ -2050,15 +2089,34 @@ export default function CompanyPage() {
                           </p>
                         </div>
                         {asaasStatus === 'connected' ? (
-                          <Badge className={asaasStatusBadge.className}>
+                          <Badge className={asaasOperationalBadge.className}>
                             <CheckCircle2 className="h-3 w-3 mr-1" />
-                            {asaasStatusBadge.label}
+                            {asaasOperationalBadge.label}
                           </Badge>
                         ) : (
-                          <Badge variant={asaasStatus === 'not_configured' ? 'secondary' : 'outline'} className={asaasStatusBadge.className}>
+                          <Badge variant={asaasStatus === 'not_configured' ? 'secondary' : 'outline'} className={asaasOperationalBadge.className}>
                             {asaasStatus !== 'not_configured' && <AlertCircle className="h-3 w-3 mr-1" />}
-                            {asaasStatusBadge.label}
+                            {asaasOperationalBadge.label}
                           </Badge>
+                        )}
+                      </div>
+                      <div className="rounded-md border bg-muted/20 p-3 text-xs space-y-1">
+                        <p>
+                          <strong>Última verificação:</strong> {lastAsaasCheckAtLabel}
+                        </p>
+                        <p>
+                          <strong>Ambiente:</strong>{' '}
+                          {lastAsaasCheckForCurrentEnvironment
+                            ? (lastAsaasCheckForCurrentEnvironment.environment === 'production' ? 'Produção' : 'Sandbox')
+                            : (runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox')}
+                        </p>
+                        <p>
+                          <strong>Resultado:</strong> {lastAsaasCheckResultLabel}
+                        </p>
+                        {lastAsaasCheckErrorReason && (
+                          <p className="text-destructive">
+                            <strong>Motivo:</strong> {lastAsaasCheckErrorReason}
+                          </p>
                         )}
                       </div>
 
