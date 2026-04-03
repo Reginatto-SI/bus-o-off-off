@@ -536,7 +536,7 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="order-2 grid gap-4">
+        <section className="order-2 min-w-0 grid gap-4">
           <Card>
             <CardHeader>
               <CardDescription>Performance comercial</CardDescription>
