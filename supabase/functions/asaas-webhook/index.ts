@@ -96,6 +96,36 @@ function resolveAsaasConfirmedAt(
   return new Date().toISOString();
 }
 
+function normalizeAsaasStatus(value: unknown): string {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+
+function isConfirmedAsaasStatus(value: unknown): boolean {
+  const status = normalizeAsaasStatus(value);
+  return (
+    status === "CONFIRMED" ||
+    status === "RECEIVED" ||
+    status === "RECEIVED_IN_CASH"
+  );
+}
+
+function isFinancialReversalAsaasStatus(value: unknown): boolean {
+  const status = normalizeAsaasStatus(value);
+  if (!status) return false;
+  if (status === "REFUNDED" || status === "REFUND_REQUESTED") {
+    return true;
+  }
+
+  // Blindagem conservadora e explícita:
+  // alguns contratos podem sinalizar contestação/reversão no próprio status do pagamento
+  // (ex.: chargeback/dispute). Nesses casos precisamos invalidar operação, nunca ignorar.
+  return (
+    status.includes("CHARGEBACK") ||
+    status.includes("DISPUTE") ||
+    status.includes("CONTEST")
+  );
+}
+
 /**
  * Busca o payment_environment da venda no banco.
  * Hardening Step 5: sem ambiente persistido, o webhook não processa o evento.
@@ -439,6 +469,8 @@ serve(async (req) => {
       "PAYMENT_RECEIVED",
       "PAYMENT_OVERDUE",
       "PAYMENT_DELETED",
+      "PAYMENT_UPDATED",
+      "PAYMENT_RESTORED",
       "PAYMENT_REFUNDED",
     ];
 
@@ -621,7 +653,18 @@ serve(async (req) => {
 
     let result: ProcessingResult;
 
-    if (eventType === "PAYMENT_CONFIRMED" || eventType === "PAYMENT_RECEIVED") {
+    const normalizedAsaasStatus = normalizeAsaasStatus(payment?.status);
+    const shouldTreatAsConfirmed =
+      isConfirmedAsaasStatus(normalizedAsaasStatus) ||
+      eventType === "PAYMENT_CONFIRMED" ||
+      eventType === "PAYMENT_RECEIVED";
+    const shouldTreatAsFailure =
+      isFinancialReversalAsaasStatus(normalizedAsaasStatus) ||
+      eventType === "PAYMENT_OVERDUE" ||
+      eventType === "PAYMENT_DELETED" ||
+      eventType === "PAYMENT_REFUNDED";
+
+    if (shouldTreatAsConfirmed) {
       result = await processPaymentConfirmed(
         supabaseAdmin,
         sale,
@@ -629,13 +672,52 @@ serve(async (req) => {
         eventType,
         requestPayload?.dateCreated ?? null,
       );
-    } else {
+    } else if (shouldTreatAsFailure) {
       result = await processPaymentFailed(
         supabaseAdmin,
         sale,
         payment,
         eventType,
       );
+    } else {
+      // Eventos operacionais sem perda financeira terminal (ex.: PAYMENT_UPDATED/PAYMENT_RESTORED)
+      // não alteram status da venda por si só. Persistimos apenas status do gateway para
+      // manter rastreabilidade e evitar fluxo paralelo/mágico no backend.
+      const normalized = normalizeAsaasStatus(payment?.status);
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          asaas_payment_status: normalized || payment?.status || null,
+        })
+        .eq("id", sale.id)
+        .eq("company_id", sale.company_id);
+
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_status_updated_without_transition",
+        source: "asaas-webhook",
+        result: "ignored",
+        paymentEnvironment: sale.payment_environment ?? null,
+        detail: `${eventType}|status=${normalized || "unknown"}|payment=${payment.id}`,
+      });
+
+      result = {
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message: `Evento ${eventType} registrado sem transição operacional`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason: "status_update_without_operational_transition",
+          asaas_status: normalized || payment?.status || null,
+          sale_id: sale.id,
+        },
+        saleId: sale.id,
+        companyId: sale.company_id,
+      };
     }
 
     result.eventType = eventType;
@@ -1054,6 +1136,272 @@ async function processPaymentFailed(
   eventType: string,
 ): Promise<ProcessingResult> {
   const saleId = sale.id;
+  const asaasStatusNormalized = normalizeAsaasStatus(payment?.status);
+
+  if (sale.status === "cancelado") {
+    await supabaseAdmin
+      .from("sales")
+      .update({ asaas_payment_status: asaasStatusNormalized || payment.status })
+      .eq("id", saleId)
+      .eq("company_id", sale.company_id);
+
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId: sale.company_id,
+      action: "payment_failed_ignored",
+      source: "asaas-webhook",
+      result: "ignored",
+      paymentEnvironment: sale.payment_environment ?? null,
+      detail: `${eventType}|payment=${payment.id}|already_cancelled`,
+    });
+
+    return {
+      status: "ignored",
+      resultCategory: "ignored",
+      httpStatus: 200,
+      message: `Evento ${eventType} ignorado: venda ${saleId} já estava cancelada`,
+      responseBody: {
+        received: true,
+        ignored: true,
+        reason: "sale_already_cancelled",
+        sale_id: saleId,
+      },
+      saleId,
+      companyId: sale.company_id,
+    };
+  }
+
+  if (sale.status === "pago") {
+    const isPostPaidFinancialReversal =
+      isFinancialReversalAsaasStatus(asaasStatusNormalized) ||
+      eventType === "PAYMENT_REFUNDED";
+
+    if (!isPostPaidFinancialReversal) {
+      /**
+       * Revisão conservadora:
+       * sinais como OVERDUE/DELETED/CANCELLED podem aparecer em trilhas administrativas
+       * e não significam, por si só, perda financeira pós-pago.
+       * Para venda já paga, só executamos blindagem destrutiva em estorno/disputa/chargeback real.
+       */
+      await supabaseAdmin
+        .from("sales")
+        .update({ asaas_payment_status: asaasStatusNormalized || payment.status })
+        .eq("id", saleId)
+        .eq("company_id", sale.company_id);
+
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId,
+        companyId: sale.company_id,
+        action: "payment_failed_ignored",
+        source: "asaas-webhook",
+        result: "ignored",
+        paymentEnvironment: sale.payment_environment ?? null,
+        detail:
+          `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|non_terminal_for_post_paid_reversal`,
+      });
+
+      return {
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message:
+          `Evento ${eventType} registrado sem blindagem pós-pago na venda ${saleId} (status não terminal de perda financeira)`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason: "non_terminal_for_post_paid_reversal",
+          sale_id: saleId,
+          asaas_status: asaasStatusNormalized || payment.status || null,
+        },
+        saleId,
+        companyId: sale.company_id,
+      };
+    }
+
+    const { data: ticketsData } = await supabaseAdmin
+      .from("tickets")
+      .select("id, boarding_status")
+      .eq("sale_id", saleId)
+      .eq("company_id", sale.company_id);
+
+    const hasConsumedBoarding = (ticketsData ?? []).some((ticket) =>
+      (ticket.boarding_status ?? "pendente") !== "pendente"
+    );
+
+    if (hasConsumedBoarding) {
+      /**
+       * Blindagem operacional pós-embarque:
+       * - NÃO apagamos histórico já consumido (ticket/boarding);
+       * - registramos risco financeiro explícito para suporte/auditoria;
+       * - e deixamos claro que não existe reembolso automático de split/taxas.
+       */
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          asaas_payment_status: asaasStatusNormalized || payment.status,
+        })
+        .eq("id", saleId)
+        .eq("company_id", sale.company_id);
+
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId,
+        companyId: sale.company_id,
+        action: "financial_reversal_post_paid_after_boarding",
+        source: "asaas-webhook",
+        result: "warning",
+        paymentEnvironment: sale.payment_environment ?? null,
+        errorCode: "post_paid_reversal_after_boarding",
+        detail:
+          `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+      });
+
+      return {
+        status: "warning",
+        resultCategory: "warning",
+        httpStatus: 200,
+        message: `Reversão financeira detectada após embarque na venda ${saleId}; risco financeiro registrado`,
+        responseBody: {
+          received: true,
+          processed: true,
+          sale_id: saleId,
+          incident_code: "post_paid_reversal_after_boarding",
+          operational_action: "kept_history_and_flagged_risk",
+          no_automatic_refund: true,
+        },
+        saleId,
+        companyId: sale.company_id,
+        incidentCode: "post_paid_reversal_after_boarding",
+      };
+    }
+
+    /**
+     * Blindagem operacional pré-embarque:
+     * reversão financeira pós-pago invalida venda para impedir uso indevido.
+     * Não há reembolso automático de split/taxa neste fluxo.
+     */
+    const { data: cancelledPaidSale, error: cancelPaidError } = await supabaseAdmin
+      .from("sales")
+      .update({
+        status: "cancelado",
+        cancel_reason:
+          `Reversão financeira (${eventType}/${asaasStatusNormalized || "unknown"}) pós-pagamento; venda invalidada operacionalmente. Reembolso/split permanece manual pela empresa.`,
+        cancelled_at: new Date().toISOString(),
+        asaas_payment_status: asaasStatusNormalized || payment.status,
+      })
+      .eq("id", saleId)
+      .eq("company_id", sale.company_id)
+      .eq("status", "pago")
+      .select("id")
+      .maybeSingle();
+
+    if (cancelPaidError) {
+      return {
+        status: "failed",
+        resultCategory: "error",
+        httpStatus: 500,
+        message: `Falha ao invalidar venda paga ${saleId} após reversão financeira`,
+        responseBody: {
+          error: "post_paid_reversal_cancellation_failed",
+          sale_id: saleId,
+        },
+        saleId,
+        companyId: sale.company_id,
+      };
+    }
+
+    if (!cancelledPaidSale) {
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          asaas_payment_status: asaasStatusNormalized || payment.status,
+        })
+        .eq("id", saleId)
+        .eq("company_id", sale.company_id);
+
+      return {
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message: `Venda ${saleId} já mudou de estado durante a reversão; status Asaas atualizado sem nova limpeza`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason: "race_condition_sale_state_changed",
+          sale_id: saleId,
+        },
+        saleId,
+        companyId: sale.company_id,
+      };
+    }
+
+    await supabaseAdmin
+      .from("tickets")
+      .delete()
+      .eq("sale_id", saleId)
+      .eq("company_id", sale.company_id);
+    const { error: postPaidSeatLockError } = await supabaseAdmin
+      .from("seat_locks")
+      .delete()
+      .eq("sale_id", saleId)
+      .eq("company_id", sale.company_id);
+
+    if (postPaidSeatLockError) {
+      return {
+        status: "partial_failure",
+        resultCategory: "partial_failure",
+        httpStatus: 200,
+        message:
+          `Venda paga ${saleId} invalidada por reversão, mas falhou remoção de seat_locks`,
+        responseBody: {
+          received: true,
+          processed: true,
+          warning: "Seat lock cleanup failed",
+          sale_id: saleId,
+          incident_code: "seat_lock_cleanup_failed",
+          no_automatic_refund: true,
+        },
+        saleId,
+        companyId: sale.company_id,
+      };
+    }
+
+    await supabaseAdmin
+      .from("sale_passengers")
+      .delete()
+      .eq("sale_id", saleId)
+      .eq("company_id", sale.company_id);
+
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId: sale.company_id,
+      action: "financial_reversal_post_paid_cancelled",
+      source: "asaas-webhook",
+      result: "success",
+      paymentEnvironment: sale.payment_environment ?? null,
+      detail:
+        `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+    });
+
+    return {
+      status: "success",
+      resultCategory: "success",
+      httpStatus: 200,
+      message: `Venda paga ${saleId} cancelada por reversão financeira antes do embarque`,
+      responseBody: {
+        received: true,
+        processed: true,
+        sale_id: saleId,
+        operational_action: "cancelled_before_boarding",
+        no_automatic_refund: true,
+      },
+      saleId,
+      companyId: sale.company_id,
+    };
+  }
 
   const { data: cancelledSale, error: updateError } = await supabaseAdmin
     .from("sales")
@@ -1061,9 +1409,10 @@ async function processPaymentFailed(
       status: "cancelado",
       cancel_reason: `Pagamento ${eventType.toLowerCase().replace("payment_", "")} via Asaas`,
       cancelled_at: new Date().toISOString(),
-      asaas_payment_status: payment.status,
+      asaas_payment_status: asaasStatusNormalized || payment.status,
     })
     .eq("id", saleId)
+    .eq("company_id", sale.company_id)
     .in("status", ["pendente_pagamento", "reservado"])
     .select("id")
     .maybeSingle();
@@ -1088,8 +1437,9 @@ async function processPaymentFailed(
      */
     await supabaseAdmin
       .from("sales")
-      .update({ asaas_payment_status: payment.status })
-      .eq("id", saleId);
+      .update({ asaas_payment_status: asaasStatusNormalized || payment.status })
+      .eq("id", saleId)
+      .eq("company_id", sale.company_id);
 
     await logSaleOperationalEvent({
       supabaseAdmin,
@@ -1118,11 +1468,16 @@ async function processPaymentFailed(
     };
   }
 
-  await supabaseAdmin.from("tickets").delete().eq("sale_id", saleId);
+  await supabaseAdmin
+    .from("tickets")
+    .delete()
+    .eq("sale_id", saleId)
+    .eq("company_id", sale.company_id);
   const { error: seatLockError } = await supabaseAdmin
     .from("seat_locks")
     .delete()
-    .eq("sale_id", saleId);
+    .eq("sale_id", saleId)
+    .eq("company_id", sale.company_id);
   if (seatLockError) {
     return {
       status: "partial_failure",
@@ -1141,7 +1496,11 @@ async function processPaymentFailed(
     };
   }
 
-  await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", saleId);
+  await supabaseAdmin
+    .from("sale_passengers")
+    .delete()
+    .eq("sale_id", saleId)
+    .eq("company_id", sale.company_id);
 
   await logSaleOperationalEvent({
     supabaseAdmin,
