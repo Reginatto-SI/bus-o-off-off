@@ -116,6 +116,7 @@ interface SaleIntegrationLog {
   environment_decision_source: 'sale' | 'request' | 'host' | null;
   environment_host_detected: string | null;
   created_at: string;
+  duration_ms?: number | null;
 }
 
 interface WebhookDedupEntry {
