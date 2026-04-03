@@ -12,9 +12,12 @@ import {
 import {
   isWebhookTokenValidForContext,
   resolvePaymentContext,
-  validateFinancialSocioForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
+import {
+  computeSocioFinancialSnapshot,
+  resolveAsaasSplitRecipients,
+} from "../_shared/split-recipients-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -513,7 +516,7 @@ serve(async (req) => {
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select(
-        "id, company_id, status, unit_price, quantity, gross_amount, payment_environment",
+        "id, company_id, status, unit_price, quantity, gross_amount, payment_environment, representative_id",
       )
       .eq("id", saleId)
       .maybeSingle();
@@ -880,115 +883,98 @@ async function upsertFinancialSnapshot(
 
   const platformFeePercent = Number(company.platform_fee_percent);
   const grossAmount = sale.gross_amount ?? sale.unit_price * sale.quantity;
-  const grossAmountCents = Math.round(grossAmount * 100);
-  const platformFeeCents = Math.round(
-    grossAmountCents * (platformFeePercent / 100),
-  );
-  const platformFeeTotal = platformFeeCents / 100;
+  const socioSplitPercent = Number(company?.socio_split_percent ?? 50);
+  let splitResolution;
+  try {
+    splitResolution = await resolveAsaasSplitRecipients({
+      supabaseAdmin,
+      source: "asaas-webhook",
+      saleId,
+      companyId,
+      paymentEnvironment,
+      splitEnabled: true,
+      platformFeePercent,
+      socioSplitPercent,
+      representativeId: sale.representative_id ?? null,
+      includePlatformRecipient: false,
+    });
+  } catch (splitError) {
+    const splitErrorMessage = splitError instanceof Error
+      ? splitError.message
+      : String(splitError);
+    const [splitErrorCode, ...rest] = splitErrorMessage.split(":");
+    const splitErrorDetail = rest.join(":").trim();
 
-  const socioSplitPercent = company?.socio_split_percent ?? 50;
-  let socio: any = null;
-  let socioWalletId: string | null = null;
-
-  if (socioSplitPercent > 0) {
-    const { data: socioRows, error: socioSplitError } = await supabaseAdmin
-      .from("socios_split")
-      .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
-      // Hardening Step 5: escopo multi-tenant obrigatório para evitar parceiro de outra empresa.
-      .eq("company_id", companyId)
-      .eq("status", "ativo")
-      .limit(2);
-
-    if (socioSplitError) {
-      logPaymentTrace("error", "asaas-webhook", "split_socio_query_failed", {
-        sale_id: saleId,
-        company_id: companyId,
-        payment_environment: paymentEnvironment,
-        error_message: socioSplitError.message,
-      });
-
-      await logSaleOperationalEvent({
-        supabaseAdmin,
-        saleId,
-        companyId,
-        action: "payment_confirmed",
-        source: "asaas-webhook",
-        result: "error",
-        paymentEnvironment,
-        errorCode: "split_socio_query_failed",
-        detail: socioSplitError.message,
-      });
-      return;
-    }
-
-    const socioSplitValidation = validateFinancialSocioForSplit({
-      socios: socioRows ?? [],
-      provider: "asaas",
-      environment: paymentEnvironment,
+    logPaymentTrace("error", "asaas-webhook", splitErrorCode || "split_resolution_failed", {
+      sale_id: saleId,
+      company_id: companyId,
+      payment_environment: paymentEnvironment,
+      error_message: splitErrorDetail || splitErrorMessage,
     });
 
-    if (!socioSplitValidation.ok) {
-      logPaymentTrace("error", "asaas-webhook", "split_socio_validation_failed", {
-        sale_id: saleId,
-        company_id: companyId,
-        payment_environment: paymentEnvironment,
-        validation_code: socioSplitValidation.code,
-        validation_message: socioSplitValidation.message,
-        active_socio_rows: (socioRows ?? []).length,
-      });
-
-      await logSaleOperationalEvent({
-        supabaseAdmin,
-        saleId,
-        companyId,
-        action: "payment_confirmed",
-        source: "asaas-webhook",
-        result: "error",
-        paymentEnvironment,
-        errorCode: socioSplitValidation.code,
-        detail: socioSplitValidation.message,
-      });
-      return;
-    }
-
-    socio = socioSplitValidation.socio;
-    socioWalletId = socioSplitValidation.walletId;
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId,
+      action: "payment_confirmed",
+      source: "asaas-webhook",
+      result: "error",
+      paymentEnvironment,
+      errorCode: splitErrorCode || "split_resolution_failed",
+      detail: splitErrorDetail || splitErrorMessage,
+    });
+    return;
   }
 
-  let socioFeeAmount = 0;
-  let platformNetAmount = platformFeeTotal;
+  const financialSnapshot = computeSocioFinancialSnapshot({
+    grossAmount,
+    platformFeePercent,
+    socioSplitPercent,
+    socioValidation: splitResolution.socioValidation,
+    paymentEnvironment,
+  });
 
   logPaymentTrace("info", "asaas-webhook", "financial_socio_selected", {
     sale_id: saleId,
     company_id: companyId,
     payment_environment: paymentEnvironment,
-    socio_id: socio?.id ?? null,
-    socio_wallet_selected: socioWalletId,
+    socio_id: financialSnapshot.socio?.id ?? null,
+    socio_wallet_selected: financialSnapshot.socioWalletId,
     socio_wallet_source:
       paymentEnvironment === "production"
-        ? socio?.asaas_wallet_id_production
+        ? financialSnapshot.socio?.asaas_wallet_id_production
           ? "socio.production"
           : "none"
-        : socio?.asaas_wallet_id_sandbox
+        : financialSnapshot.socio?.asaas_wallet_id_sandbox
           ? "socio.sandbox"
           : "none",
   });
 
-  if (socioWalletId && socio?.status === "ativo") {
-    const socioFeeCents = Math.round(
-      platformFeeCents * (socioSplitPercent / 100),
-    );
-    socioFeeAmount = socioFeeCents / 100;
-    platformNetAmount = (platformFeeCents - socioFeeCents) / 100;
+  if (splitResolution.representative.eligible) {
+    logPaymentTrace("info", "asaas-webhook", "split_representative_eligible", {
+      sale_id: saleId,
+      company_id: companyId,
+      payment_environment: paymentEnvironment,
+      representative_id: splitResolution.representative.representativeId,
+      representative_percent: splitResolution.representative.percent,
+    });
+  } else if (sale.representative_id) {
+    logPaymentTrace("warn", "asaas-webhook", "split_representative_ignored", {
+      sale_id: saleId,
+      company_id: companyId,
+      payment_environment: paymentEnvironment,
+      representative_id: sale.representative_id,
+      representative_reason: splitResolution.representative.reason,
+    });
   }
 
   await supabaseAdmin
     .from("sales")
     .update({
       gross_amount: grossAmount,
-      platform_fee_total: platformFeeTotal,
-      socio_fee_amount: socioFeeAmount,
-      platform_net_amount: platformNetAmount,
+      platform_fee_total: financialSnapshot.platformFeeTotal,
+      socio_fee_amount: financialSnapshot.socioFeeAmount,
+      platform_net_amount: financialSnapshot.platformNetAmount,
       asaas_payment_status: payment.status,
     })
     .eq("id", saleId);

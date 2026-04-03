@@ -7,9 +7,9 @@ import {
 } from "../_shared/payment-observability.ts";
 import {
   resolvePaymentContext,
-  validateFinancialSocioForSplit,
 } from "../_shared/payment-context-resolver.ts";
 import type { PaymentEnvironment } from "../_shared/runtime-env.ts";
+import { resolveAsaasSplitRecipients } from "../_shared/split-recipients-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -675,32 +675,57 @@ serve(async (req) => {
       );
     }
 
-    // 5. Buscar sócio ativo para split (espelhado em sandbox/produção)
-    let activeSocioWalletId: string | null = null;
-    const effectiveSocioFee =
-      splitEnabled && socioSplitPercent > 0 ? socioSplitPercent : 0;
+    const platformWalletId = splitEnabled && platformFeePercent > 0
+      ? Deno.env.get(paymentContext.platformWalletSecretName)
+      : null;
 
-    if (effectiveSocioFee > 0) {
-      const { data: socioRows, error: socioSplitError } = await supabaseAdmin
-        .from("socios_split")
-        .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
-        .eq("company_id", sale.company_id)
-        .eq("status", "ativo")
-        .limit(2);
+    // Fase 2: resolvedor único do split (plataforma/sócio/representante).
+    // Mantém regra determinística e evita espalhar validações por função.
+    let splitResolution;
+    try {
+      splitResolution = await resolveAsaasSplitRecipients({
+        supabaseAdmin,
+        source: "create-asaas-payment",
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentContext.environment,
+        splitEnabled,
+        platformFeePercent,
+        socioSplitPercent,
+        representativeId: sale.representative_id ?? null,
+        includePlatformRecipient: true,
+        platformWalletId,
+      });
+    } catch (splitError) {
+      const splitErrorMessage = splitError instanceof Error
+        ? splitError.message
+        : String(splitError);
+      const [splitErrorCode, ...rest] = splitErrorMessage.split(":");
+      const splitErrorDetail = rest.join(":").trim();
 
-      if (socioSplitError) {
-        await logSaleOperationalEvent({
-          supabaseAdmin,
-          saleId: sale.id,
-          companyId: sale.company_id,
-          action: "payment_create_failed",
-          source: "create-asaas-payment",
-          result: "error",
-          paymentEnvironment: paymentContext.environment,
-          errorCode: "split_socio_query_failed",
-          detail: socioSplitError.message,
-        });
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: splitErrorCode || "split_resolution_failed",
+        detail: splitErrorDetail || splitErrorMessage,
+      });
 
+      if (splitErrorCode === "missing_platform_wallet") {
+        return jsonResponse(
+          {
+            error: "Wallet da plataforma não configurada",
+            error_code: "missing_platform_wallet",
+          },
+          500,
+        );
+      }
+
+      if (splitErrorCode === "split_socio_query_failed") {
         return jsonResponse(
           {
             error: "Falha ao validar o sócio do split",
@@ -710,91 +735,60 @@ serve(async (req) => {
         );
       }
 
-      const socioSplitValidation = validateFinancialSocioForSplit({
-        socios: socioRows ?? [],
-        provider: "asaas",
-        environment: paymentContext.environment,
+      return jsonResponse(
+        {
+          error: splitErrorDetail || "Falha ao validar o split financeiro",
+          error_code: splitErrorCode || "split_resolution_failed",
+        },
+        409,
+      );
+    }
+
+    const splitArray = splitResolution.recipients.map((recipient) => ({
+      walletId: recipient.walletId,
+      percentualValue: recipient.percentualValue,
+    }));
+
+    const totalFee = splitArray.reduce((sum, recipient) => sum + recipient.percentualValue, 0);
+    if (totalFee > 100) {
+      return jsonResponse(
+        {
+          error: "Soma das taxas (plataforma + sócio + representante) excede 100%",
+          error_code: "fee_exceeds_limit",
+        },
+        400,
+      );
+    }
+
+    if (splitResolution.representative.eligible) {
+      logPaymentTrace("info", "create-asaas-payment", "split_representative_eligible", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        representative_id: splitResolution.representative.representativeId,
+        representative_percent: splitResolution.representative.percent,
       });
-
-      if (!socioSplitValidation.ok) {
-        logPaymentTrace("error", "create-asaas-payment", "split_socio_validation_failed", {
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          payment_environment: paymentContext.environment,
-          validation_code: socioSplitValidation.code,
-          validation_message: socioSplitValidation.message,
-          active_socio_rows: (socioRows ?? []).length,
-        });
-
-        await logSaleOperationalEvent({
-          supabaseAdmin,
-          saleId: sale.id,
-          companyId: sale.company_id,
-          action: "payment_create_failed",
-          source: "create-asaas-payment",
-          result: "error",
-          paymentEnvironment: paymentContext.environment,
-          errorCode: socioSplitValidation.code,
-          detail: socioSplitValidation.message,
-        });
-
-        return jsonResponse(
-          {
-            error: socioSplitValidation.message,
-            error_code: socioSplitValidation.code,
-          },
-          409,
-        );
-      }
-
-      activeSocioWalletId = socioSplitValidation.walletId;
+    } else if (sale.representative_id) {
+      // Regra desta fase: ausência de wallet ou elegibilidade inválida nunca derruba checkout.
+      logPaymentTrace("warn", "create-asaas-payment", "split_representative_ignored", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        representative_id: sale.representative_id,
+        representative_reason: splitResolution.representative.reason,
+      });
     }
 
-    // 6. Montar split (espelhado em sandbox/produção)
-    const splitArray: Array<{ walletId: string; percentualValue: number }> = [];
-
-    if (splitEnabled) {
-      const actualSocioFee = activeSocioWalletId ? effectiveSocioFee : 0;
-      const totalFee = platformFeePercent + actualSocioFee;
-
-      if (totalFee > 100) {
-        return jsonResponse(
-          {
-            error: "Soma das taxas (plataforma + sócio) excede 100%",
-            error_code: "fee_exceeds_limit",
-          },
-          400,
-        );
-      }
-
-      // Em todos os ambientes do fluxo principal, a empresa é dona da cobrança. Plataforma e sócio entram no split.
-      if (platformFeePercent > 0) {
-        const platformWalletId = Deno.env.get(
-          paymentContext.platformWalletSecretName,
-        );
-        if (!platformWalletId) {
-          return jsonResponse(
-            {
-              error: "Wallet da plataforma não configurada",
-              error_code: "missing_platform_wallet",
-            },
-            500,
-          );
-        }
-        splitArray.push({
-          walletId: platformWalletId,
-          percentualValue: platformFeePercent,
-        });
-      }
-
-      if (activeSocioWalletId && actualSocioFee > 0) {
-        splitArray.push({
-          walletId: activeSocioWalletId,
-          percentualValue: actualSocioFee,
-        });
-      }
-    }
-    // Em fluxo principal: split habilitado conforme política central de contexto.
+    logPaymentTrace("info", "create-asaas-payment", "split_recipients_resolved", {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      payment_environment: paymentContext.environment,
+      split_recipients: splitResolution.recipients.map((recipient) => ({
+        kind: recipient.kind,
+        percentual_value: recipient.percentualValue,
+      })),
+      split_recipients_count: splitResolution.recipients.length,
+    });
 
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
