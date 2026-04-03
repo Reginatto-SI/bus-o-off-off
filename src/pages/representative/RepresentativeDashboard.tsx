@@ -423,7 +423,7 @@ export default function RepresentativeDashboard() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background">
+    <div className="min-h-screen w-full max-w-full bg-background">
       {/* Header mobile-first: no mobile quebramos em 2 linhas para evitar compressão entre marca, título e ação. */}
       <header className="sticky top-0 z-30 border-b bg-card px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="mx-auto w-full max-w-7xl">
