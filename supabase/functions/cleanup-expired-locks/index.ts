@@ -130,6 +130,9 @@ serve(async (req) => {
     let checkoutCandidateCount = 0;
     let checkoutCancelledCount = 0;
     let checkoutIgnoredCount = 0;
+    let orphanCheckoutCandidateCount = 0;
+    let orphanCheckoutCancelledCount = 0;
+    let orphanCheckoutIgnoredCount = 0;
     let manualCandidateCount = 0;
     let cancelledManualReservations = 0;
     let manualIgnoredCount = 0;
@@ -343,6 +346,196 @@ serve(async (req) => {
       cleanedLocks = expiredLocks.length;
     }
 
+    // 4.1) Blindagem defensiva para checkout órfão:
+    // mantém o pipeline oficial sem fluxo paralelo, mas cobre vendas pendentes do checkout
+    // que não aparecem mais na trilha de lock expirado (ex.: lock sem sale_id rastreável).
+    // Segurança: só atua após a mesma janela operacional do checkout público (15 min)
+    // e exige ausência de ticket/lock ativo e ausência de confirmação financeira.
+    const orphanCheckoutCutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    const { data: orphanCheckoutCandidates, error: orphanCheckoutCandidatesError } = await supabaseAdmin
+      .from("sales")
+      .select("id, company_id, payment_environment, asaas_payment_status, payment_confirmed_at")
+      .eq("status", "pendente_pagamento")
+      .eq("sale_origin", "online_checkout")
+      .is("reservation_expires_at", null)
+      .is("payment_confirmed_at", null)
+      .lt("created_at", orphanCheckoutCutoffIso);
+
+    if (orphanCheckoutCandidatesError) {
+      logCleanup("error", {
+        execution_id: executionId,
+        stage: "checkout_orphan_candidate_scan",
+        action: "falhou",
+        flow: "checkout_publico",
+        reason: "orphan_candidate_sales_query_failed",
+        detail: orphanCheckoutCandidatesError.message,
+      });
+      return new Response(JSON.stringify({ error: "Failed to fetch orphan checkout candidates" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    orphanCheckoutCandidateCount = orphanCheckoutCandidates?.length ?? 0;
+
+    const orphanSaleIds = (orphanCheckoutCandidates ?? []).map((sale) => sale.id);
+    if (orphanSaleIds.length > 0) {
+      const [activeLocksRes, ticketsRes] = await Promise.all([
+        supabaseAdmin
+          .from("seat_locks")
+          .select("sale_id")
+          .in("sale_id", orphanSaleIds)
+          .gt("expires_at", nowIso),
+        supabaseAdmin
+          .from("tickets")
+          .select("sale_id")
+          .in("sale_id", orphanSaleIds),
+      ]);
+
+      if (activeLocksRes.error) {
+        logCleanup("error", {
+          execution_id: executionId,
+          stage: "checkout_orphan_active_lock_validation",
+          action: "falhou",
+          flow: "checkout_publico",
+          reason: "orphan_active_lock_query_failed",
+          detail: activeLocksRes.error.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate orphan active locks" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (ticketsRes.error) {
+        logCleanup("error", {
+          execution_id: executionId,
+          stage: "checkout_orphan_ticket_validation",
+          action: "falhou",
+          flow: "checkout_publico",
+          reason: "orphan_ticket_query_failed",
+          detail: ticketsRes.error.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate orphan tickets" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const salesWithActiveLocks = new Set((activeLocksRes.data ?? []).map((row) => row.sale_id).filter(Boolean));
+      const salesWithTickets = new Set((ticketsRes.data ?? []).map((row) => row.sale_id).filter(Boolean));
+      const cancellableAsaasStatuses = new Set([null, "PENDING", "AWAITING_RISK_ANALYSIS", "OVERDUE"]);
+
+      const orphanCancellableSales = (orphanCheckoutCandidates ?? []).filter((sale) => {
+        const hasActiveLock = salesWithActiveLocks.has(sale.id);
+        const hasTicket = salesWithTickets.has(sale.id);
+        const hasConfirmedAsaasStatus = sale.asaas_payment_status === "RECEIVED"
+          || sale.asaas_payment_status === "CONFIRMED"
+          || sale.asaas_payment_status === "RECEIVED_IN_CASH";
+        const statusAllowsCancel = cancellableAsaasStatuses.has(sale.asaas_payment_status ?? null);
+
+        const isCancellable = !hasActiveLock && !hasTicket && !hasConfirmedAsaasStatus && statusAllowsCancel;
+        logCleanup(isCancellable ? "info" : "warn", {
+          execution_id: executionId,
+          stage: "checkout_orphan_candidate_evaluated",
+          action: isCancellable ? "candidato" : "ignorado",
+          flow: "checkout_publico",
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: sale.payment_environment ?? null,
+          reason: isCancellable
+            ? "pending_checkout_without_active_lock_or_ticket_after_window"
+            : `orphan_guard_blocked;active_lock=${hasActiveLock};ticket=${hasTicket};asaas_status=${sale.asaas_payment_status ?? "null"}`,
+        });
+        return isCancellable;
+      });
+
+      if (orphanCancellableSales.length > 0) {
+        const orphanCancellableIds = orphanCancellableSales.map((sale) => sale.id);
+        const { data: cancelledOrphanSales, error: cancelOrphanError } = await supabaseAdmin
+          .from("sales")
+          .update({
+            status: "cancelado",
+            cancel_reason: "Checkout pendente expirado sem lock/ticket ativo (blindagem do cleanup oficial)",
+            cancelled_at: nowIso,
+            reservation_expires_at: null,
+          })
+          .in("id", orphanCancellableIds)
+          .eq("status", "pendente_pagamento")
+          .is("payment_confirmed_at", null)
+          .select("id, company_id, payment_environment");
+
+        if (cancelOrphanError) {
+          logCleanup("error", {
+            execution_id: executionId,
+            stage: "checkout_orphan_cancel_update",
+            action: "falhou",
+            flow: "checkout_publico",
+            reason: "orphan_sales_cancel_update_failed",
+            detail: cancelOrphanError.message,
+          });
+          return new Response(JSON.stringify({ error: "Failed to cancel orphan pending sales" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        orphanCheckoutCancelledCount = cancelledOrphanSales?.length ?? 0;
+        orphanCheckoutIgnoredCount += Math.max(orphanCancellableIds.length - orphanCheckoutCancelledCount, 0);
+
+        await insertSaleLogsSafely(
+          supabaseAdmin,
+          (cancelledOrphanSales ?? []).map((sale) => ({
+            sale_id: sale.id,
+            action: "auto_cancelled",
+            description: `Venda cancelada automaticamente por blindagem do checkout órfão (pendente > 15min sem lock/ticket ativo, env=${sale.payment_environment ?? "unknown"}).`,
+            company_id: sale.company_id,
+          })),
+          {
+            execution_id: executionId,
+            stage: "checkout_orphan_sale_logs",
+            flow: "checkout_publico",
+            action: "executando",
+          },
+        );
+
+        for (const sale of cancelledOrphanSales ?? []) {
+          const { error: passengerDeleteError } = await supabaseAdmin.from("sale_passengers").delete().eq("sale_id", sale.id);
+          if (passengerDeleteError) {
+            logCleanup("error", {
+              execution_id: executionId,
+              stage: "checkout_orphan_passenger_cleanup",
+              action: "falhou",
+              flow: "checkout_publico",
+              sale_id: sale.id,
+              company_id: sale.company_id,
+              payment_environment: sale.payment_environment ?? null,
+              reason: "sale_passengers_delete_failed",
+              detail: passengerDeleteError.message,
+            });
+          }
+
+          const { error: seatLockDeleteError } = await supabaseAdmin.from("seat_locks").delete().eq("sale_id", sale.id);
+          if (seatLockDeleteError) {
+            logCleanup("error", {
+              execution_id: executionId,
+              stage: "checkout_orphan_lock_cleanup",
+              action: "falhou",
+              flow: "checkout_publico",
+              sale_id: sale.id,
+              company_id: sale.company_id,
+              payment_environment: sale.payment_environment ?? null,
+              reason: "seat_locks_delete_failed",
+              detail: seatLockDeleteError.message,
+            });
+          }
+        }
+      }
+
+      orphanCheckoutIgnoredCount += Math.max(orphanCheckoutCandidateCount - orphanCancellableSales.length, 0);
+    }
+
     // 5) Reservas manuais do administrativo não usam seat_locks como fonte de verdade.
     // O vencimento fica explícito em `sales.reservation_expires_at` justamente para evitar
     // reservas eternas sem aplicar o TTL curto do checkout público a vendas humanas legítimas.
@@ -519,6 +712,9 @@ serve(async (req) => {
         checkout_candidates: checkoutCandidateCount,
         checkout_cancelled: checkoutCancelledCount,
         checkout_ignored: checkoutIgnoredCount,
+        checkout_orphan_candidates: orphanCheckoutCandidateCount,
+        checkout_orphan_cancelled: orphanCheckoutCancelledCount,
+        checkout_orphan_ignored: orphanCheckoutIgnoredCount,
         manual_candidates: manualCandidateCount,
         manual_cancelled: cancelledManualReservations,
         manual_ignored: manualIgnoredCount,
@@ -530,6 +726,9 @@ serve(async (req) => {
       checkout_candidates: checkoutCandidateCount,
       checkout_cancelled: checkoutCancelledCount,
       checkout_ignored: checkoutIgnoredCount,
+      checkout_orphan_candidates: orphanCheckoutCandidateCount,
+      checkout_orphan_cancelled: orphanCheckoutCancelledCount,
+      checkout_orphan_ignored: orphanCheckoutIgnoredCount,
       expired_manual_reservations: manualCandidateCount,
       cancelled_manual_reservations: cancelledManualReservations,
       ignored_manual_reservations: manualIgnoredCount,
