@@ -117,6 +117,33 @@ interface SaleIntegrationLog {
   created_at: string;
 }
 
+interface WebhookDedupEntry {
+  asaas_event_id: string;
+  sale_id: string | null;
+  external_reference: string | null;
+  payment_environment: 'sandbox' | 'production' | null;
+  duplicate_count: number;
+  first_received_at: string;
+  last_seen_at: string;
+}
+
+type TechnicalDiagnosticStatus = 'ok' | 'attention' | 'critical';
+
+interface TechnicalDiagnosticSnapshot {
+  companyId: string;
+  companyName: string;
+  paymentEnvironment: 'sandbox' | 'production';
+  executedAt: string;
+}
+
+interface TechnicalDivergence {
+  id: string;
+  title: string;
+  severity: 'attention' | 'critical';
+  detail: string;
+  saleId?: string | null;
+}
+
 const EMPTY_UUID_FILTER = '00000000-0000-0000-0000-000000000000';
 const EXACT_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -141,6 +168,18 @@ function isExactUuid(value: string): boolean {
 
 function formatPaymentEnvironmentLabel(value?: string | null): string {
   return value === 'production' ? 'Produção' : 'Sandbox';
+}
+
+function formatTechnicalDiagnosticStatusLabel(status: TechnicalDiagnosticStatus): string {
+  if (status === 'critical') return 'Crítico';
+  if (status === 'attention') return 'Atenção';
+  return 'OK';
+}
+
+function formatTechnicalDiagnosticStatusTone(status: TechnicalDiagnosticStatus): string {
+  if (status === 'critical') return 'text-destructive';
+  if (status === 'attention') return 'text-amber-600';
+  return 'text-emerald-600';
 }
 
 function formatCompactDurationFromNow(targetDate: string): string {
@@ -982,6 +1021,13 @@ export default function SalesDiagnostic() {
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailIntegrationLogs, setDetailIntegrationLogs] = useState<SaleIntegrationLog[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [technicalDiagnosticOpen, setTechnicalDiagnosticOpen] = useState(false);
+  const [technicalDiagnosticLoading, setTechnicalDiagnosticLoading] = useState(false);
+  const [technicalDiagnosticSnapshot, setTechnicalDiagnosticSnapshot] = useState<TechnicalDiagnosticSnapshot | null>(null);
+  const [technicalDiagnosticLogs, setTechnicalDiagnosticLogs] = useState<SaleIntegrationLog[]>([]);
+  const [technicalDiagnosticSales, setTechnicalDiagnosticSales] = useState<DiagnosticSale[]>([]);
+  const [technicalDiagnosticSaleLogs, setTechnicalDiagnosticSaleLogs] = useState<SaleLog[]>([]);
+  const [technicalDiagnosticDedupEntries, setTechnicalDiagnosticDedupEntries] = useState<WebhookDedupEntry[]>([]);
   const [detailCompany, setDetailCompany] = useState<{
     name: string;
     asaas_account_email_production: string | null;
@@ -1200,6 +1246,189 @@ export default function SalesDiagnostic() {
     if (!lastRelevantChangeAt) return lastRelevantChangeLabel;
     return `${lastRelevantChangeLabel} Última mudança detectada às ${format(parseISO(lastRelevantChangeAt), 'HH:mm:ss', { locale: ptBR })}.`;
   }, [lastRelevantChangeAt, lastRelevantChangeLabel]);
+
+  const technicalDiagnosticLastEvent = useMemo(() => technicalDiagnosticLogs[0] ?? null, [technicalDiagnosticLogs]);
+
+  const technicalDiagnosticLastWebhook = useMemo(
+    () => technicalDiagnosticLogs.find((log) => log.provider === 'asaas' && log.direction === 'incoming_webhook') ?? null,
+    [technicalDiagnosticLogs]
+  );
+
+  const technicalDiagnosticLastFailure = useMemo(() => (
+    technicalDiagnosticLogs.find((log) => (
+      log.processing_status === 'failed'
+      || log.processing_status === 'partial_failure'
+      || log.processing_status === 'rejected'
+      || log.processing_status === 'unauthorized'
+      || !!log.incident_code
+    )) ?? null
+  ), [technicalDiagnosticLogs]);
+
+  const technicalDiagnosticDivergences = useMemo<TechnicalDivergence[]>(() => {
+    const divergences: TechnicalDivergence[] = [];
+
+    // Critério 1 (objetivo): vendas sem payment_environment no recorte.
+    technicalDiagnosticSales
+      .filter((sale) => !sale.payment_environment)
+      .forEach((sale) => {
+        divergences.push({
+          id: `sale_without_environment_${sale.id}`,
+          title: 'Venda sem payment_environment',
+          severity: 'critical',
+          detail: `A venda ${sale.id} está sem ambiente persistido, o que quebra a rastreabilidade do fluxo Asaas.`,
+          saleId: sale.id,
+        });
+      });
+
+    // Critério 2 (objetivo): vendas sem asaas_payment_id, mas em estado pendente/reservado.
+    technicalDiagnosticSales
+      .filter((sale) => !sale.asaas_payment_id && sale.status !== 'cancelado')
+      .forEach((sale) => {
+        divergences.push({
+          id: `sale_without_payment_id_${sale.id}`,
+          title: 'Venda sem asaas_payment_id',
+          severity: 'attention',
+          detail: `A venda ${sale.id} está em ${sale.status} sem cobrança Asaas vinculada.`,
+          saleId: sale.id,
+        });
+      });
+
+    // Critério 3 (objetivo): status não pago no sales, com indício técnico de confirmação.
+    const confirmedIndicators = new Set(
+      technicalDiagnosticLogs
+        .filter((log) => (
+          !!log.sale_id
+          && (
+            (log.event_type ?? '').toLowerCase().includes('payment_confirmed')
+            || (log.event_type ?? '').toLowerCase().includes('payment_received')
+            || (log.result_category === 'payment_confirmed')
+          )
+        ))
+        .map((log) => log.sale_id as string)
+    );
+
+    technicalDiagnosticSales
+      .filter((sale) => sale.status !== 'pago' && confirmedIndicators.has(sale.id))
+      .forEach((sale) => {
+        divergences.push({
+          id: `sale_status_mismatch_confirmed_${sale.id}`,
+          title: 'Status da venda não reflete confirmação técnica',
+          severity: 'critical',
+          detail: `A venda ${sale.id} não está em pago, mas há indício recente de confirmação nos logs técnicos.`,
+          saleId: sale.id,
+        });
+      });
+
+    // Critério 4 (objetivo): inconsistência status da venda vs asaas_payment_status.
+    technicalDiagnosticSales
+      .filter((sale) => sale.status === 'pago' && sale.asaas_payment_status && !['CONFIRMED', 'RECEIVED'].includes(sale.asaas_payment_status))
+      .forEach((sale) => {
+        divergences.push({
+          id: `sale_vs_asaas_status_${sale.id}`,
+          title: 'Inconsistência sales.status x asaas_payment_status',
+          severity: 'attention',
+          detail: `A venda ${sale.id} está paga, porém asaas_payment_status=${sale.asaas_payment_status}.`,
+          saleId: sale.id,
+        });
+      });
+
+    // Critério 5 (objetivo): warning de observabilidade já padronizado no verify-payment-status.
+    technicalDiagnosticLogs
+      .filter((log) => log.warning_code === 'webhook_not_observed_before_verify_confirmation' || log.incident_code === 'webhook_not_observed_before_verify_confirmation')
+      .forEach((log) => {
+        divergences.push({
+          id: `warning_webhook_not_observed_${log.id}`,
+          title: 'Confirmação sem webhook correlacionado',
+          severity: 'attention',
+          detail: log.message,
+          saleId: log.sale_id,
+        });
+      });
+
+    // Critério 6 (objetivo): incidentes técnicos críticos recentes.
+    technicalDiagnosticLogs
+      .filter((log) => ['failed', 'partial_failure', 'rejected', 'unauthorized'].includes(log.processing_status) && !!log.incident_code)
+      .forEach((log) => {
+        divergences.push({
+          id: `critical_incident_${log.id}`,
+          title: `Incidente técnico: ${log.incident_code}`,
+          severity: 'critical',
+          detail: log.message,
+          saleId: log.sale_id,
+        });
+      });
+
+    // Critério 7 (objetivo): deduplicação detectada no recorte atual.
+    technicalDiagnosticDedupEntries
+      .filter((entry) => (entry.duplicate_count ?? 0) > 0)
+      .forEach((entry) => {
+        divergences.push({
+          id: `dedup_${entry.asaas_event_id}`,
+          title: 'Duplicidade de webhook detectada',
+          severity: 'attention',
+          detail: `Evento ${entry.asaas_event_id} teve ${entry.duplicate_count} repetição(ões).`,
+          saleId: entry.sale_id,
+        });
+      });
+
+    return divergences;
+  }, [technicalDiagnosticDedupEntries, technicalDiagnosticLogs, technicalDiagnosticSales]);
+
+  const technicalDiagnosticStatus = useMemo<TechnicalDiagnosticStatus>(() => {
+    // Semáforo mínimo e explícito para evitar “diagnóstico fake”.
+    // - Critical: incidente crítico, falha forte de processamento ou divergência crítica.
+    // - Attention: warning relevante, ausência de evento recente ou divergências de atenção.
+    // - OK: há atividade recente e nenhum achado relevante no recorte.
+    const hasCriticalDivergence = technicalDiagnosticDivergences.some((divergence) => divergence.severity === 'critical');
+    const hasCriticalLog = technicalDiagnosticLogs.some((log) => (
+      ['failed', 'partial_failure', 'rejected', 'unauthorized'].includes(log.processing_status)
+      || !!log.incident_code
+    ));
+
+    if (hasCriticalDivergence || hasCriticalLog) return 'critical';
+
+    const hasAttentionDivergence = technicalDiagnosticDivergences.some((divergence) => divergence.severity === 'attention');
+    const hasWarningLog = technicalDiagnosticLogs.some((log) => log.processing_status === 'warning' || !!log.warning_code);
+
+    const lastEventAgeMs = technicalDiagnosticLastEvent
+      ? Date.now() - new Date(technicalDiagnosticLastEvent.created_at).getTime()
+      : null;
+    const hasNoRecentEvent = lastEventAgeMs === null || lastEventAgeMs > 1000 * 60 * 60 * 12;
+
+    if (hasAttentionDivergence || hasWarningLog || hasNoRecentEvent) return 'attention';
+
+    return 'ok';
+  }, [technicalDiagnosticDivergences, technicalDiagnosticLastEvent, technicalDiagnosticLogs]);
+
+  const technicalDiagnosticKpis = useMemo(() => {
+    // v1.1: KPIs apenas resumem sinais já existentes da v1.
+    // Não criam nova regra de negócio e usam os mesmos dados carregados pelo snapshot congelado.
+    const criticalLogsCount = technicalDiagnosticLogs.filter((log) => (
+      ['failed', 'partial_failure', 'rejected', 'unauthorized'].includes(log.processing_status)
+      || !!log.incident_code
+    )).length;
+
+    const criticalDivergencesCount = technicalDiagnosticDivergences.filter((divergence) => divergence.severity === 'critical').length;
+
+    const warningsCount = technicalDiagnosticLogs.filter((log) => (
+      log.processing_status === 'warning' || !!log.warning_code
+    )).length;
+
+    const duplicateWebhookCount = technicalDiagnosticDedupEntries.filter((entry) => (entry.duplicate_count ?? 0) > 0).length;
+
+    const saleIdsWithDivergence = new Set(
+      technicalDiagnosticDivergences
+        .map((divergence) => divergence.saleId)
+        .filter((saleId): saleId is string => !!saleId)
+    );
+
+    return {
+      criticalIncidents: criticalLogsCount + criticalDivergencesCount,
+      warnings: warningsCount,
+      duplicateWebhooks: duplicateWebhookCount,
+      salesWithDivergence: saleIdsWithDivergence.size,
+    };
+  }, [technicalDiagnosticDedupEntries, technicalDiagnosticDivergences, technicalDiagnosticLogs]);
 
   const fetchSales = useCallback(async () => {
     const requestId = ++latestSalesRequestIdRef.current;
@@ -1678,6 +1907,102 @@ export default function SalesDiagnostic() {
     toast.success('Diagnóstico da venda recarregado.');
   }, [detailSale?.id, fetchSales, openDetail]);
 
+  const handleOpenTechnicalDiagnostic = useCallback(async () => {
+    if (!activeCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady) {
+      toast.error('Contexto ativo indisponível para diagnóstico técnico.');
+      return;
+    }
+
+    // Snapshot fixo: congela empresa + ambiente + horário no clique.
+    // Toda a leitura do modal usa este contexto até o fechamento, evitando mistura durante troca no header.
+    const snapshot: TechnicalDiagnosticSnapshot = {
+      companyId: activeCompanyId,
+      companyName: activeCompany?.name ?? 'Empresa ativa',
+      paymentEnvironment: runtimePaymentEnvironment,
+      executedAt: new Date().toISOString(),
+    };
+
+    setTechnicalDiagnosticSnapshot(snapshot);
+    setTechnicalDiagnosticOpen(true);
+    setTechnicalDiagnosticLoading(true);
+    setTechnicalDiagnosticLogs([]);
+    setTechnicalDiagnosticSales([]);
+    setTechnicalDiagnosticSaleLogs([]);
+    setTechnicalDiagnosticDedupEntries([]);
+
+    const { data: logsData, error: logsError } = await supabase
+      .from('sale_integration_logs')
+      .select('*')
+      .eq('company_id', snapshot.companyId)
+      .eq('payment_environment', snapshot.paymentEnvironment)
+      .order('created_at', { ascending: false })
+      .limit(120);
+
+    if (logsError) {
+      toast.error('Erro ao carregar logs técnicos do diagnóstico.');
+      setTechnicalDiagnosticLoading(false);
+      return;
+    }
+
+    const typedLogs = (logsData ?? []) as SaleIntegrationLog[];
+    setTechnicalDiagnosticLogs(typedLogs);
+
+    const { data: salesData, error: salesError } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        event:events(name, date),
+        company:companies(name)
+      `)
+      .eq('company_id', snapshot.companyId)
+      .eq('payment_environment', snapshot.paymentEnvironment)
+      .order('created_at', { ascending: false })
+      .limit(120);
+
+    if (salesError) {
+      toast.error('Erro ao carregar vendas do diagnóstico técnico.');
+      setTechnicalDiagnosticLoading(false);
+      return;
+    }
+
+    const typedSales = (salesData ?? []) as unknown as DiagnosticSale[];
+    setTechnicalDiagnosticSales(typedSales);
+
+    const saleIds = typedSales.map((sale) => sale.id);
+
+    if (saleIds.length > 0) {
+      const [saleLogsRes, dedupRes] = await Promise.all([
+        supabase
+          .from('sale_logs')
+          .select('*')
+          .in('sale_id', saleIds)
+          .eq('company_id', snapshot.companyId)
+          .order('created_at', { ascending: false })
+          .limit(120),
+        supabase
+          .from('asaas_webhook_event_dedup')
+          .select('asaas_event_id, sale_id, external_reference, payment_environment, duplicate_count, first_received_at, last_seen_at')
+          .in('sale_id', saleIds)
+          .eq('payment_environment', snapshot.paymentEnvironment)
+          .order('last_seen_at', { ascending: false })
+          .limit(120),
+      ]);
+
+      if (saleLogsRes.error) {
+        toast.error('Erro ao carregar trilha funcional (sale_logs).');
+      }
+
+      if (dedupRes.error) {
+        toast.error('Erro ao carregar deduplicação de webhook.');
+      }
+
+      setTechnicalDiagnosticSaleLogs((saleLogsRes.data ?? []) as SaleLog[]);
+      setTechnicalDiagnosticDedupEntries((dedupRes.data ?? []) as WebhookDedupEntry[]);
+    }
+
+    setTechnicalDiagnosticLoading(false);
+  }, [activeCompany?.name, activeCompanyId, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
+
   const filterSelects = [
     {
       id: 'status',
@@ -2038,6 +2363,18 @@ export default function SalesDiagnostic() {
         <PageHeader
           title="Diagnóstico de Vendas"
           description="Ferramenta para análise de vendas, pagamentos e retorno das integrações do sistema."
+          actions={(
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleOpenTechnicalDiagnostic()}
+              disabled={!activeCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady}
+              className="gap-2"
+            >
+              <Code className="h-4 w-4" />
+              Executar diagnóstico técnico
+            </Button>
+          )}
         />
 
         <Card className="mb-4">
@@ -2217,6 +2554,236 @@ export default function SalesDiagnostic() {
         )}
 
         {/* Detail Modal */}
+        <Dialog
+          open={technicalDiagnosticOpen}
+          onOpenChange={(open) => {
+            setTechnicalDiagnosticOpen(open);
+            if (!open) {
+              setTechnicalDiagnosticSnapshot(null);
+              setTechnicalDiagnosticLogs([]);
+              setTechnicalDiagnosticSales([]);
+              setTechnicalDiagnosticSaleLogs([]);
+              setTechnicalDiagnosticDedupEntries([]);
+            }
+          }}
+        >
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Code className="h-4 w-4" />
+                Diagnóstico técnico de webhooks (v1)
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  Empresa: {technicalDiagnosticSnapshot?.companyName ?? '-'}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Ambiente: {formatPaymentEnvironmentLabel(technicalDiagnosticSnapshot?.paymentEnvironment ?? null)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Execução: {technicalDiagnosticSnapshot?.executedAt
+                    ? format(parseISO(technicalDiagnosticSnapshot.executedAt), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })
+                    : '-'}
+                </Badge>
+              </div>
+            </div>
+
+            {technicalDiagnosticLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando diagnóstico técnico do contexto ativo...
+              </div>
+            ) : (
+              <Tabs defaultValue="resumo" className="flex-1 overflow-hidden flex flex-col">
+                <TabsList className="w-full justify-start flex-shrink-0">
+                  <TabsTrigger value="resumo">Resumo</TabsTrigger>
+                  <TabsTrigger value="ambiente">Ambiente atual</TabsTrigger>
+                  <TabsTrigger value="divergencias">Divergências</TabsTrigger>
+                  <TabsTrigger value="logs">Logs recentes</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="resumo" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="grid gap-3 pb-4 md:grid-cols-2 xl:grid-cols-3">
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Status geral</p>
+                          <p className={cn('text-lg font-semibold', formatTechnicalDiagnosticStatusTone(technicalDiagnosticStatus))}>
+                            {formatTechnicalDiagnosticStatusLabel(technicalDiagnosticStatus)}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Último webhook</p>
+                          <p className="text-sm font-medium">{technicalDiagnosticLastWebhook?.event_type ?? 'Não encontrado no recorte'}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Tempo desde último evento</p>
+                          <p className="text-sm font-medium">
+                            {technicalDiagnosticLastEvent
+                              ? formatDistanceToNowStrict(parseISO(technicalDiagnosticLastEvent.created_at), { addSuffix: true, locale: ptBR })
+                              : 'Sem eventos no recorte'}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Última falha relevante</p>
+                          <p className="text-sm font-medium">
+                            {technicalDiagnosticLastFailure?.incident_code ?? technicalDiagnosticLastFailure?.warning_code ?? technicalDiagnosticLastFailure?.processing_status ?? 'Nenhuma'}
+                          </p>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{technicalDiagnosticLastFailure?.message ?? 'Sem falha relevante no recorte.'}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Divergências detectadas</p>
+                          <p className="text-lg font-semibold">{technicalDiagnosticDivergences.length}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Logs analisados</p>
+                          <p className="text-lg font-semibold">{technicalDiagnosticLogs.length}</p>
+                          <p className="text-xs text-muted-foreground">sale_logs: {technicalDiagnosticSaleLogs.length} • dedup: {technicalDiagnosticDedupEntries.length}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Incidentes críticos</p>
+                          <p className="text-lg font-semibold text-destructive">{technicalDiagnosticKpis.criticalIncidents}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Warnings</p>
+                          <p className="text-lg font-semibold text-amber-600">{technicalDiagnosticKpis.warnings}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Duplicidades de webhook</p>
+                          <p className="text-lg font-semibold">{technicalDiagnosticKpis.duplicateWebhooks}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">Vendas com divergência</p>
+                          <p className="text-lg font-semibold">{technicalDiagnosticKpis.salesWithDivergence}</p>
+                          <p className="text-xs text-muted-foreground">Divergências totais: {technicalDiagnosticDivergences.length}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+
+                <TabsContent value="ambiente" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-3 pb-4">
+                      <h3 className="text-sm font-semibold">Último log de webhook no ambiente ativo</h3>
+                      {technicalDiagnosticLastWebhook ? (
+                        <div className="grid gap-3 md:grid-cols-2 text-sm">
+                          <div><span className="text-muted-foreground">event_type</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.event_type ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">created_at</span><p>{format(parseISO(technicalDiagnosticLastWebhook.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p></div>
+                          <div><span className="text-muted-foreground">external_reference</span><p className="font-mono text-xs break-all">{technicalDiagnosticLastWebhook.external_reference ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">payment_id</span><p className="font-mono text-xs break-all">{technicalDiagnosticLastWebhook.payment_id ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">sale_id</span><p className="font-mono text-xs break-all">{technicalDiagnosticLastWebhook.sale_id ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">company_id</span><p className="font-mono text-xs break-all">{technicalDiagnosticLastWebhook.company_id ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">payment_environment</span><p>{technicalDiagnosticLastWebhook.payment_environment ? formatPaymentEnvironmentLabel(technicalDiagnosticLastWebhook.payment_environment) : '-'}</p></div>
+                          <div><span className="text-muted-foreground">processing_status</span><p>{technicalDiagnosticLastWebhook.processing_status}</p></div>
+                          <div><span className="text-muted-foreground">result_category</span><p>{technicalDiagnosticLastWebhook.result_category ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">http_status</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.http_status ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">duration_ms</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.duration_ms ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">incident_code</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.incident_code ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">warning_code</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.warning_code ?? '-'}</p></div>
+                          <div className="md:col-span-2"><span className="text-muted-foreground">message</span><p className="text-xs">{technicalDiagnosticLastWebhook.message}</p></div>
+                          <div><span className="text-muted-foreground">environment_decision_source</span><p className="font-mono text-xs">{technicalDiagnosticLastWebhook.environment_decision_source ?? '-'}</p></div>
+                          <div><span className="text-muted-foreground">environment_host_detected</span><p className="font-mono text-xs break-all">{technicalDiagnosticLastWebhook.environment_host_detected ?? '-'}</p></div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nenhum webhook persistido encontrado no recorte atual.</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+
+                <TabsContent value="divergencias" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-3 pb-4">
+                      <h3 className="text-sm font-semibold">Achados com regra explícita</h3>
+                      {technicalDiagnosticDivergences.length === 0 ? (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                          Nenhuma divergência encontrada no recorte atual.
+                        </div>
+                      ) : (
+                        technicalDiagnosticDivergences.map((divergence) => (
+                          <div
+                            key={divergence.id}
+                            className={cn(
+                              'rounded-md border p-3',
+                              divergence.severity === 'critical'
+                                ? 'border-destructive/30 bg-destructive/5'
+                                : 'border-amber-300 bg-amber-50'
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold">{divergence.title}</p>
+                              <Badge variant="outline" className="text-xs">
+                                {divergence.severity === 'critical' ? 'Crítico' : 'Atenção'}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{divergence.detail}</p>
+                            {divergence.saleId && (
+                              <p className="mt-1 text-[11px] font-mono text-muted-foreground break-all">sale_id: {divergence.saleId}</p>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+
+                <TabsContent value="logs" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-2 pb-4">
+                      <h3 className="text-sm font-semibold">Logs técnicos recentes (contexto ativo)</h3>
+                      {technicalDiagnosticLogs.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Sem logs técnicos no recorte.</p>
+                      ) : (
+                        technicalDiagnosticLogs.map((log) => (
+                          <div key={log.id} className="rounded-md border p-3 text-xs">
+                            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
+                              <p><span className="text-muted-foreground">horário:</span> {format(parseISO(log.created_at), "dd/MM HH:mm:ss", { locale: ptBR })}</p>
+                              <p><span className="text-muted-foreground">origem:</span> {log.provider}</p>
+                              <p><span className="text-muted-foreground">direção:</span> {log.direction}</p>
+                              <p><span className="text-muted-foreground">event_type:</span> {log.event_type ?? '-'}</p>
+                              <p><span className="text-muted-foreground">status:</span> {log.processing_status}</p>
+                              <p><span className="text-muted-foreground">incident_code:</span> {log.incident_code ?? '-'}</p>
+                              <p><span className="text-muted-foreground">warning_code:</span> {log.warning_code ?? '-'}</p>
+                              <p><span className="text-muted-foreground">ambiente:</span> {log.payment_environment ? formatPaymentEnvironmentLabel(log.payment_environment) : '-'}</p>
+                              <p className="break-all"><span className="text-muted-foreground">sale_id:</span> {log.sale_id ?? '-'}</p>
+                              <p className="break-all"><span className="text-muted-foreground">company_id:</span> {log.company_id ?? '-'}</p>
+                              <p className="break-all"><span className="text-muted-foreground">payment_id:</span> {log.payment_id ?? '-'}</p>
+                              <p className="break-all"><span className="text-muted-foreground">external_reference:</span> {log.external_reference ?? '-'}</p>
+                            </div>
+                            <p className="mt-2 text-muted-foreground">message: {log.message}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!detailSale} onOpenChange={(open) => !open && setDetailSale(null)}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
