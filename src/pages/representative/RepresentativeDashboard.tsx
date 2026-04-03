@@ -512,7 +512,7 @@ export default function RepresentativeDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardDescription>Identidade</CardDescription>
               <CardTitle className="text-base">Resumo do representante</CardTitle>
