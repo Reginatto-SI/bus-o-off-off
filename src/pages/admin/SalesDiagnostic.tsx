@@ -139,9 +139,43 @@ interface TechnicalDiagnosticSnapshot {
 interface TechnicalDivergence {
   id: string;
   title: string;
+  incidentCode: string;
+  type: 'tecnica' | 'operacional' | 'integridade';
   severity: 'attention' | 'critical';
+  incidentStatus: 'ativo' | 'intermitente' | 'resolvido';
+  flowStage: string;
+  operationalImpact: string;
   detail: string;
+  ruleKey: string;
+  isCurrentlyInconsistent: boolean;
   saleId?: string | null;
+  externalReference?: string | null;
+  asaasPaymentId?: string | null;
+  companyId?: string | null;
+  paymentEnvironment?: 'sandbox' | 'production' | null;
+  saleStatus?: SaleStatus | null;
+  gatewayStatus?: string | null;
+  firstDetectedAt?: string | null;
+  lastDetectedAt?: string | null;
+  lastRelatedLog?: SaleIntegrationLog | null;
+  occurrenceCount: number;
+  isReincident: boolean;
+  relatedLogs: SaleIntegrationLog[];
+  relatedSaleLogs: SaleLog[];
+  rawEvidence: Record<string, unknown>;
+}
+
+interface TechnicalDiagnosticDivergenceFilters {
+  periodHours: '24' | '72' | '168' | 'all';
+  severity: 'all' | 'attention' | 'critical';
+  divergenceType: 'all' | TechnicalDivergence['type'];
+  incidentStatus: 'all' | TechnicalDivergence['incidentStatus'];
+  environment: 'all' | 'sandbox' | 'production';
+  saleId: string;
+  externalReference: string;
+  asaasPaymentId: string;
+  onlyActive: boolean;
+  onlyReincident: boolean;
 }
 
 const EMPTY_UUID_FILTER = '00000000-0000-0000-0000-000000000000';
@@ -180,6 +214,47 @@ function formatTechnicalDiagnosticStatusTone(status: TechnicalDiagnosticStatus):
   if (status === 'critical') return 'text-destructive';
   if (status === 'attention') return 'text-amber-600';
   return 'text-emerald-600';
+}
+
+function formatTechnicalDivergenceTypeLabel(type: TechnicalDivergence['type']): string {
+  if (type === 'tecnica') return 'Técnica';
+  if (type === 'operacional') return 'Operacional';
+  return 'Integridade';
+}
+
+function formatIncidentStatusLabel(status: TechnicalDivergence['incidentStatus']): string {
+  if (status === 'ativo') return 'Ativo';
+  if (status === 'intermitente') return 'Intermitente';
+  return 'Resolvido';
+}
+
+function formatOptionalDiagnosticValue(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return 'não disponível';
+  return String(value);
+}
+
+function mapIntegrationLogToOperationalStage(
+  log: SaleIntegrationLog,
+  fallbackStage: string,
+): string {
+  const eventType = (log.event_type ?? '').toLowerCase();
+  const incidentCode = (log.incident_code ?? '').toLowerCase();
+  const warningCode = (log.warning_code ?? '').toLowerCase();
+  const direction = (log.direction ?? '').toLowerCase();
+
+  if (direction.includes('incoming_webhook')) return 'Webhook recebido';
+  if (direction.includes('manual_sync') || incidentCode.includes('verify') || warningCode.includes('verify')) return 'Verificação manual';
+  if (incidentCode.includes('duplicate') || warningCode.includes('duplicate')) return 'Deduplicação de webhook';
+  if (eventType.includes('customer') || incidentCode.includes('customer')) return 'Busca/validação do cliente';
+  if (eventType.includes('payment_created') || direction.includes('create_payment')) return 'Criação da cobrança';
+  if (direction.includes('outgoing') || direction.includes('request')) return 'Envio de requisição ao Asaas';
+  if (eventType.includes('payment_confirmed') || eventType.includes('payment_received') || (log.result_category ?? '').toLowerCase().includes('confirmed')) {
+    return 'Convergência de status';
+  }
+  if (incidentCode.includes('environment') || warningCode.includes('environment')) return 'Auditoria de ambiente';
+  if (incidentCode.includes('finaliz') || warningCode.includes('finaliz')) return 'Finalização da venda';
+
+  return fallbackStage;
 }
 
 function formatCompactDurationFromNow(targetDate: string): string {
@@ -1097,6 +1172,19 @@ export default function SalesDiagnostic() {
   const [technicalDiagnosticSales, setTechnicalDiagnosticSales] = useState<DiagnosticSale[]>([]);
   const [technicalDiagnosticSaleLogs, setTechnicalDiagnosticSaleLogs] = useState<SaleLog[]>([]);
   const [technicalDiagnosticDedupEntries, setTechnicalDiagnosticDedupEntries] = useState<WebhookDedupEntry[]>([]);
+  const [selectedTechnicalDivergenceId, setSelectedTechnicalDivergenceId] = useState<string | null>(null);
+  const [technicalDiagnosticDivergenceFilters, setTechnicalDiagnosticDivergenceFilters] = useState<TechnicalDiagnosticDivergenceFilters>({
+    periodHours: '72',
+    severity: 'all',
+    divergenceType: 'all',
+    incidentStatus: 'all',
+    environment: 'all',
+    saleId: '',
+    externalReference: '',
+    asaasPaymentId: '',
+    onlyActive: false,
+    onlyReincident: false,
+  });
   const [detailCompany, setDetailCompany] = useState<{
     name: string;
     asaas_account_email_production: string | null;
@@ -1334,119 +1422,364 @@ export default function SalesDiagnostic() {
   ), [technicalDiagnosticLogs]);
 
   const technicalDiagnosticDivergences = useMemo<TechnicalDivergence[]>(() => {
-    const divergences: TechnicalDivergence[] = [];
+    const divergencesMap = new Map<string, TechnicalDivergence>();
+    const salesById = new Map(technicalDiagnosticSales.map((sale) => [sale.id, sale]));
 
-    // Critério 1 (objetivo): vendas sem payment_environment no recorte.
+    const buildIncidentStatus = (
+      logs: SaleIntegrationLog[],
+      isCurrentlyInconsistent: boolean,
+      hasConvergentCurrentState: boolean,
+    ): TechnicalDivergence['incidentStatus'] => {
+      if (isCurrentlyInconsistent) return 'ativo';
+      if (logs.length === 0) return hasConvergentCurrentState ? 'resolvido' : 'ativo';
+
+      const hasErrorSignal = logs.some((log) => ['failed', 'partial_failure', 'warning', 'rejected', 'unauthorized'].includes(log.processing_status));
+      const hasResolvedSignal = logs.some((log) => log.processing_status === 'success');
+      const lastErrorAt = logs
+        .filter((log) => ['failed', 'partial_failure', 'warning', 'rejected', 'unauthorized'].includes(log.processing_status))
+        .map((log) => new Date(log.created_at).getTime())
+        .sort((a, b) => b - a)[0] ?? null;
+      const lastSuccessAt = logs
+        .filter((log) => log.processing_status === 'success')
+        .map((log) => new Date(log.created_at).getTime())
+        .sort((a, b) => b - a)[0] ?? null;
+
+      if (hasErrorSignal && hasResolvedSignal) {
+        if (hasConvergentCurrentState && lastSuccessAt && lastErrorAt && lastSuccessAt > lastErrorAt) return 'resolvido';
+        return 'intermitente';
+      }
+
+      if (hasErrorSignal) return 'ativo';
+      return hasConvergentCurrentState ? 'resolvido' : 'intermitente';
+    };
+
+    const buildDivergenceKey = (params: {
+      type: TechnicalDivergence['type'];
+      incidentCode: string;
+      saleId?: string | null;
+      externalReference?: string | null;
+      asaasPaymentId?: string | null;
+      paymentEnvironment?: string | null;
+    }): string => {
+      const anchor = params.saleId ?? params.externalReference ?? params.asaasPaymentId ?? 'global';
+      return [params.type, params.incidentCode, anchor, params.paymentEnvironment ?? 'unknown'].join('::');
+    };
+
+    const upsertDivergence = ({
+      id,
+      title,
+      incidentCode,
+      type,
+      severity,
+      flowStage,
+      operationalImpact,
+      detail,
+      ruleKey,
+      isCurrentlyInconsistent,
+      hasConvergentCurrentState,
+      saleId,
+      externalReference,
+      asaasPaymentId,
+      paymentEnvironment,
+      relatedLogs,
+      rawEvidence,
+    }: {
+      id: string;
+      title: string;
+      incidentCode: string;
+      type: TechnicalDivergence['type'];
+      severity: TechnicalDivergence['severity'];
+      flowStage: string;
+      operationalImpact: string;
+      detail: string;
+      ruleKey: string;
+      isCurrentlyInconsistent: boolean;
+      hasConvergentCurrentState: boolean;
+      saleId?: string | null;
+      externalReference?: string | null;
+      asaasPaymentId?: string | null;
+      paymentEnvironment?: 'sandbox' | 'production' | null;
+      relatedLogs: SaleIntegrationLog[];
+      rawEvidence: Record<string, unknown>;
+    }) => {
+      const relatedSale = saleId ? salesById.get(saleId) : undefined;
+      const relatedSaleLogs = saleId
+        ? technicalDiagnosticSaleLogs.filter((log) => log.sale_id === saleId)
+        : [];
+      const key = buildDivergenceKey({
+        type,
+        incidentCode,
+        saleId: saleId ?? null,
+        externalReference: externalReference ?? relatedSale?.external_reference ?? null,
+        asaasPaymentId: asaasPaymentId ?? relatedSale?.asaas_payment_id ?? null,
+        paymentEnvironment: paymentEnvironment ?? relatedSale?.payment_environment ?? technicalDiagnosticSnapshot?.paymentEnvironment ?? null,
+      });
+
+      const existing = divergencesMap.get(key);
+      const mergedLogs = [...(existing?.relatedLogs ?? []), ...relatedLogs];
+      const uniqueLogsById = new Map(mergedLogs.map((log) => [log.id, log]));
+      const orderedLogs = [...uniqueLogsById.values()].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      const firstDetectedAt = orderedLogs[0]?.created_at ?? relatedSaleLogs[relatedSaleLogs.length - 1]?.created_at ?? relatedSale?.created_at ?? null;
+      const lastDetectedAt = orderedLogs[orderedLogs.length - 1]?.created_at ?? relatedSaleLogs[0]?.created_at ?? relatedSale?.created_at ?? null;
+      const lastRelatedLog = [...orderedLogs].reverse()[0] ?? null;
+      const occurrenceCount = Math.max(orderedLogs.length, 1);
+      const finalIsCurrentlyInconsistent = (existing?.isCurrentlyInconsistent ?? false) || isCurrentlyInconsistent;
+      const incidentStatus = buildIncidentStatus(orderedLogs, finalIsCurrentlyInconsistent, hasConvergentCurrentState);
+
+      divergencesMap.set(key, {
+        id: existing?.id ?? id,
+        title: existing?.title ?? title,
+        incidentCode,
+        type,
+        severity: existing?.severity === 'critical' || severity === 'critical' ? 'critical' : 'attention',
+        incidentStatus,
+        flowStage: existing?.flowStage ?? flowStage,
+        operationalImpact: existing?.operationalImpact ?? operationalImpact,
+        detail: existing?.detail ?? detail,
+        ruleKey,
+        isCurrentlyInconsistent: finalIsCurrentlyInconsistent,
+        saleId: saleId ?? null,
+        externalReference: lastRelatedLog?.external_reference ?? externalReference ?? relatedSale?.external_reference ?? null,
+        asaasPaymentId: lastRelatedLog?.payment_id ?? asaasPaymentId ?? relatedSale?.asaas_payment_id ?? null,
+        companyId: lastRelatedLog?.company_id ?? relatedSale?.company_id ?? activeCompanyId ?? null,
+        paymentEnvironment: lastRelatedLog?.payment_environment ?? paymentEnvironment ?? relatedSale?.payment_environment ?? technicalDiagnosticSnapshot?.paymentEnvironment ?? null,
+        saleStatus: relatedSale?.status ?? null,
+        gatewayStatus: relatedSale?.asaas_payment_status ?? null,
+        firstDetectedAt,
+        lastDetectedAt,
+        lastRelatedLog,
+        occurrenceCount,
+        isReincident: occurrenceCount > 1,
+        relatedLogs: orderedLogs,
+        relatedSaleLogs,
+        rawEvidence: { ...(existing?.rawEvidence ?? {}), ...rawEvidence },
+      });
+    };
+
     technicalDiagnosticSales
       .filter((sale) => !sale.payment_environment)
       .forEach((sale) => {
-        divergences.push({
+        const hasConvergentCurrentState = !!sale.payment_environment;
+        upsertDivergence({
           id: `sale_without_environment_${sale.id}`,
-          title: 'Venda sem payment_environment',
+          title: 'Venda sem ambiente de pagamento persistido',
+          incidentCode: 'sale_without_payment_environment',
+          type: 'integridade',
           severity: 'critical',
-          detail: `A venda ${sale.id} está sem ambiente persistido, o que quebra a rastreabilidade do fluxo Asaas.`,
+          flowStage: 'Persistência da venda',
+          operationalImpact: 'Risco de auditoria cruzar sandbox/produção na mesma investigação.',
+          detail: `A venda ${sale.id} está sem payment_environment e exige correção para rastreabilidade.`,
+          ruleKey: 'sale_missing_environment',
+          isCurrentlyInconsistent: true,
+          hasConvergentCurrentState,
           saleId: sale.id,
+          relatedLogs: technicalDiagnosticLogs.filter((log) => log.sale_id === sale.id),
+          rawEvidence: { sale_id: sale.id, payment_environment: sale.payment_environment },
         });
       });
 
-    // Critério 2 (objetivo): vendas sem asaas_payment_id, mas em estado pendente/reservado.
     technicalDiagnosticSales
       .filter((sale) => !sale.asaas_payment_id && sale.status !== 'cancelado')
       .forEach((sale) => {
-        divergences.push({
+        upsertDivergence({
           id: `sale_without_payment_id_${sale.id}`,
           title: 'Venda sem asaas_payment_id',
+          incidentCode: 'sale_without_asaas_payment_id',
+          type: 'integridade',
           severity: 'attention',
-          detail: `A venda ${sale.id} está em ${sale.status} sem cobrança Asaas vinculada.`,
+          flowStage: 'Criação da cobrança',
+          operationalImpact: 'Risco de assento permanecer bloqueado sem cobrança vinculada para confirmação.',
+          detail: `A venda ${sale.id} está em ${sale.status} sem cobrança Asaas associada.`,
+          ruleKey: 'sale_missing_asaas_payment_id',
+          isCurrentlyInconsistent: !sale.asaas_payment_id && sale.status !== 'cancelado',
+          hasConvergentCurrentState: !!sale.asaas_payment_id || sale.status === 'cancelado',
           saleId: sale.id,
+          relatedLogs: technicalDiagnosticLogs.filter((log) => log.sale_id === sale.id),
+          rawEvidence: { sale_id: sale.id, asaas_payment_id: sale.asaas_payment_id, sale_status: sale.status },
         });
       });
 
-    // Critério 3 (objetivo): status não pago no sales, com indício técnico de confirmação.
-    const confirmedIndicators = new Set(
-      technicalDiagnosticLogs
-        .filter((log) => (
-          !!log.sale_id
-          && (
-            (log.event_type ?? '').toLowerCase().includes('payment_confirmed')
-            || (log.event_type ?? '').toLowerCase().includes('payment_received')
-            || (log.result_category === 'payment_confirmed')
-          )
-        ))
-        .map((log) => log.sale_id as string)
-    );
+    const confirmedIndicators = technicalDiagnosticLogs.filter((log) => (
+      !!log.sale_id
+      && (
+        (log.event_type ?? '').toLowerCase().includes('payment_confirmed')
+        || (log.event_type ?? '').toLowerCase().includes('payment_received')
+        || (log.result_category === 'payment_confirmed')
+      )
+    ));
 
+    const confirmedSaleIds = new Set(confirmedIndicators.map((log) => log.sale_id as string));
     technicalDiagnosticSales
-      .filter((sale) => sale.status !== 'pago' && confirmedIndicators.has(sale.id))
+      .filter((sale) => sale.status !== 'pago' && confirmedSaleIds.has(sale.id))
       .forEach((sale) => {
-        divergences.push({
+        const relatedLogs = confirmedIndicators.filter((log) => log.sale_id === sale.id);
+        upsertDivergence({
           id: `sale_status_mismatch_confirmed_${sale.id}`,
-          title: 'Status da venda não reflete confirmação técnica',
+          title: 'Pagamento confirmado sem finalização da venda',
+          incidentCode: 'sale_status_mismatch_after_confirmation',
+          type: 'operacional',
           severity: 'critical',
-          detail: `A venda ${sale.id} não está em pago, mas há indício recente de confirmação nos logs técnicos.`,
+          flowStage: 'Finalização pós-webhook',
+          operationalImpact: 'Risco de cliente ficar sem ticket válido mesmo com pagamento confirmado.',
+          detail: `A venda ${sale.id} não está em pago, mas já recebeu sinal técnico de confirmação.`,
+          ruleKey: 'sale_status_not_paid_after_confirmation',
+          isCurrentlyInconsistent: sale.status !== 'pago',
+          hasConvergentCurrentState: sale.status === 'pago',
           saleId: sale.id,
+          relatedLogs,
+          rawEvidence: { sale_id: sale.id, sale_status: sale.status, confirmation_logs: relatedLogs.map((log) => log.id) },
         });
       });
 
-    // Critério 4 (objetivo): inconsistência status da venda vs asaas_payment_status.
     technicalDiagnosticSales
-      .filter((sale) => sale.status === 'pago' && sale.asaas_payment_status && !['CONFIRMED', 'RECEIVED'].includes(sale.asaas_payment_status))
+      .filter((sale) => sale.status === 'pago' && sale.asaas_payment_status && !['CONFIRMED', 'RECEIVED'].includes((sale.asaas_payment_status ?? '').toUpperCase()))
       .forEach((sale) => {
-        divergences.push({
+        const upperStatus = (sale.asaas_payment_status ?? '').toUpperCase();
+        upsertDivergence({
           id: `sale_vs_asaas_status_${sale.id}`,
-          title: 'Inconsistência sales.status x asaas_payment_status',
-          severity: ['REFUNDED', 'REFUND_REQUESTED'].includes((sale.asaas_payment_status ?? '').toUpperCase())
-            || (sale.asaas_payment_status ?? '').toUpperCase().includes('CHARGEBACK')
-            || (sale.asaas_payment_status ?? '').toUpperCase().includes('DISPUTE')
-            || (sale.asaas_payment_status ?? '').toUpperCase().includes('CONTEST')
+          title: 'Inconsistência entre venda e gateway',
+          incidentCode: 'sale_gateway_status_mismatch',
+          type: 'operacional',
+          severity: ['REFUNDED', 'REFUND_REQUESTED'].includes(upperStatus)
+            || upperStatus.includes('CHARGEBACK')
+            || upperStatus.includes('DISPUTE')
+            || upperStatus.includes('CONTEST')
             ? 'critical'
             : 'attention',
-          detail: `A venda ${sale.id} está paga, porém asaas_payment_status=${sale.asaas_payment_status}.`,
+          flowStage: 'Convergência de status',
+          operationalImpact: 'Pode existir cobrança devolvida/disputada com venda ainda marcada como paga.',
+          detail: `A venda ${sale.id} está paga, porém o gateway reporta ${sale.asaas_payment_status}.`,
+          ruleKey: 'sale_vs_gateway_status_mismatch',
+          isCurrentlyInconsistent: sale.status === 'pago' && !['CONFIRMED', 'RECEIVED'].includes(upperStatus),
+          hasConvergentCurrentState: sale.status !== 'pago' || ['CONFIRMED', 'RECEIVED'].includes(upperStatus),
           saleId: sale.id,
+          relatedLogs: technicalDiagnosticLogs.filter((log) => log.sale_id === sale.id),
+          rawEvidence: { sale_id: sale.id, sale_status: sale.status, gateway_status: sale.asaas_payment_status },
         });
       });
 
-    // Critério 5 (objetivo): warning de observabilidade já padronizado no verify-payment-status.
     technicalDiagnosticLogs
       .filter((log) => log.warning_code === 'webhook_not_observed_before_verify_confirmation' || log.incident_code === 'webhook_not_observed_before_verify_confirmation')
       .forEach((log) => {
-        divergences.push({
+        upsertDivergence({
           id: `warning_webhook_not_observed_${log.id}`,
           title: 'Confirmação sem webhook correlacionado',
+          incidentCode: 'webhook_not_observed_before_verify_confirmation',
+          type: 'tecnica',
           severity: 'attention',
+          flowStage: 'Observabilidade webhook',
+          operationalImpact: 'Investigações futuras dependem de trilha parcial e exigem validação manual.',
           detail: log.message,
+          ruleKey: 'webhook_not_observed_before_verify_confirmation',
+          isCurrentlyInconsistent: true,
+          hasConvergentCurrentState: false,
           saleId: log.sale_id,
+          externalReference: log.external_reference,
+          asaasPaymentId: log.payment_id,
+          paymentEnvironment: log.payment_environment,
+          relatedLogs: technicalDiagnosticLogs.filter((item) => item.sale_id === log.sale_id && (item.warning_code === log.warning_code || item.incident_code === log.incident_code)),
+          rawEvidence: { log_id: log.id, warning_code: log.warning_code, incident_code: log.incident_code },
         });
       });
 
-    // Critério 6 (objetivo): incidentes técnicos críticos recentes.
     technicalDiagnosticLogs
       .filter((log) => ['failed', 'partial_failure', 'rejected', 'unauthorized'].includes(log.processing_status) && !!log.incident_code)
       .forEach((log) => {
-        divergences.push({
+        upsertDivergence({
           id: `critical_incident_${log.id}`,
           title: `Incidente técnico: ${log.incident_code}`,
+          incidentCode: log.incident_code ?? 'technical_incident',
+          type: 'tecnica',
           severity: 'critical',
+          flowStage: 'Processamento técnico webhook/API',
+          operationalImpact: 'Risco de evento crítico não processado e atraso de convergência operacional.',
           detail: log.message,
+          ruleKey: 'critical_technical_incident',
+          isCurrentlyInconsistent: ['failed', 'partial_failure', 'rejected', 'unauthorized', 'warning'].includes(log.processing_status),
+          hasConvergentCurrentState: false,
           saleId: log.sale_id,
+          externalReference: log.external_reference,
+          asaasPaymentId: log.payment_id,
+          paymentEnvironment: log.payment_environment,
+          relatedLogs: technicalDiagnosticLogs.filter((item) => item.sale_id === log.sale_id && item.incident_code === log.incident_code),
+          rawEvidence: { log_id: log.id, processing_status: log.processing_status, incident_code: log.incident_code },
         });
       });
 
-    // Critério 7 (objetivo): deduplicação detectada no recorte atual.
     technicalDiagnosticDedupEntries
       .filter((entry) => (entry.duplicate_count ?? 0) > 0)
       .forEach((entry) => {
-        divergences.push({
+        const relatedLogs = technicalDiagnosticLogs.filter((log) => (
+          (entry.sale_id && log.sale_id === entry.sale_id)
+          || (entry.external_reference && log.external_reference === entry.external_reference)
+        ));
+        upsertDivergence({
           id: `dedup_${entry.asaas_event_id}`,
-          title: 'Duplicidade de webhook detectada',
+          title: 'Webhook duplicado detectado',
+          incidentCode: 'duplicate_webhook_event',
+          type: 'tecnica',
           severity: 'attention',
+          flowStage: 'Recepção de webhook',
+          operationalImpact: 'Aumenta ruído operacional e pode mascarar incidentes reais.',
           detail: `Evento ${entry.asaas_event_id} teve ${entry.duplicate_count} repetição(ões).`,
+          ruleKey: 'duplicate_webhook_event',
+          isCurrentlyInconsistent: (entry.duplicate_count ?? 0) > 0,
+          hasConvergentCurrentState: false,
           saleId: entry.sale_id,
+          externalReference: entry.external_reference,
+          paymentEnvironment: entry.payment_environment,
+          relatedLogs,
+          rawEvidence: { ...entry },
         });
       });
 
-    return divergences;
-  }, [technicalDiagnosticDedupEntries, technicalDiagnosticLogs, technicalDiagnosticSales]);
+    return [...divergencesMap.values()]
+      .sort((a, b) => {
+        const aAt = a.lastDetectedAt ? new Date(a.lastDetectedAt).getTime() : 0;
+        const bAt = b.lastDetectedAt ? new Date(b.lastDetectedAt).getTime() : 0;
+        return bAt - aAt;
+      });
+  }, [activeCompanyId, technicalDiagnosticDedupEntries, technicalDiagnosticLogs, technicalDiagnosticSaleLogs, technicalDiagnosticSales, technicalDiagnosticSnapshot?.paymentEnvironment]);
+
+  const filteredTechnicalDiagnosticDivergences = useMemo(() => {
+    const now = Date.now();
+    const periodHours = technicalDiagnosticDivergenceFilters.periodHours === 'all'
+      ? null
+      : Number(technicalDiagnosticDivergenceFilters.periodHours);
+
+    return technicalDiagnosticDivergences.filter((divergence) => {
+      if (periodHours) {
+        const baseDate = divergence.lastDetectedAt ?? divergence.firstDetectedAt;
+        if (baseDate) {
+          const ageMs = now - new Date(baseDate).getTime();
+          if (ageMs > periodHours * 60 * 60 * 1000) return false;
+        }
+      }
+
+      if (technicalDiagnosticDivergenceFilters.severity !== 'all' && divergence.severity !== technicalDiagnosticDivergenceFilters.severity) return false;
+      if (technicalDiagnosticDivergenceFilters.divergenceType !== 'all' && divergence.type !== technicalDiagnosticDivergenceFilters.divergenceType) return false;
+      if (technicalDiagnosticDivergenceFilters.incidentStatus !== 'all' && divergence.incidentStatus !== technicalDiagnosticDivergenceFilters.incidentStatus) return false;
+      if (technicalDiagnosticDivergenceFilters.environment !== 'all' && divergence.paymentEnvironment !== technicalDiagnosticDivergenceFilters.environment) return false;
+      if (technicalDiagnosticDivergenceFilters.onlyActive && divergence.incidentStatus !== 'ativo') return false;
+      if (technicalDiagnosticDivergenceFilters.onlyReincident && !divergence.isReincident) return false;
+
+      const normalizedSaleId = technicalDiagnosticDivergenceFilters.saleId.trim().toLowerCase();
+      if (normalizedSaleId && !(divergence.saleId ?? '').toLowerCase().includes(normalizedSaleId)) return false;
+
+      const normalizedExternalReference = technicalDiagnosticDivergenceFilters.externalReference.trim().toLowerCase();
+      if (normalizedExternalReference && !(divergence.externalReference ?? '').toLowerCase().includes(normalizedExternalReference)) return false;
+
+      const normalizedAsaasPaymentId = technicalDiagnosticDivergenceFilters.asaasPaymentId.trim().toLowerCase();
+      if (normalizedAsaasPaymentId && !(divergence.asaasPaymentId ?? '').toLowerCase().includes(normalizedAsaasPaymentId)) return false;
+
+      return true;
+    });
+  }, [technicalDiagnosticDivergenceFilters, technicalDiagnosticDivergences]);
+
+  const selectedTechnicalDivergence = useMemo(
+    () => filteredTechnicalDiagnosticDivergences.find((divergence) => divergence.id === selectedTechnicalDivergenceId) ?? null,
+    [filteredTechnicalDiagnosticDivergences, selectedTechnicalDivergenceId]
+  );
 
   const technicalDiagnosticStatus = useMemo<TechnicalDiagnosticStatus>(() => {
     // Semáforo mínimo e explícito para evitar “diagnóstico fake”.
@@ -1503,6 +1836,40 @@ export default function SalesDiagnostic() {
       salesWithDivergence: saleIdsWithDivergence.size,
     };
   }, [technicalDiagnosticDedupEntries, technicalDiagnosticDivergences, technicalDiagnosticLogs]);
+
+  const technicalDiagnosticLastFailureSummary = useMemo(() => {
+    if (!technicalDiagnosticLastFailure) return null;
+
+    const relatedDivergence = technicalDiagnosticDivergences.find((divergence) => (
+      divergence.incidentCode === (technicalDiagnosticLastFailure.incident_code ?? technicalDiagnosticLastFailure.warning_code)
+      || divergence.lastRelatedLog?.id === technicalDiagnosticLastFailure.id
+    ));
+
+    return {
+      humanTitle: relatedDivergence?.title ?? 'Falha técnica identificada no monitoramento',
+      stage: relatedDivergence?.flowStage ?? 'Etapa não mapeada',
+      environment: technicalDiagnosticLastFailure.payment_environment
+        ? formatPaymentEnvironmentLabel(technicalDiagnosticLastFailure.payment_environment)
+        : 'não disponível',
+      impactedSales: new Set(
+        technicalDiagnosticDivergences
+          .filter((divergence) => divergence.incidentCode === (technicalDiagnosticLastFailure.incident_code ?? technicalDiagnosticLastFailure.warning_code))
+          .map((divergence) => divergence.saleId)
+          .filter((saleId): saleId is string => !!saleId)
+      ).size,
+    };
+  }, [technicalDiagnosticDivergences, technicalDiagnosticLastFailure]);
+
+  const technicalDiagnosticIncidentStatusSummary = useMemo(() => {
+    const active = filteredTechnicalDiagnosticDivergences.filter((item) => item.incidentStatus === 'ativo').length;
+    const intermittent = filteredTechnicalDiagnosticDivergences.filter((item) => item.incidentStatus === 'intermitente').length;
+    const resolved = filteredTechnicalDiagnosticDivergences.filter((item) => item.incidentStatus === 'resolvido').length;
+
+    if (active > 0) return `Monitoramento com ${active} incidente(s) ativo(s)`;
+    if (intermittent > 0) return `Monitoramento intermitente (${intermittent} incidente(s))`;
+    if (resolved > 0) return 'Sem incidentes ativos no recorte';
+    return 'Sem divergências no recorte aplicado';
+  }, [filteredTechnicalDiagnosticDivergences]);
 
   const fetchSales = useCallback(async () => {
     const requestId = ++latestSalesRequestIdRef.current;
@@ -2014,6 +2381,18 @@ export default function SalesDiagnostic() {
     toast.success('Diagnóstico da venda recarregado.');
   }, [detailSale?.id, fetchSales, openDetail]);
 
+  const handleDownloadTextFile = useCallback((filename: string, content: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleOpenTechnicalDiagnostic = useCallback(async () => {
     if (!activeCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady) {
       toast.error('Contexto ativo indisponível para diagnóstico técnico.');
@@ -2036,6 +2415,19 @@ export default function SalesDiagnostic() {
     setTechnicalDiagnosticSales([]);
     setTechnicalDiagnosticSaleLogs([]);
     setTechnicalDiagnosticDedupEntries([]);
+    setSelectedTechnicalDivergenceId(null);
+    setTechnicalDiagnosticDivergenceFilters({
+      periodHours: '72',
+      severity: 'all',
+      divergenceType: 'all',
+      incidentStatus: 'all',
+      environment: 'all',
+      saleId: '',
+      externalReference: '',
+      asaasPaymentId: '',
+      onlyActive: false,
+      onlyReincident: false,
+    });
 
     const { data: logsData, error: logsError } = await supabase
       .from('sale_integration_logs')
@@ -2671,6 +3063,7 @@ export default function SalesDiagnostic() {
               setTechnicalDiagnosticSales([]);
               setTechnicalDiagnosticSaleLogs([]);
               setTechnicalDiagnosticDedupEntries([]);
+              setSelectedTechnicalDivergenceId(null);
             }
           }}
         >
@@ -2742,16 +3135,22 @@ export default function SalesDiagnostic() {
                       <Card>
                         <CardContent className="p-3 space-y-1">
                           <p className="text-xs text-muted-foreground">Última falha relevante</p>
-                          <p className="text-sm font-medium">
-                            {technicalDiagnosticLastFailure?.incident_code ?? technicalDiagnosticLastFailure?.warning_code ?? technicalDiagnosticLastFailure?.processing_status ?? 'Nenhuma'}
+                          <p className="text-sm font-medium">{technicalDiagnosticLastFailureSummary?.humanTitle ?? 'Nenhuma falha relevante no recorte'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {technicalDiagnosticLastFailure
+                              ? `${technicalDiagnosticLastFailureSummary?.stage ?? 'Etapa não mapeada'} • ${format(parseISO(technicalDiagnosticLastFailure.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })} • ${technicalDiagnosticLastFailureSummary?.environment ?? 'não disponível'}`
+                              : 'Sem falha relevante no recorte.'}
                           </p>
-                          <p className="text-xs text-muted-foreground line-clamp-2">{technicalDiagnosticLastFailure?.message ?? 'Sem falha relevante no recorte.'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Vendas impactadas: {technicalDiagnosticLastFailureSummary?.impactedSales ?? 0}
+                          </p>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardContent className="p-3 space-y-1">
-                          <p className="text-xs text-muted-foreground">Divergências detectadas</p>
-                          <p className="text-lg font-semibold">{technicalDiagnosticDivergences.length}</p>
+                          <p className="text-xs text-muted-foreground">Status atual do monitoramento</p>
+                          <p className="text-sm font-semibold">{technicalDiagnosticIncidentStatusSummary}</p>
+                          <p className="text-xs text-muted-foreground">Divergências no filtro: {filteredTechnicalDiagnosticDivergences.length}</p>
                         </CardContent>
                       </Card>
                       <Card>
@@ -2823,34 +3222,280 @@ export default function SalesDiagnostic() {
                 <TabsContent value="divergencias" className="flex-1 overflow-auto">
                   <ScrollArea className="h-full pr-4">
                     <div className="space-y-3 pb-4">
-                      <h3 className="text-sm font-semibold">Achados com regra explícita</h3>
-                      {technicalDiagnosticDivergences.length === 0 ? (
+                      <h3 className="text-sm font-semibold">Incidentes auditáveis com rastreabilidade técnica</h3>
+                      <div className="rounded-md border bg-muted/30 p-3">
+                        {/* Filtros locais do popup: compactos e sem alterar o fluxo principal da página. */}
+                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                          <Select
+                            value={technicalDiagnosticDivergenceFilters.periodHours}
+                            onValueChange={(value) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, periodHours: value as TechnicalDiagnosticDivergenceFilters['periodHours'] }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="24">Últimas 24h</SelectItem>
+                              <SelectItem value="72">Últimas 72h</SelectItem>
+                              <SelectItem value="168">Últimos 7 dias</SelectItem>
+                              <SelectItem value="all">Todo o recorte</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={technicalDiagnosticDivergenceFilters.severity}
+                            onValueChange={(value) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, severity: value as TechnicalDiagnosticDivergenceFilters['severity'] }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Severidade" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todas severidades</SelectItem>
+                              <SelectItem value="critical">Crítico</SelectItem>
+                              <SelectItem value="attention">Atenção</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={technicalDiagnosticDivergenceFilters.divergenceType}
+                            onValueChange={(value) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, divergenceType: value as TechnicalDiagnosticDivergenceFilters['divergenceType'] }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos os tipos</SelectItem>
+                              <SelectItem value="tecnica">Técnica</SelectItem>
+                              <SelectItem value="operacional">Operacional</SelectItem>
+                              <SelectItem value="integridade">Integridade</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={technicalDiagnosticDivergenceFilters.incidentStatus}
+                            onValueChange={(value) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, incidentStatus: value as TechnicalDiagnosticDivergenceFilters['incidentStatus'] }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Status do incidente" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos os status</SelectItem>
+                              <SelectItem value="ativo">Ativo</SelectItem>
+                              <SelectItem value="intermitente">Intermitente</SelectItem>
+                              <SelectItem value="resolvido">Resolvido</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={technicalDiagnosticDivergenceFilters.environment}
+                            onValueChange={(value) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, environment: value as TechnicalDiagnosticDivergenceFilters['environment'] }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Ambiente" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos ambientes</SelectItem>
+                              <SelectItem value="sandbox">Sandbox</SelectItem>
+                              <SelectItem value="production">Produção</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-3">
+                          <input
+                            className="h-9 rounded-md border bg-background px-3 text-xs"
+                            value={technicalDiagnosticDivergenceFilters.saleId}
+                            onChange={(event) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, saleId: event.target.value }))}
+                            placeholder="Buscar sale_id"
+                          />
+                          <input
+                            className="h-9 rounded-md border bg-background px-3 text-xs"
+                            value={technicalDiagnosticDivergenceFilters.externalReference}
+                            onChange={(event) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, externalReference: event.target.value }))}
+                            placeholder="Buscar external_reference"
+                          />
+                          <input
+                            className="h-9 rounded-md border bg-background px-3 text-xs"
+                            value={technicalDiagnosticDivergenceFilters.asaasPaymentId}
+                            onChange={(event) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, asaasPaymentId: event.target.value }))}
+                            placeholder="Buscar asaas_payment_id"
+                          />
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
+                          <label className="inline-flex items-center gap-2 text-muted-foreground">
+                            <Switch
+                              checked={technicalDiagnosticDivergenceFilters.onlyActive}
+                              onCheckedChange={(checked) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, onlyActive: checked }))}
+                            />
+                            Somente incidentes ativos
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-muted-foreground">
+                            <Switch
+                              checked={technicalDiagnosticDivergenceFilters.onlyReincident}
+                              onCheckedChange={(checked) => setTechnicalDiagnosticDivergenceFilters((prev) => ({ ...prev, onlyReincident: checked }))}
+                            />
+                            Somente reincidentes
+                          </label>
+                        </div>
+                      </div>
+                      {filteredTechnicalDiagnosticDivergences.length === 0 ? (
                         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                           Nenhuma divergência encontrada no recorte atual.
                         </div>
                       ) : (
-                        technicalDiagnosticDivergences.map((divergence) => (
-                          <div
-                            key={divergence.id}
-                            className={cn(
-                              'rounded-md border p-3',
-                              divergence.severity === 'critical'
-                                ? 'border-destructive/30 bg-destructive/5'
-                                : 'border-amber-300 bg-amber-50'
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold">{divergence.title}</p>
-                              <Badge variant="outline" className="text-xs">
-                                {divergence.severity === 'critical' ? 'Crítico' : 'Atenção'}
-                              </Badge>
+                        <>
+                          {(['tecnica', 'operacional', 'integridade'] as const).map((groupType) => {
+                            const groupItems = filteredTechnicalDiagnosticDivergences.filter((item) => item.type === groupType);
+                            if (groupItems.length === 0) return null;
+
+                            return (
+                              <div key={groupType} className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {formatTechnicalDivergenceTypeLabel(groupType)} ({groupItems.length})
+                                </p>
+                                {groupItems.map((divergence) => {
+                                  const relatedSale = divergence.saleId
+                                    ? technicalDiagnosticSales.find((sale) => sale.id === divergence.saleId)
+                                    : null;
+                                  const actions: ActionItem[] = [
+                                    {
+                                      label: 'Copiar diagnóstico completo',
+                                      icon: Copy,
+                                      onClick: () => void handleCopyToClipboard('Diagnóstico completo', JSON.stringify(divergence, null, 2)),
+                                    },
+                                    {
+                                      label: 'Copiar JSON bruto relacionado',
+                                      icon: FileJson,
+                                      onClick: () => void handleCopyToClipboard('JSON bruto', JSON.stringify(divergence.rawEvidence, null, 2)),
+                                    },
+                                    ...(relatedSale ? [{
+                                      label: 'Abrir venda',
+                                      icon: Eye,
+                                      onClick: () => void openDetail(relatedSale),
+                                    }] : []),
+                                    {
+                                      label: 'Abrir timeline',
+                                      icon: Activity,
+                                      onClick: () => setSelectedTechnicalDivergenceId(divergence.id),
+                                    },
+                                    ...(relatedSale ? [{
+                                      label: 'Reexecutar verificação manual',
+                                      icon: RefreshCw,
+                                      onClick: () => void handleRefreshSingleSale(relatedSale),
+                                    }] : []),
+                                    {
+                                      label: 'Exportar incidente (Markdown)',
+                                      icon: ExternalLink,
+                                      onClick: () => {
+                                        const markdown = [
+                                          `# ${divergence.title}`,
+                                          '',
+                                          `- incident_code: ${divergence.incidentCode}`,
+                                          `- severidade: ${divergence.severity}`,
+                                          `- status: ${divergence.incidentStatus}`,
+                                          `- tipo: ${divergence.type}`,
+                                          `- sale_id: ${divergence.saleId ?? 'não disponível'}`,
+                                          '',
+                                          `## Detalhe`,
+                                          divergence.detail,
+                                        ].join('\n');
+                                        handleDownloadTextFile(`incidente-${divergence.id}.md`, markdown, 'text/markdown;charset=utf-8');
+                                      },
+                                    },
+                                    {
+                                      label: 'Exportar incidente (JSON)',
+                                      icon: FileJson,
+                                      onClick: () => handleDownloadTextFile(`incidente-${divergence.id}.json`, JSON.stringify(divergence, null, 2), 'application/json;charset=utf-8'),
+                                    },
+                                  ];
+
+                                  return (
+                                    <div
+                                      key={divergence.id}
+                                      className={cn(
+                                        'rounded-md border p-3',
+                                        divergence.severity === 'critical'
+                                          ? 'border-destructive/30 bg-destructive/5'
+                                          : 'border-amber-300 bg-amber-50'
+                                      )}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="space-y-1">
+                                          <p className="text-sm font-semibold">{divergence.title}</p>
+                                          <p className="text-xs text-muted-foreground">{divergence.detail}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-xs">{divergence.severity === 'critical' ? 'Crítico' : 'Atenção'}</Badge>
+                                          <ActionsDropdown actions={actions} />
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground md:grid-cols-2 xl:grid-cols-3">
+                                        <p><span className="font-medium text-foreground">incident_code:</span> {divergence.incidentCode}</p>
+                                        <p><span className="font-medium text-foreground">status:</span> {formatIncidentStatusLabel(divergence.incidentStatus)}</p>
+                                        <p><span className="font-medium text-foreground">etapa:</span> {divergence.flowStage}</p>
+                                        <p><span className="font-medium text-foreground">impacto:</span> {divergence.operationalImpact}</p>
+                                        <p className="font-mono break-all"><span className="font-medium text-foreground">sale_id:</span> {formatOptionalDiagnosticValue(divergence.saleId)}</p>
+                                        <p className="font-mono break-all"><span className="font-medium text-foreground">external_reference:</span> {formatOptionalDiagnosticValue(divergence.externalReference)}</p>
+                                        <p className="font-mono break-all"><span className="font-medium text-foreground">asaas_payment_id:</span> {formatOptionalDiagnosticValue(divergence.asaasPaymentId)}</p>
+                                        <p className="font-mono break-all"><span className="font-medium text-foreground">company_id:</span> {formatOptionalDiagnosticValue(divergence.companyId)}</p>
+                                        <p><span className="font-medium text-foreground">payment_environment:</span> {divergence.paymentEnvironment ? formatPaymentEnvironmentLabel(divergence.paymentEnvironment) : 'não disponível'}</p>
+                                        <p><span className="font-medium text-foreground">status venda:</span> {divergence.saleStatus ? getSaleStatusLabel(divergence.saleStatus) : 'não disponível'}</p>
+                                        <p><span className="font-medium text-foreground">status gateway:</span> {formatOptionalDiagnosticValue(divergence.gatewayStatus)}</p>
+                                        <p><span className="font-medium text-foreground">primeira detecção:</span> {divergence.firstDetectedAt ? format(parseISO(divergence.firstDetectedAt), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR }) : 'não disponível'}</p>
+                                        <p><span className="font-medium text-foreground">última detecção:</span> {divergence.lastDetectedAt ? format(parseISO(divergence.lastDetectedAt), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR }) : 'não disponível'}</p>
+                                        <p><span className="font-medium text-foreground">ocorrências:</span> {divergence.occurrenceCount}</p>
+                                        <p><span className="font-medium text-foreground">último log:</span> {divergence.lastRelatedLog?.message ?? 'não disponível'}</p>
+                                      </div>
+                                      <div className="mt-2">
+                                        <Button size="sm" variant="outline" onClick={() => setSelectedTechnicalDivergenceId(divergence.id)}>
+                                          Ver timeline e evidências
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+
+                          {selectedTechnicalDivergence && (
+                            <div className="rounded-md border bg-background p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold">Timeline do incidente: {selectedTechnicalDivergence.title}</p>
+                                <Button size="sm" variant="ghost" onClick={() => setSelectedTechnicalDivergenceId(null)}>
+                                  Fechar timeline
+                                </Button>
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                {[...selectedTechnicalDivergence.relatedLogs]
+                                  .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                                  .map((event) => {
+                                    // A etapa da timeline agora é calculada por evento real, usando sinais do próprio log.
+                                    // Isso evita repetir a etapa geral do incidente em todos os itens e melhora a auditoria.
+                                    const eventStage = mapIntegrationLogToOperationalStage(event, selectedTechnicalDivergence.flowStage);
+                                    return (
+                                    <div key={event.id} className="rounded border bg-muted/30 p-2 text-xs">
+                                      <div className="grid gap-1 md:grid-cols-2 xl:grid-cols-4">
+                                        <p><span className="text-muted-foreground">horário:</span> {format(parseISO(event.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}</p>
+                                        <p><span className="text-muted-foreground">origem:</span> {event.provider}</p>
+                                        <p><span className="text-muted-foreground">etapa:</span> {eventStage}</p>
+                                        <p><span className="text-muted-foreground">status:</span> {event.processing_status}</p>
+                                        <p><span className="text-muted-foreground">message:</span> {event.message}</p>
+                                        <p><span className="text-muted-foreground">environment:</span> {event.payment_environment ? formatPaymentEnvironmentLabel(event.payment_environment) : 'não disponível'}</p>
+                                        <p className="break-all"><span className="text-muted-foreground">payment_id:</span> {formatOptionalDiagnosticValue(event.payment_id)}</p>
+                                        <p className="break-all"><span className="text-muted-foreground">external_reference:</span> {formatOptionalDiagnosticValue(event.external_reference)}</p>
+                                        <p><span className="text-muted-foreground">direction:</span> {event.direction}</p>
+                                        <p><span className="text-muted-foreground">warning_code:</span> {formatOptionalDiagnosticValue(event.warning_code)}</p>
+                                        <p><span className="text-muted-foreground">incident_code:</span> {formatOptionalDiagnosticValue(event.incident_code)}</p>
+                                        <p><span className="text-muted-foreground">http_status:</span> {formatOptionalDiagnosticValue(event.http_status)}</p>
+                                      </div>
+                                      <Collapsible className="mt-1">
+                                        <CollapsibleTrigger className="text-[11px] text-primary underline">Ver evidência bruta</CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                          <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[10px]">
+                                            {JSON.stringify({
+                                              payload_json: event.payload_json,
+                                              response_json: event.response_json,
+                                              event_id: event.id,
+                                              provider: event.provider,
+                                            }, null, 2)}
+                                          </pre>
+                                        </CollapsibleContent>
+                                      </Collapsible>
+                                    </div>
+                                  );
+                                })}
+                                {selectedTechnicalDivergence.relatedLogs.length === 0 && (
+                                  <p className="text-xs text-muted-foreground">Sem logs técnicos correlacionados neste recorte. Evidência disponível somente via estado atual da venda.</p>
+                                )}
+                              </div>
                             </div>
-                            <p className="mt-1 text-xs text-muted-foreground">{divergence.detail}</p>
-                            {divergence.saleId && (
-                              <p className="mt-1 text-[11px] font-mono text-muted-foreground break-all">sale_id: {divergence.saleId}</p>
-                            )}
-                          </div>
-                        ))
+                          )}
+                        </>
                       )}
                     </div>
                   </ScrollArea>
