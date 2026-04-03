@@ -464,6 +464,13 @@ function computeLockStatus(sale: DiagnosticSale): LockStatusView {
 function computePaymentStatus(sale: DiagnosticSale): PaymentStatusView {
   const gateway = computeGateway(sale);
   const asaasStatus = sale.asaas_payment_status;
+  const normalizedAsaasStatus = (asaasStatus ?? '').toUpperCase();
+
+  const isFinancialReversalRisk = normalizedAsaasStatus.includes('CHARGEBACK')
+    || normalizedAsaasStatus.includes('DISPUTE')
+    || normalizedAsaasStatus.includes('CONTEST')
+    || normalizedAsaasStatus === 'REFUNDED'
+    || normalizedAsaasStatus === 'REFUND_REQUESTED';
 
   // A tela separa status da venda e status do pagamento porque o operador precisa distinguir
   // pendência comercial legítima de divergência técnica com o gateway. Misturar os dois conceitos
@@ -477,7 +484,9 @@ function computePaymentStatus(sale: DiagnosticSale): PaymentStatusView {
   if (asaasStatus === 'OVERDUE' || asaasStatus === 'EXPIRED') {
     return { label: 'Pagamento expirado', detail: `Retorno do Asaas: ${asaasStatus}`, variant: 'destructive' };
   }
-  if (asaasStatus === 'REFUNDED' || asaasStatus === 'REFUND_REQUESTED') {
+  if (isFinancialReversalRisk) {
+    // Blindagem visual: agrupamos estorno/chargeback/disputa no mesmo alerta operacional
+    // para evitar leitura falsa de "pagamento saudável" em venda já confirmada no passado.
     return { label: 'Pagamento estornado', detail: `Retorno do Asaas: ${asaasStatus}`, variant: 'destructive' };
   }
   if (asaasStatus === 'CANCELLED') {
@@ -509,6 +518,11 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
   const isManualReservation = isManualReservationFlow(sale);
   const manualReservationExpired = isManualReservation && !!sale.reservation_expires_at && new Date(sale.reservation_expires_at).getTime() <= Date.now();
   const asaasPaid = sale.asaas_payment_status === 'RECEIVED' || sale.asaas_payment_status === 'CONFIRMED';
+  const asaasFinancialReversalRisk = (sale.asaas_payment_status ?? '').toUpperCase().includes('CHARGEBACK')
+    || (sale.asaas_payment_status ?? '').toUpperCase().includes('DISPUTE')
+    || (sale.asaas_payment_status ?? '').toUpperCase().includes('CONTEST')
+    || sale.asaas_payment_status === 'REFUNDED'
+    || sale.asaas_payment_status === 'REFUND_REQUESTED';
   const hasGatewayDivergence = ((isPendingCheckout || isReserved) && asaasPaid) || (sale.status === 'cancelado' && asaasPaid);
 
   // Helper local para evitar repetição: calcula operationalPriority a partir do resultado parcial.
@@ -520,6 +534,27 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
   // A causa principal é mutuamente exclusiva: a função retorna no primeiro cenário dominante.
   // Isso evita que a linha traga duas narrativas conflitantes e preserva uma leitura operacional confiável.
   if (sale.status === 'pago') {
+    if (asaasFinancialReversalRisk) {
+      return withPriority({
+        category: 'divergencia',
+        categoryLabel: 'Divergência',
+        categoryVariant: 'destructive',
+        priority: 1,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Risco financeiro pós-pagamento',
+        operationalDetail: 'Gateway sinaliza reversão/contestação financeira para uma venda que já foi marcada como paga.',
+        causeLabel: 'Reversão financeira detectada após confirmação operacional da venda.',
+        actionLabel: 'Validar cancelamento operacional e acionar tratativa manual de devolução pela empresa.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: true,
+      });
+    }
+
     return withPriority({
       category: 'pago',
       categoryLabel: 'Pago',
@@ -1360,7 +1395,12 @@ export default function SalesDiagnostic() {
         divergences.push({
           id: `sale_vs_asaas_status_${sale.id}`,
           title: 'Inconsistência sales.status x asaas_payment_status',
-          severity: 'attention',
+          severity: ['REFUNDED', 'REFUND_REQUESTED'].includes((sale.asaas_payment_status ?? '').toUpperCase())
+            || (sale.asaas_payment_status ?? '').toUpperCase().includes('CHARGEBACK')
+            || (sale.asaas_payment_status ?? '').toUpperCase().includes('DISPUTE')
+            || (sale.asaas_payment_status ?? '').toUpperCase().includes('CONTEST')
+            ? 'critical'
+            : 'attention',
           detail: `A venda ${sale.id} está paga, porém asaas_payment_status=${sale.asaas_payment_status}.`,
           saleId: sale.id,
         });
