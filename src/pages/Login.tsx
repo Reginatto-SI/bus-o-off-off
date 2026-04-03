@@ -17,7 +17,8 @@ import { Logo } from "@/components/Logo";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
-function getRedirectByRole(role: string | null): string {
+function getRedirectByRole(role: string | null, isRepresentative: boolean): string {
+  if (isRepresentative) return "/representante/painel";
   if (role === "vendedor") return "/vendedor/minhas-vendas";
   if (role === "motorista") return "/motorista";
   // Usuários administrativos entram sempre pelo dashboard como página inicial estratégica.
@@ -35,7 +36,7 @@ export default function Login() {
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoverySuccessMessage, setRecoverySuccessMessage] = useState("");
   const [loginSuccess, setLoginSuccess] = useState(false);
-  const { signIn, user, userRole, loading: authLoading } = useAuth();
+  const { signIn, user, userRole, loading: authLoading, isRepresentative } = useAuth();
   const navigate = useNavigate();
   const rememberEmailKey = "boo.remember_email";
   const rememberedEmailKey = "boo.remembered_email";
@@ -81,10 +82,10 @@ export default function Login() {
   // Redirect após login bem-sucedido ou sessão existente
   useEffect(() => {
     // Em recovery, não redirecionamos automaticamente: priorizamos concluir troca de senha.
-    if (!isRecoveryFlow && user && userRole) {
-      navigate(getRedirectByRole(userRole), { replace: true });
+    if (!isRecoveryFlow && user && (userRole || isRepresentative)) {
+      navigate(getRedirectByRole(userRole, isRepresentative), { replace: true });
     }
-  }, [user, userRole, navigate, isRecoveryFlow]);
+  }, [user, userRole, navigate, isRecoveryFlow, isRepresentative]);
 
   if (authLoading) {
     return (
@@ -199,14 +200,14 @@ export default function Login() {
       );
     }
 
-    if (!userRole) {
+    if (!userRole && !isRepresentative) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       );
     }
-    return <Navigate to={getRedirectByRole(userRole)} replace />;
+    return <Navigate to={getRedirectByRole(userRole, isRepresentative)} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
