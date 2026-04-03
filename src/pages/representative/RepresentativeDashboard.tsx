@@ -461,7 +461,7 @@ export default function RepresentativeDashboard() {
         {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
         <section className="order-1 min-w-0 grid gap-4 lg:grid-cols-3">
           {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
-          <Card className="lg:col-span-2 border-primary/30 shadow-sm">
+          <Card className="min-w-0 overflow-hidden lg:col-span-2 border-primary/30 shadow-sm">
             <CardHeader className="pb-3">
               <CardDescription>Link oficial de indicação</CardDescription>
               <CardTitle className="text-lg">Compartilhamento comercial</CardTitle>
