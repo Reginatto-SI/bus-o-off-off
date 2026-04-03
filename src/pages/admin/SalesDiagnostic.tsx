@@ -633,6 +633,40 @@ function computeOperationalView(sale: DiagnosticSale): DiagnosticOperationalView
       });
     }
 
+    // Rebaixamento controlado de severidade:
+    // Para checkout público ainda pendente no gateway (PENDING/AWAITING_RISK_ANALYSIS),
+    // sem ticket emitido, sem lock ativo e sem reserva manual, a ausência de lock
+    // não indica bloqueio operacional atual. Nesses casos exibimos acompanhamento
+    // em vez de divergência crítica para reduzir falso positivo sem mascarar falha real.
+    const isPendingGatewayWithoutOperationalImpact =
+      sale.sale_origin === 'online_checkout'
+      && sale.status === 'pendente_pagamento'
+      && (sale.asaas_payment_status === 'PENDING' || sale.asaas_payment_status === 'AWAITING_RISK_ANALYSIS')
+      && (sale.ticket_count ?? 0) === 0
+      && (sale.active_lock_count ?? 0) === 0
+      && !sale.reservation_expires_at;
+
+    if (lockStatus.isMissing && isPendingGatewayWithoutOperationalImpact) {
+      return withPriority({
+        category: 'atencao',
+        categoryLabel: 'Atenção',
+        categoryVariant: 'secondary',
+        priority: 2,
+        saleStatusLabel: getSaleStatusLabel(sale.status),
+        paymentStatusLabel: paymentStatus.label,
+        operationalLabel: 'Pendência financeira sem lock ativo',
+        operationalDetail: 'Checkout público ainda pendente no gateway, sem bloqueio operacional ativo no momento.',
+        causeLabel: 'Pagamento aguardando confirmação com assento atualmente livre no mapa operacional.',
+        actionLabel: 'Acompanhar.',
+        timeLabel: timeView.label,
+        timeDetail: timeView.detail,
+        timeSourceLabel: timeView.sourceLabel,
+        lockLabel: lockStatus.label,
+        lockVariant: lockStatus.variant,
+        hasGatewayDivergence: false,
+      });
+    }
+
     if (lockStatus.isMissing) {
       return withPriority({
         category: 'divergencia',
