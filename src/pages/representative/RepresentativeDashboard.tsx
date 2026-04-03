@@ -626,7 +626,7 @@ export default function RepresentativeDashboard() {
           </section>
         )}
 
-        <section className="order-6 grid gap-4 lg:order-4 lg:grid-cols-2">
+        <section className="order-6 min-w-0 grid gap-4 lg:order-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardDescription>Ativação operacional</CardDescription>
