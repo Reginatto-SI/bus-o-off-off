@@ -1,57 +1,42 @@
 
 
-# Plano: Corrigir cadastro de representante + link no rodapé
+# Plano: Corrigir redirecionamento após cadastro de representante
 
-## Causa raiz identificada
+## Causa raiz
 
-A edge function `register-representative` **não está registrada** em `supabase/config.toml` com `verify_jwt = false`. Como o cadastro é público (sem sessão autenticada), o gateway do Supabase rejeita a requisição com 401 antes que a função sequer inicie — por isso há zero logs e o frontend recebe "Failed to send a request to the Edge Function".
+Race condition no AuthContext. Quando `signInWithPassword` dispara `onAuthStateChange`, o handler chama `setTimeout(fetchUserData, 0)` mas **não** volta `loading=true`. Como `loading` já foi setado para `false` pelo `getSession()` inicial (sem sessão prévia), o RepresentativeDashboard renderiza com `authLoading=false` + `isRepresentative=false` e executa `Navigate to="/admin/dashboard"` antes de `fetchUserData` terminar.
 
-Todas as outras edge functions públicas do projeto (register-company, create-asaas-payment, etc.) possuem `verify_jwt = false` no config.toml. Esta é a única ausente.
+## Mudança proposta
 
-## Mudanças propostas
+### Arquivo: `src/contexts/AuthContext.tsx`
 
-### 1. Registrar a função no config.toml (causa raiz)
+No handler de `onAuthStateChange`, ao detectar sessão válida, setar `setLoading(true)` **antes** do `setTimeout(fetchUserData)`. Isso garante que qualquer componente que dependa de `authLoading` (como o RepresentativeDashboard) mostre o spinner enquanto `fetchUserData` resolve os dados do usuário.
 
-**Arquivo:** `supabase/config.toml`
-
-Adicionar o bloco:
-```toml
-[functions.register-representative]
-  verify_jwt = false
+```typescript
+if (session?.user) {
+  setLoading(true); // ← adicionar esta linha
+  setTimeout(() => fetchUserData(session.user.id), 0);
+}
 ```
 
-Isso permite que a chamada pública do frontend chegue à função sem token JWT.
+Essa é a correção mínima — 1 linha adicionada. O `fetchUserData` já faz `setLoading(false)` no `finally`, então o ciclo fica consistente.
 
-### 2. Melhorar tratamento de erro no frontend
+## Por que funciona
 
-**Arquivo:** `src/pages/public/RepresentativeRegistration.tsx`
-
-No `handleSubmit`, o bloco `catch` hoje expõe a mensagem crua do SDK ("Failed to send a request to the Edge Function"). Ajustar para:
-
-- Exibir mensagem amigável: "Não foi possível concluir seu cadastro agora. Tente novamente em instantes."
-- Registrar o erro real em `console.error` com contexto (etapa, função chamada)
-- Tratar também o caso onde `fnError` vem sem `data` (resposta não-JSON do gateway)
-
-### 3. Adicionar link no rodapé da landing page
-
-**Arquivo:** `src/pages/public/LandingPage.tsx`
-
-Na seção "Para empresas" do footer (após "Acessar painel", linha ~1967), adicionar um `<li>` com link para `/seja-representante` com texto "Seja um representante", usando exatamente o mesmo padrão visual dos links existentes (`text-sm text-white/40 transition-colors hover:text-white`).
+1. `signInWithPassword` → `onAuthStateChange` → `setLoading(true)`
+2. RepresentativeDashboard vê `authLoading=true` → mostra spinner
+3. `fetchUserData` termina → `isRepresentative=true`, `loading=false`
+4. RepresentativeDashboard re-renderiza → passa no guard → exibe painel
 
 ## O que NÃO muda
 
-- Lógica da edge function `register-representative` (já está correta)
-- Fluxo de login, checkout, pagamentos
-- Nenhuma outra edge function
-- Nenhuma tabela ou RLS
-- Nenhum outro componente visual
+- Lógica de `fetchUserData`
+- Fluxo de login normal (Login.tsx já verifica `userRole || isRepresentative` antes de redirecionar)
+- Nenhum outro componente ou rota
+- Nenhum arquivo adicional
+- Nenhum redirect alterado no RepresentativeRegistration
 
-## Detalhes técnicos
+## Risco
 
-| Item | Detalhe |
-|---|---|
-| Causa raiz | `verify_jwt = false` ausente no config.toml para `register-representative` |
-| Arquivos alterados | `supabase/config.toml`, `src/pages/public/RepresentativeRegistration.tsx`, `src/pages/public/LandingPage.tsx` |
-| Risco | Mínimo — mudança aditiva, sem alterar lógica existente |
-| Reversível | Sim — remover a linha do config.toml reverte ao estado anterior |
+Mínimo. A mudança apenas garante que `loading` reflita corretamente que dados estão sendo carregados. Qualquer componente que usa `authLoading` já espera por esse estado.
 
