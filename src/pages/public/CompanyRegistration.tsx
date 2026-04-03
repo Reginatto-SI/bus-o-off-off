@@ -103,6 +103,7 @@ export default function CompanyRegistration() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [referralTrackingCode, setReferralTrackingCode] = useState<string | null>(null);
+  const [representativeTrackingCode, setRepresentativeTrackingCode] = useState<string | null>(null);
 
   // Comentário: bloco institucional reforçado para aproximar o visual do cadastro à linguagem comercial da landing.
   const benefits = [
@@ -137,8 +138,18 @@ export default function CompanyRegistration() {
     () => normalizeCompanyReferralCode(searchParams.get('ref')),
     [searchParams]
   );
+  const representativeCodeFromUrl = useMemo(
+    () => normalizeCompanyReferralCode(searchParams.get('representative_code')),
+    [searchParams]
+  );
 
   useEffect(() => {
+    // Garantia complementar: representative_code é semântica própria e prioriza o vínculo com representante.
+    // Não compartilhamos storage com referral entre empresas para evitar ambiguidade operacional.
+    if (representativeCodeFromUrl) {
+      setRepresentativeTrackingCode(representativeCodeFromUrl);
+    }
+
     // Comentário de manutenção: regra adotada para conflito de links no MVP.
     // O primeiro link válido da sessão é preservado, mas uma nova entrada explícita
     // com `?ref=` substitui conscientemente o tracking ativo porque houve nova ação do usuário.
@@ -150,7 +161,7 @@ export default function CompanyRegistration() {
 
     const existingTracking = readCompanyReferralTracking();
     setReferralTrackingCode(existingTracking?.code ?? null);
-  }, [referralCodeFromUrl]);
+  }, [referralCodeFromUrl, representativeCodeFromUrl]);
 
   const validate = () => {
     const hasBaseRequired = companyName && responsibleName && email && phone && password && confirmPassword;
@@ -205,6 +216,7 @@ export default function CompanyRegistration() {
           phone: normalizePhoneForStorage(phone),
           password,
           referral_code: referralTrackingCode,
+          representative_code: representativeTrackingCode,
         },
       });
 
