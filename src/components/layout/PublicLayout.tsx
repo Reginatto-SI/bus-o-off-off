@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Building2, LogOut, Menu, Search, Settings, Ticket, User } from 'lucide-react';
+import { Building2, Handshake, LogOut, Menu, Search, Settings, Ticket, User } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TrustFooter } from '@/components/public/TrustFooter';
 import { FloatingWhatsApp } from '@/components/public/FloatingWhatsApp';
@@ -40,6 +40,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
     { to: '/eventos', label: 'Comprar Passagens', icon: Ticket },
     ...(hideMyTicketsButton ? [] : [{ to: '/consultar-passagens', label: 'Minhas Passagens', icon: Search }]),
     { to: '/cadastro', label: 'Quero vender passagens', icon: Building2 },
+    { to: '/seja-representante', label: 'Seja representante', icon: Handshake },
     { to: '/login', label: 'Área Administrativa', icon: Settings },
   ];
 
@@ -128,6 +129,20 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
                 </DropdownMenu>
               ) : (
                 <>
+                  <NavLink
+                    to="/seja-representante"
+                    end
+                    className={({ isActive }) =>
+                      `${desktopNavItemClass} ${
+                        isActive
+                          ? 'text-foreground underline underline-offset-4 decoration-1 decoration-foreground/60'
+                          : ''
+                      }`
+                    }
+                  >
+                    <Handshake className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>Seja representante</span>
+                  </NavLink>
                   <NavLink
                     to="/login"
                     end

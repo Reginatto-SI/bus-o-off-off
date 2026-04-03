@@ -56,6 +56,7 @@ import PublicCompanyShowcase from "./pages/public/PublicCompanyShowcase";
 import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 import AboutSmartbus from "./pages/public/AboutSmartbus";
+import RepresentativeRegistration from "./pages/public/RepresentativeRegistration";
 
 import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/consultar-passagens" element={<TicketLookup />} />
             <Route path="/v/:code" element={<SellerRedirect />} />
             <Route path="/cadastro" element={<CompanyRegistration />} />
+            <Route path="/seja-representante" element={<RepresentativeRegistration />} />
             <Route path="/i/:code" element={<CompanyReferralRedirect />} />
             {/* Redirect legado para manter links antigos de onboarding público. */}
             <Route path="/cadastro-empresa" element={<Navigate to="/cadastro" replace />} />
