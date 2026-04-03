@@ -1,26 +1,57 @@
 
 
-## Analysis
+# Plano: Corrigir cadastro de representante + link no rodapé
 
-**Component:** `EventCardFeatured` — used identically in both `/empresa/:slug` (via `PublicCompanyShowcase`) and `/eventos` (via `PublicEvents`), always through `EventsCarousel`. Both contexts share the exact same component and carousel wrapper. There are no divergences to reconcile.
+## Causa raiz identificada
 
-**Root cause:** On mobile, the banner uses `aspect-[4/3]` with all content (category badge, date, title, city, price) overlaid via `absolute bottom-0` positioning inside a relatively short image area. The overlay content competes for vertical space, resulting in the cramped, unprofessional appearance visible in the screenshot. The CTA button sits below the image in a separate `p-3 pt-2` block with minimal padding.
+A edge function `register-representative` **não está registrada** em `supabase/config.toml` com `verify_jwt = false`. Como o cadastro é público (sem sessão autenticada), o gateway do Supabase rejeita a requisição com 401 antes que a função sequer inicie — por isso há zero logs e o frontend recebe "Failed to send a request to the Edge Function".
 
-**Desktop is fine** because `aspect-video` (16/9) gives a wide canvas, and the content is laid out horizontally with `sm:flex-row`.
+Todas as outras edge functions públicas do projeto (register-company, create-asaas-payment, etc.) possuem `verify_jwt = false` no config.toml. Esta é a única ausente.
 
-## Plan
+## Mudanças propostas
 
-### Single file change: `src/components/public/EventCardFeatured.tsx`
+### 1. Registrar a função no config.toml (causa raiz)
 
-1. **Increase mobile banner height** — change `aspect-[4/3]` to `aspect-[3/4]` (portrait orientation), keeping `sm:aspect-video` for desktop. This gives ~33% more vertical space for the overlay content on mobile.
+**Arquivo:** `supabase/config.toml`
 
-2. **Increase mobile overlay spacing** — change the overlay container's mobile spacing from `space-y-3.5 p-3 pb-4` to `space-y-4 p-4 pb-5`, giving more breathing room between category badge, date+title block, and price.
+Adicionar o bloco:
+```toml
+[functions.register-representative]
+  verify_jwt = false
+```
 
-3. **Improve mobile title size** — bump mobile title from `text-base` to `text-lg` to reinforce the "featured" identity vs common cards.
+Isso permite que a chamada pública do frontend chegue à função sem token JWT.
 
-4. **Increase mobile CTA block padding** — change the below-banner CTA section from `p-3 pt-2` to `p-4 pt-3` for better separation from the image.
+### 2. Melhorar tratamento de erro no frontend
 
-5. **Add subtle city styling on mobile** — add a small `MapPin` icon inline with the city text on mobile (currently just plain text) to match the desktop treatment and add visual polish.
+**Arquivo:** `src/pages/public/RepresentativeRegistration.tsx`
 
-No changes to `EventsCarousel`, `EventCard`, desktop layout, or any other file. Both `/empresa/:slug` and `/eventos` will benefit automatically since they share the same component.
+No `handleSubmit`, o bloco `catch` hoje expõe a mensagem crua do SDK ("Failed to send a request to the Edge Function"). Ajustar para:
+
+- Exibir mensagem amigável: "Não foi possível concluir seu cadastro agora. Tente novamente em instantes."
+- Registrar o erro real em `console.error` com contexto (etapa, função chamada)
+- Tratar também o caso onde `fnError` vem sem `data` (resposta não-JSON do gateway)
+
+### 3. Adicionar link no rodapé da landing page
+
+**Arquivo:** `src/pages/public/LandingPage.tsx`
+
+Na seção "Para empresas" do footer (após "Acessar painel", linha ~1967), adicionar um `<li>` com link para `/seja-representante` com texto "Seja um representante", usando exatamente o mesmo padrão visual dos links existentes (`text-sm text-white/40 transition-colors hover:text-white`).
+
+## O que NÃO muda
+
+- Lógica da edge function `register-representative` (já está correta)
+- Fluxo de login, checkout, pagamentos
+- Nenhuma outra edge function
+- Nenhuma tabela ou RLS
+- Nenhum outro componente visual
+
+## Detalhes técnicos
+
+| Item | Detalhe |
+|---|---|
+| Causa raiz | `verify_jwt = false` ausente no config.toml para `register-representative` |
+| Arquivos alterados | `supabase/config.toml`, `src/pages/public/RepresentativeRegistration.tsx`, `src/pages/public/LandingPage.tsx` |
+| Risco | Mínimo — mudança aditiva, sem alterar lógica existente |
+| Reversível | Sim — remover a linha do config.toml reverte ao estado anterior |
 
