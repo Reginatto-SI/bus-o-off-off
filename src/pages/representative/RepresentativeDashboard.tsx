@@ -474,7 +474,7 @@ export default function RepresentativeDashboard() {
                 </p>
               </div>
               <div className="grid min-w-0 gap-3">
-                <div className="rounded-lg border bg-background p-3">
+                <div className="min-w-0 overflow-hidden rounded-lg border bg-background p-3">
                   <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
                     <span className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">Código do representante</span>
                     <Badge variant="secondary" className="shrink-0 font-mono">
