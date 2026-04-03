@@ -1965,6 +1965,14 @@ export default function LandingPage() {
                     Acessar painel
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    to="/seja-representante"
+                    className="text-sm text-white/40 transition-colors hover:text-white"
+                  >
+                    Seja um representante
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>

@@ -109,8 +109,13 @@ export default function RepresentativeRegistration() {
       // o redirecionamento direto para o painel mantém consistência com o login existente.
       navigate('/representante/painel');
     } catch (unknownError) {
-      const parsedError = unknownError instanceof Error ? unknownError.message : 'Erro inesperado. Tente novamente.';
-      setError(parsedError);
+      const technicalDetail = unknownError instanceof Error ? unknownError.message : String(unknownError);
+      console.error('[register-representative] Erro inesperado:', {
+        etapa: 'handleSubmit',
+        funcao: 'register-representative',
+        erro: technicalDetail,
+      });
+      setError('Não foi possível concluir seu cadastro agora. Tente novamente em instantes.');
     } finally {
       setLoading(false);
     }
