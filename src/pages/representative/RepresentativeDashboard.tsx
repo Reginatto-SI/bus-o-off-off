@@ -724,7 +724,7 @@ export default function RepresentativeDashboard() {
         </section>
 
         <section className="order-4 min-w-0 grid gap-4 lg:grid-cols-2 lg:order-5">
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Empresas vinculadas</CardTitle>
               <CardDescription>Vínculos oficiais em representative_company_links</CardDescription>

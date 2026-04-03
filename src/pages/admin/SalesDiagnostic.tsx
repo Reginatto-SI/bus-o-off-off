@@ -1544,7 +1544,7 @@ export default function SalesDiagnostic() {
         externalReference: lastRelatedLog?.external_reference ?? externalReference ?? relatedSale?.external_reference ?? null,
         asaasPaymentId: lastRelatedLog?.payment_id ?? asaasPaymentId ?? relatedSale?.asaas_payment_id ?? null,
         companyId: lastRelatedLog?.company_id ?? relatedSale?.company_id ?? activeCompanyId ?? null,
-        paymentEnvironment: lastRelatedLog?.payment_environment ?? paymentEnvironment ?? relatedSale?.payment_environment ?? technicalDiagnosticSnapshot?.paymentEnvironment ?? null,
+        paymentEnvironment: (lastRelatedLog?.payment_environment ?? paymentEnvironment ?? relatedSale?.payment_environment ?? technicalDiagnosticSnapshot?.paymentEnvironment ?? null) as "production" | "sandbox" | null,
         saleStatus: relatedSale?.status ?? null,
         gatewayStatus: relatedSale?.asaas_payment_status ?? null,
         firstDetectedAt,
