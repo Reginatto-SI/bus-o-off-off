@@ -250,8 +250,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // Bug fix: NÃO setar loading=false aqui. fetchUserData faz isso no finally.
-          // Usar setTimeout para evitar deadlock do Supabase no onAuthStateChange.
+          // Bug fix: setar loading=true para evitar race condition onde componentes
+          // protegidos (ex: RepresentativeDashboard) renderizam antes de fetchUserData
+          // resolver o role/isRepresentative. fetchUserData faz setLoading(false) no finally.
+          setLoading(true);
           setTimeout(() => fetchUserData(session.user.id), 0);
         } else {
           setProfile(null);
