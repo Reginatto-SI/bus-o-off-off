@@ -318,24 +318,25 @@ export default function MyAccount() {
               <CardContent className="space-y-4">
                 {/* Comentário: seguimos o padrão da tela de empresa com abas internas. */}
                 <Tabs defaultValue="dados" className="space-y-4">
-                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2">
+                  {/* Comentário: em telas pequenas, as abas viram pilha para ampliar área de toque. */}
+                  <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-start">
                     <TabsTrigger
                       value="dados"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
                     >
                       <IdCard className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Dados Gerais</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="endereco"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
                     >
                       <MapPin className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Endereço</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="seguranca"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
                     >
                       <Shield className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Segurança</span>
@@ -462,11 +463,12 @@ export default function MyAccount() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={resetForm}>
+            {/* Comentário: ações finais empilhadas no mobile para evitar botões comprimidos. */}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="ghost" onClick={resetForm} className="w-full sm:w-auto">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={saving} className="w-full sm:w-auto">
                 {saving ? 'Salvando...' : 'Salvar alterações'}
               </Button>
             </div>
@@ -476,6 +478,7 @@ export default function MyAccount() {
 
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent>
+          {/* Comentário: mantemos conteúdo em fluxo linear para reduzir quebra mental no mobile. */}
           <DialogHeader>
             <DialogTitle>Alterar senha</DialogTitle>
             <DialogDescription>
