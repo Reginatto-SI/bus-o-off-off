@@ -962,10 +962,10 @@ export default function Sponsors() {
         />
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Total de patrocinadores" value={stats.total} icon={Image} />
-          <StatsCard label="Patrocinadores ativos" value={stats.ativos} icon={Image} variant="success" />
-          <StatsCard label="Patrocinadores inativos" value={stats.inativos} icon={Image} variant="destructive" />
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatsCard label="Total de patrocinadores" value={stats.total} icon={Image} className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
+          <StatsCard label="Patrocinadores ativos" value={stats.ativos} icon={Image} variant="success" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Patrocinadores inativos" value={stats.inativos} icon={Image} variant="destructive" className="min-h-0 p-3 sm:p-4" />
         </div>
 
         <FilterCard
@@ -1013,18 +1013,18 @@ export default function Sponsors() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Logo</TableHead>
+                    <TableHead className="hidden sm:table-cell">Logo</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Tipo de link</TableHead>
-                    <TableHead>Ordem</TableHead>
+                    <TableHead className="hidden md:table-cell">Ordem</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredSponsors.map((sponsor) => (
-                    <TableRow key={sponsor.id}>
-                      <TableCell>
+                    <TableRow key={sponsor.id} className="align-top">
+                      <TableCell className="hidden sm:table-cell py-3 sm:py-4">
                         {sponsor.banner_url ? (
                           <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted">
                             <img
@@ -1037,14 +1037,26 @@ export default function Sponsors() {
                           <span className="text-xs text-muted-foreground">Sem logo</span>
                         )}
                       </TableCell>
-                      <TableCell className="font-medium">{sponsor.name}</TableCell>
-                      <TableCell>{sponsor.link_type === 'whatsapp' ? 'WhatsApp' : 'Site'}</TableCell>
-                      <TableCell>{sponsor.carousel_order}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: bloco principal concentra identificação e ordem de exibição. */}
+                        <div className="space-y-1">
+                          <p className="font-medium leading-tight">{sponsor.name}</p>
+                          <p className="text-xs text-muted-foreground md:hidden">Ordem: {sponsor.carousel_order}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 sm:py-4">{sponsor.link_type === 'whatsapp' ? 'WhatsApp' : 'Site'}</TableCell>
+                      <TableCell className="hidden md:table-cell py-3 sm:py-4">{sponsor.carousel_order}</TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <StatusBadge status={sponsor.status} />
                       </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getSponsorActions(sponsor)} />
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: enfatiza ações da linha mantendo menu compacto. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getSponsorActions(sponsor)} />
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
