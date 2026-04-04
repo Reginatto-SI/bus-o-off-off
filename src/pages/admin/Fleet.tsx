@@ -41,8 +41,15 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Bus,
   CheckCircle,
+  Ellipsis,
   FileSpreadsheet,
   FileText,
   IdCard,
@@ -1034,18 +1041,11 @@ export default function Fleet() {
           title="Frota"
           description="Gerencie os veículos disponíveis"
           actions={
-            <>
-              <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              {/* Mobile: mantém ação principal e recolhe exportações em menu discreto. */}
               <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="flex-1 sm:flex-none">
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Veículo
                   </Button>
@@ -1367,33 +1367,68 @@ export default function Fleet() {
                   </form>
                 </DialogContent>
               </Dialog>
-            </>
+
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Mais ações">
+                      <Ellipsis className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleExportExcel}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Exportar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
+                <Button variant="outline" size="sm" onClick={handleExportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportPDF}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
           }
         />
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
           <StatsCard
             label="Total de veículos"
             value={stats.total}
             icon={Bus}
+            className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
           />
           <StatsCard
             label="Veículos ativos"
             value={stats.ativos}
             icon={CheckCircle}
             variant="success"
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Veículos inativos"
             value={stats.inativos}
             icon={XCircle}
             variant="destructive"
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Capacidade total"
             value={`${stats.capacidadeTotal} pass.`}
             icon={Users}
+            className="min-h-0 p-3 sm:p-4"
           />
         </div>
 
@@ -1545,11 +1580,17 @@ export default function Fleet() {
                       <TableCell className="hidden font-mono sm:table-cell">{vehicle.plate}</TableCell>
                       <TableCell className="hidden lg:table-cell">{vehicle.owner ?? '-'}</TableCell>
                       <TableCell>{vehicle.capacity} passageiros</TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <StatusBadge status={vehicle.status} />
                       </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getVehicleActions(vehicle)} />
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: reforça percepção de ação disponível sem expor múltiplos botões. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getVehicleActions(vehicle)} />
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

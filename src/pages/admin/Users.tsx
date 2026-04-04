@@ -41,9 +41,16 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Car,
   CheckCircle,
   Copy,
+  Ellipsis,
   Eye,
   FileSpreadsheet,
   FileText,
@@ -879,18 +886,11 @@ export default function UsersPage() {
           title="Usuários"
           description="Gerencie os usuários e acessos do sistema"
           actions={
-            <>
-              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              {/* Mobile: ação primária permanece visível e exportações ficam em menu secundário. */}
               <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="flex-1 sm:flex-none">
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Usuário
                   </Button>
@@ -1125,48 +1125,86 @@ export default function UsersPage() {
                   </form>
                 </DialogContent>
               </Dialog>
-            </>
+
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Mais ações">
+                      <Ellipsis className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Exportar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
+                <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
           }
         />
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-4">
           <StatsCard
             label="Total de usuários"
             value={stats.total}
             icon={UsersIcon}
+            className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
           />
           <StatsCard
             label="Usuários ativos"
             value={stats.ativos}
             icon={CheckCircle}
             variant="success"
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Usuários inativos"
             value={stats.inativos}
             icon={XCircle}
             variant="destructive"
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Gerentes"
             value={stats.gerentes}
             icon={Shield}
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Operadores"
             value={stats.operadores}
             icon={Settings}
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Vendedores"
             value={stats.vendedores}
             icon={UserCheck}
+            className="min-h-0 p-3 sm:p-4"
           />
           <StatsCard
             label="Motoristas"
             value={stats.motoristas}
             icon={Car}
+            className="min-h-0 p-3 sm:p-4"
           />
         </div>
 
@@ -1272,15 +1310,19 @@ export default function UsersPage() {
                         )}
                       </TableCell>
                       <TableCell>{getVinculo(u)}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <StatusBadge status={u.status} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: aumentamos pista visual da coluna de ações sem poluir a linha. */}
                         <div className="flex items-center justify-end gap-2">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
                           {authActionLoadingUserId === u.id ? (
                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                           ) : null}
-                          <ActionsDropdown actions={getUserActions(u)} />
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getUserActions(u)} />
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -41,6 +41,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Users,
   Plus,
   Loader2,
@@ -54,6 +60,7 @@ import {
   XCircle,
   AlertTriangle,
   Power,
+  Ellipsis,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -399,15 +406,8 @@ export default function Drivers() {
           title="Motoristas"
           description="Gerencie os motoristas cadastrados"
           actions={
-            <>
-              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              {/* Mobile: mantém ação principal visível e exportações em menu secundário. */}
               <Dialog
                 open={dialogOpen}
                 onOpenChange={(open) => {
@@ -416,7 +416,7 @@ export default function Drivers() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="flex-1 sm:flex-none">
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Motorista
                   </Button>
@@ -576,16 +576,47 @@ export default function Drivers() {
                   </form>
                 </DialogContent>
               </Dialog>
-            </>
+
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Mais ações">
+                      <Ellipsis className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Exportar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
+                <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
           }
         />
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Total de motoristas" value={stats.total} icon={Users} />
-          <StatsCard label="Motoristas ativos" value={stats.ativos} icon={CheckCircle} variant="success" />
-          <StatsCard label="Motoristas inativos" value={stats.inativos} icon={XCircle} variant="destructive" />
-          <StatsCard label="CNHs atenção" value={stats.cnhsAtencao} icon={AlertTriangle} variant="warning" />
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatsCard label="Total de motoristas" value={stats.total} icon={Users} className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
+          <StatsCard label="Motoristas ativos" value={stats.ativos} icon={CheckCircle} variant="success" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Motoristas inativos" value={stats.inativos} icon={XCircle} variant="destructive" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="CNHs atenção" value={stats.cnhsAtencao} icon={AlertTriangle} variant="warning" className="min-h-0 p-3 sm:p-4" />
         </div>
 
         {/* Filtros */}
@@ -716,11 +747,17 @@ export default function Drivers() {
                           '-'
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <StatusBadge status={driver.status ?? 'ativo'} />
                       </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getDriverActions(driver)} />
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: evidência de ações mantendo menu compacto. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getDriverActions(driver)} />
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

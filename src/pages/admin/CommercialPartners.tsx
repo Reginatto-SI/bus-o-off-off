@@ -837,11 +837,11 @@ export default function CommercialPartners() {
         />
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Total de parceiros" value={stats.total} icon={Briefcase} />
-          <StatsCard label="Parceiros ativos" value={stats.ativos} icon={Briefcase} variant="success" />
-          <StatsCard label="Premium" value={stats.premium} icon={Star} variant="warning" />
-          <StatsCard label="Destaque" value={stats.destaque} icon={Star} />
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatsCard label="Total de parceiros" value={stats.total} icon={Briefcase} className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
+          <StatsCard label="Parceiros ativos" value={stats.ativos} icon={Briefcase} variant="success" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Premium" value={stats.premium} icon={Star} variant="warning" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Destaque" value={stats.destaque} icon={Star} className="min-h-0 p-3 sm:p-4" />
         </div>
 
         <FilterCard
@@ -902,18 +902,18 @@ export default function CommercialPartners() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Logo</TableHead>
+                    <TableHead className="hidden sm:table-cell">Logo</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Nível</TableHead>
-                    <TableHead>Ordem</TableHead>
+                    <TableHead className="hidden md:table-cell">Ordem</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredPartners.map((partner) => (
-                    <TableRow key={partner.id}>
-                      <TableCell>
+                    <TableRow key={partner.id} className="align-top">
+                      <TableCell className="hidden sm:table-cell py-3 sm:py-4">
                         {partner.logo_url ? (
                           <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted">
                             <img src={partner.logo_url} alt={`Logo ${partner.name}`} className="h-full w-full object-contain p-1" />
@@ -922,8 +922,14 @@ export default function CommercialPartners() {
                           <span className="text-xs text-muted-foreground">Sem logo</span>
                         )}
                       </TableCell>
-                      <TableCell className="font-medium">{partner.name}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: bloco principal concentra identificação e contexto comercial. */}
+                        <div className="space-y-1">
+                          <p className="font-medium leading-tight">{partner.name}</p>
+                          <p className="text-xs text-muted-foreground md:hidden">Ordem: {partner.display_order}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           partner.partner_tier === 'premium'
                             ? 'bg-warning/10 text-warning'
@@ -934,12 +940,18 @@ export default function CommercialPartners() {
                           {TIER_LABELS[partner.partner_tier]}{partner.partner_tier === 'destaque' ? ' ⭐' : partner.partner_tier === 'premium' ? ' 🔥' : ''}
                         </span>
                       </TableCell>
-                      <TableCell>{partner.display_order}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell py-3 sm:py-4">{partner.display_order}</TableCell>
+                      <TableCell className="py-3 sm:py-4">
                         <StatusBadge status={partner.status} />
                       </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getPartnerActions(partner)} />
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: melhora pista visual de ações sem adicionar botões extras. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getPartnerActions(partner)} />
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
