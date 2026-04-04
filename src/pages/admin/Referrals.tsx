@@ -303,7 +303,7 @@ export default function Referrals() {
           description="Acompanhe quanto você já ganhou, o que ainda pode receber e o progresso de cada indicação."
           metadata={activeCompany ? <p className="text-sm text-muted-foreground">Empresa ativa: <strong>{activeCompany.name}</strong></p> : null}
           actions={
-            <Button variant="outline" onClick={handleCopyReferralLink} disabled={!referralLink}>
+            <Button className="w-full sm:w-auto" variant="outline" onClick={handleCopyReferralLink} disabled={!referralLink}>
               <Copy className="mr-2 h-4 w-4" />
               Copiar link
             </Button>
@@ -346,12 +346,14 @@ export default function Referrals() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={handleCopyReferralLink} disabled={!referralLink}>
+            {/* Comentário: ações principais empilhadas no mobile para facilitar toque e leitura. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button className="w-full sm:w-auto" onClick={handleCopyReferralLink} disabled={!referralLink}>
                 <Copy className="mr-2 h-4 w-4" />
                 Copiar link de indicação
               </Button>
               <Button
+                className="w-full sm:w-auto"
                 variant="outline"
                 disabled={!companySummary?.referral_code}
                 onClick={() => companySummary?.referral_code && handleCopyReferralCode(companySummary.referral_code)}
@@ -419,7 +421,7 @@ export default function Referrals() {
             title="Você ainda não fez nenhuma indicação"
             description="Você ainda não fez nenhuma indicação. Indique empresas e ganhe R$50 por cada uma que começar a vender."
             action={
-              <Button onClick={handleCopyReferralLink} disabled={!referralLink}>
+              <Button className="w-full sm:w-auto" onClick={handleCopyReferralLink} disabled={!referralLink}>
                 <Copy className="mr-2 h-4 w-4" />
                 Copiar meu link de indicação
               </Button>
@@ -445,10 +447,10 @@ export default function Referrals() {
                     <TableHead>Empresa indicada</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Progresso</TableHead>
-                    <TableHead>Meta</TableHead>
+                    <TableHead className="hidden lg:table-cell">Meta</TableHead>
                     <TableHead>Recompensa</TableHead>
-                    <TableHead>Data da indicação</TableHead>
-                    <TableHead>Elegível em</TableHead>
+                    <TableHead className="hidden xl:table-cell">Data da indicação</TableHead>
+                    <TableHead className="hidden xl:table-cell">Elegível em</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -463,18 +465,18 @@ export default function Referrals() {
 
                     return (
                       <TableRow key={referral.id}>
-                        <TableCell>
+                        <TableCell className="py-4">
                           <div className="space-y-1">
                             <p className="font-medium">{getReferralCompanyName(referral)}</p>
                             <p className="text-xs text-muted-foreground">Código usado: {referral.referral_code}</p>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
                           <Badge variant="outline" className={statusVisual.className}>
                             {statusVisual.label}
                           </Badge>
                         </TableCell>
-                        <TableCell className="min-w-[260px]">
+                        <TableCell className="min-w-[220px] py-4">
                           <div className="space-y-2">
                             <div className="flex items-center justify-between gap-3 text-sm">
                               <span className="font-medium">{formatCurrency(referral.progress_platform_fee_amount)}</span>
@@ -488,11 +490,11 @@ export default function Referrals() {
                             </p>
                           </div>
                         </TableCell>
-                        <TableCell>{formatCurrency(referral.target_platform_fee_amount)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatCurrency(referral.target_platform_fee_amount)}</TableCell>
                         <TableCell>{formatCurrency(referral.reward_amount)}</TableCell>
-                        <TableCell>{formatDateTime(referral.created_at)}</TableCell>
-                        <TableCell>{formatDateTime(referral.eligible_at)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden xl:table-cell">{formatDateTime(referral.created_at)}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{formatDateTime(referral.eligible_at)}</TableCell>
+                        <TableCell className="py-4">
                           <ActionsDropdown actions={getReferralActions(referral)} />
                         </TableCell>
                       </TableRow>
@@ -507,6 +509,7 @@ export default function Referrals() {
 
       <Dialog open={Boolean(selectedReferral)} onOpenChange={(open) => !open && setSelectedReferral(null)}>
         <DialogContent>
+          {/* Comentário: detalhes seguem ordem operacional já conhecida para manter fluxo cognitivo. */}
           <DialogHeader>
             <DialogTitle>Detalhes da indicação</DialogTitle>
             <DialogDescription>

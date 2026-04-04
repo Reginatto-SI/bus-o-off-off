@@ -329,23 +329,24 @@ export default function BoardingLocations() {
           title="Locais de Embarque"
           description="Gerencie os pontos de embarque"
           actions={
-            <>
-              <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={handleExportExcel}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel
               </Button>
-              <Button variant="outline" size="sm" onClick={handleExportPDF}>
+              <Button className="w-full sm:w-auto" variant="outline" size="sm" onClick={handleExportPDF}>
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
               <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="w-full sm:w-auto">
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Local
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-md">
+                  {/* Comentário: no mobile, priorizamos leitura vertical e ações empilhadas no formulário. */}
                   <DialogHeader>
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Local</DialogTitle>
                   </DialogHeader>
@@ -398,7 +399,7 @@ export default function BoardingLocations() {
                         rows={3}
                       />
                     </div>
-                    <div className="flex justify-end gap-2 pt-4">
+                    <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
                       <DialogClose asChild>
                         <Button type="button" variant="outline">
                           Cancelar
@@ -411,7 +412,7 @@ export default function BoardingLocations() {
                   </form>
                 </DialogContent>
               </Dialog>
-            </>
+            </div>
           }
         />
 
@@ -497,7 +498,7 @@ export default function BoardingLocations() {
                   <TableRow className="admin-table-header">
                     <TableHead>Nome</TableHead>
                     <TableHead>Endereço</TableHead>
-                    <TableHead>Cidade/UF</TableHead>
+                    <TableHead className="hidden md:table-cell">Cidade/UF</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]">Ações</TableHead>
                   </TableRow>
@@ -505,7 +506,7 @@ export default function BoardingLocations() {
                 <TableBody>
                   {filteredLocations.map((location) => (
                     <TableRow key={location.id}>
-                      <TableCell className="font-medium">{location.name}</TableCell>
+                      <TableCell className="py-4 font-medium">{location.name}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <span className="truncate max-w-[300px]">{location.address}</span>
@@ -521,17 +522,17 @@ export default function BoardingLocations() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {location.city && location.state ? (
                           <span className="text-sm">{formatCityLabel(location.city, location.state)}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4">
                         <StatusBadge status={location.status} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4">
                         <ActionsDropdown actions={getLocationActions(location)} />
                       </TableCell>
                     </TableRow>
