@@ -445,10 +445,10 @@ export default function Referrals() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Empresa indicada</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Status</TableHead>
                     <TableHead>Progresso</TableHead>
                     <TableHead className="hidden lg:table-cell">Meta</TableHead>
-                    <TableHead>Recompensa</TableHead>
+                    <TableHead className="hidden md:table-cell">Recompensa</TableHead>
                     <TableHead className="hidden xl:table-cell">Data da indicação</TableHead>
                     <TableHead className="hidden xl:table-cell">Elegível em</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
@@ -464,14 +464,23 @@ export default function Referrals() {
                     );
 
                     return (
-                      <TableRow key={referral.id}>
+                      <TableRow key={referral.id} className="align-top">
                         <TableCell className="py-4">
-                          <div className="space-y-1">
-                            <p className="font-medium">{getReferralCompanyName(referral)}</p>
+                          {/* Comentário Fase 3: priorizamos identidade da empresa e resumo financeiro no mesmo bloco no mobile. */}
+                          <div className="space-y-1.5">
+                            <p className="font-semibold leading-tight">{getReferralCompanyName(referral)}</p>
                             <p className="text-xs text-muted-foreground">Código usado: {referral.referral_code}</p>
+                            <div className="flex flex-wrap items-center gap-2 md:hidden">
+                              <Badge variant="outline" className={statusVisual.className}>
+                                {statusVisual.label}
+                              </Badge>
+                              <span className="text-xs font-medium text-foreground">
+                                Recompensa: {formatCurrency(referral.reward_amount)}
+                              </span>
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="py-4">
+                        <TableCell className="hidden py-4 md:table-cell">
                           <Badge variant="outline" className={statusVisual.className}>
                             {statusVisual.label}
                           </Badge>
@@ -491,7 +500,7 @@ export default function Referrals() {
                           </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">{formatCurrency(referral.target_platform_fee_amount)}</TableCell>
-                        <TableCell>{formatCurrency(referral.reward_amount)}</TableCell>
+                        <TableCell className="hidden md:table-cell">{formatCurrency(referral.reward_amount)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{formatDateTime(referral.created_at)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{formatDateTime(referral.eligible_at)}</TableCell>
                         <TableCell className="py-4">

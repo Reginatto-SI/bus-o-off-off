@@ -1508,10 +1508,10 @@ export default function Fleet() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
+                    <TableHead>Veículo</TableHead>
                     <TableHead>Marca / Modelo</TableHead>
-                    <TableHead>Placa</TableHead>
-                    <TableHead>Proprietário</TableHead>
+                    <TableHead className="hidden sm:table-cell">Placa</TableHead>
+                    <TableHead className="hidden lg:table-cell">Proprietário</TableHead>
                     <TableHead>Capacidade</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ações</TableHead>
@@ -1519,20 +1519,31 @@ export default function Fleet() {
                 </TableHeader>
                 <TableBody>
                   {filteredVehicles.map((vehicle) => (
-                    <TableRow key={vehicle.id}>
+                    <TableRow key={vehicle.id} className="align-top">
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Bus className="h-4 w-4 text-muted-foreground" />
-                          {vehicleTypeLabels[vehicle.type] ?? vehicle.type}
+                        {/* Comentário Fase 3: consolidamos dados-chave no primeiro bloco para leitura com rolagem vertical curta. */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <Bus className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{vehicleTypeLabels[vehicle.type] ?? vehicle.type}</span>
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground sm:hidden">{vehicle.plate}</p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {vehicle.brand || vehicle.model
-                          ? `${vehicle.brand ?? ''} ${vehicle.model ? `/ ${vehicle.model}` : ''}`.trim()
-                          : '-'}
+                        <div className="space-y-1">
+                          <p>
+                            {vehicle.brand || vehicle.model
+                              ? `${vehicle.brand ?? ''} ${vehicle.model ? `/ ${vehicle.model}` : ''}`.trim()
+                              : '-'}
+                          </p>
+                          {vehicle.owner ? (
+                            <p className="text-xs text-muted-foreground lg:hidden">Proprietário: {vehicle.owner}</p>
+                          ) : null}
+                        </div>
                       </TableCell>
-                      <TableCell className="font-mono">{vehicle.plate}</TableCell>
-                      <TableCell>{vehicle.owner ?? '-'}</TableCell>
+                      <TableCell className="hidden font-mono sm:table-cell">{vehicle.plate}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{vehicle.owner ?? '-'}</TableCell>
                       <TableCell>{vehicle.capacity} passageiros</TableCell>
                       <TableCell>
                         <StatusBadge status={vehicle.status} />
