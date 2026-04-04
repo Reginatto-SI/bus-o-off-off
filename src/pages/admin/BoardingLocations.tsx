@@ -534,8 +534,8 @@ export default function BoardingLocations() {
                     <TableHead>Local</TableHead>
                     <TableHead className="hidden md:table-cell">Endereço</TableHead>
                     <TableHead className="hidden lg:table-cell">Cidade/UF</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[80px]">Ações</TableHead>
+                    <TableHead className="hidden md:table-cell">Status</TableHead>
+                    <TableHead className="hidden md:table-cell w-[80px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                   <TableBody>
@@ -549,6 +549,13 @@ export default function BoardingLocations() {
                           {location.city && location.state ? (
                             <p className="text-xs text-muted-foreground lg:hidden">{formatCityLabel(location.city, location.state)}</p>
                           ) : null}
+                          {/* Mobile: status e ações ficam na mesma célula para eliminar rolagem horizontal e manter ação sempre visível. */}
+                          <div className="flex items-center justify-between gap-3 pt-1 md:hidden">
+                            <StatusBadge status={location.status} />
+                            <div className="rounded-md border border-border/60 bg-muted/30">
+                              <ActionsDropdown actions={getLocationActions(location)} />
+                            </div>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
@@ -573,14 +580,13 @@ export default function BoardingLocations() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="py-3 sm:py-4">
+                      <TableCell className="hidden md:table-cell py-3 sm:py-4">
                         {/* Comentário Fase 3: mantemos status isolado para escaneabilidade rápida de ativo/inativo. */}
                         <StatusBadge status={location.status} />
                       </TableCell>
-                      <TableCell className="py-3 sm:py-4">
-                        {/* Mobile: reforçamos affordance das ações sem adicionar botões extras na linha. */}
+                      <TableCell className="hidden md:table-cell py-3 sm:py-4">
+                        {/* Desktop: preserva coluna dedicada de ações sem alterar o padrão atual da tela. */}
                         <div className="flex items-center justify-end gap-1.5">
-                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
                           <div className="rounded-md border border-border/60 bg-muted/30">
                             <ActionsDropdown actions={getLocationActions(location)} />
                           </div>
