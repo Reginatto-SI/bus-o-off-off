@@ -23,6 +23,10 @@ import {
 } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
   Loader2,
   LogOut,
@@ -66,9 +70,19 @@ export default function RepresentativeDashboard() {
   const [pageSize, setPageSize] = useState<10 | 20 | 50>(10);
   const [page, setPage] = useState(1);
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletSaving, setWalletSaving] = useState(false);
+  const [walletInput, setWalletInput] = useState('');
+  const [savedWalletId, setSavedWalletId] = useState('');
+  const [walletHelpExpanded, setWalletHelpExpanded] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
-  const [checklistExpanded, setChecklistExpanded] = useState(false);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
+
+  useEffect(() => {
+    // Fonte única da wallet no painel: priorizamos produção e usamos sandbox como fallback de legado.
+    const walletFromProfile = representativeProfile?.asaas_wallet_id_production || representativeProfile?.asaas_wallet_id_sandbox || '';
+    setSavedWalletId(walletFromProfile);
+  }, [representativeProfile?.asaas_wallet_id_production, representativeProfile?.asaas_wallet_id_sandbox]);
 
   useEffect(() => {
     if (!representativeProfile?.id) {
@@ -211,7 +225,7 @@ export default function RepresentativeDashboard() {
   const alerts = useMemo(() => {
     const messages: { title: string; description: string; icon: 'wallet' | 'company' | 'status' }[] = [];
 
-    const walletMissing = !representativeProfile?.asaas_wallet_id_sandbox && !representativeProfile?.asaas_wallet_id_production;
+    const walletMissing = !savedWalletId;
     if (walletMissing) {
       messages.push({
         title: 'Carteira de recebimento não cadastrada',
@@ -253,7 +267,7 @@ export default function RepresentativeDashboard() {
     }
 
     return messages;
-  }, [commissions.length, companyLinks.length, filteredCommissions.length, kpis.blockedCount, representativeProfile]);
+  }, [commissions.length, companyLinks.length, filteredCommissions.length, kpis.blockedCount, representativeProfile, savedWalletId]);
 
   const prioritizedAlerts = useMemo(() => {
     const priorityByIcon: Record<'wallet' | 'company' | 'status', number> = {
@@ -301,7 +315,7 @@ export default function RepresentativeDashboard() {
      * - comissões bloqueadas: leitura direta do status no ledger
      * - link oficial: existência de referral_link resolvido no perfil
      */
-    const walletConfigured = Boolean(representativeProfile?.asaas_wallet_id_sandbox || representativeProfile?.asaas_wallet_id_production);
+    const walletConfigured = Boolean(savedWalletId);
     const hasLinkedCompanies = companyLinks.length > 0;
     const hasBlockedCommissions = commissions.some((item) => item.status === 'bloqueada');
     const hasOfficialLink = Boolean(officialLink);
@@ -330,7 +344,48 @@ export default function RepresentativeDashboard() {
         helpText: hasBlockedCommissions ? 'Há comissões bloqueadas aguardando tratativa.' : 'Nenhum bloqueio encontrado no ledger.',
       },
     ];
-  }, [commissions, companyLinks.length, officialLink, representativeProfile?.asaas_wallet_id_production, representativeProfile?.asaas_wallet_id_sandbox]);
+  }, [commissions, companyLinks.length, officialLink, savedWalletId]);
+
+  // Bloco oficial de ativação: reaproveita o checklist existente sem criar regra nova.
+  const activationCompletedCount = activationChecklist.filter((item) => item.done).length;
+  const activationProgressPercentage = (activationCompletedCount / activationChecklist.length) * 100;
+
+  const openWalletModal = () => {
+    setWalletInput(savedWalletId);
+    setWalletHelpExpanded(false);
+    setWalletModalOpen(true);
+  };
+
+  const saveWalletId = async () => {
+    if (!representativeProfile?.id) return;
+    const normalizedWallet = walletInput.trim();
+    if (!normalizedWallet) {
+      toast.error('Informe o Wallet ID do Asaas para continuar.');
+      return;
+    }
+
+    setWalletSaving(true);
+    // Persistimos a wallet nos dois ambientes para evitar pendência operacional entre sandbox/produção.
+    const { error } = await supabase
+      .from('representatives' as never)
+      .update({
+        asaas_wallet_id_production: normalizedWallet,
+        asaas_wallet_id_sandbox: normalizedWallet,
+      } as never)
+      .eq('id', representativeProfile.id);
+
+    if (error) {
+      console.error('representatives.update wallet failed', error);
+      toast.error('Não foi possível salvar sua wallet agora. Tente novamente.');
+      setWalletSaving(false);
+      return;
+    }
+
+    setSavedWalletId(normalizedWallet);
+    setWalletModalOpen(false);
+    setWalletSaving(false);
+    toast.success('Wallet configurada com sucesso.');
+  };
 
   /**
    * Mensagem pronta curta e comercial para WhatsApp.
@@ -458,10 +513,9 @@ export default function RepresentativeDashboard() {
       </header>
 
       <main className="mx-auto grid w-full min-w-0 max-w-7xl gap-4 overflow-hidden px-4 py-5 md:gap-5">
-        {/* Hierarquia visual reorganizada: bloco principal de compartilhamento sobe para o topo com destaque. */}
-        <section className="order-1 min-w-0 grid gap-4 lg:grid-cols-3">
-          {/* Reaproveita card e botões existentes, fortalecendo o CTA central de indicação comercial. */}
-          <Card className="min-w-0 overflow-hidden lg:col-span-2 border-primary/30 shadow-sm">
+        {/* Hierarquia visual: compartilhamento comercial permanece como primeira ação da tela. */}
+        <section className="order-1 min-w-0">
+          <Card className="min-w-0 overflow-hidden border-primary/30 shadow-sm">
             <CardHeader className="pb-3">
               <CardDescription>Link oficial de indicação</CardDescription>
               <CardTitle className="text-lg">Compartilhamento comercial</CardTitle>
@@ -512,6 +566,45 @@ export default function RepresentativeDashboard() {
             </CardContent>
           </Card>
 
+        </section>
+
+        <section className="order-2 min-w-0">
+          {/* Bloco oficial de ativação: consolida progresso e próximas ações sem duplicar regra de negócio. */}
+          <Card className="min-w-0 overflow-hidden border-primary/20">
+            <CardHeader>
+              <CardDescription>Complete os itens abaixo para evitar bloqueios e receber suas comissões normalmente.</CardDescription>
+              <CardTitle className="text-base">Ative seu recebimento de comissões</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="rounded-md border bg-muted/40 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  {activationCompletedCount} de {activationChecklist.length} etapas concluídas
+                </p>
+                <Progress value={activationProgressPercentage} className="mt-2 h-2" />
+              </div>
+              <div className="space-y-2">
+                {activationChecklist.map((item) => (
+                  <div key={`activation-${item.label}`} className="rounded-md border bg-background p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                      </div>
+                      <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
+                    </div>
+                    {!item.done && item.label === 'Carteira de recebimento cadastrada' && (
+                      <Button variant="outline" size="sm" className="mt-3 w-full sm:w-auto" onClick={openWalletModal}>
+                        Configurar wallet
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="order-3 min-w-0 grid gap-4 lg:grid-cols-3">
           <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardDescription>Identidade</CardDescription>
@@ -532,18 +625,24 @@ export default function RepresentativeDashboard() {
                 <span className="text-muted-foreground">Código oficial</span>
                 <span className="font-semibold font-mono">{representativeProfile.representative_code}</span>
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Carteira de recebimento</span>
+                <Badge variant={savedWalletId ? 'default' : 'secondary'}>
+                  {savedWalletId ? 'Configurada' : 'Não configurada'}
+                </Badge>
+              </div>
+              <Button variant="outline" size="sm" className="w-full" onClick={openWalletModal}>
+                {savedWalletId ? 'Editar wallet' : 'Configurar wallet'}
+              </Button>
             </CardContent>
           </Card>
-        </section>
 
-        <section className="order-2 min-w-0 grid gap-4">
-          <Card>
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardDescription>Performance comercial</CardDescription>
               <CardTitle className="text-base">Visão consolidada do seu resultado</CardTitle>
             </CardHeader>
-            {/* KPI mais compacto no mobile para reduzir sensação de mural de mini-cards. */}
-            <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+            <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-md border bg-background p-3 sm:p-4">
                 <p className="text-xs text-muted-foreground">Empresas vinculadas</p>
                 <p className="mt-1 text-xl font-semibold leading-none sm:text-2xl">{kpis.totalCompanies}</p>
@@ -573,7 +672,7 @@ export default function RepresentativeDashboard() {
         </section>
 
         {alerts.length > 0 && (
-          <section className="order-3 grid gap-2 sm:gap-3">
+          <section className="order-4 grid gap-2 sm:gap-3">
             {/* Compactação mobile: exibimos alertas prioritários primeiro e permitimos expandir os demais. */}
             {mobileVisibleAlerts.map((item, index) => (
               <Alert key={`${item.title}-${index}`}>
@@ -626,54 +725,7 @@ export default function RepresentativeDashboard() {
           </section>
         )}
 
-        <section className="order-6 min-w-0 grid gap-4 lg:order-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardDescription>Ativação operacional</CardDescription>
-              <CardTitle className="text-base">Checklist rápido do representante</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Checklist com progresso explícito para facilitar leitura de pendências e bloqueios sem alterar regra. */}
-              <div className="rounded-md border bg-muted/40 px-3 py-2">
-                <p className="text-xs text-muted-foreground">
-                  {activationChecklist.filter((item) => item.done).length} de {activationChecklist.length} etapas concluídas
-                </p>
-              </div>
-              {/* Compactação mobile: checklist expansível para reduzir altura sem perder conteúdo. */}
-              <div className="md:hidden">
-                <Collapsible open={checklistExpanded} onOpenChange={setChecklistExpanded}>
-                  <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-9 w-full justify-between">
-                      <span>{checklistExpanded ? 'Ocultar checklist' : 'Ver checklist completo'}</span>
-                      <ChevronDown className={cn('h-4 w-4 transition-transform', checklistExpanded && 'rotate-180')} />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-3 space-y-3">
-                    {activationChecklist.map((item) => (
-                      <div key={`mobile-${item.label}`} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">{item.label}</p>
-                          <p className="text-xs text-muted-foreground">{item.helpText}</p>
-                        </div>
-                        <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
-                      </div>
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-              <div className="hidden space-y-3 md:block">
-                {activationChecklist.map((item) => (
-                  <div key={item.label} className="flex items-start justify-between gap-3 rounded-md border bg-background p-3">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">{item.helpText}</p>
-                    </div>
-                    <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        <section className="order-5 min-w-0">
           <Card>
             <CardHeader>
               <CardDescription>Indicadores simples de conversão (30 dias)</CardDescription>
@@ -723,7 +775,7 @@ export default function RepresentativeDashboard() {
           </Card>
         </section>
 
-        <section className="order-4 min-w-0 grid gap-4 lg:grid-cols-2 lg:order-5">
+        <section className="order-6 min-w-0 grid gap-4 lg:grid-cols-2">
           <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base">Empresas vinculadas</CardTitle>
@@ -985,6 +1037,67 @@ export default function RepresentativeDashboard() {
         open={qrModalOpen}
         onOpenChange={setQrModalOpen}
       />
+
+      <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Configuração de wallet de recebimento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="representative-wallet-id">
+                Wallet ID do Asaas
+                <span className="block text-xs font-normal text-muted-foreground">
+                  (carteira que vai receber suas comissões)
+                </span>
+              </Label>
+              <Input
+                id="representative-wallet-id"
+                value={walletInput}
+                onChange={(event) => setWalletInput(event.target.value)}
+                placeholder="Ex.: 7f0c0f79-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Esse código identifica sua carteira no Asaas. É por meio dele que você recebe suas comissões automaticamente.
+              </p>
+            </div>
+
+            <Collapsible open={walletHelpExpanded} onOpenChange={setWalletHelpExpanded}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span>Onde encontro meu Wallet ID?</span>
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', walletHelpExpanded && 'rotate-180')} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 rounded-md border bg-muted/30 p-3">
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                  <li>Acesse sua conta no Asaas</li>
+                  <li>No menu, clique em "Minha Conta"</li>
+                  <li>Vá em "Integrações"</li>
+                  <li>Copie o Wallet ID exibido na tela</li>
+                </ol>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Aviso importante</AlertTitle>
+              <AlertDescription>
+                Se você não configurar sua carteira, suas comissões podem ficar pendentes até regularização.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={saveWalletId} disabled={walletSaving || !walletInput.trim()}>
+              {walletSaving ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
