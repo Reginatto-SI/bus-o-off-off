@@ -666,9 +666,9 @@ export default function Drivers() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Categoria CNH</TableHead>
+                    <TableHead className="hidden sm:table-cell">CPF</TableHead>
+                    <TableHead className="hidden md:table-cell">Telefone</TableHead>
+                    <TableHead className="hidden lg:table-cell">Categoria CNH</TableHead>
                     <TableHead>Validade CNH</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]">Ações</TableHead>
@@ -676,21 +676,37 @@ export default function Drivers() {
                 </TableHeader>
                 <TableBody>
                   {filteredDrivers.map((driver) => (
-                    <TableRow key={driver.id}>
-                      <TableCell className="font-medium">{driver.name}</TableCell>
-                      <TableCell>
+                    <TableRow key={driver.id} className="align-top">
+                      <TableCell className="py-4">
+                        {/* Comentário Fase 3: concentramos identificação do motorista em um bloco para reduzir troca de foco no mobile. */}
+                        <div className="space-y-1.5">
+                          <p className="font-semibold leading-tight">{driver.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+                            <IdCard className="h-3.5 w-3.5" />
+                            {formatCpfInput(driver.cpf ?? '')}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground md:hidden">
+                            <Phone className="h-3.5 w-3.5" />
+                            {formatPhoneInput(driver.phone)}
+                          </div>
+                          <p className="text-xs text-muted-foreground lg:hidden">
+                            CNH: {driver.cnh_category ?? '-'}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <div className="flex items-center gap-2">
                           <IdCard className="h-4 w-4 text-muted-foreground" />
                           {formatCpfInput(driver.cpf ?? '')}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           {formatPhoneInput(driver.phone)}
                         </div>
                       </TableCell>
-                      <TableCell>{driver.cnh_category ?? '-'}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{driver.cnh_category ?? '-'}</TableCell>
                       <TableCell>
                         {driver.cnh_expires_at ? (
                           <span className={cn(getCnhStatusClass(driver.cnh_expires_at))}>

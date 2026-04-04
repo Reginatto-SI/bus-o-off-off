@@ -496,18 +496,27 @@ export default function BoardingLocations() {
               <Table>
                 <TableHeader>
                   <TableRow className="admin-table-header">
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Endereço</TableHead>
-                    <TableHead className="hidden md:table-cell">Cidade/UF</TableHead>
+                    <TableHead>Local</TableHead>
+                    <TableHead className="hidden md:table-cell">Endereço</TableHead>
+                    <TableHead className="hidden lg:table-cell">Cidade/UF</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[80px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLocations.map((location) => (
-                    <TableRow key={location.id}>
-                      <TableCell className="py-4 font-medium">{location.name}</TableCell>
-                      <TableCell>
+                    <TableRow key={location.id} className="align-top">
+                      <TableCell className="py-4">
+                        {/* Comentário Fase 3: no mobile, agrupamos nome + contexto para reduzir salto visual entre colunas. */}
+                        <div className="space-y-1.5">
+                          <p className="font-semibold leading-tight">{location.name}</p>
+                          <p className="text-sm text-muted-foreground md:hidden">{location.address}</p>
+                          {location.city && location.state ? (
+                            <p className="text-xs text-muted-foreground lg:hidden">{formatCityLabel(location.city, location.state)}</p>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex items-center gap-2">
                           <span className="truncate max-w-[300px]">{location.address}</span>
                           {location.maps_url && (
@@ -522,7 +531,7 @@ export default function BoardingLocations() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden lg:table-cell">
                         {location.city && location.state ? (
                           <span className="text-sm">{formatCityLabel(location.city, location.state)}</span>
                         ) : (
@@ -530,6 +539,7 @@ export default function BoardingLocations() {
                         )}
                       </TableCell>
                       <TableCell className="py-4">
+                        {/* Comentário Fase 3: mantemos status isolado para escaneabilidade rápida de ativo/inativo. */}
                         <StatusBadge status={location.status} />
                       </TableCell>
                       <TableCell className="py-4">
