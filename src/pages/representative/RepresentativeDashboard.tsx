@@ -76,6 +76,7 @@ export default function RepresentativeDashboard() {
   const [savedWalletId, setSavedWalletId] = useState('');
   const [walletHelpExpanded, setWalletHelpExpanded] = useState(false);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
+  const [activationExpanded, setActivationExpanded] = useState(false);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
 
   useEffect(() => {
@@ -349,6 +350,7 @@ export default function RepresentativeDashboard() {
   // Bloco oficial de ativação: reaproveita o checklist existente sem criar regra nova.
   const activationCompletedCount = activationChecklist.filter((item) => item.done).length;
   const activationProgressPercentage = (activationCompletedCount / activationChecklist.length) * 100;
+  const activationPendingCount = activationChecklist.length - activationCompletedCount;
 
   const openWalletModal = () => {
     setWalletInput(savedWalletId);
@@ -542,26 +544,24 @@ export default function RepresentativeDashboard() {
                 </div>
               </div>
 
-              {/* Mobile-first: CTA principal em largura total para reduzir competição com ações secundárias. */}
-              <div className="space-y-2">
-                <Button onClick={copyOfficialLink} disabled={!officialLink} className="h-11 w-full sm:w-auto sm:min-w-48">
+              {/* Mobile-first preservado: empilhado no celular; desktop em linha única com 4 ações balanceadas. */}
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                <Button onClick={copyOfficialLink} disabled={!officialLink} className="h-10 w-full">
                   <Copy className="mr-2 h-4 w-4" />
                   {linkCopied ? 'Copiado!' : 'Copiar link oficial'}
                 </Button>
-                <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  <Button variant="outline" onClick={copyRepresentativeCode} className="h-10 w-full sm:w-auto">
-                    <Copy className="mr-2 h-4 w-4" />
-                    {codeCopied ? 'Código copiado!' : 'Copiar código'}
-                  </Button>
-                  <Button variant="outline" onClick={copyReadyMessage} disabled={!readyToShareMessage} className="h-10 w-full sm:w-auto">
-                    <Megaphone className="mr-2 h-4 w-4" />
-                    {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
-                  </Button>
-                  <Button variant="outline" onClick={openQrModal} disabled={!officialLink} className="h-10 w-full sm:w-auto">
-                    <Download className="mr-2 h-4 w-4" />
-                    Ver QR Code
-                  </Button>
-                </div>
+                <Button variant="outline" onClick={copyRepresentativeCode} className="h-10 w-full">
+                  <Copy className="mr-2 h-4 w-4" />
+                  {codeCopied ? 'Código copiado!' : 'Copiar código'}
+                </Button>
+                <Button variant="outline" onClick={copyReadyMessage} disabled={!readyToShareMessage} className="h-10 w-full">
+                  <Megaphone className="mr-2 h-4 w-4" />
+                  {messageCopied ? 'Mensagem copiada!' : 'Copiar mensagem pronta'}
+                </Button>
+                <Button variant="outline" onClick={openQrModal} disabled={!officialLink} className="h-10 w-full">
+                  <Download className="mr-2 h-4 w-4" />
+                  Ver QR Code
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -573,7 +573,7 @@ export default function RepresentativeDashboard() {
           <Card className="min-w-0 overflow-hidden border-primary/20">
             <CardHeader>
               <CardDescription>Complete os itens abaixo para evitar bloqueios e receber suas comissões normalmente.</CardDescription>
-              <CardTitle className="text-base">Ative seu recebimento de comissões</CardTitle>
+              <CardTitle className="text-base">Ativação de comissões</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="rounded-md border bg-muted/40 px-3 py-2">
@@ -581,25 +581,37 @@ export default function RepresentativeDashboard() {
                   {activationCompletedCount} de {activationChecklist.length} etapas concluídas
                 </p>
                 <Progress value={activationProgressPercentage} className="mt-2 h-2" />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {activationPendingCount} pendência(s) para conclusão total
+                </p>
               </div>
-              <div className="space-y-2">
-                {activationChecklist.map((item) => (
-                  <div key={`activation-${item.label}`} className="rounded-md border bg-background p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.helpText}</p>
+              {/* Mantém compacto por padrão no mobile-first; detalhes aparecem sob demanda via Collapsible. */}
+              <Collapsible open={activationExpanded} onOpenChange={setActivationExpanded}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 w-full justify-between">
+                    <span>{activationExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}</span>
+                    <ChevronDown className={cn('h-4 w-4 transition-transform', activationExpanded && 'rotate-180')} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-2">
+                  {activationChecklist.map((item) => (
+                    <div key={`activation-${item.label}`} className="rounded-md border bg-background p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">{item.label}</p>
+                          <p className="text-xs text-muted-foreground">{item.helpText}</p>
+                        </div>
+                        <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
                       </div>
-                      <Badge variant={item.done ? 'default' : 'secondary'}>{item.done ? 'OK' : 'Pendente'}</Badge>
+                      {!item.done && item.label === 'Carteira de recebimento cadastrada' && (
+                        <Button variant="outline" size="sm" className="mt-3 w-full sm:w-auto" onClick={openWalletModal}>
+                          Configurar wallet
+                        </Button>
+                      )}
                     </div>
-                    {!item.done && item.label === 'Carteira de recebimento cadastrada' && (
-                      <Button variant="outline" size="sm" className="mt-3 w-full sm:w-auto" onClick={openWalletModal}>
-                        Configurar wallet
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
             </CardContent>
           </Card>
         </section>
