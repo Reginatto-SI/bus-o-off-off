@@ -242,6 +242,9 @@ export function AsaasDiagnosticPanel({
           rawError: errorMessage,
           checkResponse: null,
         });
+        // Comentário de manutenção: o painel developer deve preservar o mesmo feedback
+        // do backend em toast para não "sumir" erro operacional quando a invoke falha.
+        toast.error(errorMessage);
         return;
       }
 
@@ -265,10 +268,14 @@ export function AsaasDiagnosticPanel({
         checkResponse: response,
       });
 
+      // Comentário de manutenção: preservamos a mensagem do backend sem sobrescrita
+      // e diferenciamos severidade para manter consistência com o botão principal.
       if (response.status === 'ok') {
         toast.success(response.message);
-      } else {
+      } else if (response.integration_status === 'pending' || response.integration_status === 'incomplete') {
         toast.warning(response.message);
+      } else {
+        toast.error(response.message);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
