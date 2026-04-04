@@ -30,8 +30,9 @@ export function StatsCard({
           <p className="stats-card__label">{label}</p>
           <p className="stats-card__value">{value}</p>
         </div>
-        <div className={cn('p-3 rounded-full bg-muted', variantStyles[variant])}>
-          <Icon className="h-5 w-5" />
+        {/* Reduzimos levemente o bloco de ícone no mobile para preservar área útil sem alterar o visual desktop. */}
+        <div className={cn('rounded-full bg-muted p-2.5 sm:p-3', variantStyles[variant])}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
       </div>
     </div>

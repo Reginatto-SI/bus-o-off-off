@@ -70,16 +70,16 @@ export function FilterCard({
 
   return (
     <div className={cn('filter-card', className)}>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:gap-4">
         {/* Cabeçalho do card */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <span className="text-sm font-semibold text-foreground">{title}</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClearFilters}
             className={cn(
-              'text-muted-foreground hover:text-foreground',
+              'h-8 px-2 text-xs text-muted-foreground hover:text-foreground sm:h-9 sm:px-3 sm:text-sm',
               hasActiveFilters && 'text-primary'
             )}
           >
@@ -89,7 +89,7 @@ export function FilterCard({
         </div>
 
         {/* Filtros Simples */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
           <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <SearchIcon className="h-4 w-4" />
@@ -101,7 +101,7 @@ export function FilterCard({
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="pl-9"
+                className="h-9 pl-9 sm:h-10"
               />
             </div>
           </div>
@@ -116,7 +116,7 @@ export function FilterCard({
                 value={select.value}
                 onValueChange={select.onChange}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-9 w-full sm:h-10">
                   <SelectValue placeholder={select.placeholder} />
                 </SelectTrigger>
                 <SelectContent>
@@ -137,7 +137,7 @@ export function FilterCard({
         {advancedFilters && (
           <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-fit">
+              <Button variant="ghost" size="sm" className="h-8 w-fit px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
                 {isAdvancedOpen ? (
                   <ChevronUp className="h-4 w-4 mr-2" />
                 ) : (
