@@ -110,7 +110,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar />
       <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <AdminHeader />
-        <main className="pt-16 lg:pt-0">
+        {/* No mobile preservamos espaço para a barra fixa do menu sem alterar o espaçamento do desktop. */}
+        <main className="pt-14 lg:pt-0">
           {children}
         </main>
       </div>

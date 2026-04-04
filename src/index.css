@@ -200,20 +200,20 @@
 
   /* Stats cards - Indicadores */
   .stats-card {
-    @apply bg-card rounded-lg border p-4 shadow-sm;
+    @apply bg-card rounded-lg border p-3 shadow-sm sm:p-4;
   }
 
   .stats-card__value {
-    @apply text-2xl font-bold text-foreground;
+    @apply text-xl font-bold text-foreground sm:text-2xl;
   }
 
   .stats-card__label {
-    @apply text-sm text-muted-foreground;
+    @apply text-xs text-muted-foreground sm:text-sm;
   }
 
   /* Filter card */
   .filter-card {
-    @apply bg-card rounded-lg border p-4 shadow-sm;
+    @apply bg-card rounded-lg border p-3 shadow-sm sm:p-4;
   }
 }
 

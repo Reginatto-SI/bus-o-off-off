@@ -36,7 +36,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
 import { normalizePublicSlug } from '@/lib/publicSlug';
@@ -348,6 +348,16 @@ export function AdminSidebar() {
 
   const isDeveloperOnlyItem = (item: NavigationItem) => item.roles?.length === 1 && item.roles[0] === 'developer';
 
+  useEffect(() => {
+    // Evita scroll no conteúdo de fundo quando o drawer mobile está aberto.
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
   /* ── Expanded sidebar content (used for both mobile overlay and desktop expanded) ── */
   const expandedContent = (showToggle: boolean, onClose?: () => void) => (
     <>
@@ -620,11 +630,11 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={200}>
       {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-16 bg-card border-b flex items-center px-4">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b flex items-center px-3">
         <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
-          <Menu className="h-6 w-6" />
+          <Menu className="h-5 w-5" />
         </Button>
-        <div className="ml-2">
+        <div className="ml-1.5">
           <BrandHeader compact />
         </div>
       </div>
@@ -632,8 +642,8 @@ export function AdminSidebar() {
       {/* Mobile sidebar (always expanded) */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-64 bg-sidebar flex flex-col">
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-[1px]" onClick={() => setMobileOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-64 max-w-[85vw] bg-sidebar flex flex-col shadow-2xl">
             {expandedContent(false, () => setMobileOpen(false))}
           </div>
         </div>
