@@ -201,6 +201,23 @@ function formatOperationalErrorMessage(params: {
   return `${params.base}\nAmbiente: ${environmentLabel}\n${walletLine}\n${accountLine}`;
 }
 
+function formatEnvironmentLabel(environment: PaymentEnvironment) {
+  return environment === "production" ? "produção" : "sandbox";
+}
+
+function resolveAccountNumberFromPayload(payload: unknown): string | null {
+  if (typeof payload === "string" && payload.trim().length > 0) {
+    return payload.trim();
+  }
+
+  if (!payload || typeof payload !== "object") return null;
+  const source = payload as Record<string, unknown>;
+  const accountNumber = source.accountNumber ?? source.account_number ?? source.number;
+  return typeof accountNumber === "string" && accountNumber.trim().length > 0
+    ? accountNumber.trim()
+    : null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -420,6 +437,12 @@ serve(async (req) => {
     const details = buildBaseDetails(companyConfig, envFields);
 
     if (details.missing_fields.length > 0) {
+      const environmentLabel = formatEnvironmentLabel(paymentEnv);
+      const missingMessage = !details.has_api_key
+        ? `Chave da API Asaas não configurada para o ambiente ${environmentLabel}.`
+        : !details.has_wallet_id
+          ? `Wallet Asaas não configurada para o ambiente ${environmentLabel}.`
+          : `Configuração Asaas incompleta para o ambiente ${environmentLabel}.`;
       const missingResponse: CheckResponse = {
         status: "error",
         integration_status: "incomplete",
@@ -429,7 +452,7 @@ serve(async (req) => {
           ...details,
           error_type: "missing_credentials",
         },
-        message: `A conta Asaas deste ambiente ainda não está completamente configurada: faltando ${details.missing_fields.join(", ")}.`,
+        message: `${missingMessage} Campos pendentes: ${details.missing_fields.join(", ")}.`,
       };
 
       logCheck("warn", "[check-asaas-integration] missing environment credentials before Asaas call", {
@@ -456,24 +479,30 @@ serve(async (req) => {
        * Ela apenas consulta o gateway e compara o retorno com o que já está salvo,
        * justamente para diferenciar credencial inválida, conta divergente e pendência operacional.
        */
-      logCheck("log", "[check-asaas-integration] calling Asaas health check", {
+      logCheck("log", "[check-asaas-integration] calling Asaas accountNumber health check", {
         company_id: companyId,
         requested_target_environment: requestedEnvironment,
         resolved_payment_environment: paymentEnv,
         diagnostic_stage: "asaas_request",
         asaas_request_attempted: true,
         error_type: null,
-        endpoint: `${asaasBaseUrl}/myAccount`,
+        endpoint: `${asaasBaseUrl}/myAccount/accountNumber`,
       });
 
-      const asaasResponse = await fetch(`${asaasBaseUrl}/myAccount`, {
+      /**
+       * Ordem da validação (mínima e explícita):
+       * 1) accountNumber como prova primária de conta/autenticação no ambiente;
+       * 2) status/wallet/pix para diagnóstico operacional complementar.
+       */
+      const accountNumberRes = await fetch(`${asaasBaseUrl}/myAccount/accountNumber`, {
         headers: { access_token: apiKey! },
       });
 
-      if (!asaasResponse.ok) {
-        const errorBody = await asaasResponse.text();
-        const authError = asaasResponse.status === 401 || asaasResponse.status === 403;
-        const notFoundError = asaasResponse.status === 404;
+      if (!accountNumberRes.ok) {
+        const errorBody = await accountNumberRes.text();
+        const authError = accountNumberRes.status === 401 || accountNumberRes.status === 403;
+        const notFoundError = accountNumberRes.status === 404;
+        const environmentLabel = formatEnvironmentLabel(paymentEnv);
 
         const gatewayFailureResponse: CheckResponse = {
           status: "error",
@@ -483,7 +512,7 @@ serve(async (req) => {
           details: {
             ...details,
             asaas_request_attempted: true,
-            asaas_http_status: asaasResponse.status,
+            asaas_http_status: accountNumberRes.status,
             error_type: authError
               ? "invalid_api_key"
               : notFoundError
@@ -491,10 +520,10 @@ serve(async (req) => {
                 : "asaas_gateway_error",
           },
           message: authError
-            ? "Falha de credencial no Asaas: API Key rejeitada pelo gateway."
+            ? `Falha de autenticação com o Asaas no ambiente ${environmentLabel}. Verifique a API Key e o ambiente configurado.`
             : notFoundError
-              ? "Conta Asaas não encontrada durante a verificação da integração."
-              : "Falha na comunicação com o Asaas durante a verificação da integração.",
+              ? `Conta Asaas não encontrada no ambiente ${environmentLabel} durante a validação da integração.`
+              : `Falha na comunicação com o Asaas durante a validação da integração no ambiente ${environmentLabel}.`,
         };
 
         logCheck(authError || notFoundError ? "warn" : "error", "[check-asaas-integration] Asaas returned operational error", {
@@ -504,11 +533,97 @@ serve(async (req) => {
           diagnostic_stage: "asaas_request",
           asaas_request_attempted: true,
           error_type: gatewayFailureResponse.details.error_type,
-          asaas_http_status: asaasResponse.status,
+          asaas_http_status: accountNumberRes.status,
           response_body: errorBody,
         });
 
         return jsonResponse(gatewayFailureResponse, 200);
+      }
+
+      let accountNumberPayload: unknown = null;
+      const accountNumberRawBody = await accountNumberRes.text();
+      if (accountNumberRawBody.trim().length > 0) {
+        try {
+          accountNumberPayload = JSON.parse(accountNumberRawBody);
+        } catch {
+          accountNumberPayload = accountNumberRawBody;
+        }
+      }
+      const resolvedAccountNumber = resolveAccountNumberFromPayload(accountNumberPayload);
+      if (!resolvedAccountNumber) {
+        // Comentário de manutenção: se accountNumber não vier em payload de sucesso,
+        // separamos o erro para não mascarar como "conta não encontrada".
+        const parseFailureResponse: CheckResponse = {
+          status: "error",
+          integration_status: "communication_error",
+          environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          details: {
+            ...details,
+            asaas_request_attempted: true,
+            asaas_http_status: accountNumberRes.status,
+            error_type: "unexpected_account_number_payload",
+          },
+          message: `Conta Asaas respondeu no ambiente ${formatEnvironmentLabel(paymentEnv)}, mas não foi possível identificar o número da conta.`,
+        };
+
+        logCheck("warn", "[check-asaas-integration] accountNumber payload parsing failed", {
+          company_id: companyId,
+          requested_target_environment: requestedEnvironment,
+          resolved_payment_environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          asaas_request_attempted: true,
+          error_type: "unexpected_account_number_payload",
+          payload_type: typeof accountNumberPayload,
+        });
+
+        return jsonResponse(parseFailureResponse, 200);
+      }
+
+      // Comentário de manutenção: mantemos /myAccount como leitura auxiliar para
+      // account_id/wallet legados e validações já existentes sem alterar arquitetura.
+      const asaasResponse = await fetch(`${asaasBaseUrl}/myAccount`, {
+        headers: { access_token: apiKey! },
+      });
+      if (!asaasResponse.ok) {
+        const asaasBody = await asaasResponse.text();
+        const authError = asaasResponse.status === 401 || asaasResponse.status === 403;
+        const notFoundError = asaasResponse.status === 404;
+        const environmentLabel = formatEnvironmentLabel(paymentEnv);
+        const myAccountFailure: CheckResponse = {
+          status: "error",
+          integration_status: authError ? "invalid" : notFoundError ? "not_found" : "communication_error",
+          environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          details: {
+            ...details,
+            asaas_request_attempted: true,
+            asaas_http_status: asaasResponse.status,
+            error_type: authError
+              ? "invalid_api_key_after_account_number"
+              : notFoundError
+                ? "asaas_my_account_not_found"
+                : "asaas_my_account_error",
+          },
+          message: authError
+            ? `Falha de autenticação com o Asaas no ambiente ${environmentLabel}. Verifique a API Key e o ambiente configurado.`
+            : notFoundError
+              ? `Conta Asaas validada no ambiente ${environmentLabel}, mas não encontrada no endpoint complementar de conta.`
+              : `Conta Asaas validada no ambiente ${environmentLabel}, porém o diagnóstico complementar falhou.`,
+        };
+
+        logCheck(authError || notFoundError ? "warn" : "error", "[check-asaas-integration] myAccount complementary check failed", {
+          company_id: companyId,
+          requested_target_environment: requestedEnvironment,
+          resolved_payment_environment: paymentEnv,
+          diagnostic_stage: "asaas_request",
+          asaas_request_attempted: true,
+          error_type: myAccountFailure.details.error_type,
+          asaas_http_status: asaasResponse.status,
+          response_body: asaasBody,
+        });
+
+        return jsonResponse(myAccountFailure, 200);
       }
 
       const checkedAt = new Date().toISOString();
@@ -606,7 +721,7 @@ serve(async (req) => {
             wallet_id_matches: walletIdMatches,
             error_type: "asaas_account_not_found",
           },
-          message: "Conta Asaas não encontrada durante a verificação da integração.",
+          message: `Conta Asaas validada no ambiente ${formatEnvironmentLabel(paymentEnv)}, porém não foi possível identificar os dados da conta no retorno complementar.`,
         };
 
         logCheck("warn", "[check-asaas-integration] account not found in /myAccount response", {
@@ -716,7 +831,7 @@ serve(async (req) => {
        * Não criamos chave, não alteramos conta e não executamos endpoints de escrita.
        */
       const [statusRes, walletsRes, pixActiveRes, pixAllRes] = await Promise.all([
-        fetch(`${asaasBaseUrl}/myAccount/status/`, { headers: { access_token: apiKey! } }),
+        fetch(`${asaasBaseUrl}/myAccount/status`, { headers: { access_token: apiKey! } }),
         fetch(`${asaasBaseUrl}/wallets/`, { headers: { access_token: apiKey! } }),
         fetch(`${asaasBaseUrl}/pix/addressKeys?status=ACTIVE`, { headers: { access_token: apiKey! } }),
         fetch(`${asaasBaseUrl}/pix/addressKeys`, { headers: { access_token: apiKey! } }),
@@ -741,7 +856,7 @@ serve(async (req) => {
             pix_last_error: "Falha ao consultar diagnóstico operacional do Pix no Asaas.",
             local_metadata_warning: localMetadataWarning,
           },
-          message: "Pix indisponível: erro ao consultar Asaas.",
+          message: `Conta Asaas validada no ambiente ${formatEnvironmentLabel(paymentEnv)}, porém houve erro ao consultar o diagnóstico operacional (status/wallet/pix).`,
         };
 
         logCheck("warn", "[check-asaas-integration] read-only diagnostic query failed", {
@@ -878,7 +993,9 @@ serve(async (req) => {
           gateway_account_id: remoteAccountId,
           local_metadata_warning: localMetadataWarning,
         },
-        message: pixConclusion,
+        message: pixReadyForOperations
+          ? `Conta Asaas validada com sucesso no ambiente ${formatEnvironmentLabel(paymentEnv)}. ${pixConclusion}`
+          : `Conta validada no ambiente ${formatEnvironmentLabel(paymentEnv)}, porém com pendências operacionais. ${pixConclusion}`,
       };
 
       logCheck("log", "[check-asaas-integration] Asaas integration validated successfully", {
@@ -902,7 +1019,7 @@ serve(async (req) => {
           asaas_request_attempted: true,
           error_type: "network_or_runtime_error",
         },
-        message: "Falha na comunicação com o Asaas durante a verificação da integração.",
+        message: `Falha de rede/execução ao validar a integração Asaas no ambiente ${formatEnvironmentLabel(paymentEnv)}.`,
       };
 
       logCheck("error", "[check-asaas-integration] unexpected error after Asaas attempt", {
