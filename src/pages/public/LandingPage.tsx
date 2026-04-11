@@ -495,7 +495,9 @@ const LANDING_FAQS = [
   },
   {
     question: "Como funciona a taxa da plataforma?",
-    answer: "A plataforma cobra 6% sobre cada venda realizada.",
+    // Linguagem comercial e escaneável para reduzir objeção de preço sem entrar em regra detalhada da tabela.
+    answer:
+      "A taxa do Smartbus é inteligente e varia conforme o valor da passagem. Você paga a partir de 6% nas vendas menores e, quanto maior o valor da passagem, menor é a taxa. Além disso, existe um teto máximo por venda para você não pagar caro em passagens de maior valor. Na prática, é um modelo justo, previsível e pensado para não comprometer seu lucro.",
   },
   {
     question: "Preciso ter conta no Asaas?",
