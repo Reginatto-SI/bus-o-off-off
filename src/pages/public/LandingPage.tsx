@@ -1805,6 +1805,106 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      {/* Seção de modelo de cobrança — posicionada antes do "Como começar" para reduzir objeção de preço antes da conversão. */}
+      <section className="bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-10 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <Wallet className="h-3.5 w-3.5" />
+              Modelo justo e transparente
+            </div>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Você só paga quando vende — e nunca paga caro
+            </h2>
+            <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
+              Diferente de outras plataformas, nossa taxa é inteligente: quanto maior o valor da passagem, menor o impacto no seu lucro.
+            </p>
+          </div>
+
+          {/* Grid de cards de taxa */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              { range: "Até R$ 100", rate: "6%", label: "por venda" },
+              { range: "R$ 100 a R$ 300", rate: "5%", label: "por venda" },
+              { range: "R$ 300 a R$ 600", rate: "4%", label: "por venda" },
+              { range: "Acima de R$ 600", rate: "3%", label: "por venda" },
+            ].map((tier) => (
+              <div
+                key={tier.range}
+                className="rounded-2xl border border-border bg-card p-5 text-center shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-md"
+              >
+                <p className="text-sm font-medium text-muted-foreground">{tier.range}</p>
+                <p className="mt-2 text-3xl font-bold text-foreground">{tier.rate}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{tier.label}</p>
+              </div>
+            ))}
+            {/* Card de destaque — teto máximo */}
+            <div className="rounded-2xl border-2 border-primary bg-primary/5 p-5 text-center shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+              <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                <Shield className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-sm font-semibold text-primary">Teto máximo</p>
+              <p className="mt-1 text-lg font-bold text-foreground">Máx. R$ 25</p>
+              <p className="mt-1 text-xs text-muted-foreground">por passagem vendida</p>
+            </div>
+          </div>
+
+          {/* Card estratégico — sistema se paga sozinho */}
+          <div className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+            <div className="grid items-center gap-6 lg:grid-cols-2">
+              <div>
+                <h3 className="text-xl font-bold text-foreground sm:text-2xl">
+                  Seu sistema pode sair literalmente de graça
+                </h3>
+                <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground sm:text-base">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>Adicionar patrocinadores</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>Incluir parceiros comerciais</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>Criar taxas personalizadas nas passagens</span>
+                  </li>
+                </ul>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  👉 Isso permite que você cubra totalmente o custo da plataforma
+                </p>
+                <p className="mt-2 rounded-xl bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary">
+                  💡 Na prática: o sistema se paga sozinho — ou até gera lucro extra
+                </p>
+              </div>
+              <div className="flex flex-col items-center justify-center rounded-2xl bg-muted/50 p-6 text-center">
+                <Gift className="mb-3 h-10 w-10 text-primary" />
+                <p className="text-lg font-bold text-foreground">
+                  A maioria dos nossos clientes não paga a plataforma do próprio bolso.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              to="/cadastro"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Criar meu primeiro evento
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/cadastro"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-8 py-3.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              Começar agora
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Nova seção inserida imediatamente antes da FAQ para reduzir objeção inicial
