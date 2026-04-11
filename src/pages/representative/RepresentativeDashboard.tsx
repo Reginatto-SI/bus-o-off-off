@@ -884,6 +884,18 @@ export default function RepresentativeDashboard() {
               <CardDescription>Últimos lançamentos em representative_commissions</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Alert>
+                <AlertTitle>Regra da sua comissão</AlertTitle>
+                <AlertDescription className="space-y-1 text-xs sm:text-sm">
+                  <p>
+                    Sua comissão por venda é calculada automaticamente com base em <strong>1/3 da taxa da plataforma</strong> aplicada na venda.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Exemplos: 6% → 2,00% · 5% → 1,67% · 4% → 1,33% · 3% → 1,00%.
+                  </p>
+                </AlertDescription>
+              </Alert>
+
               {/* Filtros mantidos com mesma lógica; apenas distribuição mais confortável para toque no mobile. */}
               <div className="grid gap-2 sm:gap-3 md:grid-cols-3">
                 <div className="space-y-1">
@@ -946,7 +958,7 @@ export default function RepresentativeDashboard() {
                       <p className="truncate font-medium">{item.company?.trade_name || item.company?.name || 'Empresa'}</p>
                       <p className="truncate text-xs text-muted-foreground">Venda: <span className="font-mono">{item.sale?.id || item.sale_id}</span></p>
                       <p className="text-xs text-muted-foreground">
-                        Base: {formatCurrencyBRL(item.base_amount)} · Percentual: {item.commission_percent}%
+                        Base: {formatCurrencyBRL(item.base_amount)} · Percentual: {Number(item.commission_percent ?? 0).toFixed(2)}%
                       </p>
                     </div>
                   </div>
@@ -987,7 +999,7 @@ export default function RepresentativeDashboard() {
                         <TableCell className="font-mono text-xs">{item.sale?.id || item.sale_id}</TableCell>
                         <TableCell>{item.company?.trade_name || item.company?.name || 'Empresa'}</TableCell>
                         <TableCell>{formatCurrencyBRL(item.base_amount)}</TableCell>
-                        <TableCell>{item.commission_percent}%</TableCell>
+                        <TableCell>{Number(item.commission_percent ?? 0).toFixed(2)}%</TableCell>
                         <TableCell>{formatCurrencyBRL(item.commission_amount)}</TableCell>
                         <TableCell>
                           <Badge variant={getStatusVariant(item.status)}>{getStatusLabel(item.status)}</Badge>
