@@ -79,10 +79,21 @@ type SocioRow = {
 type RepresentativeRow = {
   id: string;
   status: string;
-  commission_percent?: number | null;
   asaas_wallet_id_production?: string | null;
   asaas_wallet_id_sandbox?: string | null;
 };
+
+/**
+ * Regra oficial do representante (Smartbus BR):
+ * - percentual do representante = 1/3 da taxa da plataforma;
+ * - arredondamento oficial: 2 casas decimais.
+ *
+ * Mantemos helper local para garantir cálculo determinístico e evitar
+ * reintrodução de fallback legado de percentual fixo.
+ */
+function computeRepresentativeCommissionPercent(platformFeePercent: number): number {
+  return Math.round((platformFeePercent / 3) * 100) / 100;
+}
 
 function resolveRepresentativeWalletByEnvironment(
   representative: {
@@ -189,7 +200,7 @@ export async function resolveAsaasSplitRecipients(
   try {
     const { data: representativeRaw, error: representativeError } = await params.supabaseAdmin
       .from("representatives")
-      .select("id, status, commission_percent, asaas_wallet_id_production, asaas_wallet_id_sandbox")
+      .select("id, status, asaas_wallet_id_production, asaas_wallet_id_sandbox")
       .eq("id", params.representativeId)
       .maybeSingle();
 
@@ -237,7 +248,14 @@ export async function resolveAsaasSplitRecipients(
       };
     }
 
-    const representativePercent = Number(representative.commission_percent ?? 2);
+    /**
+     * Regra nova: não usamos mais `representatives.commission_percent` como
+     * fonte operacional do split. O percentual do representante deriva
+     * exclusivamente da taxa da plataforma da própria venda/contexto.
+     */
+    const representativePercent = computeRepresentativeCommissionPercent(
+      Number(params.platformFeePercent ?? 0),
+    );
     if (!Number.isFinite(representativePercent) || representativePercent <= 0) {
       return {
         recipients,
