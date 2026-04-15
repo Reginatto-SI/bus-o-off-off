@@ -1815,8 +1815,9 @@ export default function LandingPage() {
               <Wallet className="h-3.5 w-3.5" />
               Modelo justo e transparente
             </div>
+            {/* Ajuste de copy: removemos o travessão para deixar a leitura do heading mais limpa e natural. */}
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Você só paga quando vende — e nunca paga caro
+              Você só paga quando vende e nunca paga caro
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
               Diferente de outras plataformas, nossa taxa é inteligente: quanto maior o valor da passagem, menor o impacto no seu lucro.
@@ -1838,6 +1839,10 @@ export default function LandingPage() {
                 <p className="text-sm font-medium text-muted-foreground">{tier.range}</p>
                 <p className="mt-2 text-3xl font-bold text-foreground">{tier.rate}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{tier.label}</p>
+                {/* Microcopy comercial secundária: reduz objeção sem competir com a taxa exibida no card. */}
+                <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">
+                  Pode repassar ao cliente
+                </p>
               </div>
             ))}
             {/* Card de destaque — teto máximo */}
@@ -1848,6 +1853,10 @@ export default function LandingPage() {
               <p className="text-sm font-semibold text-primary">Teto máximo</p>
               <p className="mt-1 text-lg font-bold text-foreground">Máx. R$ 25</p>
               <p className="mt-1 text-xs text-muted-foreground">por passagem vendida</p>
+              {/* Mantém consistência visual com os demais cards e preserva comunicação de repasse opcional. */}
+              <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">
+                Pode repassar ao cliente
+              </p>
             </div>
           </div>
 
