@@ -16,6 +16,7 @@ interface RegisterRepresentativeResponse {
   representative_id?: string;
   user_id?: string;
   error?: string;
+  reused_account?: boolean;
 }
 
 export default function RepresentativeRegistration() {
@@ -84,7 +85,19 @@ export default function RepresentativeRegistration() {
         return;
       }
 
-      // Integração com auth atual: reutilizamos o login por senha já existente para evitar fluxo paralelo.
+      // Se a conta foi reutilizada, a senha informada não é a da conta existente.
+      // Orientar login em vez de tentar auto-login.
+      if (data.reused_account) {
+        toast({
+          title: 'Cadastro vinculado! 🎉',
+          description: 'Seu perfil de representante foi criado. Faça login com sua senha atual para acessar o painel.',
+        });
+        navigate('/login');
+        setLoading(false);
+        return;
+      }
+
+      // Conta nova — auto-login com a senha informada no formulário.
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -105,8 +118,6 @@ export default function RepresentativeRegistration() {
         description: 'Seu painel de representante já está ativo para começar a compartilhar seu link.',
       });
 
-      // Como o AuthContext já identifica representantes por representatives.user_id,
-      // o redirecionamento direto para o painel mantém consistência com o login existente.
       navigate('/representante/painel');
     } catch (unknownError) {
       const technicalDetail = unknownError instanceof Error ? unknownError.message : String(unknownError);

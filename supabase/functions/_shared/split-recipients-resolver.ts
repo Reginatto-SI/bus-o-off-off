@@ -6,24 +6,8 @@ import {
 } from "./payment-context-resolver.ts";
 import type { PaymentEnvironment } from "./runtime-env.ts";
 
-type SupabaseAdminClient = {
-  from: (table: string) => {
-    select: (query: string) => {
-      eq: (column: string, value: string) => {
-        eq: (column: string, value: string) => {
-          limit: (value: number) => Promise<{
-            data: Array<Record<string, unknown>> | null;
-            error: { message: string } | null;
-          }>;
-        };
-        maybeSingle: () => Promise<{
-          data: Record<string, unknown> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
-};
+// deno-lint-ignore no-explicit-any
+type SupabaseAdminClient = any;
 
 type ResolveSplitRecipientsParams = {
   supabaseAdmin: SupabaseAdminClient;

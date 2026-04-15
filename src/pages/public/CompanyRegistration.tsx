@@ -226,7 +226,20 @@ export default function CompanyRegistration() {
         return;
       }
 
-      // Auto sign-in
+      // Se a conta foi reutilizada, a senha informada não é a da conta existente.
+      // Orientar login em vez de tentar auto-login.
+      if (data.reused_account) {
+        clearCompanyReferralTracking();
+        toast({
+          title: 'Empresa cadastrada! 🎉',
+          description: 'Sua empresa foi vinculada à sua conta existente. Faça login com sua senha atual para acessar o painel.',
+        });
+        navigate('/login');
+        setLoading(false);
+        return;
+      }
+
+      // Conta nova — auto sign-in com a senha informada no formulário.
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) {
         setError('Conta criada, mas houve erro ao fazer login. Faça login manualmente.');
@@ -234,15 +247,12 @@ export default function CompanyRegistration() {
         return;
       }
 
-      // Comentário de manutenção: o tracking temporário já cumpriu seu papel
-      // quando o backend conclui a criação da empresa e decide se ativa ou não o vínculo oficial.
       clearCompanyReferralTracking();
 
       toast({
         title: 'Bem-vindo! 🎉',
         description: 'Sua empresa foi cadastrada com sucesso. Comece criando seu primeiro evento!',
       });
-      // Após cadastro + login automático, priorizar visão executiva inicial do Admin.
       navigate('/admin/dashboard');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Erro inesperado. Tente novamente.';

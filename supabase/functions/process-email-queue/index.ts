@@ -276,12 +276,12 @@ Deno.serve(async (req) => {
         await sendLovableEmail(
           {
             run_id: payload.run_id,
-            to: payload.to,
-            from: payload.from,
+            to: payload.to as string,
+            from: payload.from as string,
             sender_domain: payload.sender_domain,
-            subject: payload.subject,
-            html: payload.html,
-            text: payload.text,
+            subject: payload.subject as string,
+            html: payload.html as string,
+            text: payload.text as string,
             purpose: payload.purpose,
             label: payload.label,
             idempotency_key: payload.idempotency_key,

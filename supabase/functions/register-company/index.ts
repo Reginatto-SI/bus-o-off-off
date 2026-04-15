@@ -93,7 +93,7 @@ serve(async (req) => {
       );
     }
 
-    // Comentário de manutenção: regra explícita de nome evita fallback confuso entre PF/PJ.
+    // Regra explícita de nome evita fallback confuso entre PF/PJ.
     const persistedName = legal_type === "PJ"
       ? (trade_name?.trim() || legal_name?.trim() || company_name.trim())
       : (trade_name?.trim() || company_name.trim());
@@ -105,7 +105,7 @@ serve(async (req) => {
       );
     }
 
-    // Check if email already exists
+    // Checagem de e-mail existente no Auth.
     const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) {
       console.error("Error listing users:", listError);
@@ -116,37 +116,71 @@ serve(async (req) => {
     }
 
     const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
+      (u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase()
     );
+
+    // Flag para o frontend saber que a conta foi reutilizada (orientar login).
+    let reusedAccount = false;
+    let userId: string;
+
     if (existingUser) {
-      return new Response(
-        JSON.stringify({ error: "Este email já está cadastrado" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Conta já existe — verificar se já tem papel de gerente em alguma empresa.
+      const { data: existingRole, error: roleCheckError } = await supabaseAdmin
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", existingUser.id)
+        .eq("role", "gerente")
+        .maybeSingle();
+
+      if (roleCheckError) {
+        console.error("[register-company] Error checking existing roles:", roleCheckError);
+        return new Response(
+          JSON.stringify({ error: "Erro ao verificar cadastro existente." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (existingRole) {
+        // Já tem empresa — bloquear com mensagem específica.
+        return new Response(
+          JSON.stringify({
+            error: "Este e-mail já possui uma empresa cadastrada. Faça login para gerenciar sua conta.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Reutilizar conta existente — não criar novo auth user.
+      userId = existingUser.id;
+      reusedAccount = true;
+      console.log("[register-company] Reusing existing auth account for company registration", {
+        user_id: userId,
+        email,
+      });
+    } else {
+      // Conta nova — criar auth user normalmente.
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { name: responsible_name },
+      });
+
+      if (createError || !newUser?.user) {
+        console.error("Error creating user:", createError);
+        return new Response(
+          JSON.stringify({ error: createError?.message || "Erro ao criar usuário" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      userId = newUser.user.id;
     }
 
-    // 1. Create auth user (email pre-confirmed for immediate access)
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name: responsible_name },
-    });
-
-    if (createError || !newUser?.user) {
-      console.error("Error creating user:", createError);
-      return new Response(
-        JSON.stringify({ error: createError?.message || "Erro ao criar usuário" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = newUser.user.id;
-
-    // Correção: gerar referral_code único para a nova empresa (campo NOT NULL obrigatório).
+    // Gerar referral_code único para a nova empresa (campo NOT NULL obrigatório).
     const generatedReferralCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
 
-    // 2. Create company
+    // Criar empresa.
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .insert({
@@ -160,8 +194,6 @@ serve(async (req) => {
         phone,
         email,
         referral_code: generatedReferralCode,
-        // Padrão de comissão aplicado já na criação para evitar configuração manual.
-        // Regra de negócio (2026-07): novas empresas devem iniciar com 3% / 3%.
         platform_fee_percent: 3,
         socio_split_percent: 3,
       })
@@ -170,8 +202,10 @@ serve(async (req) => {
 
     if (companyError || !company) {
       console.error("Error creating company:", companyError);
-      // Cleanup: delete auth user
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      // Cleanup: se a conta foi criada nesta requisição, remover.
+      if (!reusedAccount) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+      }
       return new Response(
         JSON.stringify({ error: "Erro ao criar empresa" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -180,8 +214,7 @@ serve(async (req) => {
 
     const companyId = company.id;
 
-    // Comentário de manutenção: o vínculo oficial do referral nasce somente após a empresa
-    // indicada existir no banco. Clique, URL e sessão nunca criam o vínculo sozinhos.
+    // Vínculo de referral entre empresas.
     let companyReferralLinked = false;
 
     if (normalizedReferralCode) {
@@ -205,8 +238,6 @@ serve(async (req) => {
           referred_company_id: companyId,
         });
       } else {
-        // Comentário de idempotência: a constraint única em `referred_company_id` garante
-        // que a mesma empresa indicada nunca gere dois vínculos oficiais.
         const { error: referralInsertError } = await supabaseAdmin
           .from("company_referrals")
           .insert({
@@ -222,7 +253,6 @@ serve(async (req) => {
             progress_platform_fee_amount: 0,
           });
 
-        // Regra de resiliência do MVP: referral inválido/inconsistente nunca bloqueia o cadastro.
         if (referralInsertError) {
           if ((referralInsertError as { code?: string | null }).code === "23505") {
             console.log("[register-company] referral ignored because referred company already has an official link", {
@@ -238,14 +268,7 @@ serve(async (req) => {
       }
     }
 
-    /**
-     * Fase complementar (garantia do representative_code):
-     * - `representative_code` é o caminho oficial e prioritário para vínculo com representante.
-     * - `referral_code` continua reservado ao referral entre empresas.
-     * - fallback via `referral_code` é transição controlada e restrita para códigos
-     *   no formato oficial de representante (prefixo REP) quando o referral entre empresas
-     *   não foi consumido.
-     */
+    // Fase complementar: vínculo com representante.
     const hasLegacyRepresentativeFallback =
       !normalizedRepresentativeCode &&
       !companyReferralLinked &&
@@ -309,12 +332,12 @@ serve(async (req) => {
       }
     }
 
-    // 3. Wait for handle_new_user trigger to complete
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Aguardar trigger handle_new_user (apenas para contas novas).
+    if (!reusedAccount) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
 
-    // 4. Update only cadastral profile data.
-    // O vínculo multiempresa oficial é user_roles; profiles.company_id não deve
-    // voltar a ditar contexto de empresa porque isso contaminava a empresa padrão.
+    // Atualizar dados cadastrais no perfil.
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -327,8 +350,7 @@ serve(async (req) => {
       console.error("Error updating profile:", profileError);
     }
 
-    // 5. Limpeza defensiva do legado: se existir vínculo indevido na empresa
-    // padrão para esta conta recém-criada, removemos antes de gravar user_roles.
+    // Limpeza defensiva do legado.
     const defaultCompanyId = "a0000000-0000-0000-0000-000000000001";
     await supabaseAdmin
       .from("user_roles")
@@ -336,7 +358,7 @@ serve(async (req) => {
       .eq("user_id", userId)
       .eq("company_id", defaultCompanyId);
 
-    // 6. Insert role for new company
+    // Vincular papel gerente na nova empresa.
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
       .upsert(
@@ -350,7 +372,6 @@ serve(async (req) => {
 
     if (roleError) {
       console.error("Error creating role:", roleError);
-      // Try insert as fallback
       await supabaseAdmin.from("user_roles").insert({
         user_id: userId,
         company_id: companyId,
@@ -363,6 +384,8 @@ serve(async (req) => {
         success: true,
         company_id: companyId,
         user_id: userId,
+        // Flag para o frontend saber que precisa orientar login em vez de auto-login.
+        reused_account: reusedAccount,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
