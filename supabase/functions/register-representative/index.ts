@@ -53,7 +53,7 @@ serve(async (req) => {
       });
     }
 
-    // Reaproveitamos a checagem já usada no onboarding de empresa para manter o mesmo contrato de auth.
+    // Checagem de e-mail existente no Auth.
     const { data: existingUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers();
     if (listUsersError) {
       console.error("[register-representative] Error listing users:", listUsersError);
@@ -63,37 +63,70 @@ serve(async (req) => {
       });
     }
 
-    const existingUser = existingUsers?.users?.find((user) => user.email?.toLowerCase() === email);
+    const existingUser = existingUsers?.users?.find((user: { email?: string }) => user.email?.toLowerCase() === email);
+
+    // Variável que indica se estamos reutilizando conta existente (frontend precisará orientar login).
+    let reusedAccount = false;
+    let userId: string;
+
     if (existingUser) {
-      return new Response(JSON.stringify({ error: "Este e-mail já está cadastrado. Faça login para continuar." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Conta já existe — verificar se já é representante antes de reutilizar.
+      const { data: existingRep, error: repCheckError } = await supabaseAdmin
+        .from("representatives")
+        .select("id")
+        .eq("user_id", existingUser.id)
+        .maybeSingle();
+
+      if (repCheckError) {
+        console.error("[register-representative] Error checking existing representative:", repCheckError);
+        return new Response(JSON.stringify({ error: "Erro ao verificar cadastro existente." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (existingRep) {
+        // Já é representante — bloquear com mensagem específica.
+        return new Response(
+          JSON.stringify({
+            error: "Este e-mail já possui cadastro como representante. Faça login para acessar seu painel.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      // Reutilizar conta existente — não criar novo auth user.
+      userId = existingUser.id;
+      reusedAccount = true;
+      console.log("[register-representative] Reusing existing auth account for representative", {
+        user_id: userId,
+        email,
       });
+    } else {
+      // Conta nova — criar auth user normalmente.
+      const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name,
+          user_type: "representative",
+        },
+      });
+
+      if (createUserError || !createdUser?.user) {
+        console.error("[register-representative] Error creating auth user:", createUserError);
+        return new Response(JSON.stringify({ error: createUserError?.message || "Erro ao criar usuário." }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      userId = createdUser.user.id;
     }
 
-    // Fase 5: criação do usuário autenticado no backend para ativação imediata, sem depender do frontend.
-    const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        name,
-        user_type: "representative",
-      },
-    });
-
-    if (createUserError || !createdUser?.user) {
-      console.error("[register-representative] Error creating auth user:", createUserError);
-      return new Response(JSON.stringify({ error: createUserError?.message || "Erro ao criar usuário." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = createdUser.user.id;
-
-    // Fase 5: o registro oficial em representatives nasce no backend e fica vinculado por user_id.
-    // representative_code e referral_link são garantidos por trigger no banco (fonte de verdade).
+    // Registro oficial em representatives vinculado por user_id.
+    // representative_code e referral_link são garantidos por trigger no banco.
     const { data: representative, error: representativeError } = await supabaseAdmin
       .from("representatives")
       .insert({
@@ -109,15 +142,17 @@ serve(async (req) => {
 
     if (representativeError || !representative) {
       console.error("[register-representative] Error creating representative profile:", representativeError);
-      // Evita usuário "meio criado": se falhar o representative, removemos o auth user criado nesta requisição.
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      // Se a conta foi criada nesta requisição (não reutilizada), removemos para evitar "meio criado".
+      if (!reusedAccount) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+      }
       return new Response(JSON.stringify({ error: "Não foi possível criar seu perfil de representante." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Mantém o perfil de auth sincronizado com nome/telefone para reaproveitar o fluxo atual de sessão.
+    // Atualiza perfil com nome/telefone para manter consistência com o fluxo de sessão.
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
@@ -137,6 +172,8 @@ serve(async (req) => {
         representative_id: representative.id,
         representative_code: representative.representative_code,
         referral_link: representative.referral_link,
+        // Flag para o frontend saber que precisa orientar login em vez de auto-login.
+        reused_account: reusedAccount,
       }),
       {
         status: 200,

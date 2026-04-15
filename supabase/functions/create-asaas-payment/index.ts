@@ -888,27 +888,29 @@ serve(async (req) => {
       );
     }
 
-    if (!searchRes.ok) {
+    if (!searchRes || !searchRes.ok) {
       logPaymentTrace("error", "create-asaas-payment", "customer_search_http_error", {
         sale_id: sale.id,
         company_id: sale.company_id,
-        http_status: searchRes.status,
-        http_status_text: searchRes.statusText,
+        http_status: searchRes?.status ?? null,
+        http_status_text: searchRes?.statusText ?? null,
         payment_environment: paymentEnv,
       });
       await insertIntegrationLog(
         "failed",
-        `Erro ao buscar cliente no Asaas (HTTP ${searchRes.status})`,
+        `Erro ao buscar cliente no Asaas (HTTP ${searchRes?.status ?? "null"})`,
         { externalReference: sale.id },
-        { http_status: searchRes.status, http_status_text: searchRes.statusText },
+        { http_status: searchRes?.status ?? null, http_status_text: searchRes?.statusText ?? null },
         null,
         "CUSTOMER_SEARCH_HTTP_ERROR",
       );
       return jsonResponse({ error: "Erro ao buscar cliente no Asaas", error_code: "customer_search_http_error" }, 400);
     }
 
-    const existingCustomers = Array.isArray(searchData?.data)
-      ? searchData.data
+    // deno-lint-ignore no-explicit-any
+    const searchDataAny = searchData as any;
+    const existingCustomers = Array.isArray(searchDataAny?.data)
+      ? searchDataAny.data
       : [];
 
     if (
