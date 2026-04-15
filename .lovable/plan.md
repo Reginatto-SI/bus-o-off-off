@@ -1,58 +1,67 @@
 
 
-# Plano: Corrigir build errors + layout mobile do painel do representante
+# Plano: Corrigir fluxos de cadastro público + build errors nas edge functions
 
-## Parte 1 — Build errors em SalesDiagnostic.tsx
+## Diagnóstico
 
-Quatro erros de tipo que precisam de correção pontual:
+### Problema de produto (cadastro representante e empresa)
+Ambos os fluxos (`register-representative` e `register-company`) usam `listUsers()` para checar e-mail duplicado e **bloqueiam completamente** se o e-mail já existe — mesmo que o usuário pudesse legitimamente ter um segundo papel (ex: já é gerente de empresa e quer ser representante, ou vice-versa).
 
-### 1.1 `external_reference` não existe em `DiagnosticSale`
-A interface `Sale` não possui `external_reference`. Linhas 1513 e 1542 acessam `relatedSale?.external_reference`.
-**Correção:** Adicionar `external_reference?: string | null` à interface `DiagnosticSale` (já é um `extends` com campos adicionais).
+### Decisão recomendada: **Reutilizar conta existente e anexar papel**
+Justificativa:
+- A arquitetura já suporta múltiplos papéis por usuário (`user_roles` com constraint `user_id + company_id`)
+- Representante é vinculado por `representatives.user_id`, não por empresa
+- Bloquear completamente desperdiça conversão e gera confusão
+- O `create-user` interno (admin) já faz isso — reutiliza conta e vincula papel
 
-### 1.2 Tipo de `paymentEnvironment` (linha 1545)
-`relatedSale?.payment_environment` é `string` (no tipo `Sale`), mas o destino espera `"production" | "sandbox"`. 
-**Correção:** Cast com `as "production" | "sandbox" | null` no valor final, ou adicionar override na interface `DiagnosticSale`.
+### Comportamento proposto
+1. Se e-mail já existe **e já é representante** → bloquear com mensagem clara: "Este e-mail já possui cadastro como representante."
+2. Se e-mail já existe **mas não é representante** → reutilizar conta, criar registro em `representatives`, não criar auth user novo
+3. Mesmo padrão para empresa: se e-mail existe mas não tem empresa → reutilizar conta, criar empresa e vincular papel `gerente`
+4. Se e-mail já existe e já tem empresa → bloquear com mensagem específica
 
-### 1.3 `duration_ms` não existe em `SaleIntegrationLog` (linha 3208)
-**Correção:** Adicionar `duration_ms?: number | null` à interface `SaleIntegrationLog`.
+### Build errors (pré-existentes, não relacionados ao cadastro)
+Três grupos de erros precisam de correção:
+1. **`split-recipients-resolver.ts`** — tipo `SupabaseAdminClient` customizado é incompatível com `SupabaseClient` real. Afeta `asaas-webhook`, `create-asaas-payment`, `verify-payment-status`.
+2. **`create-asaas-payment/index.ts`** — `searchRes` pode ser `null` após o guard de `searchData`, mas o TypeScript não consegue inferir narrowing.
+3. **`process-email-queue/index.ts`** — campos `to`, `from`, `subject`, `html`, `text` do payload são `string | undefined` mas o SDK espera `string`.
 
 ---
 
-## Parte 2 — Layout mobile do painel do representante
+## Parte 1 — Fluxo de cadastro de representante
 
-### Causa raiz
-O container raiz usa `overflow-x-hidden` para mascarar elementos que estouram a viewport. Os suspeitos reais:
+**Arquivo:** `supabase/functions/register-representative/index.ts`
 
-1. **Grid sections sem `min-w-0`** — children de CSS grid herdam largura intrínseca do conteúdo, empurrando o grid para além da viewport.
-2. **Card de compartilhamento** — a URL longa no bloco do link e os botões `w-full` dentro de um grid sem constraints.
-3. **Cards mobile do ledger** — `font-mono` no sale ID pode forçar largura mínima.
+Mudança: quando e-mail já existe, em vez de bloquear, verificar se já tem registro em `representatives`:
+- Se já é representante → retornar erro específico: "Este e-mail já possui cadastro como representante. Faça login para acessar seu painel."
+- Se não é representante → reutilizar `existingUser.id`, criar registro em `representatives` e atualizar `profiles`. Não criar auth user novo. Retornar sucesso normalmente.
 
-### Correções propostas
+**Arquivo:** `src/pages/public/RepresentativeRegistration.tsx`
 
-**Arquivo:** `src/pages/representative/RepresentativeDashboard.tsx`
+Mudança: quando o backend retorna sucesso para conta existente, o frontend tenta `signInWithPassword` — isso falha porque a senha informada não é a senha da conta existente. Neste caso, exibir mensagem orientando login: "Cadastro vinculado à sua conta existente. Faça login com sua senha atual para acessar o painel."
 
-1. **Container raiz (linha 426):** Trocar `overflow-x-hidden` por `max-w-full` — remove a máscara e força contenção real.
+---
 
-2. **`<main>` (linha 460):** Adicionar `min-w-0 overflow-hidden` para que o grid nunca ultrapasse a viewport.
+## Parte 2 — Fluxo de cadastro de empresa
 
-3. **Sections com grid (linhas 462, 539, 629, 726):** Adicionar `min-w-0` em cada `<section>` que é child de grid.
+**Arquivo:** `supabase/functions/register-company/index.ts`
 
-4. **Cards que contêm texto dinâmico (linhas 464, 515, 630, 677, 727, 817):** Adicionar `min-w-0 overflow-hidden` nos Cards problemáticos.
+Mudança análoga:
+- Se e-mail já existe e já tem papel `gerente` em alguma empresa → bloquear com mensagem: "Este e-mail já possui uma empresa cadastrada. Faça login para gerenciar sua conta."
+- Se e-mail existe mas não tem empresa → reutilizar conta, criar empresa, vincular `gerente` via `user_roles`. Não criar auth user novo.
 
-5. **Bloco do link oficial (linha 484):** Já tem `min-w-0` e `overflow-hidden`, porém o parent `<div className="grid gap-3">` (linha 476) precisa de `min-w-0 overflow-hidden`.
+---
 
-6. **Botões de ação (linhas 493-509):** O container `<div className="space-y-2">` (linha 492) precisa de `min-w-0`. Os botões com texto longo em mobile devem ter `truncate` no texto para evitar que o label force largura.
+## Parte 3 — Build errors
 
-7. **Cards mobile do ledger (linha 883):** O `font-mono` no sale ID com `truncate` já está correto; garantir que o parent `<div className="min-w-0 space-y-1">` (linha 881) se mantenha.
+### 3a. `split-recipients-resolver.ts` (linhas 9-26)
+Substituir o tipo `SupabaseAdminClient` customizado por `any` para eliminar incompatibilidade de tipagem profunda com o SDK real. Alternativa mais limpa que reescrever toda a cadeia de tipos.
 
-8. **Identidade card (linhas 521-534):** Adicionar `min-w-0 truncate` no valor do nome (linha 523) para casos de nomes longos.
+### 3b. `create-asaas-payment/index.ts` (linhas 891-912)
+Adicionar guard explícito `if (!searchRes)` antes de `if (!searchRes.ok)` — o TypeScript não consegue inferir que `searchData !== null` implica `searchRes !== null`.
 
-### Resumo da abordagem
-- Tratar a causa (largura intrínseca dos children de grid/flex) e não o sintoma (overflow-x-hidden)
-- Aplicar `min-w-0` + `overflow-hidden` nos containers de grid/flex que contêm conteúdo dinâmico
-- Manter `truncate` em textos longos (URLs, nomes, IDs)
-- Preservar desktop intacto (todas as mudanças são neutras em breakpoints maiores)
+### 3c. `process-email-queue/index.ts` (linhas 279-284)
+Adicionar assertions `as string` ou fallback nos campos `to`, `from`, `subject`, `html`, `text` ao chamar `sendLovableEmail`.
 
 ---
 
@@ -60,6 +69,15 @@ O container raiz usa `overflow-x-hidden` para mascarar elementos que estouram a 
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/admin/SalesDiagnostic.tsx` | Adicionar `external_reference` e `duration_ms` às interfaces locais; cast de `payment_environment` |
-| `src/pages/representative/RepresentativeDashboard.tsx` | Corrigir contenção de largura em grid/flex containers; remover dependência de `overflow-x-hidden` |
+| `supabase/functions/register-representative/index.ts` | Reutilizar conta existente quando e-mail já existe mas não é representante |
+| `supabase/functions/register-company/index.ts` | Reutilizar conta existente quando e-mail já existe mas não tem empresa |
+| `src/pages/public/RepresentativeRegistration.tsx` | Tratar cenário de conta existente reutilizada (orientar login) |
+| `src/pages/public/CompanyRegistration.tsx` | Tratar cenário de conta existente reutilizada (orientar login) |
+| `supabase/functions/_shared/split-recipients-resolver.ts` | Corrigir tipo `SupabaseAdminClient` |
+| `supabase/functions/create-asaas-payment/index.ts` | Guard de null em `searchRes` |
+| `supabase/functions/process-email-queue/index.ts` | Assertions de tipo nos campos de e-mail |
+
+## Riscos residuais
+- Login automático não funciona para contas reutilizadas (senha diferente) — mitigado com redirect para `/login`
+- `listUsers()` sem paginação pode ser lento em volume alto (risco pré-existente, não introduzido aqui)
 
