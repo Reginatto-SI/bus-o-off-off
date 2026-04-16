@@ -1,0 +1,67 @@
+# PRD — Página SEO: Caravana para Jogo de Futebol
+
+## Ação Desejada
+
+Criar a página `/caravana-para-jogo-de-futebol`, focada em atrair torcidas organizadas e grupos esportivos.
+
+---
+
+## Contexto
+
+Página altamente nichada com grande potencial de SEO.
+
+---
+
+## Público-alvo
+
+- torcidas organizadas
+- grupos de amigos
+- organizadores de viagens para jogos
+
+---
+
+## Problema principal
+
+- organizar grupo grande
+- controlar pagamentos
+- evitar confusão
+
+---
+
+## Proposta
+
+Mostrar como organizar caravanas esportivas com mais controle.
+
+---
+
+## Estrutura
+
+### 1. Headline
+
+"Como organizar caravanas para jogos de futebol sem confusão"
+
+---
+
+### 2. Problemas
+
+- desorganização
+- atrasos
+- pagamentos confusos
+
+---
+
+### 3. Solução
+
+SmartBus como organizador central
+
+---
+
+### 4. CTA
+
+"Organizar minha caravana para jogo"
+
+---
+
+### 5. Navegação
+
+Mesmo padrão

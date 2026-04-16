@@ -1,0 +1,200 @@
+# PRD — Página SEO: Sistema Gratuito para Excursões (Versão Piloto)
+
+## Ação Desejada
+
+Criar a página pública `/sistema-gratuito-para-excursoes`, focada em atrair usuários que buscam soluções gratuitas para organizar excursões e converter esse tráfego em novos usuários do SmartBus BR.
+
+---
+
+## Contexto
+
+O principal diferencial do SmartBus BR é:
+
+- não possui mensalidade
+- não possui custo fixo
+- cobra apenas por venda realizada
+- permite repasse da taxa ao cliente
+
+Isso faz com que, na prática, o sistema possa sair sem custo para quem utiliza.
+
+Essa página deve explorar esse posicionamento de forma clara e direta.
+
+---
+
+## Público-alvo
+
+- organizadores iniciantes
+- pessoas que não querem investir dinheiro no início
+- usuários que usam planilhas ou controle manual
+- pequenos operadores
+
+---
+
+## Problema principal
+
+O usuário acredita que:
+
+- precisa pagar sistema caro
+- não consegue profissionalizar operação sem investimento
+- organizar excursões exige estrutura complexa
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+👉 é possível organizar excursões sem custo fixo  
+👉 existe uma alternativa profissional acessível  
+👉 o SmartBus resolve isso de forma simples  
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+"Sistema gratuito para excursões: organize e venda sem mensalidade"
+
+---
+
+### 2. Subtítulo
+
+"Crie sua excursão, venda passagens e organize o embarque sem pagar custo fixo"
+
+---
+
+### 3. Bloco de quebra de crença
+
+Explicar:
+
+- a maioria dos sistemas cobra mensalidade
+- isso trava quem está começando
+
+---
+
+### 4. Bloco de diferencial
+
+Destacar com força:
+
+- sem mensalidade
+- sem custo fixo
+- pagamento apenas por venda
+- possibilidade de repasse
+
+---
+
+### 5. Explicação clara do modelo
+
+Explicar de forma simples:
+
+- você só paga quando vende
+- pode repassar ao passageiro
+- o sistema pode se pagar sozinho
+
+---
+
+### 6. Comparação
+
+Comparar:
+
+- planilha
+- sistema pago
+- SmartBus
+
+---
+
+### 7. Benefícios
+
+- começar sem risco
+- organizar melhor
+- vender online
+- controlar passageiros
+
+---
+
+### 8. Como funciona
+
+1. Cria excursão
+2. Publica link
+3. Vende passagens
+4. Organiza embarque
+
+---
+
+### 9. Prova de valor (baseado na landing)
+
+Reforçar:
+
+- venda online
+- link próprio
+- QR Code
+- controle de embarque
+
+---
+
+### 10. CTA principal
+
+"Começar sem pagar nada"
+
+---
+
+### 11. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 12. FAQ
+
+- realmente não tem mensalidade?
+- como o sistema ganha dinheiro?
+- posso repassar a taxa?
+- funciona para iniciantes?
+
+---
+
+### 13. Navegação entre páginas (OBRIGATÓRIO)
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para caravanas  
+- Sistema para eventos  
+
+---
+
+### 14. Bloco final
+
+Reforço forte:
+
+"Você só paga quando vender — e pode não pagar nada do próprio bolso"
+
++ CTA
+
+---
+
+## Critérios de sucesso
+
+- deixar claro em segundos que é sem mensalidade
+- quebrar objeção de custo
+- não parecer enganoso
+- explicar modelo com transparência
+- conduzir para conversão
+
+---
+
+## Restrições
+
+- não esconder taxa
+- não usar linguagem confusa
+- não parecer “bom demais para ser verdade”
+- não fugir da realidade do produto
+
+---
+
+## Observações importantes
+
+- esse é um dos principais pontos de aquisição do sistema
+- deve ser uma das páginas mais fortes do projeto
+- precisa ser extremamente clara e direta

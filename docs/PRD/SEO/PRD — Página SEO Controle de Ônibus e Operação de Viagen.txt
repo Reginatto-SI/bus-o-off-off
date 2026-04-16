@@ -1,0 +1,208 @@
+# PRD — Página SEO: Controle de Ônibus e Operação de Viagens
+
+## Ação Desejada
+
+Criar a página pública `/controle-de-onibus`, focada em atrair usuários que buscam formas de controlar ônibus, passageiros e operação de viagens, e apresentar o SmartBus BR como solução completa.
+
+---
+
+## Contexto
+
+Muitos organizadores e empresas ainda fazem controle de operação de forma manual:
+
+- papel
+- planilhas
+- WhatsApp
+
+Isso gera:
+
+- desorganização
+- erros operacionais
+- dificuldade de crescimento
+
+O SmartBus resolve isso ao centralizar:
+
+- passageiros
+- embarque
+- vendas
+- operação
+
+---
+
+## Público-alvo
+
+- pequenos operadores de transporte
+- organizadores de viagens recorrentes
+- empresas com frota pequena
+- quem controla ônibus manualmente
+
+---
+
+## Problema principal
+
+O usuário enfrenta:
+
+- dificuldade para controlar passageiros por ônibus
+- falta de organização nos embarques
+- confusão com listas
+- erros operacionais
+- falta de visão da operação
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+👉 controlar ônibus manualmente não escala  
+👉 existe uma forma simples de organizar tudo  
+👉 o SmartBus resolve isso sem complexidade  
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+"Controle de ônibus e passageiros para viagens sem confusão"
+
+---
+
+### 2. Subtítulo
+
+"Organize sua operação, controle embarques e tenha mais visibilidade sem usar planilhas"
+
+---
+
+### 3. Introdução
+
+Explicar o cenário comum:
+
+- listas no papel
+- planilhas desorganizadas
+- mensagens espalhadas
+
+---
+
+### 4. Problemas comuns
+
+- passageiros em ônibus errado
+- embarque confuso
+- listas desatualizadas
+- falta de controle por viagem
+
+---
+
+### 5. Formas de controle
+
+Comparação:
+
+- papel  
+- planilha  
+- sistema  
+
+---
+
+### 6. Limitações do modelo manual
+
+- alto risco de erro  
+- falta de organização  
+- difícil de escalar  
+
+---
+
+### 7. Apresentação do SmartBus
+
+Mostrar como solução:
+
+- controle de passageiros por viagem  
+- organização de embarque  
+- validação com QR Code  
+- centralização da operação  
+
+---
+
+### 8. Benefícios
+
+- mais controle operacional  
+- menos erro  
+- mais organização  
+- melhor experiência no embarque  
+
+---
+
+### 9. Como funciona
+
+1. Crie a viagem  
+2. Defina pontos de embarque  
+3. Organize passageiros  
+4. Valide embarque  
+
+---
+
+### 10. Conexão com vendas
+
+Mostrar que além do controle:
+
+- também permite vender passagens  
+- acompanhar ocupação  
+- organizar operação completa  
+
+---
+
+### 11. CTA principal
+
+"Organizar minha operação agora"
+
+---
+
+### 12. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 13. Navegação entre páginas (OBRIGATÓRIO)
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para caravanas  
+- Sistema para eventos  
+
+---
+
+### 14. Bloco final
+
+Reforço:
+
+"Mais controle, menos confusão e uma operação mais profissional"
+
++ CTA
+
+---
+
+## Critérios de sucesso
+
+- falar com quem pensa em operação (não só venda)
+- deixar claro o ganho de controle
+- não parecer sistema complexo
+- conectar controle + embarque + vendas
+- conduzir para conversão
+
+---
+
+## Restrições
+
+- não virar página técnica
+- não falar como software complexo
+- não fugir da simplicidade
+- não perder foco em operação real
+
+---
+
+## Observações importantes
+
+- essa página amplia o público do sistema
+- conecta diretamente com empresas de transporte
+- ajuda a posicionar o SmartBus como sistema completo

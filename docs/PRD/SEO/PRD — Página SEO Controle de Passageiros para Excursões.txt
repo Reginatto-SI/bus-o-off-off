@@ -1,0 +1,149 @@
+# PRD — Página SEO: Controle de Passageiros para Excursões
+
+## Ação Desejada
+
+Criar a página pública `/controle-de-passageiros-excursao`, focada em atrair usuários que buscam formas de controlar passageiros e apresentar o SmartBus como solução prática.
+
+---
+
+## Contexto
+
+Essa página atua no meio do funil.
+
+O usuário já entende que precisa organizar melhor, mas ainda não definiu qual ferramenta usar.
+
+---
+
+## Público-alvo
+
+- organizadores de excursões
+- pessoas que já fazem viagens recorrentes
+- usuários que já tentaram planilhas ou controle manual
+
+---
+
+## Problema principal
+
+O usuário enfrenta dificuldades como:
+
+- perda de controle de quem pagou
+- dificuldade para organizar lista de passageiros
+- erros no embarque
+- informações espalhadas
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+- controlar passageiros é essencial
+- fazer isso manualmente gera erro
+- existe uma forma simples e profissional de resolver
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Controle de passageiros para excursões: organize tudo sem erros"
+
+---
+
+### 2. Subtítulo
+
+"Saiba quem pagou, quem vai viajar e organize seu embarque com facilidade"
+
+---
+
+### 3. Introdução
+
+Explicar a dor do controle manual e seus riscos.
+
+---
+
+### 4. Problemas comuns
+
+- lista desatualizada
+- passageiros duplicados
+- confusão no embarque
+- perda de informações
+
+---
+
+### 5. Formas de controle
+
+Comparação:
+
+- papel
+- planilha
+- sistema
+
+---
+
+### 6. Limitações do controle manual
+
+- risco de erro
+- falta de organização
+- dificuldade de escala
+
+---
+
+### 7. Apresentação do SmartBus
+
+Mostrar como solução:
+
+- lista centralizada
+- controle em tempo real
+- organização de embarque
+- redução de erros
+
+---
+
+### 8. Benefícios
+
+- mais controle
+- mais segurança
+- menos retrabalho
+- operação profissional
+
+---
+
+### 9. CTA principal
+
+"Organizar meus passageiros agora"
+
+---
+
+### 10. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 11. Navegação entre páginas
+
+Bloco obrigatório:
+
+"Você também pode usar o sistema para:"
+
+- Sistema para caravanas  
+- Sistema para eventos  
+- Sistema para viagens  
+
+---
+
+### 12. Bloco final
+
+Reforço da solução + CTA
+
+---
+
+## Critérios de sucesso
+
+- deixar claro o problema do controle manual
+- apresentar o sistema como solução natural
+- não parecer venda forçada
+- manter linguagem simples
+- conduzir para conversão

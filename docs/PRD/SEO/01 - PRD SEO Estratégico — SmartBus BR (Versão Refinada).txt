@@ -1,0 +1,223 @@
+# PRD SEO Estratégico — SmartBus BR (Versão Refinada)
+
+---
+
+## 1. Objetivo do SEO no SmartBus
+
+O SEO no SmartBus BR tem como objetivo principal gerar aquisição orgânica previsível, atraindo empresas e organizadores de viagens que precisam vender passagens e gerenciar operações.
+
+O SEO não substitui a landing page, mas atua como canal de entrada segmentado, direcionando usuários com diferentes intenções para páginas específicas, aumentando conversão e autoridade.
+
+---
+
+## 2. Posicionamento consolidado do produto
+
+O SmartBus BR é uma plataforma para:
+
+- venda de passagens
+- gestão de excursões e eventos com transporte
+- controle operacional de embarque
+
+O sistema NÃO é:
+- uma simples ferramenta de emissão de bilhete
+- um marketplace aberto de viagens
+
+O foco é:
+👉 empresas e organizadores que precisam estruturar e vender viagens
+
+---
+
+## 3. Segmentação de mercado (REFINADO)
+
+Segmentos definidos:
+
+### 3.1 Excursões (FOCO INICIAL)
+- público: organizadores independentes
+- necessidade: vender passagens e controlar passageiros
+- dor principal: desorganização e controle manual
+
+### 3.2 Caravanas religiosas
+- público: igrejas e grupos religiosos
+- necessidade: organizar grupos grandes
+- dor principal: controle de participantes e pagamentos
+
+### 3.3 Eventos com transporte
+- público: produtores de eventos
+- necessidade: logística + venda
+- dor principal: coordenação e escala
+
+### 3.4 Viagens turísticas
+- público: agências e organizadores
+- necessidade: gestão de vendas
+- dor principal: controle e profissionalização
+
+---
+
+## 4. Estratégia de foco (CRÍTICO)
+
+👉 O projeto NÃO deve atacar todos os segmentos ao mesmo tempo.
+
+FOCO INICIAL DEFINIDO:
+
+➡️ **Excursões**
+
+Justificativa:
+- maior volume de busca
+- menor complexidade operacional
+- maior aderência imediata ao produto
+
+---
+
+## 5. Arquitetura de páginas SEO
+
+### Página principal (já existente)
+- `/`
+- objetivo: conversão geral
+
+---
+
+### Páginas satélite (fase 1)
+
+- `/sistema-para-excursoes`
+- `/como-organizar-excursao`
+- `/controle-de-passageiros-excursao`
+- `/planilha-para-excursoes`
+
+---
+
+### Expansão futura
+
+- caravanas
+- eventos
+- turismo
+
+---
+
+## 6. Estratégia de palavras-chave (REFINADO)
+
+### Página: sistema-para-excursoes
+- principal: sistema para excursões
+- variações:
+  - software para excursão
+  - vender passagem excursão
+- intenção: comercial
+
+---
+
+### Página: como-organizar-excursao
+- principal: como organizar excursão
+- intenção: informacional
+
+---
+
+### Página: controle-de-passageiros-excursao
+- principal: controle de passageiros excursão
+- intenção: solução prática
+
+---
+
+### Página: planilha-para-excursoes
+- principal: planilha excursão
+- intenção: entrada de topo de funil
+
+---
+
+## 7. Estratégia de cluster (CRÍTICO)
+
+Cada vertical deve formar um cluster completo.
+
+Exemplo excursões:
+
+- página principal
+- conteúdos auxiliares
+- conteúdos educativos
+
+Objetivo:
+👉 dominar o tema no Google
+
+---
+
+## 8. Estrutura de funil
+
+### Topo
+- conteúdo educativo
+- atrair tráfego
+
+### Meio
+- mostrar solução
+- comparação com métodos manuais
+
+### Fundo
+- conversão
+- direcionamento para landing
+
+---
+
+## 9. Padrão de páginas (obrigatório)
+
+Todas páginas devem seguir:
+
+1. Headline clara
+2. Problema real
+3. Explicação simples
+4. Benefícios diretos
+5. Prova ou argumento
+6. Taxa/preço (se aplicável)
+7. CTA
+
+---
+
+## 10. Estratégia de conversão
+
+CTA principal:
+👉 Criar conta / começar a vender
+
+CTA secundário:
+👉 conhecer o sistema
+
+Fluxo:
+SEO → página satélite → landing → conversão
+
+---
+
+## 11. Prioridade de execução
+
+Ordem definida:
+
+1. sistema-para-excursoes
+2. como-organizar-excursao
+3. controle-de-passageiros-excursao
+4. planilha-para-excursoes
+
+---
+
+## 12. Riscos estratégicos
+
+- atacar muitos segmentos ao mesmo tempo
+- criar páginas genéricas
+- falta de consistência
+- não manter padrão visual
+- baixa profundidade de conteúdo
+
+---
+
+## 13. Diretrizes obrigatórias
+
+- não criar novos layouts
+- manter padrão da landing
+- manter linguagem simples
+- não inventar funcionalidades
+- manter consistência total
+
+---
+
+## 14. Próximos passos
+
+1. Criar PRD individual da página:
+   - sistema-para-excursoes
+
+2. Criar páginas auxiliares do cluster
+
+3. Implementar no Lovable
+
+---

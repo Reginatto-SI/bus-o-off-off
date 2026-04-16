@@ -1,0 +1,208 @@
+# PRD — Página SEO: Sistema para Vender Passagens
+
+## Ação Desejada
+
+Criar a página pública `/sistema-para-vender-passagens`, focada em atrair usuários que já estão buscando uma plataforma para vender passagens e converter esse tráfego em novos usuários do SmartBus BR.
+
+---
+
+## Contexto
+
+O SmartBus BR permite:
+
+- criar eventos e viagens
+- vender passagens online
+- gerar link próprio
+- receber pagamentos
+- organizar embarque
+
+Essa página deve atuar como página de decisão, ajudando o usuário a escolher um sistema.
+
+---
+
+## Público-alvo
+
+- organizadores de excursões
+- empresas de transporte
+- vendedores independentes
+- operadores que já vendem manualmente
+
+---
+
+## Problema principal
+
+O usuário quer:
+
+- vender passagens online
+- organizar melhor sua operação
+- ter controle sobre vendas
+- profissionalizar o processo
+
+Mas não sabe qual sistema usar.
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+👉 o SmartBus é uma solução completa  
+👉 é simples de usar  
+👉 não exige estrutura complexa  
+👉 não tem custo fixo  
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+"Sistema para vender passagens online com mais controle e simplicidade"
+
+---
+
+### 2. Subtítulo
+
+"Crie suas viagens, venda online e organize embarques em um único sistema"
+
+---
+
+### 3. Introdução
+
+Explicar que escolher um sistema pode ser difícil e que muitas opções são complexas ou caras.
+
+---
+
+### 4. Problemas dos sistemas tradicionais
+
+- mensalidade alta  
+- complexidade  
+- difícil de usar  
+- excesso de recursos desnecessários  
+
+---
+
+### 5. Diferencial do SmartBus
+
+Destacar:
+
+- simples de usar  
+- pronto para operar  
+- pensado para o dia a dia  
+- sem custo fixo  
+
+---
+
+### 6. O que o sistema permite fazer
+
+- criar eventos e viagens  
+- vender passagens online  
+- compartilhar link próprio  
+- acompanhar vendas  
+- organizar embarque  
+
+---
+
+### 7. Benefícios
+
+- começar rápido  
+- vender pelo celular  
+- organizar melhor  
+- crescer com controle  
+
+---
+
+### 8. Modelo de custo (CRÍTICO)
+
+Reforçar:
+
+- sem mensalidade  
+- pagamento por venda  
+- possibilidade de repasse  
+
+---
+
+### 9. Comparação implícita
+
+Comparar com:
+
+- sistemas complexos  
+- planilhas  
+- controle manual  
+
+---
+
+### 10. Como começar
+
+1. Crie sua viagem  
+2. Publique seu link  
+3. Compartilhe  
+4. Comece a vender  
+
+---
+
+### 11. CTA principal
+
+"Começar a vender passagens"
+
+---
+
+### 12. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 13. FAQ
+
+- tem mensalidade?
+- preciso de empresa?
+- como recebo os pagamentos?
+- funciona para iniciantes?
+
+---
+
+### 14. Navegação entre páginas (OBRIGATÓRIO)
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para caravanas  
+- Controle de ônibus  
+
+---
+
+### 15. Bloco final
+
+Reforço:
+
+"Venda passagens com mais organização, controle e sem complicação"
+
++ CTA
+
+---
+
+## Critérios de sucesso
+
+- ser clara e direta
+- facilitar decisão do usuário
+- destacar diferenciais reais
+- não parecer complexa
+- conduzir para conversão
+
+---
+
+## Restrições
+
+- não usar linguagem técnica
+- não complicar a explicação
+- não esconder modelo de cobrança
+- não fugir da proposta real do produto
+
+---
+
+## Observações importantes
+
+- página de fundo de funil
+- alto potencial de conversão
+- deve ser uma das principais páginas do projeto

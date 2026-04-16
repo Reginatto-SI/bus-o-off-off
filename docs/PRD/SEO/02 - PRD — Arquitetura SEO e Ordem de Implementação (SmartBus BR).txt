@@ -1,0 +1,177 @@
+# PRD — Arquitetura SEO e Ordem de Implementação (SmartBus BR)
+
+## Objetivo
+
+Definir a estrutura de criação, ligação e crescimento das páginas SEO do SmartBus BR, garantindo:
+
+- consistência entre páginas
+- ganho de autoridade no Google
+- melhor experiência de navegação
+- execução organizada no Lovable
+
+---
+
+## Conceito base
+
+As páginas SEO devem funcionar em formato de cluster.
+
+Cada cluster possui:
+
+- 1 página principal (hub)
+- páginas de apoio (topo, meio e fundo de funil)
+- ligação entre todas as páginas
+
+---
+
+## Estrutura geral
+
+### Cluster 1 — Excursões
+
+Página principal (hub):
+- /sistema-para-excursoes
+
+Páginas de apoio:
+- /como-organizar-excursao
+- /planilha-para-excursoes
+- /controle-de-passageiros-excursao
+- /como-gerenciar-excursoes
+- /sistema-gratuito-para-excursoes
+
+---
+
+### Cluster 2 — Caravanas
+
+Página principal (hub):
+- /sistema-para-caravanas
+
+Páginas de apoio:
+- /como-organizar-caravana
+- /planilha-para-caravana
+- /controle-de-passageiros-caravana
+- /como-gerenciar-caravana
+- /caravana-para-jogo-de-futebol
+- /caravana-religiosa
+
+---
+
+### Cluster 3 — Operação e Venda
+
+Páginas principais:
+- /controle-de-onibus
+- /como-vender-passagens-online
+- /sistema-para-vender-passagens
+
+---
+
+## Regra de interligação (CRÍTICO)
+
+Todas as páginas devem seguir:
+
+### 1. Linkar para a página hub do cluster
+
+Exemplo:
+- páginas de excursão → /sistema-para-excursoes
+
+---
+
+### 2. Linkar para páginas relacionadas do mesmo cluster
+
+Exemplo:
+- planilha → como organizar → controle → sistema
+
+---
+
+### 3. Linkar para outros clusters (leve)
+
+Exemplo:
+- excursão → caravanas → eventos
+
+---
+
+## Fluxo de navegação esperado
+
+Topo → Meio → Fundo → Conversão
+
+Exemplo:
+
+como-organizar-excursao  
+↓  
+controle-de-passageiros  
+↓  
+sistema-gratuito  
+↓  
+sistema-para-excursoes  
+
+---
+
+## Ordem de implementação (CRÍTICO)
+
+### Fase 1 — Base de conversão
+
+1. /sistema-para-excursoes  
+2. /sistema-para-caravanas  
+
+---
+
+### Fase 2 — Captura principal
+
+3. /como-organizar-excursao  
+4. /como-organizar-caravana  
+
+---
+
+### Fase 3 — Meio de funil
+
+5. /controle-de-passageiros-excursao  
+6. /controle-de-passageiros-caravana  
+7. /como-gerenciar-excursoes  
+8. /como-gerenciar-caravana  
+
+---
+
+### Fase 4 — Diferencial competitivo
+
+9. /sistema-gratuito-para-excursoes  
+10. /controle-de-onibus  
+
+---
+
+### Fase 5 — Conversão forte
+
+11. /como-vender-passagens-online  
+12. /sistema-para-vender-passagens  
+
+---
+
+### Fase 6 — Nicho (expansão)
+
+13. /caravana-para-jogo-de-futebol  
+14. /caravana-religiosa  
+
+---
+
+## Regras obrigatórias
+
+- todas páginas devem ter navegação entre páginas
+- manter padrão visual da landing
+- não criar páginas isoladas
+- sempre conectar com o cluster
+- sempre ter CTA claro
+
+---
+
+## Critérios de sucesso
+
+- páginas conectadas entre si
+- fluxo lógico de navegação
+- crescimento de SEO consistente
+- aumento de tempo no site
+- aumento de conversão
+
+---
+
+## Observações importantes
+
+- este PRD define a ordem oficial de construção
+- deve ser seguido antes de criar novas páginas
+- novas páginas devem respeitar essa arquitetura

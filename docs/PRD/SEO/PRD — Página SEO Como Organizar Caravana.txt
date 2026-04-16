@@ -1,0 +1,123 @@
+# PRD — Página SEO: Como Organizar Caravana
+
+## Ação Desejada
+
+Criar a página pública `/como-organizar-caravana`, focada em atrair usuários que buscam aprender a organizar caravanas e apresentar o SmartBus como solução natural.
+
+---
+
+## Contexto
+
+Página de topo de funil.
+
+O usuário ainda não está buscando um sistema, mas sim entender como organizar uma caravana.
+
+---
+
+## Público-alvo
+
+- iniciantes
+- líderes de grupos religiosos
+- organizadores de caravanas esportivas
+- pessoas planejando primeira caravana
+
+---
+
+## Problema principal
+
+O usuário não sabe:
+
+- como começar
+- como organizar participantes
+- como controlar pagamentos
+- como estruturar a viagem
+
+---
+
+## Proposta da página
+
+Ensinar de forma simples:
+
+👉 como organizar uma caravana passo a passo
+
+E mostrar naturalmente:
+
+👉 que o SmartBus resolve tudo isso
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Como organizar uma caravana: guia simples para iniciantes"
+
+---
+
+### 2. Introdução
+
+Explicar que organizar caravanas pode parecer difícil, mas pode ser simples.
+
+---
+
+### 3. Passo a passo
+
+1. Definir destino
+2. Organizar participantes
+3. Planejar transporte
+4. Controlar pagamentos
+5. Organizar embarque
+
+---
+
+### 4. Problemas comuns
+
+- falta de controle
+- confusão com participantes
+- erros de pagamento
+- desorganização
+
+---
+
+### 5. Formas de organizar
+
+Comparação:
+
+- caderno
+- WhatsApp
+- planilha
+- sistema
+
+---
+
+### 6. Apresentação do SmartBus
+
+Mostrar como solução natural:
+
+- centraliza tudo
+- reduz erro
+- organiza melhor
+
+---
+
+### 7. CTA
+
+"Começar a organizar minha caravana"
+
+---
+
+### 8. Navegação entre páginas
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para eventos  
+- Sistema para viagens  
+
+---
+
+## Critérios de sucesso
+
+- conteúdo educativo real
+- não parecer venda forçada
+- conduzir naturalmente para o sistema

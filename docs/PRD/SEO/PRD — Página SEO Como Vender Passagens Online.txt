@@ -1,0 +1,208 @@
+# PRD — Página SEO: Como Vender Passagens Online
+
+## Ação Desejada
+
+Criar a página pública `/como-vender-passagens-online`, focada em atrair usuários que querem vender passagens ou ganhar dinheiro com viagens e converter esse público em usuários do SmartBus BR.
+
+---
+
+## Contexto
+
+O SmartBus BR permite:
+
+- criar eventos e viagens
+- vender passagens online
+- compartilhar link próprio
+- acompanhar vendas
+- organizar embarque
+
+Essa página deve conectar diretamente com o desejo de gerar renda.
+
+---
+
+## Público-alvo
+
+- organizadores de excursões
+- pessoas que querem começar a vender viagens
+- vendedores independentes
+- pessoas que vendem pelo WhatsApp ou Instagram
+
+---
+
+## Problema principal
+
+O usuário não sabe:
+
+- como começar a vender passagens
+- como cobrar clientes
+- como organizar vendas
+- como escalar sem bagunça
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+👉 qualquer pessoa pode começar a vender passagens  
+👉 não precisa de estrutura complexa  
+👉 o SmartBus facilita todo o processo  
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+"Como vender passagens online e organizar suas viagens com facilidade"
+
+---
+
+### 2. Subtítulo
+
+"Aprenda a vender viagens, organizar passageiros e receber pagamentos sem complicação"
+
+---
+
+### 3. Introdução
+
+Explicar que hoje é possível vender passagens mesmo sem estrutura formal.
+
+---
+
+### 4. Caminhos comuns (contexto)
+
+Mostrar:
+
+- vender manualmente
+- usar WhatsApp
+- anotar pedidos
+- dificuldades disso
+
+---
+
+### 5. Problemas do modelo manual
+
+- perda de controle
+- erros
+- dificuldade de cobrança
+- falta de organização
+
+---
+
+### 6. O que é necessário para vender passagens
+
+Explicar:
+
+- organizar viagem
+- controlar passageiros
+- receber pagamento
+- confirmar presença
+
+---
+
+### 7. Apresentação do SmartBus
+
+Mostrar como solução completa:
+
+- cria evento
+- gera link de venda
+- vende online
+- acompanha tudo
+- organiza embarque
+
+---
+
+### 8. Benefícios
+
+- começar rápido
+- vender pelo celular
+- organizar melhor
+- acompanhar resultados
+
+---
+
+### 9. Modelo de custo (CRÍTICO)
+
+Reforçar:
+
+- sem mensalidade
+- pagamento por venda
+- possibilidade de repasse
+
+---
+
+### 10. Como começar
+
+1. Crie sua viagem  
+2. Publique o link  
+3. Compartilhe com clientes  
+4. Comece a vender  
+
+---
+
+### 11. CTA principal
+
+"Começar a vender passagens agora"
+
+---
+
+### 12. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 13. FAQ
+
+- preciso de CNPJ?
+- como recebo o dinheiro?
+- posso vender sozinho?
+- tem custo fixo?
+
+---
+
+### 14. Navegação entre páginas (OBRIGATÓRIO)
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para caravanas  
+- Controle de ônibus  
+
+---
+
+### 15. Bloco final
+
+Reforço:
+
+"Venda passagens com mais organização, controle e sem complicação"
+
++ CTA
+
+---
+
+## Critérios de sucesso
+
+- conectar com desejo de ganhar dinheiro
+- ser simples e direto
+- não parecer complexo
+- deixar claro que qualquer pessoa pode usar
+- conduzir para conversão
+
+---
+
+## Restrições
+
+- não parecer conteúdo genérico
+- não complicar explicação
+- não fugir do modelo real do sistema
+- não esconder custos
+
+---
+
+## Observações importantes
+
+- essa página conecta diretamente com receita
+- é uma das mais importantes do projeto
+- deve ter alto foco em conversão

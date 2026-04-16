@@ -1,0 +1,116 @@
+# PRD — Página SEO: Como Organizar Excursão
+
+## Ação Desejada
+
+Criar a página `/como-organizar-excursao`, focada em atrair usuários que buscam aprender a organizar excursões e apresentar o SmartBus como solução natural.
+
+---
+
+## Contexto
+
+Essa página tem foco em topo de funil.
+
+O objetivo é atrair usuários que ainda NÃO estão buscando um sistema, mas sim aprender como organizar excursões.
+
+---
+
+## Público-alvo
+
+- iniciantes
+- organizadores informais
+- pessoas planejando primeira excursão
+
+---
+
+## Problema principal
+
+O usuário não sabe:
+
+- por onde começar
+- como organizar passageiros
+- como controlar pagamentos
+- como estruturar a viagem
+
+---
+
+## Proposta da página
+
+Ensinar de forma simples:
+
+👉 como organizar excursão passo a passo
+
+E naturalmente mostrar:
+
+👉 que o SmartBus resolve tudo isso
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Como organizar uma excursão: guia simples para iniciantes"
+
+---
+
+### 2. Introdução
+
+Explicar que organizar excursão pode parecer difícil, mas pode ser simples.
+
+---
+
+### 3. Passo a passo
+
+1. Definir destino
+2. Definir transporte
+3. Organizar passageiros
+4. Controlar pagamentos
+5. Planejar embarque
+
+---
+
+### 4. Problemas comuns
+
+- perda de controle
+- erros com passageiros
+- confusão em pagamentos
+
+---
+
+### 5. Formas de organizar
+
+Comparação:
+
+- caderno
+- planilha
+- sistema
+
+---
+
+### 6. Apresentação do SmartBus
+
+Mostrar como solução natural:
+
+- automatiza tudo
+- reduz erro
+- profissionaliza
+
+---
+
+### 7. CTA
+
+"Começar a organizar minha excursão"
+
+---
+
+### 8. Navegação entre páginas
+
+Mesma lógica do PRD piloto
+
+---
+
+## Critérios de sucesso
+
+- conteúdo educativo real
+- não parecer venda forçada
+- conduzir para o sistema

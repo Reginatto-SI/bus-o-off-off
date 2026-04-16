@@ -1,0 +1,148 @@
+# PRD — Página SEO: Como Gerenciar Excursões
+
+## Ação Desejada
+
+Criar a página pública `/como-gerenciar-excursoes`, focada em atrair usuários que já organizam excursões e precisam melhorar sua gestão.
+
+---
+
+## Contexto
+
+Essa página atua entre meio e fundo de funil.
+
+O usuário já organiza excursões, mas enfrenta problemas operacionais e busca melhorar.
+
+---
+
+## Público-alvo
+
+- organizadores frequentes
+- pequenos operadores
+- pessoas que já vendem excursões
+
+---
+
+## Problema principal
+
+O usuário enfrenta dificuldades como:
+
+- falta de organização geral
+- dificuldade de escalar operação
+- controle financeiro limitado
+- problemas no embarque
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+- gerenciar excursões exige organização
+- métodos manuais não escalam
+- existe uma forma simples de profissionalizar
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Como gerenciar excursões de forma organizada e profissional"
+
+---
+
+### 2. Subtítulo
+
+"Melhore o controle de passageiros, vendas e embarque sem complicação"
+
+---
+
+### 3. Introdução
+
+Explicar a evolução de quem sai do amador para o organizado.
+
+---
+
+### 4. Principais desafios
+
+- crescimento desorganizado
+- erros operacionais
+- dificuldade de controle financeiro
+- retrabalho
+
+---
+
+### 5. Formas de gestão
+
+Comparação:
+
+- controle manual
+- planilhas
+- sistema
+
+---
+
+### 6. Limitações das soluções manuais
+
+- não escalam
+- geram erro
+- consomem tempo
+
+---
+
+### 7. Apresentação do SmartBus
+
+Mostrar como solução:
+
+- centralização
+- automação
+- controle total
+- profissionalização
+
+---
+
+### 8. Benefícios
+
+- mais organização
+- mais controle
+- mais eficiência
+- crescimento estruturado
+
+---
+
+### 9. CTA principal
+
+"Gerenciar minhas excursões melhor"
+
+---
+
+### 10. CTA secundário
+
+"Conhecer o sistema"
+
+---
+
+### 11. Navegação entre páginas
+
+Bloco obrigatório:
+
+"Você também pode usar o sistema para:"
+
+- Sistema para caravanas  
+- Sistema para eventos  
+- Sistema para viagens  
+
+---
+
+### 12. Bloco final
+
+Reforço + CTA
+
+---
+
+## Critérios de sucesso
+
+- falar com quem já organiza excursões
+- mostrar evolução natural para sistema
+- não parecer conteúdo genérico
+- conduzir para decisão

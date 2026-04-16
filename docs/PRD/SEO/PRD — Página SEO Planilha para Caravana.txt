@@ -1,0 +1,88 @@
+# PRD — Página SEO: Planilha para Caravana
+
+## Ação Desejada
+
+Criar a página pública `/planilha-para-caravana`, focada em atrair usuários que buscam planilhas e apresentar o SmartBus como alternativa superior.
+
+---
+
+## Contexto
+
+Usuário busca solução simples e prática.
+
+---
+
+## Público-alvo
+
+- usuários de Excel
+- organizadores informais
+- líderes de grupos
+
+---
+
+## Problema principal
+
+- controle manual trabalhoso
+- erros em planilhas
+- dificuldade de atualização
+
+---
+
+## Proposta da página
+
+Mostrar:
+
+👉 como a planilha ajuda  
+👉 onde ela falha  
+👉 e a evolução para sistema
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Planilha para caravana: como organizar participantes e pagamentos"
+
+---
+
+### 2. Introdução
+
+Explicar uso comum de planilhas
+
+---
+
+### 3. O que a planilha resolve
+
+- lista de participantes
+- controle básico
+
+---
+
+### 4. Limitações
+
+- erros
+- falta de automação
+- dificuldade de escala
+
+---
+
+### 5. Comparação
+
+Planilha vs Sistema
+
+---
+
+### 6. SmartBus como evolução
+
+---
+
+### 7. CTA
+
+"Sair da planilha e organizar melhor"
+
+---
+
+### 8. Navegação entre páginas
+
+Mesmo padrão

@@ -1,0 +1,98 @@
+# PRD — Página SEO: Planilha para Excursões
+
+## Ação Desejada
+
+Criar a página `/planilha-para-excursoes`, focada em atrair usuários que buscam planilhas e apresentar o sistema como alternativa superior.
+
+---
+
+## Contexto
+
+Essa página captura usuários que estão buscando soluções simples.
+
+---
+
+## Público-alvo
+
+- usuários que usam Excel
+- organizadores manuais
+- pessoas buscando modelos prontos
+
+---
+
+## Problema principal
+
+- controle manual trabalhoso
+- erros em planilhas
+- dificuldade de atualização
+
+---
+
+## Proposta da página
+
+Mostrar:
+
+👉 como uma planilha funciona  
+👉 suas limitações  
+👉 e a evolução para um sistema
+
+---
+
+## Estrutura da página
+
+### 1. Headline
+
+"Planilha para excursões: como organizar passageiros e pagamentos"
+
+---
+
+### 2. Introdução
+
+Explicar o uso comum de planilhas
+
+---
+
+### 3. O que uma planilha resolve
+
+- lista de passageiros
+- controle básico
+
+---
+
+### 4. Limitações da planilha
+
+- erros
+- falta de automação
+- dificuldade de escala
+
+---
+
+### 5. Comparação
+
+Planilha vs Sistema
+
+---
+
+### 6. Apresentação do SmartBus
+
+Como evolução natural
+
+---
+
+### 7. CTA
+
+"Sair da planilha e organizar melhor"
+
+---
+
+### 8. Navegação entre páginas
+
+Mesma lógica do PRD piloto
+
+---
+
+## Critérios de sucesso
+
+- capturar tráfego
+- educar o usuário
+- conduzir para o sistema

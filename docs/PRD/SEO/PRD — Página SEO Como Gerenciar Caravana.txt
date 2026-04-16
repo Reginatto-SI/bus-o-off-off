@@ -1,0 +1,74 @@
+# PRD — Página SEO: Como Gerenciar Caravana
+
+## Ação Desejada
+
+Criar a página `/como-gerenciar-caravana`, focada em usuários que já organizam caravanas e querem melhorar.
+
+---
+
+## Contexto
+
+Usuário já atua e quer evoluir.
+
+---
+
+## Público-alvo
+
+- organizadores recorrentes
+- líderes de grupos
+
+---
+
+## Problema principal
+
+- crescimento desorganizado
+- erros operacionais
+- falta de controle
+
+---
+
+## Proposta
+
+Mostrar evolução para gestão profissional.
+
+---
+
+## Estrutura
+
+### 1. Headline
+
+"Como gerenciar caravanas de forma organizada e eficiente"
+
+---
+
+### 2. Desafios
+
+- falta de organização
+- retrabalho
+- dificuldade de escala
+
+---
+
+### 3. Comparação
+
+- manual vs sistema
+
+---
+
+### 4. SmartBus como solução
+
+- organização
+- automação
+- controle
+
+---
+
+### 5. CTA
+
+"Gerenciar minha caravana melhor"
+
+---
+
+### 6. Navegação entre páginas
+
+Mesmo padrão

@@ -1,0 +1,76 @@
+# PRD — Página SEO: Controle de Participantes para Caravana
+
+## Ação Desejada
+
+Criar a página `/controle-de-passageiros-caravana`, focada em atrair usuários que buscam controle de participantes.
+
+---
+
+## Contexto
+
+Usuário já percebe a necessidade de organização.
+
+---
+
+## Público-alvo
+
+- organizadores ativos
+- líderes de grupos recorrentes
+
+---
+
+## Problema principal
+
+- não sabe quem pagou
+- perde controle da lista
+- confusão no embarque
+
+---
+
+## Proposta
+
+Mostrar que controle manual não funciona bem.
+
+---
+
+## Estrutura
+
+### 1. Headline
+
+"Controle de participantes para caravana sem complicação"
+
+---
+
+### 2. Problemas comuns
+
+- listas desatualizadas
+- erros
+- confusão
+
+---
+
+### 3. Formas de controle
+
+- papel
+- planilha
+- sistema
+
+---
+
+### 4. SmartBus como solução
+
+- controle centralizado
+- dados organizados
+- menos erro
+
+---
+
+### 5. CTA
+
+"Organizar minha caravana agora"
+
+---
+
+### 6. Navegação entre páginas
+
+Mesmo padrão

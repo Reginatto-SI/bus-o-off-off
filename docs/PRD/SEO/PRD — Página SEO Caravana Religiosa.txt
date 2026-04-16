@@ -1,0 +1,67 @@
+# PRD — Página SEO: Caravana Religiosa
+
+## Ação Desejada
+
+Criar a página `/caravana-religiosa`, focada em grupos religiosos.
+
+---
+
+## Contexto
+
+Segmento forte e recorrente.
+
+---
+
+## Público-alvo
+
+- igrejas
+- líderes religiosos
+- grupos de peregrinação
+
+---
+
+## Problema principal
+
+- organizar grupos grandes
+- controlar participantes
+- gerenciar pagamentos
+
+---
+
+## Proposta
+
+Mostrar como organizar caravanas religiosas com mais segurança.
+
+---
+
+## Estrutura
+
+### 1. Headline
+
+"Como organizar caravanas religiosas com organização e segurança"
+
+---
+
+### 2. Problemas
+
+- controle manual
+- confusão
+- falta de organização
+
+---
+
+### 3. Solução
+
+SmartBus como ferramenta simples e confiável
+
+---
+
+### 4. CTA
+
+"Organizar minha caravana religiosa"
+
+---
+
+### 5. Navegação
+
+Mesmo padrão

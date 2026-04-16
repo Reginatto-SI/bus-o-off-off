@@ -1,0 +1,211 @@
+# PRD — Página SEO: Sistema para Caravanas (Versão Piloto Oficial)
+
+## Ação Desejada
+
+Criar a página pública `/sistema-para-caravanas`, focada em atrair usuários que organizam caravanas e converter esse tráfego em novos usuários do SmartBus BR.
+
+Esta página será o modelo base (piloto) para todas as páginas relacionadas a caravanas.
+
+---
+
+## Contexto
+
+O SmartBus BR já possui uma landing page principal com abordagem geral.
+
+A estratégia é criar páginas específicas por segmento, sendo caravanas o segundo pilar após excursões.
+
+Essa página deve:
+
+- atrair tráfego qualificado
+- se conectar com o público de caravanas
+- mostrar o sistema como solução
+- direcionar para conversão
+
+---
+
+## Público-alvo
+
+- organizadores de caravanas
+- líderes de grupos (igrejas, torcidas, excursões recorrentes)
+- responsáveis por viagens em grupo fechado
+- organizadores informais
+
+---
+
+## Problema principal
+
+O usuário enfrenta dificuldades como:
+
+- controle manual de participantes
+- organização via WhatsApp
+- dificuldade para gerenciar pagamentos
+- desorganização no embarque
+- falta de profissionalização
+
+---
+
+## Particularidade das caravanas
+
+Diferente de excursões, caravanas:
+
+- envolvem grupos recorrentes
+- possuem organização mais informal
+- dependem de confiança entre participantes
+- possuem forte vínculo emocional (religioso, esportivo)
+
+A página deve refletir esse contexto.
+
+---
+
+## Proposta da página
+
+Mostrar que:
+
+- organizar caravanas pode ser simples
+- existe uma forma organizada sem perder simplicidade
+- o SmartBus ajuda sem complicar
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+"Sistema para organizar caravanas com mais controle e menos complicação"
+
+---
+
+### 2. Subtítulo
+
+"Gerencie participantes, organize embarques e controle pagamentos de forma simples"
+
+---
+
+### 3. Bloco de problema
+
+Explicar o cenário comum:
+
+- listas no WhatsApp
+- anotações informais
+- falta de controle
+- confusão no embarque
+
+---
+
+### 4. Bloco de solução
+
+Apresentar o SmartBus como solução:
+
+- centralização das informações
+- controle de participantes
+- organização de embarque
+- apoio na gestão da caravana
+
+---
+
+### 5. Benefícios principais
+
+- controle dos participantes
+- organização do embarque
+- redução de erros
+- mais segurança
+- mais profissionalismo
+
+---
+
+### 6. Como funciona
+
+1. Crie sua caravana
+2. Defina embarques
+3. Organize participantes
+4. Controle tudo em um só lugar
+
+---
+
+### 7. Bloco de cobrança
+
+- sem mensalidade
+- pagamento por venda
+- possibilidade de repasse ao participante
+
+---
+
+### 8. Comparação implícita
+
+Mostrar superioridade sobre:
+
+- WhatsApp
+- listas manuais
+- planilhas
+
+---
+
+### 9. CTA principal
+
+"Começar minha caravana agora"
+
+---
+
+### 10. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 11. FAQ
+
+- posso usar sem CNPJ?
+- funciona para grupos religiosos?
+- serve para caravanas de futebol?
+
+---
+
+### 12. Bloco de navegação entre páginas (OBRIGATÓRIO)
+
+"Você também pode usar o sistema para:"
+
+- Sistema para excursões  
+- Sistema para eventos  
+- Sistema para viagens  
+
+Regras:
+
+- manter simples
+- não criar navegação complexa
+- seguir padrão visual da landing
+
+---
+
+### 13. Bloco final
+
+Reforço + CTA
+
+---
+
+## Critérios de sucesso
+
+- falar diretamente com organizadores de caravanas
+- manter linguagem simples
+- não misturar com excursões
+- conectar com realidade do usuário
+- manter padrão da landing
+- servir como modelo para páginas futuras
+
+---
+
+## Restrições
+
+- não criar novo layout
+- não misturar segmentos
+- não usar linguagem técnica
+- não inventar funcionalidades
+- não complicar a experiência
+
+---
+
+## Observações importantes
+
+- usar linguagem próxima do usuário
+- considerar contexto emocional (religioso / esportivo)
+- evitar tom corporativo
+- manter coerência com o produto

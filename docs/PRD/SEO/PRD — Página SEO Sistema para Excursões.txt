@@ -1,0 +1,230 @@
+# PRD — Página SEO: Sistema para Excursões (Versão Piloto Oficial)
+
+## Ação Desejada
+
+Criar a página pública `/sistema-para-excursoes`, focada em atrair usuários que buscam soluções para organizar excursões e converter esse tráfego em novos usuários do SmartBus BR.
+
+Esta página será o **modelo base (piloto)** para todas as futuras páginas SEO do sistema.
+
+---
+
+## Contexto
+
+O SmartBus BR já possui uma landing page principal que apresenta o produto de forma geral.
+
+A estratégia atual é expandir a aquisição orgânica criando páginas específicas por segmento, começando por excursões.
+
+A landing principal continuará sendo a página central de conversão.
+
+As páginas satélite terão o papel de:
+
+- atrair tráfego segmentado
+- educar o usuário
+- direcionar para conversão
+
+---
+
+## Público-alvo
+
+- organizadores de excursões
+- líderes de grupos de viagem
+- pequenos operadores
+- organizadores informais que utilizam planilhas ou WhatsApp
+
+---
+
+## Problema principal
+
+O usuário enfrenta dificuldades como:
+
+- controle manual de passageiros
+- organização via WhatsApp
+- dificuldade para gerenciar pagamentos
+- falta de organização nos embarques
+- risco de erros operacionais
+
+---
+
+## Proposta da página
+
+A página deve mostrar que:
+
+- organizar excursões pode ser simples
+- existe uma forma profissional de controlar tudo
+- o SmartBus resolve isso sem complexidade
+
+---
+
+## Estrutura da página
+
+### 1. Headline principal
+
+Deve ser direta, clara e focada em busca:
+
+"Sistema para organizar excursões e vender passagens com facilidade"
+
+---
+
+### 2. Subtítulo
+
+"Controle passageiros, organize embarques e gerencie suas excursões sem complicação"
+
+---
+
+### 3. Bloco de problema
+
+Explicar o cenário atual do usuário:
+
+- uso de planilhas
+- mensagens desorganizadas
+- falta de controle
+- retrabalho constante
+
+---
+
+### 4. Bloco de solução
+
+Apresentar o SmartBus como solução:
+
+- centralização das informações
+- controle de passageiros
+- organização de embarques
+- vendas online
+
+---
+
+### 5. Benefícios principais
+
+Apresentar de forma objetiva:
+
+- controle completo dos passageiros
+- organização do embarque
+- vendas online simples
+- redução de erros
+- mais profissionalismo
+
+---
+
+### 6. Como funciona
+
+Explicação simples:
+
+1. Crie sua excursão
+2. Defina pontos de embarque
+3. Venda passagens
+4. Controle seus passageiros
+
+---
+
+### 7. Bloco de cobrança
+
+Deixar claro:
+
+- sem mensalidade
+- pagamento por venda
+- possibilidade de repasse ao cliente
+
+---
+
+### 8. Comparação implícita
+
+Mostrar superioridade sobre:
+
+- planilhas
+- controle manual
+- WhatsApp
+
+---
+
+### 9. CTA principal
+
+Botão:
+
+"Começar agora"
+
+---
+
+### 10. CTA secundário
+
+"Ver como funciona"
+
+---
+
+### 11. FAQ
+
+Responder dúvidas comuns:
+
+- preciso de CNPJ?
+- tem mensalidade?
+- funciona para qualquer excursão?
+
+---
+
+### 12. Bloco de navegação entre páginas (OBRIGATÓRIO)
+
+A página deve conter um bloco simples de navegação para outras páginas do sistema.
+
+Objetivo:
+
+- permitir que o usuário descubra outros usos do sistema
+- aumentar o tempo de navegação
+- reforçar que o sistema atende diferentes cenários
+
+Formato:
+
+Título:
+
+"Você também pode usar o sistema para:"
+
+Opções:
+
+- Sistema para caravanas
+- Sistema para eventos
+- Sistema para viagens
+
+Regras:
+
+- não criar sistema de busca
+- não criar navegação complexa
+- manter layout simples
+- seguir padrão visual da landing
+
+---
+
+### 13. Bloco final
+
+Reforço da proposta + CTA principal
+
+---
+
+## Critérios de sucesso
+
+A página deve:
+
+- ser compreendida em menos de 5 segundos
+- focar exclusivamente em excursões
+- ter CTA visível e claro
+- não misturar segmentos
+- manter padrão visual da landing principal
+- servir como modelo para outras páginas
+
+---
+
+## Restrições
+
+- não criar novo layout
+- não alterar estrutura visual existente
+- não misturar outros segmentos
+- não usar linguagem técnica
+- não inventar funcionalidades
+- não complicar a experiência
+
+---
+
+## Observações importantes
+
+- linguagem simples e direta
+- foco no problema real do usuário
+- evitar texto genérico
+- manter coerência com a landing principal
+- esta página define o padrão de todas as próximas
