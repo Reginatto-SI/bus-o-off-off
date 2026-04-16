@@ -201,7 +201,7 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/minha-conta',
     icon: Settings
   }]
-}];
+}] as NavigationGroup[];
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
   return (
@@ -279,7 +279,7 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
+  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany, isRepresentative } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -289,26 +289,43 @@ export function AdminSidebar() {
   const publicShowcaseUrl = normalizedPublicSlug ? `${window.location.origin}/${normalizedPublicSlug}` : null;
 
   // Comentário: item dinâmico usa somente o nick público da empresa ativa, sem expor identificadores internos.
-  const groupsWithShowcaseLink = navigationGroups.map((group) => {
-    if (group.id !== 'eventos') return group;
+  const groupsWithDynamicItems = navigationGroups.map((group) => {
+    if (group.id === 'eventos') {
+      return {
+        ...group,
+        items: [
+          ...group.items,
+          {
+            id: 'public-showcase',
+            name: 'Minha Vitrine Pública',
+            href: publicShowcaseUrl ?? '/admin/empresa',
+            icon: Globe,
+            openInNewTab: Boolean(publicShowcaseUrl),
+            statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
+          },
+        ],
+      };
+    }
 
-    return {
-      ...group,
-      items: [
-        ...group.items,
-        {
-          id: 'public-showcase',
-          name: 'Minha Vitrine Pública',
-          href: publicShowcaseUrl ?? '/admin/empresa',
-          icon: Globe,
-          openInNewTab: Boolean(publicShowcaseUrl),
-          statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
-        },
-      ],
-    };
+    // Item condicional: link para o Painel Representante visível apenas se o usuário também é representante.
+    if (group.id === 'conta' && isRepresentative) {
+      return {
+        ...group,
+        items: [
+          {
+            name: 'Painel Representante',
+            href: '/representante/painel',
+            icon: BadgePercent,
+          },
+          ...group.items,
+        ],
+      };
+    }
+
+    return group;
   });
 
-  const visibleGroups = groupsWithShowcaseLink.map(group => ({
+  const visibleGroups = groupsWithDynamicItems.map(group => ({
     ...group,
     items: group.items.filter(item => {
       // Exceção pontual: mantém item "Templates de Layout" acessível ao sócio autorizado sem abrir outras áreas de developer.
