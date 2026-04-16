@@ -1,83 +1,50 @@
 
 
-# Plano: Corrigir fluxos de cadastro público + build errors nas edge functions
+# Plano: Adicionar acesso ao Painel Representante no sidebar admin
 
-## Diagnóstico
+## Problema atual
+1. Se o usuário é gerente **e** representante, o login redireciona para `/representante/painel` (prioridade do `isRepresentative`), e ele perde acesso direto ao admin.
+2. O sidebar admin não tem nenhum link para o painel de representante — quem tem os dois papéis fica preso em um ou outro.
 
-### Problema de produto (cadastro representante e empresa)
-Ambos os fluxos (`register-representative` e `register-company`) usam `listUsers()` para checar e-mail duplicado e **bloqueiam completamente** se o e-mail já existe — mesmo que o usuário pudesse legitimamente ter um segundo papel (ex: já é gerente de empresa e quer ser representante, ou vice-versa).
+## Comportamento proposto
 
-### Decisão recomendada: **Reutilizar conta existente e anexar papel**
-Justificativa:
-- A arquitetura já suporta múltiplos papéis por usuário (`user_roles` com constraint `user_id + company_id`)
-- Representante é vinculado por `representatives.user_id`, não por empresa
-- Bloquear completamente desperdiça conversão e gera confusão
-- O `create-user` interno (admin) já faz isso — reutiliza conta e vincula papel
+### 1. Corrigir prioridade de redirecionamento no login
+**Arquivo:** `src/pages/Login.tsx` (função `getRedirectByRole`)
 
-### Comportamento proposto
-1. Se e-mail já existe **e já é representante** → bloquear com mensagem clara: "Este e-mail já possui cadastro como representante."
-2. Se e-mail já existe **mas não é representante** → reutilizar conta, criar registro em `representatives`, não criar auth user novo
-3. Mesmo padrão para empresa: se e-mail existe mas não tem empresa → reutilizar conta, criar empresa e vincular papel `gerente`
-4. Se e-mail já existe e já tem empresa → bloquear com mensagem específica
+Inverter a prioridade: papéis administrativos (gerente, developer, operador) devem ter precedência sobre representante. O representante só é o destino padrão se o usuário **não** tiver papel admin.
 
-### Build errors (pré-existentes, não relacionados ao cadastro)
-Três grupos de erros precisam de correção:
-1. **`split-recipients-resolver.ts`** — tipo `SupabaseAdminClient` customizado é incompatível com `SupabaseClient` real. Afeta `asaas-webhook`, `create-asaas-payment`, `verify-payment-status`.
-2. **`create-asaas-payment/index.ts`** — `searchRes` pode ser `null` após o guard de `searchData`, mas o TypeScript não consegue inferir narrowing.
-3. **`process-email-queue/index.ts`** — campos `to`, `from`, `subject`, `html`, `text` do payload são `string | undefined` mas o SDK espera `string`.
+```
+Antes:  isRepresentative → /representante/painel (sempre primeiro)
+Depois: gerente/developer/operador → /admin/dashboard (primeiro)
+         vendedor → /vendedor/minhas-vendas
+         motorista → /motorista
+         isRepresentative (sem papel admin) → /representante/painel
+```
 
----
+### 2. Adicionar item condicional no sidebar
+**Arquivo:** `src/components/layout/AdminSidebar.tsx`
 
-## Parte 1 — Fluxo de cadastro de representante
+Adicionar um item "Painel Representante" no grupo "Conta" (ou como standalone), visível **apenas** quando `isRepresentative === true` no `useAuth()`.
 
-**Arquivo:** `supabase/functions/register-representative/index.ts`
+- Ícone: `UserCheck` ou `BadgePercent`
+- Href: `/representante/painel`
+- Condição: `isRepresentative` (já disponível no AuthContext)
+- Posição: dentro do grupo "Conta", acima de "Minha Conta"
 
-Mudança: quando e-mail já existe, em vez de bloquear, verificar se já tem registro em `representatives`:
-- Se já é representante → retornar erro específico: "Este e-mail já possui cadastro como representante. Faça login para acessar seu painel."
-- Se não é representante → reutilizar `existingUser.id`, criar registro em `representatives` e atualizar `profiles`. Não criar auth user novo. Retornar sucesso normalmente.
+### 3. Adicionar botão "Voltar ao Admin" no painel do representante
+**Arquivo:** `src/pages/representative/RepresentativeDashboard.tsx`
 
-**Arquivo:** `src/pages/public/RepresentativeRegistration.tsx`
-
-Mudança: quando o backend retorna sucesso para conta existente, o frontend tenta `signInWithPassword` — isso falha porque a senha informada não é a senha da conta existente. Neste caso, exibir mensagem orientando login: "Cadastro vinculado à sua conta existente. Faça login com sua senha atual para acessar o painel."
-
----
-
-## Parte 2 — Fluxo de cadastro de empresa
-
-**Arquivo:** `supabase/functions/register-company/index.ts`
-
-Mudança análoga:
-- Se e-mail já existe e já tem papel `gerente` em alguma empresa → bloquear com mensagem: "Este e-mail já possui uma empresa cadastrada. Faça login para gerenciar sua conta."
-- Se e-mail existe mas não tem empresa → reutilizar conta, criar empresa, vincular `gerente` via `user_roles`. Não criar auth user novo.
-
----
-
-## Parte 3 — Build errors
-
-### 3a. `split-recipients-resolver.ts` (linhas 9-26)
-Substituir o tipo `SupabaseAdminClient` customizado por `any` para eliminar incompatibilidade de tipagem profunda com o SDK real. Alternativa mais limpa que reescrever toda a cadeia de tipos.
-
-### 3b. `create-asaas-payment/index.ts` (linhas 891-912)
-Adicionar guard explícito `if (!searchRes)` antes de `if (!searchRes.ok)` — o TypeScript não consegue inferir que `searchData !== null` implica `searchRes !== null`.
-
-### 3c. `process-email-queue/index.ts` (linhas 279-284)
-Adicionar assertions `as string` ou fallback nos campos `to`, `from`, `subject`, `html`, `text` ao chamar `sendLovableEmail`.
-
----
+Se o usuário também tem papel admin (gerente/developer/operador), exibir um botão/link "Acessar Painel Admin" no header do dashboard de representante, apontando para `/admin/dashboard`.
 
 ## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/register-representative/index.ts` | Reutilizar conta existente quando e-mail já existe mas não é representante |
-| `supabase/functions/register-company/index.ts` | Reutilizar conta existente quando e-mail já existe mas não tem empresa |
-| `src/pages/public/RepresentativeRegistration.tsx` | Tratar cenário de conta existente reutilizada (orientar login) |
-| `src/pages/public/CompanyRegistration.tsx` | Tratar cenário de conta existente reutilizada (orientar login) |
-| `supabase/functions/_shared/split-recipients-resolver.ts` | Corrigir tipo `SupabaseAdminClient` |
-| `supabase/functions/create-asaas-payment/index.ts` | Guard de null em `searchRes` |
-| `supabase/functions/process-email-queue/index.ts` | Assertions de tipo nos campos de e-mail |
+| `src/pages/Login.tsx` | Priorizar papéis admin sobre representante no redirecionamento |
+| `src/components/layout/AdminSidebar.tsx` | Item condicional "Painel Representante" quando `isRepresentative` |
+| `src/pages/representative/RepresentativeDashboard.tsx` | Link "Voltar ao Admin" para quem tem papel admin |
 
-## Riscos residuais
-- Login automático não funciona para contas reutilizadas (senha diferente) — mitigado com redirect para `/login`
-- `listUsers()` sem paginação pode ser lento em volume alto (risco pré-existente, não introduzido aqui)
+## Riscos
+- Nenhum risco estrutural. Mudança mínima e condicional.
+- Representantes puros (sem papel admin) continuam sendo redirecionados para `/representante/painel` normalmente.
 
