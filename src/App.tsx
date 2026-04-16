@@ -57,6 +57,7 @@ import PublicCompanyShortLink from "./pages/public/PublicCompanyShortLink";
 import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 import AboutSmartbus from "./pages/public/AboutSmartbus";
 import RepresentativeRegistration from "./pages/public/RepresentativeRegistration";
+import SystemForExcursionsPage from "./pages/public/SystemForExcursionsPage";
 
 import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
@@ -95,6 +96,7 @@ const App = () => (
             <Route path="/politica-de-intermediacao" element={<IntermediationPolicy />} />
             {/* Página institucional enxuta para explicar a proposta da plataforma sem promessas exageradas. */}
             <Route path="/sobre-smartbus-br" element={<AboutSmartbus />} />
+            <Route path="/sistema-para-excursoes" element={<SystemForExcursionsPage />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
