@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Logo } from '@/components/Logo';
@@ -40,6 +40,7 @@ import {
   TrendingUp,
   ChevronDown,
   AlertTriangle,
+  LayoutDashboard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -56,8 +57,12 @@ export default function RepresentativeDashboard() {
     loading: authLoading,
     representativeProfile,
     isRepresentative,
+    userRole,
     signOut,
   } = useAuth();
+
+  // Usuários com papel admin podem voltar ao painel administrativo.
+  const hasAdminRole = userRole === 'gerente' || userRole === 'developer' || userRole === 'operador';
 
   const [loading, setLoading] = useState(true);
   const [companyLinks, setCompanyLinks] = useState<RepresentativeCompanyLink[]>([]);
@@ -487,10 +492,20 @@ export default function RepresentativeDashboard() {
           {/* Linha 1 (mobile): marca à esquerda e sair à direita; desktop mantém composição horizontal original. */}
           <div className="flex items-center justify-between sm:hidden">
             <Logo size="sm" className="max-w-[108px]" />
-            <Button variant="ghost" size="sm" onClick={signOut} className="h-9 gap-1.5 px-2.5">
-              <LogOut className="h-4 w-4 shrink-0" />
-              <span className="text-xs">Sair</span>
-            </Button>
+            <div className="flex items-center gap-1">
+              {hasAdminRole && (
+                <Button variant="ghost" size="sm" asChild className="h-9 gap-1.5 px-2.5">
+                  <Link to="/admin/dashboard">
+                    <LayoutDashboard className="h-4 w-4 shrink-0" />
+                    <span className="text-xs">Admin</span>
+                  </Link>
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={signOut} className="h-9 gap-1.5 px-2.5">
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span className="text-xs">Sair</span>
+              </Button>
+            </div>
           </div>
           {/* Linha 2 (mobile): contexto textual com melhor leitura e sem disputa de espaço. */}
           <div className="mt-1.5 min-w-0 sm:hidden">
@@ -506,10 +521,20 @@ export default function RepresentativeDashboard() {
                 <h1 className="truncate text-base font-semibold sm:text-lg">{representativeProfile.name}</h1>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={signOut} className="h-10 px-3">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sair</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              {hasAdminRole && (
+                <Button variant="outline" size="sm" asChild className="h-10 px-3">
+                  <Link to="/admin/dashboard">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    <span>Painel Admin</span>
+                  </Link>
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={signOut} className="h-10 px-3">
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sair</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>

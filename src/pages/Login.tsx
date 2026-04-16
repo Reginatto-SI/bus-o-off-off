@@ -18,10 +18,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 function getRedirectByRole(role: string | null, isRepresentative: boolean): string {
-  if (isRepresentative) return "/representante/painel";
+  // Papéis administrativos têm precedência sobre representante para evitar prender admins no painel rep.
+  if (role === "gerente" || role === "developer" || role === "operador") return "/admin/dashboard";
   if (role === "vendedor") return "/vendedor/minhas-vendas";
   if (role === "motorista") return "/motorista";
-  // Usuários administrativos entram sempre pelo dashboard como página inicial estratégica.
+  if (isRepresentative) return "/representante/painel";
   return "/admin/dashboard";
 }
 
