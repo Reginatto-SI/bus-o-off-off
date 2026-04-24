@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  logCriticalPaymentIssue,
   logPaymentTrace,
   logSaleIntegrationEvent,
   logSaleOperationalEvent,
@@ -79,6 +80,28 @@ function jsonResponse(payload: Record<string, unknown>, status: number) {
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function buildFinancialSplitSnapshot(params: {
+  grossAmount: number;
+  platformFeePercent: number;
+  socioSplitPercent: number;
+  representativePercent: number;
+}) {
+  const grossAmountCents = Math.round(params.grossAmount * 100);
+  const platformFeeCents = Math.round(
+    grossAmountCents * (params.platformFeePercent / 100),
+  );
+  const socioFeeCents = params.socioSplitPercent > 0
+    ? Math.round(platformFeeCents * (params.socioSplitPercent / 100))
+    : 0;
+
+  return {
+    platformFeeTotal: platformFeeCents / 100,
+    socioFeeAmount: socioFeeCents / 100,
+    platformNetAmount: (platformFeeCents - socioFeeCents) / 100,
+    representativePercent: params.representativePercent,
+  };
 }
 
 function calculatePlatformFee(unitPrice: number, feePercent: number): number {
@@ -748,6 +771,14 @@ serve(async (req) => {
       walletId: recipient.walletId,
       percentualValue: recipient.percentualValue,
     }));
+    const financialSnapshot = buildFinancialSplitSnapshot({
+      grossAmount,
+      platformFeePercent,
+      socioSplitPercent,
+      representativePercent: splitResolution.representative.eligible
+        ? splitResolution.representative.percent
+        : 0,
+    });
 
     const totalFee = splitArray.reduce((sum, recipient) => sum + recipient.percentualValue, 0);
     if (totalFee > 100) {
@@ -1127,15 +1158,66 @@ serve(async (req) => {
       split_recipients: splitArray.length,
     });
 
-    await supabaseAdmin
+    const { error: saleUpdateError } = await supabaseAdmin
       .from("sales")
       .update({
         asaas_payment_id: paymentData.id,
         asaas_payment_status: paymentData.status,
         payment_method: normalizedPaymentMethod,
         payment_environment: paymentContext.environment,
+        // Bloqueante crítico: congelamos o snapshot financeiro usado na criação da cobrança.
+        // Webhook/verify reutilizam estes valores para evitar recalcular com configuração mutável.
+        split_snapshot_platform_fee_percent: platformFeePercent,
+        split_snapshot_socio_split_percent: socioSplitPercent,
+        split_snapshot_representative_percent: financialSnapshot.representativePercent,
+        split_snapshot_platform_fee_total: financialSnapshot.platformFeeTotal,
+        split_snapshot_socio_fee_amount: financialSnapshot.socioFeeAmount,
+        split_snapshot_platform_net_amount: financialSnapshot.platformNetAmount,
+        split_snapshot_source: "create-asaas-payment",
+        split_snapshot_captured_at: new Date().toISOString(),
       })
       .eq("id", sale.id);
+
+    if (saleUpdateError) {
+      const criticalDetail = `sale_update_after_gateway_payment_failed:${saleUpdateError.message}`;
+      await logCriticalPaymentIssue({
+        supabaseAdmin,
+        source: "create-asaas-payment",
+        errorCode: "sale_update_after_gateway_payment_failed",
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentEnv,
+        paymentId: paymentData.id,
+        detail: criticalDetail,
+      });
+
+      await insertIntegrationLog(
+        "failed",
+        "Cobrança criada no Asaas, mas falhou a persistência local da venda",
+        {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentEnv,
+          asaas_payment_id: paymentData.id,
+        },
+        {
+          error: criticalDetail,
+        },
+        paymentData.id,
+        "sale_update_after_gateway_payment_failed",
+      );
+
+      return jsonResponse(
+        {
+          error:
+            "Cobrança criada no gateway, mas falhou a persistência local. Acione o suporte com o sale_id e payment_id.",
+          error_code: "sale_update_after_gateway_payment_failed",
+          sale_id: sale.id,
+          payment_id: paymentData.id,
+        },
+        500,
+      );
+    }
 
     await logSaleOperationalEvent({
       supabaseAdmin,

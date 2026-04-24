@@ -3,6 +3,9 @@ export type PaymentOwnerType = "company" | "platform" | "unknown";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export type PaymentTraceLevel = "info" | "warn" | "error";
+export type CriticalPaymentErrorCode =
+  | "sale_update_after_gateway_payment_failed"
+  | "payment_confirmed_ticket_generation_failed";
 export type PaymentFlowResult =
   | "started"
   | "success"
@@ -171,4 +174,50 @@ export async function logSaleIntegrationEvent(params: {
       error_message: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+/**
+ * Blindagem operacional mínima:
+ * centraliza formato dos incidentes críticos para manter leitura humana padronizada
+ * e facilitar automação futura sem mudar a lógica de pagamento.
+ */
+export async function logCriticalPaymentIssue(params: {
+  supabaseAdmin: ReturnType<typeof createClient<any>>;
+  source: string;
+  errorCode: CriticalPaymentErrorCode;
+  saleId?: string | null;
+  companyId?: string | null;
+  paymentEnvironment?: string | null;
+  paymentId?: string | null;
+  detail?: string | null;
+}) {
+  const normalizedMessage =
+    params.errorCode === "sale_update_after_gateway_payment_failed"
+      ? "Cobrança criada no gateway, mas a persistência local da venda falhou"
+      : "Pagamento confirmado sem ticket após tentativa imediata de recuperação";
+
+  await logSaleOperationalEvent({
+    supabaseAdmin: params.supabaseAdmin,
+    saleId: params.saleId ?? null,
+    companyId: params.companyId ?? null,
+    action: params.errorCode,
+    source: params.source,
+    result: "error",
+    paymentEnvironment: params.paymentEnvironment ?? null,
+    errorCode: params.errorCode,
+    detail: [
+      normalizedMessage,
+      params.paymentId ? `payment_id=${params.paymentId}` : null,
+      params.detail ?? null,
+    ].filter(Boolean).join(" | "),
+  });
+
+  logPaymentTrace("error", params.source, params.errorCode, {
+    sale_id: params.saleId ?? null,
+    company_id: params.companyId ?? null,
+    payment_environment: params.paymentEnvironment ?? null,
+    payment_id: params.paymentId ?? null,
+    message: normalizedMessage,
+    detail: params.detail ?? null,
+  });
 }

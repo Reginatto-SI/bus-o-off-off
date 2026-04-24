@@ -95,7 +95,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_captured_at")
       .eq("id", saleIdFromRequest)
       .single();
 
@@ -626,7 +626,38 @@ serve(async (req) => {
         seat_locks_cleanup: "attempted",
       });
 
-      if (company?.platform_fee_percent != null) {
+      if (sale.split_snapshot_captured_at) {
+        // Bloqueante crítico: reusar snapshot congelado na criação da cobrança
+        // para impedir divergência com configuração atual da empresa.
+        await supabaseAdmin
+          .from("sales")
+          .update({
+            gross_amount: sale.gross_amount ?? (sale.unit_price * sale.quantity),
+            platform_fee_total: sale.split_snapshot_platform_fee_total ?? null,
+            socio_fee_amount: sale.split_snapshot_socio_fee_amount ?? null,
+            platform_net_amount: sale.split_snapshot_platform_net_amount ?? null,
+          })
+          .eq("id", saleIdFromRequest);
+
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: saleIdFromRequest,
+          companyId: sale.company_id,
+          action: "payment_confirmed",
+          source: "verify-payment-status",
+          result: "payment_confirmed",
+          paymentEnvironment: paymentContext.environment,
+          detail: "financial_snapshot_source=frozen_sale_snapshot",
+        });
+      } else if (company?.platform_fee_percent != null) {
+        logPaymentTrace("warn", "verify-payment-status", "financial_snapshot_source_dynamic_recalculation", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          financial_snapshot_source: "dynamic_recalculation",
+          reason: "snapshot_not_found_on_sale",
+        });
+
         const platformFeePercent = Number(company.platform_fee_percent);
         const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
 
