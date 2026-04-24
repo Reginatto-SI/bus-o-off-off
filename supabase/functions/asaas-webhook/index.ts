@@ -658,7 +658,7 @@ serve(async (req) => {
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .select(
-        "id, company_id, status, unit_price, quantity, gross_amount, payment_environment, representative_id",
+        "id, company_id, status, unit_price, quantity, gross_amount, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_captured_at",
       )
       .eq("id", saleId)
       .maybeSingle();
@@ -1088,6 +1088,41 @@ async function upsertFinancialSnapshot(
   payment: any,
   paymentEnvironment: PaymentEnvironment,
 ) {
+  // Congelamento crítico: se o snapshot financeiro já existe na venda (capturado no create),
+  // webhook não recalcula percentuais para evitar divergência temporal com configuração atual.
+  if (sale.split_snapshot_captured_at) {
+    await supabaseAdmin
+      .from("sales")
+      .update({
+        gross_amount: sale.gross_amount ?? sale.unit_price * sale.quantity,
+        platform_fee_total: sale.split_snapshot_platform_fee_total ?? null,
+        socio_fee_amount: sale.split_snapshot_socio_fee_amount ?? null,
+        platform_net_amount: sale.split_snapshot_platform_net_amount ?? null,
+        asaas_payment_status: payment.status,
+      })
+      .eq("id", saleId);
+
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId,
+      companyId,
+      action: "payment_confirmed",
+      source: "asaas-webhook",
+      result: "success",
+      paymentEnvironment,
+      detail: "financial_snapshot_source=frozen_sale_snapshot",
+    });
+    return;
+  }
+
+  logPaymentTrace("warn", "asaas-webhook", "financial_snapshot_source_dynamic_recalculation", {
+    sale_id: saleId,
+    company_id: companyId,
+    payment_environment: paymentEnvironment,
+    financial_snapshot_source: "dynamic_recalculation",
+    reason: "snapshot_not_found_on_sale",
+  });
+
   const { data: company } = await supabaseAdmin
     .from("companies")
     .select("platform_fee_percent, socio_split_percent")

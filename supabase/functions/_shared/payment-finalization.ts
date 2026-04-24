@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // deno-lint-ignore no-explicit-any
 type SupabaseAdmin = ReturnType<typeof createClient<any>>;
 import {
+  logCriticalPaymentIssue,
   logPaymentTrace,
   logSaleOperationalEvent,
 } from "./payment-observability.ts";
@@ -241,6 +242,8 @@ export async function finalizeConfirmedPayment(params: {
   } = params;
   const allowStatusUpdate = params.allowStatusUpdate ?? true;
   const writeSaleLog = params.writeSaleLog ?? true;
+  // Proteção mínima contra retry em loop indireto dentro da mesma execução.
+  let ticketRetryAttemptedInThisRun = false;
 
   // Etapa 4: trilha operacional mínima por venda para facilitar suporte por sale_id.
   await logSaleOperationalEvent({
@@ -334,6 +337,71 @@ export async function finalizeConfirmedPayment(params: {
       paymentEnvironment: sale.payment_environment ?? null,
       errorCode: "inconsistent_paid_without_ticket",
       detail: ticketResult.status,
+    });
+
+    /**
+     * Mitigação mínima do bloqueante crítico:
+     * tentamos uma reconciliação imediata na mesma transação lógica quando
+     * o pagamento confirmou sem tickets. Não altera regra de negócio, apenas
+     * evita depender exclusivamente de ação manual quando o staging ainda existe.
+     */
+    const retryTicketResult = !ticketRetryAttemptedInThisRun
+      ? await createTicketsFromPassengersShared(
+        supabaseAdmin,
+        sale.id,
+        sale.company_id,
+      )
+      : {
+        status: "error" as const,
+        message: "retry_guard_already_attempted",
+      };
+    ticketRetryAttemptedInThisRun = true;
+
+    const { count: retriedTicketsCount } = await supabaseAdmin
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("sale_id", sale.id);
+
+    if ((retriedTicketsCount ?? 0) > 0) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_finalize_recovered_after_ticket_retry",
+        source,
+        result: "success",
+        paymentEnvironment: sale.payment_environment ?? null,
+        detail: `first_attempt=${ticketResult.status};retry_attempt=${retryTicketResult.status}`,
+      });
+
+      return {
+        ok: true,
+        httpStatus: 200,
+        state: transitionedToPaid ? "finalized" : "already_finalized",
+        message: `Venda ${sale.id} recuperada após retry imediato de geração de tickets`,
+        ticketStatus: retryTicketResult.status,
+        ticketsCount: retriedTicketsCount ?? 0,
+      };
+    }
+
+    // Estado crítico rastreável: pagamento confirmado sem tickets mesmo após retry imediato.
+    await logCriticalPaymentIssue({
+      supabaseAdmin,
+      source,
+      errorCode: "payment_confirmed_ticket_generation_failed",
+      saleId: sale.id,
+      companyId: sale.company_id,
+      paymentEnvironment: sale.payment_environment ?? null,
+      paymentId: paymentId ?? null,
+      detail: `first_attempt=${ticketResult.status};retry_attempt=${retryTicketResult.status}`,
+    });
+
+    await supabaseAdmin.from("sale_logs").insert({
+      sale_id: sale.id,
+      action: "payment_confirmed_ticket_generation_failed",
+      description:
+        `Pagamento confirmado via ${source}${eventType ? ` (${eventType})` : ""}, mas sem tickets após retry imediato. Ação manual: executar reconcile-sale-payment.`,
+      company_id: sale.company_id,
     });
 
     return {
@@ -446,6 +514,22 @@ export async function finalizeConfirmedPayment(params: {
     paymentEnvironment: sale.payment_environment ?? null,
     detail: `ticket_status=${ticketResult.status}`,
   });
+
+  // Validação leve pós-confirmação: reforça visibilidade sem alterar o fluxo.
+  const postValidation = await inspectSaleConsistency(supabaseAdmin, sale.id);
+  if (postValidation.state !== "healthy" || postValidation.ticketsCount <= 0) {
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "payment_post_confirmation_validation_failed",
+      source,
+      result: "warning",
+      paymentEnvironment: sale.payment_environment ?? null,
+      errorCode: "post_confirmation_validation_failed",
+      detail: `state=${postValidation.state};tickets_count=${postValidation.ticketsCount}`,
+    });
+  }
 
   return {
     ok: true,
