@@ -519,8 +519,7 @@ serve(async (req) => {
               message: "Vínculo asaas_payment_id recuperado via externalReference",
               warningCode: "asaas_payment_id_recovered",
               httpStatus: 200,
-              paymentId: recoveredId,
-              payloadJson: { sale_id: sale.id, lookup_by: "externalReference" },
+              payloadJson: { sale_id: sale.id, lookup_by: "externalReference", recovered_payment_id: recoveredId },
               responseJson: { recovered_payment_id: recoveredId, recovered_status: recoveredStatus ?? null },
             });
 
