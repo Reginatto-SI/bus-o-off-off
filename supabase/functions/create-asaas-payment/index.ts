@@ -377,7 +377,7 @@ serve(async (req) => {
             status: existingBody.status ?? sale.asaas_payment_status,
             url: existingBody.invoiceUrl ?? existingBody.bankSlipUrl ?? null,
             reused: true,
-          });
+          }, 200);
         }
 
         // Se a cobrança existente não puder ser lida (ex.: 401 por rotação de chave),
