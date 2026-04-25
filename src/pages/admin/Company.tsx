@@ -1493,8 +1493,9 @@ export default function CompanyPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
+                        {/* Ajuste responsivo: garante que os dois blocos respeitem a largura do container no mobile. */}
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-                          <div className="space-y-4">
+                          <div className="min-w-0 space-y-4">
                             <div className="space-y-2">
                               <Label htmlFor="public_slug">Seu nick (link público)</Label>
                               <Input
@@ -1505,16 +1506,18 @@ export default function CompanyPage() {
                               />
                             </div>
 
+                            {/* Ajuste responsivo: URLs longas quebram linha sem gerar overflow horizontal. */}
                             <div className="grid gap-2 rounded-md border p-3 text-sm">
-                              <div className="flex items-start gap-2">
+                              <div className="flex min-w-0 items-start gap-2">
                                 <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                                <div>
-                                  <p className="font-medium">Curto: {shortLink}</p>
-                                  <p className="text-muted-foreground">Canônico: {canonicalLink}</p>
+                                <div className="min-w-0 space-y-1">
+                                  <p className="break-all font-medium">Curto: {shortLink}</p>
+                                  <p className="break-all text-muted-foreground">Canônico: {canonicalLink}</p>
                                 </div>
                               </div>
                             </div>
 
+                            {/* Ajuste responsivo: botão ocupa largura total no mobile para evitar compressão/estouro. */}
                             <div className="flex flex-wrap items-center gap-2">
                               {slugCheckLoading ? (
                                 <Badge variant="secondary" className="gap-1">
@@ -1540,6 +1543,7 @@ export default function CompanyPage() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 disabled={!normalizedPublicSlug}
                                 onClick={async () => {
                                   await navigator.clipboard.writeText(shortLink);
@@ -1564,22 +1568,25 @@ export default function CompanyPage() {
                               </div>
 
                               <div className="mt-3 rounded-md border bg-muted/20 p-3">
-                                <div className="flex items-start gap-2">
+                                {/* Ajuste responsivo: conteúdo do link oficial pode encolher e quebrar dentro do card. */}
+                                <div className="flex min-w-0 items-start gap-2">
                                   <Link2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                                  <div>
+                                  <div className="min-w-0">
                                     <p className="font-medium break-all">{referralLink || 'Carregando link de indicação...'}</p>
                                     {company?.referral_code && (
-                                      <p className="text-xs text-muted-foreground">Código: {company.referral_code}</p>
+                                      <p className="break-all text-xs text-muted-foreground">Código: {company.referral_code}</p>
                                     )}
                                   </div>
                                 </div>
                               </div>
 
+                              {/* Ajuste responsivo: ação principal fica clicável em tela pequena sem cortar texto. */}
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <Button
                                   type="button"
                                   variant="outline"
                                   size="sm"
+                                  className="w-full sm:w-auto"
                                   disabled={!referralLink}
                                   onClick={async () => {
                                     await navigator.clipboard.writeText(referralLink);
@@ -1593,7 +1600,8 @@ export default function CompanyPage() {
                             </div>
                           </div>
 
-                          <div className="rounded-md border bg-muted/20 p-3">
+                          {/* Ajuste responsivo: card do QR respeita largura do container no mobile. */}
+                          <div className="min-w-0 rounded-md border bg-muted/20 p-3">
                             <div className="space-y-3">
                               <p className="text-sm font-medium">QR Code da vitrine</p>
                               <div className="flex min-h-[220px] items-center justify-center rounded-md border bg-white p-3">
