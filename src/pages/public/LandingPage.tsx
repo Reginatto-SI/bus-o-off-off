@@ -50,6 +50,7 @@ import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg, type QrDownloadResult } from "@/lib/showcaseShare";
 import { toast } from "sonner";
 import { LandingHeader } from "@/components/public/LandingHeader";
+import logo from "@/assets/logo.png";
 // Mock controlado da landing: mantém a vitrine comercial estável mesmo sem depender do carregamento do catálogo real.
 // Ajuste de UX: usamos nomes atemporais e status de data genéricos para evitar percepção de desatualização na vitrine pública.
 // Ajuste de copy comercial: trocamos "reservaram" por mensagens de venda/vaga garantida para aumentar clareza e credibilidade.
