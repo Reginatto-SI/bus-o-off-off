@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface StartPlatformFeeCheckoutParams {
   saleId: string;
+  mode?: 'create_or_reuse' | 'consult_only';
   onWaived?: () => void | Promise<void>;
   onCheckoutOpened?: (url: string) => void | Promise<void>;
+  onMissingReusablePayment?: () => void | Promise<void>;
 }
 
 export type PlatformFeeCheckoutResult =
@@ -21,16 +23,26 @@ export type PlatformFeeCheckoutResult =
  */
 export async function startPlatformFeeCheckout({
   saleId,
+  mode = 'create_or_reuse',
   onWaived,
   onCheckoutOpened,
+  onMissingReusablePayment,
 }: StartPlatformFeeCheckoutParams): Promise<PlatformFeeCheckoutResult> {
   try {
     const { data, error } = await supabase.functions.invoke('create-platform-fee-checkout', {
-      body: { sale_id: saleId },
+      body: {
+        sale_id: saleId,
+        consult_only: mode === 'consult_only',
+      },
     });
 
     if (error) {
-      toast.error(data?.error || 'Erro ao criar checkout da taxa');
+      if (data?.error_code === 'consult_only_without_reusable_payment') {
+        toast.info(data?.error || 'Não existe cobrança reutilizável para consulta desta taxa.');
+        await onMissingReusablePayment?.();
+      } else {
+        toast.error(data?.error || 'Erro ao criar checkout da taxa');
+      }
       return { status: 'error' };
     }
 

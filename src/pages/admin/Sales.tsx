@@ -1270,6 +1270,7 @@ export default function Sales() {
       // exatamente a mesma cobrança para não criar narrativas/erros diferentes.
       const result = await startPlatformFeeCheckout({
         saleId: sale.id,
+        mode: 'create_or_reuse',
         onWaived: fetchSales,
       });
 
@@ -1279,6 +1280,21 @@ export default function Sales() {
     } finally {
       setPayingFee(false);
     }
+  };
+
+  const handleOpenExistingPlatformFee = async (sale: Sale): Promise<boolean> => {
+    if (!(sale as any).platform_fee_payment_id) {
+      toast.info('Nenhuma cobrança vinculada foi encontrada para esta venda.');
+      return false;
+    }
+
+    const result = await startPlatformFeeCheckout({
+      saleId: sale.id,
+      mode: 'consult_only',
+      onCheckoutOpened: fetchSales,
+    });
+
+    return result.status === 'opened' || result.status === 'already_paid';
   };
 
   /**
@@ -1314,9 +1330,9 @@ export default function Sales() {
     const convergedAsPaid = await verifyPlatformFeeStatus(sale);
     if (convergedAsPaid) return;
 
-    // Se já existe cobrança vinculada, abrimos/reutilizamos a mesma via fluxo oficial.
+    // Consulta não pode criar cobrança nova: apenas tenta reabrir cobrança já vinculada.
     if ((sale as any).platform_fee_payment_id) {
-      await handlePayPlatformFee(sale);
+      await handleOpenExistingPlatformFee(sale);
       return;
     }
 
@@ -1337,12 +1353,13 @@ export default function Sales() {
     const convergedAsPaid = await verifyPlatformFeeStatus(sale);
     if (convergedAsPaid) return;
 
-    // Regra de segurança: se já existe cobrança, consultamos/reutilizamos antes de criar nova.
+    // Regra de segurança: reprocessar sempre consulta/reutiliza cobrança vinculada primeiro.
     if ((sale as any).platform_fee_payment_id) {
-      await handlePayPlatformFee(sale);
-      return;
+      const reusedExisting = await handleOpenExistingPlatformFee(sale);
+      if (reusedExisting) return;
     }
 
+    // Somente aqui o fluxo pode solicitar criação de nova cobrança (quando permitido no backend).
     await handlePayPlatformFee(sale);
   };
 
