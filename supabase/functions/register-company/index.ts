@@ -181,6 +181,9 @@ serve(async (req) => {
     const generatedReferralCode = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
 
     // Criar empresa.
+    // Comentário de manutenção: o `public_slug` não é enviado aqui propositalmente,
+    // pois a geração automática da vitrine ocorre no banco (trigger) com regra
+    // determinística de normalização + unicidade sequencial.
     const { data: company, error: companyError } = await supabaseAdmin
       .from("companies")
       .insert({
