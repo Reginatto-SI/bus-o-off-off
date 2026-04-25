@@ -58,6 +58,7 @@ import IntermediationPolicy from "./pages/public/IntermediationPolicy";
 import AboutSmartbus from "./pages/public/AboutSmartbus";
 import RepresentativeRegistration from "./pages/public/RepresentativeRegistration";
 import SystemForExcursionsPage from "./pages/public/SystemForExcursionsPage";
+import HowToOrganizeExcursionPage from "./pages/public/HowToOrganizeExcursionPage";
 
 import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
@@ -97,6 +98,7 @@ const App = () => (
             {/* Página institucional enxuta para explicar a proposta da plataforma sem promessas exageradas. */}
             <Route path="/sobre-smartbus-br" element={<AboutSmartbus />} />
             <Route path="/sistema-para-excursoes" element={<SystemForExcursionsPage />} />
+            <Route path="/como-organizar-excursao" element={<HowToOrganizeExcursionPage />} />
             
             {/* Seller Portal (mobile-first, fora do admin) */}
             <Route path="/vendedor/minhas-vendas" element={<SellerDashboard />} />
