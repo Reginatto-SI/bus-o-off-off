@@ -568,8 +568,18 @@ export default function Sales() {
       setBoardingTimeMap({});
       setLatestLockExpiryMap({});
     } else {
-      setSales((data ?? []) as unknown as Sale[]);
+      const nextSales = (data ?? []) as unknown as Sale[];
+      setSales(nextSales);
       setTotalSalesCount(count ?? 0);
+
+      // Mantém o modal de detalhes sincronizado com a fonte oficial da listagem.
+      // Isso evita exibir status antigo (ex.: reservado) após convergência para pago.
+      if (detailSale?.id) {
+        const refreshedDetail = nextSales.find((sale) => sale.id === detailSale.id) ?? null;
+        if (refreshedDetail) {
+          setDetailSale(refreshedDetail);
+        }
+      }
     }
 
     // Busca apenas as poltronas das vendas da página atual para reduzir custo de consulta.
@@ -2352,16 +2362,30 @@ export default function Sales() {
                                 </span>
                               </div>
                             </div>
-                            {/* CTA para pagar taxa pendente */}
+                            {/*
+                              CTA operacional da taxa:
+                              - com cobrança já vinculada, primeiro consultamos/convergimos via verify-payment-status;
+                              - sem cobrança vinculada, seguimos para gerar/pagar taxa.
+                            */}
                             {((detailSale as any).platform_fee_status === 'pending' || (detailSale as any).platform_fee_status === 'failed') && isGerente && (
                               <Button
                                 size="sm"
                                 className="mt-2"
-                                onClick={() => handlePayPlatformFee(detailSale)}
+                                onClick={() => {
+                                  const hasLinkedFee = Boolean((detailSale as any).platform_fee_payment_id);
+                                  if (hasLinkedFee) {
+                                    handleConsultPlatformFee(detailSale);
+                                    return;
+                                  }
+
+                                  handlePayPlatformFee(detailSale);
+                                }}
                                 disabled={payingFee}
                               >
                                 {payingFee ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
-                                Pagar Taxa ({formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)})
+                                {(detailSale as any).platform_fee_payment_id
+                                  ? 'Consultar Taxa'
+                                  : `Pagar Taxa (${formatCurrencyBRL((detailSale as any).platform_fee_amount ?? 0)})`}
                               </Button>
                             )}
                           </div>
