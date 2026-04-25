@@ -11,6 +11,7 @@ interface StartPlatformFeeCheckoutParams {
 export type PlatformFeeCheckoutResult =
   | { status: 'opened'; url: string }
   | { status: 'waived' }
+  | { status: 'already_paid' }
   | { status: 'error' };
 
 /**
@@ -37,6 +38,23 @@ export async function startPlatformFeeCheckout({
       toast.success('Taxa da plataforma dispensada explicitamente (valor abaixo do mínimo do gateway). A venda permanece reservada até quitação válida.');
       await onWaived?.();
       return { status: 'waived' };
+    }
+
+    // Blindagem de compatibilidade: backend pode retornar convergência idempotente
+    // sem necessidade de gerar nova cobrança (ex.: já paga no Asaas).
+    if (data?.already_paid) {
+      toast.success(data?.message || 'Taxa da plataforma já estava paga e foi convergida.');
+      await onWaived?.();
+      return { status: 'already_paid' };
+    }
+
+    // Reuso explícito de cobrança existente: mantém o mesmo comportamento de abrir URL
+    // quando disponível e evita tratar como erro de criação.
+    if (data?.reused_existing_payment && data?.url) {
+      window.open(data.url, '_blank');
+      toast.info('Cobrança existente da taxa reutilizada. Após o pagamento, atualize a listagem.');
+      await onCheckoutOpened?.(data.url);
+      return { status: 'opened', url: data.url };
     }
 
     if (!data?.url) {
