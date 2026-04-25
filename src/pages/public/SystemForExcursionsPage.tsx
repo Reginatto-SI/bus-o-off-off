@@ -68,10 +68,26 @@ const DIFFERENTIAL_ITEMS = [
 ];
 
 const EXCURSION_TYPES = [
-  "Bate-volta para shows e festivais",
-  "Caravanas religiosas com saída em grupo",
-  "Excursões para jogos e campeonatos",
-  "Viagens de compras em grupo",
+  {
+    icon: CalendarCheck2,
+    title: "Bate-volta para shows e festivais",
+    description: "Organize saídas pontuais com embarque e confirmação centralizados.",
+  },
+  {
+    icon: Users,
+    title: "Caravanas religiosas com saída em grupo",
+    description: "Mantenha lista de passageiros e comunicação da viagem no mesmo fluxo.",
+  },
+  {
+    icon: Ticket,
+    title: "Excursões para jogos e campeonatos",
+    description: "Venda passagens online e acompanhe lotação antes da saída.",
+  },
+  {
+    icon: MapPin,
+    title: "Viagens de compras em grupo",
+    description: "Defina pontos de saída e controle o embarque sem planilhas soltas.",
+  },
 ];
 
 // Descrições orientadas por cenário para aumentar clareza de valor em cada rota satélite.
@@ -485,9 +501,17 @@ export default function SystemForExcursionsPage() {
             <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
               <h2 className="text-2xl font-bold text-foreground sm:text-3xl">O sistema funciona para diferentes tipos de excursão</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Refino visual: reaproveita padrão de card com ícone + microdescrição para evitar aparência crua. */}
                 {EXCURSION_TYPES.map((type) => (
-                  <div key={type} className="rounded-2xl border border-border bg-muted/30 p-4 text-sm font-medium text-foreground">
-                    {type}
+                  <div
+                    key={type.title}
+                    className="rounded-2xl border border-border bg-muted/30 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <type.icon className="h-4 w-4" />
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{type.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{type.description}</p>
                   </div>
                 ))}
               </div>
