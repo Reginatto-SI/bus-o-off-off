@@ -992,6 +992,42 @@ serve(async (req) => {
       split_recipients_count: splitResolution.recipients.length,
     });
 
+    // Regra fail-open obrigatória: ausência de wallet interna nunca bloqueia a venda.
+    // Mantemos o valor na plataforma e registramos pendência de repasse para auditoria.
+    const failOpenReasons: string[] = [];
+
+    if (splitResolution.socio.reason === "wallet_missing") {
+      failOpenReasons.push("socio_wallet_missing");
+      logPaymentTrace("warn", "create-asaas-payment", "socio_wallet_missing_repass_pending", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        socio_reason: splitResolution.socio.reason,
+        socio_percent: splitResolution.socio.percent,
+      });
+    }
+
+    if (splitResolution.representative.reason === "representative_wallet_missing") {
+      failOpenReasons.push("representative_wallet_missing");
+      logPaymentTrace("warn", "create-asaas-payment", "representative_wallet_missing_repass_pending", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        representative_id: splitResolution.representative.representativeId,
+        representative_percent: splitResolution.representative.percent,
+      });
+    }
+
+    if (failOpenReasons.length > 0) {
+      logPaymentTrace("warn", "create-asaas-payment", "split_fail_open_applied", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentContext.environment,
+        reasons: failOpenReasons,
+        split_recipients_count: splitResolution.recipients.length,
+      });
+    }
+
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
     if (
