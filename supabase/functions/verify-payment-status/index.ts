@@ -463,15 +463,112 @@ serve(async (req) => {
     }
 
     if (!sale.asaas_payment_id) {
+      // ============================================================
+      // ANÁLISE 14 — RECOVERY POR externalReference (uma única vez):
+      // se a venda perdeu o vínculo `asaas_payment_id` por algum motivo
+      // (falha na persistência após criar a cobrança, etc.), tentamos
+      // localizar a cobrança no Asaas usando o `externalReference = sale.id`.
+      // Esta operação é estritamente READ-ONLY (GET /payments?externalReference=...)
+      // e NUNCA cria nova cobrança. Se não encontrarmos, paramos com código claro
+      // `ASAAS_PAYMENT_ID_MISSING` para o frontend interromper o polling.
+      // ============================================================
+      let recoveryContext;
+      try {
+        recoveryContext = resolvePaymentContext({
+          mode: "verify",
+          sale,
+          company,
+        });
+      } catch {
+        recoveryContext = null;
+      }
+
+      if (recoveryContext?.apiKey) {
+        try {
+          const lookupRes = await fetch(
+            `${recoveryContext.baseUrl}/payments?externalReference=${encodeURIComponent(sale.id)}&limit=1`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                access_token: recoveryContext.apiKey,
+              },
+            },
+          );
+          const lookupBody = await lookupRes.json().catch(() => null);
+          const recoveredPayment =
+            lookupRes.ok && Array.isArray(lookupBody?.data) && lookupBody.data.length > 0
+              ? lookupBody.data[0]
+              : null;
+
+          if (recoveredPayment?.id) {
+            const recoveredId = recoveredPayment.id as string;
+            const recoveredStatus = recoveredPayment.status as string | undefined;
+            // Persistimos o vínculo recuperado para que próximas consultas usem o caminho normal.
+            await supabaseAdmin
+              .from("sales")
+              .update({
+                asaas_payment_id: recoveredId,
+                asaas_payment_status: recoveredStatus ?? sale.asaas_payment_status,
+              })
+              .eq("id", sale.id);
+
+            await persistVerifyLog({
+              processingStatus: "success",
+              resultCategory: "warning",
+              message: "Vínculo asaas_payment_id recuperado via externalReference",
+              warningCode: "asaas_payment_id_recovered",
+              httpStatus: 200,
+              paymentId: recoveredId,
+              payloadJson: { sale_id: sale.id, lookup_by: "externalReference" },
+              responseJson: { recovered_payment_id: recoveredId, recovered_status: recoveredStatus ?? null },
+            });
+
+            return jsonResponse({
+              paymentStatus: sale.status,
+              asaasStatus: recoveredStatus ?? null,
+              recovered: true,
+            }, 200);
+          }
+
+          // Não encontramos cobrança correspondente — não criamos nova.
+          if (lookupRes.status === 401 || lookupRes.status === 403) {
+            await persistVerifyLog({
+              processingStatus: "rejected",
+              resultCategory: "rejected",
+              message: "Recovery via externalReference falhou por autenticação Asaas",
+              incidentCode: "ASAAS_AUTH_FAILED",
+              httpStatus: 502,
+              payloadJson: { sale_id: sale.id, lookup_by: "externalReference" },
+              responseJson: { error_code: "ASAAS_AUTH_FAILED" },
+            });
+            return jsonResponse({
+              paymentStatus: sale.status,
+              error_code: "ASAAS_AUTH_FAILED",
+            }, 200);
+          }
+        } catch (lookupError) {
+          logPaymentTrace("warn", "verify-payment-status", "external_reference_lookup_failed", {
+            sale_id: sale.id,
+            company_id: sale.company_id,
+            error_message:
+              lookupError instanceof Error ? lookupError.message : String(lookupError),
+          });
+        }
+      }
+
       await persistVerifyLog({
         processingStatus: "ignored",
         resultCategory: "ignored",
-        message: "Verify sem cobrança Asaas vinculada; sem consulta externa",
-        warningCode: "missing_asaas_payment_id",
+        message: "Verify sem cobrança Asaas vinculada; recovery por externalReference não localizou cobrança",
+        warningCode: "ASAAS_PAYMENT_ID_MISSING",
         httpStatus: 200,
-        responseJson: { paymentStatus: sale.status },
+        responseJson: { paymentStatus: sale.status, error_code: "ASAAS_PAYMENT_ID_MISSING" },
       });
-      return jsonResponse({ paymentStatus: sale.status }, 200);
+      return jsonResponse({
+        paymentStatus: sale.status,
+        error_code: "ASAAS_PAYMENT_ID_MISSING",
+      }, 200);
     }
 
     let paymentContext;
