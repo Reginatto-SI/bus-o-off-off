@@ -19,6 +19,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+const MANUAL_PLATFORM_FEE_ORIGINS = new Set([
+  "admin_manual",
+  "admin_reservation_conversion",
+  "seller_manual",
+]);
+const ASAAS_CONFIRMED_STATUS = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]);
 
 function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -95,7 +101,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_captured_at")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_captured_at, platform_fee_payment_id, platform_fee_status, sale_origin")
       .eq("id", saleIdFromRequest)
       .single();
 
@@ -138,7 +144,7 @@ serve(async (req) => {
         provider: "asaas",
         direction: "manual_sync",
         eventType: "verify_payment_status",
-        paymentId: sale.asaas_payment_id,
+        paymentId: sale.asaas_payment_id ?? sale.platform_fee_payment_id ?? null,
         externalReference: sale.id,
         httpStatus: params.httpStatus ?? null,
         processingStatus: params.processingStatus,
@@ -260,6 +266,201 @@ serve(async (req) => {
       return jsonResponse({ paymentStatus: "cancelado" }, 200);
     }
 
+    const { data: company } = await supabaseAdmin
+      .from("companies")
+      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, socio_split_percent")
+      .eq("id", sale.company_id)
+      .single();
+
+    const shouldRunManualPlatformFeeFallback =
+      !sale.asaas_payment_id &&
+      !!sale.platform_fee_payment_id &&
+      (sale.platform_fee_status === "pending" || sale.platform_fee_status === "failed") &&
+      (!sale.sale_origin || MANUAL_PLATFORM_FEE_ORIGINS.has(sale.sale_origin));
+
+    /**
+     * Fallback mínimo (manual/admin):
+     * quando a venda não possui cobrança principal (`asaas_payment_id`) mas possui taxa manual
+     * com `platform_fee_payment_id`, consultamos o Asaas para convergir status e evitar
+     * nova cobrança duplicada no admin.
+     */
+    if (shouldRunManualPlatformFeeFallback) {
+      let paymentContext;
+      try {
+        paymentContext = resolvePaymentContext({
+          mode: "verify",
+          sale,
+          company,
+        });
+      } catch (contextError) {
+        await persistVerifyLog({
+          processingStatus: "rejected",
+          resultCategory: "rejected",
+          message: "Fallback manual não executado: ambiente da venda inválido ou ausente",
+          incidentCode: "payment_environment_unresolved",
+          httpStatus: 409,
+          responseJson: {
+            error: "Ambiente da venda inválido ou ausente",
+            error_code: "payment_environment_unresolved",
+            paymentStatus: sale.status,
+          },
+          payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+        });
+
+        return jsonResponse({
+          error: "Ambiente da venda inválido ou ausente",
+          error_code: "payment_environment_unresolved",
+          paymentStatus: sale.status,
+        }, 409);
+      }
+
+      const apiKeyToUse = paymentContext.apiKey;
+      if (!apiKeyToUse) {
+        await persistVerifyLog({
+          processingStatus: "rejected",
+          resultCategory: "rejected",
+          message: "Fallback manual sem API key Asaas no ambiente da venda",
+          incidentCode: "missing_company_asaas_api_key",
+          httpStatus: 409,
+          responseJson: {
+            error: "Empresa sem API key Asaas para o ambiente da venda",
+            error_code: "missing_company_asaas_api_key",
+            paymentStatus: sale.status,
+          },
+          payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+        });
+        return jsonResponse({
+          error: "Empresa sem API key Asaas para o ambiente da venda",
+          error_code: "missing_company_asaas_api_key",
+          paymentStatus: sale.status,
+        }, 409);
+      }
+
+      let platformFeePaymentData: any;
+      try {
+        const response = await fetch(`${paymentContext.baseUrl}/payments/${sale.platform_fee_payment_id}`, {
+          headers: { "access_token": apiKeyToUse },
+        });
+
+        if (!response.ok) {
+          await persistVerifyLog({
+            processingStatus: "warning",
+            resultCategory: "warning",
+            message: "Fallback manual não conseguiu consultar cobrança da taxa no Asaas",
+            warningCode: "platform_fee_payment_status_fetch_failed",
+            httpStatus: response.status,
+            payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+            responseJson: { paymentStatus: sale.status },
+          });
+          return jsonResponse({ paymentStatus: sale.status }, 200);
+        }
+
+        platformFeePaymentData = await response.json();
+      } catch {
+        await persistVerifyLog({
+          processingStatus: "warning",
+          resultCategory: "warning",
+          message: "Fallback manual com exceção ao consultar cobrança da taxa no Asaas",
+          warningCode: "platform_fee_payment_status_fetch_exception",
+          httpStatus: 200,
+          payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+          responseJson: { paymentStatus: sale.status },
+        });
+        return jsonResponse({ paymentStatus: sale.status }, 200);
+      }
+
+      const platformFeeAsaasStatus = normalizeAsaasStatus(platformFeePaymentData?.status);
+
+      if (ASAAS_CONFIRMED_STATUS.has(platformFeeAsaasStatus)) {
+        const confirmedAt = resolveAsaasConfirmedAtFromPayment(platformFeePaymentData);
+
+        const { data: updatedSale, error: updateError } = await supabaseAdmin
+          .from("sales")
+          .update({
+            platform_fee_status: "paid",
+            platform_fee_paid_at: confirmedAt,
+            payment_confirmed_at: confirmedAt,
+            status: sale.status === "reservado" ? "pago" : sale.status,
+            platform_fee_payment_id: platformFeePaymentData.id ?? sale.platform_fee_payment_id,
+          })
+          .eq("id", sale.id)
+          .in("platform_fee_status", ["pending", "failed"])
+          .select("id, status, payment_confirmed_at, platform_fee_paid_at")
+          .maybeSingle();
+
+        if (updateError) {
+          await persistVerifyLog({
+            processingStatus: "failed",
+            resultCategory: "error",
+            message: "Fallback manual falhou ao convergir venda com taxa paga",
+            incidentCode: "manual_platform_fee_convergence_failed",
+            httpStatus: 500,
+            payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+            responseJson: { error: "manual_platform_fee_convergence_failed", paymentStatus: sale.status },
+          });
+          return jsonResponse({ error: "manual_platform_fee_convergence_failed", paymentStatus: sale.status }, 500);
+        }
+
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: sale.id,
+          companyId: sale.company_id,
+          action: "manual_platform_fee_verify_converged",
+          source: "verify-payment-status",
+          result: "success",
+          paymentEnvironment: paymentContext.environment,
+          detail: `platform_fee_payment_id=${platformFeePaymentData.id ?? sale.platform_fee_payment_id}|asaas_status=${platformFeeAsaasStatus}`,
+        });
+
+        await persistVerifyLog({
+          processingStatus: "success",
+          resultCategory: "success",
+          message: "Fallback manual convergiu venda após confirmação da taxa no Asaas",
+          incidentCode: "manual_platform_fee_converged",
+          httpStatus: 200,
+          payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+          responseJson: {
+            paymentStatus: updatedSale?.status ?? (sale.status === "reservado" ? "pago" : sale.status),
+            paymentConfirmedAt: updatedSale?.payment_confirmed_at ?? confirmedAt,
+            platformFeePaidAt: updatedSale?.platform_fee_paid_at ?? confirmedAt,
+            fallback: "manual_platform_fee_payment_id",
+          },
+        });
+
+        return jsonResponse({
+          paymentStatus: updatedSale?.status ?? (sale.status === "reservado" ? "pago" : sale.status),
+          paymentConfirmedAt: updatedSale?.payment_confirmed_at ?? confirmedAt,
+          platformFeePaidAt: updatedSale?.platform_fee_paid_at ?? confirmedAt,
+          fallback: "manual_platform_fee_payment_id",
+        }, 200);
+      }
+
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "manual_platform_fee_status_divergence",
+        source: "verify-payment-status",
+        result: "warning",
+        paymentEnvironment: paymentContext.environment,
+        detail: `platform_fee_payment_id=${sale.platform_fee_payment_id}|asaas_status=${platformFeeAsaasStatus || "unknown"}|local_status=${sale.platform_fee_status}`,
+      });
+
+      await persistVerifyLog({
+        processingStatus: "warning",
+        resultCategory: "warning",
+        message: "Fallback manual detectou cobrança da taxa ainda não confirmada no Asaas",
+        warningCode: "manual_platform_fee_not_confirmed",
+        httpStatus: 200,
+        payloadJson: { sale_id: sale.id, platform_fee_payment_id: sale.platform_fee_payment_id },
+        responseJson: { paymentStatus: sale.status, platform_fee_asaas_status: platformFeeAsaasStatus || "unknown" },
+      });
+      return jsonResponse({
+        paymentStatus: sale.status,
+        platformFeeAsaasStatus: platformFeeAsaasStatus || null,
+      }, 200);
+    }
+
     if (!sale.asaas_payment_id) {
       await persistVerifyLog({
         processingStatus: "ignored",
@@ -271,12 +472,6 @@ serve(async (req) => {
       });
       return jsonResponse({ paymentStatus: sale.status }, 200);
     }
-
-    const { data: company } = await supabaseAdmin
-      .from("companies")
-      .select("asaas_api_key_production, asaas_api_key_sandbox, platform_fee_percent, socio_split_percent")
-      .eq("id", sale.company_id)
-      .single();
 
     let paymentContext;
     try {
