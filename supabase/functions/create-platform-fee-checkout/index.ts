@@ -65,7 +65,8 @@ serve(async (req) => {
   const startedAt = Date.now();
 
   try {
-    const { sale_id } = await req.json();
+    const { sale_id, consult_only } = await req.json();
+    const consultOnly = consult_only === true;
     if (!sale_id) {
       return new Response(JSON.stringify({ error: "sale_id is required" }), {
         status: 400,
@@ -141,6 +142,27 @@ serve(async (req) => {
           message: "Taxa da plataforma já confirmada para esta venda.",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (consultOnly && !sale.platform_fee_payment_id) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "platform_fee_checkout_consult_blocked_missing_payment",
+        source: "create-platform-fee-checkout",
+        result: "warning",
+        paymentEnvironment: sale.payment_environment ?? null,
+        errorCode: "consult_only_without_payment_id",
+      });
+
+      return new Response(
+        JSON.stringify({
+          error: "Consulta da taxa exige cobrança já vinculada (platform_fee_payment_id ausente).",
+          error_code: "consult_only_without_reusable_payment",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -265,6 +287,28 @@ serve(async (req) => {
         status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (consultOnly) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "platform_fee_checkout_consult_only_blocked_no_reusable_payment",
+        source: "create-platform-fee-checkout",
+        result: "warning",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: "consult_only_without_reusable_payment",
+        detail: `platform_fee_payment_id=${sale.platform_fee_payment_id ?? "null"}`,
+      });
+
+      return new Response(
+        JSON.stringify({
+          error: "Não existe cobrança reutilizável para consulta. Use reprocessamento para avaliar nova geração.",
+          error_code: "consult_only_without_reusable_payment",
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get or create customer for the company admin
