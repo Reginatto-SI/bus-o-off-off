@@ -1,50 +1,33 @@
+# Plano: Persistir o diagnóstico do Webhook Asaas
 
+## Escopo (somente documentação)
 
-# Plano: Adicionar acesso ao Painel Representante no sidebar admin
+Conforme regra obrigatória da tarefa: **não alterar código, não criar lógica nova**, apenas materializar o diagnóstico em arquivo.
 
-## Problema atual
-1. Se o usuário é gerente **e** representante, o login redireciona para `/representante/painel` (prioridade do `isRepresentative`), e ele perde acesso direto ao admin.
-2. O sidebar admin não tem nenhum link para o painel de representante — quem tem os dois papéis fica preso em um ou outro.
+## Único arquivo a ser criado
 
-## Comportamento proposto
+`docs/Analises/analise-1-webhook-asaas.md`
 
-### 1. Corrigir prioridade de redirecionamento no login
-**Arquivo:** `src/pages/Login.tsx` (função `getRedirectByRole`)
+Conteúdo: diagnóstico completo já apresentado na conversa, contendo:
 
-Inverter a prioridade: papéis administrativos (gerente, developer, operador) devem ter precedência sobre representante. O representante só é o destino padrão se o usuário **não** tiver papel admin.
+1. **Resultado executivo** — três causas raiz identificadas e priorizadas.
+2. **Causa raiz #1 (CRÍTICO):** chave Asaas de produção retornando HTTP 401 para empresa BUSÃO OFF OFF (6 ocorrências entre 22-24/04).
+3. **Causa raiz #2:** falta de idempotência por venda no checkout público — mesma cliente Camila Lorena gerou 6 vendas distintas em 3 dias.
+4. **Causa raiz #3:** venda `351151a0-dfb3-4aa8-ae88-40cccaea2f57` está presa em `reservado` há > 9h, sem `asaas_payment_id`, com polling ativo agora.
+5. **O que NÃO é problema (validado):** dedup do webhook funciona, externalReference está correto, webhook não recria cobranças, único caso de múltiplos `payment_id` foi em sandbox de teste, e os 58% de "duplicação" em `outgoing_request` são apenas logging dual (request + response) com mesmo `payment_id`.
+6. **Tabela de evidências numéricas** com 8 métricas-chave do banco.
+7. **Riscos residuais** (financeiro, operacional, UX).
+8. **Recomendações de correção mínima** (operacionais imediatas + sugestões de código futuras, **não aplicadas** nesta etapa).
+9. **Apêndice de queries SQL** usadas no diagnóstico, para reprodução futura por outro analista/dev.
 
-```
-Antes:  isRepresentative → /representante/painel (sempre primeiro)
-Depois: gerente/developer/operador → /admin/dashboard (primeiro)
-         vendedor → /vendedor/minhas-vendas
-         motorista → /motorista
-         isRepresentative (sem papel admin) → /representante/painel
-```
+## O que NÃO está no plano
 
-### 2. Adicionar item condicional no sidebar
-**Arquivo:** `src/components/layout/AdminSidebar.tsx`
-
-Adicionar um item "Painel Representante" no grupo "Conta" (ou como standalone), visível **apenas** quando `isRepresentative === true` no `useAuth()`.
-
-- Ícone: `UserCheck` ou `BadgePercent`
-- Href: `/representante/painel`
-- Condição: `isRepresentative` (já disponível no AuthContext)
-- Posição: dentro do grupo "Conta", acima de "Minha Conta"
-
-### 3. Adicionar botão "Voltar ao Admin" no painel do representante
-**Arquivo:** `src/pages/representative/RepresentativeDashboard.tsx`
-
-Se o usuário também tem papel admin (gerente/developer/operador), exibir um botão/link "Acessar Painel Admin" no header do dashboard de representante, apontando para `/admin/dashboard`.
-
-## Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/Login.tsx` | Priorizar papéis admin sobre representante no redirecionamento |
-| `src/components/layout/AdminSidebar.tsx` | Item condicional "Painel Representante" quando `isRepresentative` |
-| `src/pages/representative/RepresentativeDashboard.tsx` | Link "Voltar ao Admin" para quem tem papel admin |
+- Nenhuma alteração em edge functions (`asaas-webhook`, `create-asaas-payment`, `verify-payment-status`).
+- Nenhuma migração de banco.
+- Nenhuma alteração de config (`supabase/config.toml`).
+- Nenhuma alteração no frontend.
+- Nenhuma rotação de secret/credencial automática (precisa ser feita manualmente pelo operador no painel Asaas + aba `/admin/empresa`).
 
 ## Riscos
-- Nenhum risco estrutural. Mudança mínima e condicional.
-- Representantes puros (sem papel admin) continuam sendo redirecionados para `/representante/painel` normalmente.
 
+Nenhum risco técnico — apenas criação de arquivo Markdown em pasta de documentação. O arquivo serve como base para futuras tarefas corretivas que serão tratadas separadamente.

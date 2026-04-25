@@ -1779,6 +1779,14 @@ export type Database = {
           sale_origin: string
           seller_id: string | null
           socio_fee_amount: number | null
+          split_snapshot_captured_at: string | null
+          split_snapshot_platform_fee_percent: number | null
+          split_snapshot_platform_fee_total: number | null
+          split_snapshot_platform_net_amount: number | null
+          split_snapshot_representative_percent: number | null
+          split_snapshot_socio_fee_amount: number | null
+          split_snapshot_socio_split_percent: number | null
+          split_snapshot_source: string | null
           status: Database["public"]["Enums"]["sale_status"]
           trip_id: string
           unit_price: number
@@ -1819,6 +1827,14 @@ export type Database = {
           sale_origin?: string
           seller_id?: string | null
           socio_fee_amount?: number | null
+          split_snapshot_captured_at?: string | null
+          split_snapshot_platform_fee_percent?: number | null
+          split_snapshot_platform_fee_total?: number | null
+          split_snapshot_platform_net_amount?: number | null
+          split_snapshot_representative_percent?: number | null
+          split_snapshot_socio_fee_amount?: number | null
+          split_snapshot_socio_split_percent?: number | null
+          split_snapshot_source?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           trip_id: string
           unit_price?: number
@@ -1859,6 +1875,14 @@ export type Database = {
           sale_origin?: string
           seller_id?: string | null
           socio_fee_amount?: number | null
+          split_snapshot_captured_at?: string | null
+          split_snapshot_platform_fee_percent?: number | null
+          split_snapshot_platform_fee_total?: number | null
+          split_snapshot_platform_net_amount?: number | null
+          split_snapshot_representative_percent?: number | null
+          split_snapshot_socio_fee_amount?: number | null
+          split_snapshot_socio_split_percent?: number | null
+          split_snapshot_source?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
           trip_id?: string
           unit_price?: number
