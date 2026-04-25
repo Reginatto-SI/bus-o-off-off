@@ -21,6 +21,11 @@ type ResolveSplitRecipientsParams = {
   representativeId?: string | null;
   includePlatformRecipient: boolean;
   platformWalletId?: string | null;
+  distributionPercentages?: {
+    platform: number;
+    socio: number;
+    representative: number;
+  } | null;
 };
 
 export type SplitRecipient = {
@@ -48,6 +53,11 @@ type RepresentativeResolution = {
 export type ResolveSplitRecipientsResult = {
   recipients: SplitRecipient[];
   socioValidation: FinancialSocioValidationResult | null;
+  socio: {
+    included: boolean;
+    reason: "included" | "missing_or_invalid" | "wallet_missing";
+    percent: number;
+  };
   representative: RepresentativeResolution;
 };
 
@@ -67,16 +77,8 @@ type RepresentativeRow = {
   asaas_wallet_id_sandbox?: string | null;
 };
 
-/**
- * Regra oficial do representante (Smartbus BR):
- * - percentual do representante = 1/3 da taxa da plataforma;
- * - arredondamento oficial: 2 casas decimais.
- *
- * Mantemos helper local para garantir cálculo determinístico e evitar
- * reintrodução de fallback legado de percentual fixo.
- */
-function computeRepresentativeCommissionPercent(platformFeePercent: number): number {
-  return Math.round((platformFeePercent / 3) * 100) / 100;
+function roundPercent(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function resolveRepresentativeWalletByEnvironment(
@@ -108,6 +110,11 @@ export async function resolveAsaasSplitRecipients(
     return {
       recipients,
       socioValidation: null,
+      socio: {
+        included: false,
+        reason: "missing_or_invalid",
+        percent: 0,
+      },
       representative: {
         eligible: false,
         reason: "not_configured",
@@ -120,11 +127,59 @@ export async function resolveAsaasSplitRecipients(
 
   let socioValidation: FinancialSocioValidationResult | null = null;
 
-  const effectiveSocioPercent = params.socioSplitPercent > 0
-    ? params.socioSplitPercent
-    : 0;
+  if (!params.distributionPercentages) {
+    throw new Error("missing_distribution_percentages");
+  }
 
-  if (params.includePlatformRecipient && params.platformFeePercent > 0) {
+  const effectivePlatformPercent = roundPercent(
+    params.distributionPercentages.platform,
+  );
+  const requestedSocioPercent = roundPercent(
+    params.distributionPercentages.socio,
+  );
+  const requestedRepresentativePercent = roundPercent(
+    params.distributionPercentages.representative,
+  );
+
+  let platformPercent = effectivePlatformPercent;
+  let socioPercent = requestedSocioPercent;
+  let representativePercent = requestedRepresentativePercent;
+  let socioIncluded = false;
+  let socioReason: "included" | "missing_or_invalid" | "wallet_missing" = "missing_or_invalid";
+
+  const syncRecipients = () => {
+    if (params.includePlatformRecipient) {
+      const platformRecipient = recipients.find((item) => item.kind === "platform");
+      if (platformRecipient) {
+        platformRecipient.percentualValue = roundPercent(platformPercent);
+      }
+    }
+
+    const existingSocio = recipients.findIndex((item) => item.kind === "socio");
+    if (existingSocio >= 0) recipients.splice(existingSocio, 1);
+
+    if (socioIncluded && socioPercent > 0 && socioValidation?.ok && socioValidation.walletId) {
+      recipients.push({
+        kind: "socio",
+        walletId: socioValidation.walletId,
+        percentualValue: roundPercent(socioPercent),
+      });
+    }
+  };
+
+  const redistributeRepresentativeWhenUnavailable = () => {
+    if (representativePercent <= 0) return;
+    if (socioIncluded && socioPercent > 0) {
+      const halfRepresentative = roundPercent(representativePercent / 2);
+      socioPercent = roundPercent(socioPercent + halfRepresentative);
+      platformPercent = roundPercent(platformPercent + (representativePercent - halfRepresentative));
+    } else {
+      platformPercent = roundPercent(platformPercent + representativePercent);
+    }
+    representativePercent = 0;
+  };
+
+  if (params.includePlatformRecipient && effectivePlatformPercent > 0) {
     if (!params.platformWalletId) {
       throw new Error("missing_platform_wallet");
     }
@@ -132,11 +187,11 @@ export async function resolveAsaasSplitRecipients(
     recipients.push({
       kind: "platform",
       walletId: params.platformWalletId,
-      percentualValue: params.platformFeePercent,
+      percentualValue: effectivePlatformPercent,
     });
   }
 
-  if (effectiveSocioPercent > 0) {
+  if (requestedSocioPercent > 0) {
     const { data: socioRows, error: socioError } = await params.supabaseAdmin
       .from("socios_split")
       .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
@@ -155,22 +210,28 @@ export async function resolveAsaasSplitRecipients(
     });
 
     if (!socioValidation.ok) {
-      throw new Error(`${socioValidation.code}:${socioValidation.message}`);
-    }
-
-    if (socioValidation.walletId) {
-      recipients.push({
-        kind: "socio",
-        walletId: socioValidation.walletId,
-        percentualValue: effectiveSocioPercent,
-      });
+      platformPercent = roundPercent(platformPercent + requestedSocioPercent);
+      socioPercent = 0;
+      socioReason = socioValidation.code === "split_socio_wallet_missing"
+        ? "wallet_missing"
+        : "missing_or_invalid";
+    } else if (socioValidation.walletId) {
+      socioIncluded = true;
+      socioReason = "included";
     }
   }
 
   if (!params.representativeId) {
+    redistributeRepresentativeWhenUnavailable();
+    syncRecipients();
     return {
       recipients,
       socioValidation,
+      socio: {
+        included: socioIncluded,
+        reason: socioReason,
+        percent: socioPercent,
+      },
       representative: {
         eligible: false,
         reason: "missing_sale_representative",
@@ -189,9 +250,16 @@ export async function resolveAsaasSplitRecipients(
       .maybeSingle();
 
     if (representativeError) {
+      redistributeRepresentativeWhenUnavailable();
+      syncRecipients();
       return {
         recipients,
         socioValidation,
+        socio: {
+          included: socioIncluded,
+          reason: socioReason,
+          percent: socioPercent,
+        },
         representative: {
           eligible: false,
           reason: "representative_lookup_failed",
@@ -203,9 +271,16 @@ export async function resolveAsaasSplitRecipients(
     }
 
     if (!representativeRaw) {
+      redistributeRepresentativeWhenUnavailable();
+      syncRecipients();
       return {
         recipients,
         socioValidation,
+        socio: {
+          included: socioIncluded,
+          reason: socioReason,
+          percent: socioPercent,
+        },
         representative: {
           eligible: false,
           reason: "representative_not_found",
@@ -219,9 +294,16 @@ export async function resolveAsaasSplitRecipients(
     const representative = representativeRaw as RepresentativeRow;
 
     if (representative.status !== "ativo") {
+      redistributeRepresentativeWhenUnavailable();
+      syncRecipients();
       return {
         recipients,
         socioValidation,
+        socio: {
+          included: socioIncluded,
+          reason: socioReason,
+          percent: socioPercent,
+        },
         representative: {
           eligible: false,
           reason: "representative_status_invalid",
@@ -237,13 +319,20 @@ export async function resolveAsaasSplitRecipients(
      * fonte operacional do split. O percentual do representante deriva
      * exclusivamente da taxa da plataforma da própria venda/contexto.
      */
-    const representativePercent = computeRepresentativeCommissionPercent(
-      Number(params.platformFeePercent ?? 0),
+    representativePercent = roundPercent(
+      Number(params.distributionPercentages.representative ?? 0),
     );
     if (!Number.isFinite(representativePercent) || representativePercent <= 0) {
+      redistributeRepresentativeWhenUnavailable();
+      syncRecipients();
       return {
         recipients,
         socioValidation,
+        socio: {
+          included: socioIncluded,
+          reason: socioReason,
+          percent: socioPercent,
+        },
         representative: {
           eligible: false,
           reason: "representative_percent_invalid",
@@ -260,9 +349,17 @@ export async function resolveAsaasSplitRecipients(
     );
 
     if (!representativeWalletId) {
+      redistributeRepresentativeWhenUnavailable();
+      syncRecipients();
+
       return {
         recipients,
         socioValidation,
+        socio: {
+          included: socioIncluded,
+          reason: socioReason,
+          percent: socioPercent,
+        },
         representative: {
           eligible: false,
           reason: "representative_wallet_missing",
@@ -273,15 +370,24 @@ export async function resolveAsaasSplitRecipients(
       };
     }
 
-    recipients.push({
-      kind: "representative",
-      walletId: representativeWalletId,
-      percentualValue: representativePercent,
-    });
+    syncRecipients();
+
+    if (representativePercent > 0) {
+      recipients.push({
+        kind: "representative",
+        walletId: representativeWalletId,
+        percentualValue: representativePercent,
+      });
+    }
 
     return {
       recipients,
       socioValidation,
+      socio: {
+        included: socioIncluded,
+        reason: socioReason,
+        percent: socioPercent,
+      },
       representative: {
         eligible: true,
         reason: "included",
@@ -299,9 +405,17 @@ export async function resolveAsaasSplitRecipients(
       error_message: error instanceof Error ? error.message : String(error),
     });
 
+    redistributeRepresentativeWhenUnavailable();
+    syncRecipients();
+
     return {
       recipients,
       socioValidation,
+      socio: {
+        included: socioIncluded,
+        reason: socioReason,
+        percent: socioPercent,
+      },
       representative: {
         eligible: false,
         reason: "representative_lookup_failed",

@@ -1,5 +1,7 @@
 # 04 — PRD Asaas: Split, Comissões e Representantes
 
+> **Atualização de governança (2026-04-25):** a regra oficial consolidada de motor de taxa e distribuição financeira está em `07-asaas-motor-taxa-e-distribuicao-financeira.md`. Em caso de conflito, o PRD 07 prevalece.
+
 ## 1. Objetivo
 Documentar a distribuição financeira atual no Asaas (plataforma, sócio e representante), com foco em coerência entre split, snapshot da venda e ledger.
 

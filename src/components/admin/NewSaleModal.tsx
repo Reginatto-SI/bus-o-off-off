@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
+import { calculateFees, calculatePlatformFee, type EventFeeInput } from '@/lib/feeCalculator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Seat, Event, Trip, Vehicle, Driver, TicketRecord, Seller } from '@/types/database';
 import {
@@ -885,15 +885,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         : null;
 
       // ── Cálculo da taxa da plataforma para vendas manuais ──
-      // Fonte de verdade: company.platform_fee_percent (definido na empresa).
+      // Fonte de verdade (PRD 07): cálculo progressivo por passageiro com teto de R$ 25.
       // Vendas online usam o fluxo oficial do Asaas e não geram cobrança separada da taxa da plataforma aqui (platform_fee_status = 'not_applicable').
       // Vendas manuais precisam de cobrança separada da taxa (platform_fee_status = 'pending').
       // Bloqueios não representam venda real e ficam como 'not_applicable'.
-      const platformFeePercent = company?.platform_fee_percent ?? 0;
-      const hasPlatformFee = isManual && platformFeePercent > 0 && grossTotal > 0;
-      const platformFeeAmount = hasPlatformFee
-        ? Math.round(grossTotal * (platformFeePercent / 100) * 100) / 100
+      const platformFeeAmountByPassenger = resolvedSnapshots.reduce(
+        (sum, snapshot) => sum + calculatePlatformFee(snapshot.final_price),
+        0,
+      );
+      const platformFeeAmount = isManual && grossTotal > 0
+        ? roundCurrency(platformFeeAmountByPassenger)
         : null;
+      const hasPlatformFee = isManual && (platformFeeAmount ?? 0) > 0;
 
       // Regra financeira oficial: o Asaas não permite cobrança abaixo de R$ 5,00.
       // Para evitar criar reserva manual sem monetização válida da plataforma,

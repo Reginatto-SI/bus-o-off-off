@@ -9,10 +9,6 @@ import {
   resolvePaymentContext,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
-import {
-  computeSocioFinancialSnapshot,
-  resolveAsaasSplitRecipients,
-} from "../_shared/split-recipients-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -941,115 +937,25 @@ serve(async (req) => {
           paymentEnvironment: paymentContext.environment,
           detail: "financial_snapshot_source=frozen_sale_snapshot",
         });
-      } else if (company?.platform_fee_percent != null) {
-        logPaymentTrace("warn", "verify-payment-status", "financial_snapshot_source_dynamic_recalculation", {
+      } else {
+        logPaymentTrace("error", "verify-payment-status", "financial_snapshot_missing", {
           sale_id: sale.id,
           company_id: sale.company_id,
           payment_environment: paymentContext.environment,
-          financial_snapshot_source: "dynamic_recalculation",
           reason: "snapshot_not_found_on_sale",
         });
 
-        const platformFeePercent = Number(company.platform_fee_percent);
-        const grossAmount = sale.gross_amount ?? (sale.unit_price * sale.quantity);
-
-        const socioSplitPercent = Number(company?.socio_split_percent ?? 50);
-        let splitResolution;
-        try {
-          splitResolution = await resolveAsaasSplitRecipients({
-            supabaseAdmin,
-            source: "verify-payment-status",
-            saleId: sale.id,
-            companyId: sale.company_id,
-            paymentEnvironment: paymentContext.environment,
-            splitEnabled: true,
-            platformFeePercent,
-            socioSplitPercent,
-            representativeId: sale.representative_id ?? null,
-            includePlatformRecipient: false,
-          });
-        } catch (splitError) {
-          const splitErrorMessage = splitError instanceof Error
-            ? splitError.message
-            : String(splitError);
-          const [splitErrorCode, ...rest] = splitErrorMessage.split(":");
-          const splitErrorDetail = rest.join(":").trim();
-
-          logPaymentTrace("error", "verify-payment-status", splitErrorCode || "split_resolution_failed", {
-            sale_id: sale.id,
-            company_id: sale.company_id,
-            payment_environment: paymentContext.environment,
-            error_message: splitErrorDetail || splitErrorMessage,
-          });
-
-          await persistVerifyLog({
-            processingStatus: "warning",
-            resultCategory: "warning",
-            message: splitErrorCode === "split_socio_query_failed"
-              ? "Falha ao validar sócio do split no verify-payment-status"
-              : (splitErrorDetail || "Falha ao validar o split financeiro"),
-            incidentCode: splitErrorCode || "split_resolution_failed",
-            httpStatus: 409,
-            responseJson: {
-              paymentStatus: sale.status,
-              split_error: splitErrorDetail || "Falha ao validar o split financeiro",
-              split_error_code: splitErrorCode || "split_resolution_failed",
-            },
-          });
-
-          return jsonResponse({
+        await persistVerifyLog({
+          processingStatus: "warning",
+          resultCategory: "warning",
+          message: "Pagamento confirmado no gateway, mas venda sem snapshot financeiro congelado",
+          incidentCode: "financial_snapshot_missing",
+          httpStatus: 409,
+          responseJson: {
             paymentStatus: sale.status,
-            split_error: splitErrorDetail || "Falha ao validar o split financeiro",
-            split_error_code: splitErrorCode || "split_resolution_failed",
-          }, 409);
-        }
-
-        const financialSnapshot = computeSocioFinancialSnapshot({
-          grossAmount,
-          platformFeePercent,
-          socioSplitPercent,
-          socioValidation: splitResolution.socioValidation,
-          paymentEnvironment: paymentContext.environment,
+            error: "financial_snapshot_missing",
+          },
         });
-
-        logPaymentTrace("info", "verify-payment-status", "financial_socio_selected", {
-          sale_id: sale.id,
-          company_id: sale.company_id,
-          payment_environment: paymentContext.environment,
-          socio_id: financialSnapshot.socio?.id ?? null,
-          socio_wallet_selected: financialSnapshot.socioWalletId,
-          socio_wallet_source: paymentContext.environment === "production"
-            ? (financialSnapshot.socio?.asaas_wallet_id_production ? "socio.production" : "none")
-            : (financialSnapshot.socio?.asaas_wallet_id_sandbox ? "socio.sandbox" : "none"),
-        });
-
-        if (splitResolution.representative.eligible) {
-          logPaymentTrace("info", "verify-payment-status", "split_representative_eligible", {
-            sale_id: sale.id,
-            company_id: sale.company_id,
-            payment_environment: paymentContext.environment,
-            representative_id: splitResolution.representative.representativeId,
-            representative_percent: splitResolution.representative.percent,
-          });
-        } else if (sale.representative_id) {
-          logPaymentTrace("warn", "verify-payment-status", "split_representative_ignored", {
-            sale_id: sale.id,
-            company_id: sale.company_id,
-            payment_environment: paymentContext.environment,
-            representative_id: sale.representative_id,
-            representative_reason: splitResolution.representative.reason,
-          });
-        }
-
-        await supabaseAdmin
-          .from("sales")
-          .update({
-            gross_amount: grossAmount,
-            platform_fee_total: financialSnapshot.platformFeeTotal,
-            socio_fee_amount: financialSnapshot.socioFeeAmount,
-            platform_net_amount: financialSnapshot.platformNetAmount,
-          })
-          .eq("id", saleIdFromRequest);
 
         await logSaleOperationalEvent({
           supabaseAdmin,
@@ -1057,10 +963,17 @@ serve(async (req) => {
           companyId: sale.company_id,
           action: "payment_confirmed",
           source: "verify-payment-status",
-          result: "payment_confirmed",
+          result: "error",
           paymentEnvironment: paymentContext.environment,
-          detail: `platform_fee_total=${financialSnapshot.platformFeeTotal.toFixed(2)}`,
+          errorCode: "financial_snapshot_missing",
+          detail: "snapshot_not_found_on_sale",
         });
+
+        return jsonResponse({
+          paymentStatus: sale.status,
+          error: "financial_snapshot_missing",
+          message: "Venda confirmada sem snapshot financeiro. Requer análise operacional.",
+        }, 409);
       }
 
       await persistVerifyLog({

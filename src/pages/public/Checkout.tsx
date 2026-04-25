@@ -178,9 +178,6 @@ export default function Checkout() {
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
-  const [platformFeePercent, setPlatformFeePercent] = useState<number | null>(
-    null,
-  );
   const [companyPixStatus, setCompanyPixStatus] = useState<{
     productionReady: boolean;
     sandboxReady: boolean;
@@ -241,7 +238,7 @@ export default function Checkout() {
   // Comentário de suporte: consolidamos os números do resumo em um único memo para evitar
   // divergência visual entre as etapas sem alterar as regras atuais de cálculo.
   const checkoutSummary = useMemo(() => {
-    if (!event || platformFeePercent == null) {
+    if (!event) {
       return {
         originalSubtotal: 0,
         benefitDiscountTotal: 0,
@@ -289,7 +286,6 @@ export default function Checkout() {
 
     const breakdown = calculateFees(avgUnitPrice, eventFees, {
       passToCustomer: event.pass_platform_fee_to_customer,
-      feePercent: platformFeePercent,
     });
 
     const totalFees = roundCurrency(breakdown.totalFees * selectedCount);
@@ -339,7 +335,6 @@ export default function Checkout() {
     };
   }, [
     event,
-    platformFeePercent,
     selectedSeats,
     usesCategoryPricing,
     eventFees,
@@ -468,21 +463,21 @@ export default function Checkout() {
           }
           setEvent(eventData);
 
-          // Fonte de verdade: taxa da empresa dona do evento (sem fallback silencioso).
+          // Observação de blindagem: o frontend usa estes dados apenas para visualização/UX.
+          // A fonte oficial do cálculo financeiro é o snapshot gerado no backend.
           const { data: companyData, error: companyError } = await supabase
             .from("companies")
             .select("platform_fee_percent, asaas_pix_ready_production, asaas_pix_ready_sandbox")
             .eq("id", eventData.company_id)
             .single();
 
-          if (companyError || companyData?.platform_fee_percent == null) {
+          if (companyError) {
             toast.error(
               "Não foi possível carregar a taxa da plataforma da empresa.",
             );
             navigate(`/eventos/${id}`);
             return;
           }
-          setPlatformFeePercent(Number(companyData.platform_fee_percent));
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
             sandboxReady: Boolean(companyData.asaas_pix_ready_sandbox),
@@ -843,7 +838,7 @@ export default function Checkout() {
   const calculateTotalsFromSnapshots = (
     snapshots: Array<PassengerBenefitSnapshot | null>,
   ) => {
-    if (!event || platformFeePercent == null) {
+    if (!event) {
       return {
         originalSubtotal: 0,
         benefitTotalDiscount: 0,
@@ -872,7 +867,6 @@ export default function Checkout() {
       passengerCount > 0 ? subtotalAfterBenefits / passengerCount : 0;
     const feeBreakdown = calculateFees(avgFinalPrice, eventFees, {
       passToCustomer: event.pass_platform_fee_to_customer,
-      feePercent: platformFeePercent,
     });
     const totalFees = roundCurrency(feeBreakdown.totalFees * passengerCount);
     const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);
@@ -1041,15 +1035,6 @@ export default function Checkout() {
       } else if (resolvedSellerId) {
         validatedSellerId = resolvedSellerId;
       }
-    }
-
-    // Regra oficial: totais da venda são derivados do snapshot por passageiro.
-    if (platformFeePercent == null) {
-      toast.error("Taxa da plataforma da empresa indisponível.");
-      preOpenedPaymentTab?.close();
-      setSubmitting(false);
-      setPaymentCheckoutStatus("idle");
-      return;
     }
 
     let snapshotsToPersist = passengerBenefitSnapshots;
