@@ -1,6 +1,15 @@
 # PRD — Página SEO: Controle de Ônibus e Operação de Viagens
 
 
+
+## Referência obrigatória — Conteúdo emocional
+
+Este PRD deve seguir obrigatoriamente:
+
+`docs/PRD/SEO/PRD — Modelo de Conteúdo Emocional e Imersivo.txt`
+
+---
+
 ## Referência visual obrigatória
 
 Esta página deve seguir o padrão visual definido em:
@@ -193,6 +202,19 @@ Reforço:
 
 ---
 
+## Diretrizes complementares de conteúdo emocional
+
+Sem remover a estrutura já definida neste PRD, o conteúdo da página deve incluir obrigatoriamente:
+
+- storytelling com contexto real de operação, mostrando a situação antes da solução
+- identificação do usuário com dores e rotina (efeito espelho)
+- momento de insight explícito para virar a percepção do usuário
+- transição natural do problema para a solução SmartBus BR
+
+Regra adicional: a página não pode ser apenas informativa; deve conduzir para conversão com CTA como conclusão lógica da narrativa.
+
+---
+
 ## Critérios de sucesso
 
 - falar com quem pensa em operação (não só venda)
@@ -202,6 +224,10 @@ Reforço:
 - conduzir para conversão
 
 ---
+- nível de imersão do usuário durante a leitura
+- identificação clara com o problema apresentado
+- retenção de leitura até o bloco de solução/CTA
+- condução natural para conversão sem quebra de contexto
 
 ## Restrições
 

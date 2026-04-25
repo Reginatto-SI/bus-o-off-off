@@ -1,5 +1,14 @@
 # PRD — Padrão Visual das Páginas SEO
 
+
+## Referência obrigatória — Conteúdo emocional
+
+Este PRD deve seguir obrigatoriamente:
+
+`docs/PRD/SEO/PRD — Modelo de Conteúdo Emocional e Imersivo.txt`
+
+---
+
 ## Objetivo do padrão visual SEO
 
 Consolidar uma fonte central de verdade para o padrão visual e estrutural das páginas satélite SEO do SmartBus BR, garantindo consistência de experiência, leitura, autoridade percebida e conversão.
@@ -103,3 +112,25 @@ A estrutura pode ter pequenos ajustes de ordem apenas quando melhorar compreens�
 - Não remover conteúdo SEO específico já definido por página.
 - Não tratar a página piloto como conteúdo para cópia cega.
 - Em caso de dúvida, priorizar consistência visual com a página piloto `/sistema-para-excursoes`.
+
+---
+
+## Diretrizes complementares de conteúdo emocional
+
+Sem remover a estrutura já definida neste PRD, o conteúdo da página deve incluir obrigatoriamente:
+
+- storytelling com contexto real de operação, mostrando a situação antes da solução
+- identificação do usuário com dores e rotina (efeito espelho)
+- momento de insight explícito para virar a percepção do usuário
+- transição natural do problema para a solução SmartBus BR
+
+Regra adicional: a página não pode ser apenas informativa; deve conduzir para conversão com CTA como conclusão lógica da narrativa.
+
+---
+
+## Critérios de sucesso
+
+- nível de imersão do usuário durante a leitura
+- identificação clara com o problema apresentado
+- retenção de leitura até o bloco de solução/CTA
+- condução natural para conversão sem quebra de contexto

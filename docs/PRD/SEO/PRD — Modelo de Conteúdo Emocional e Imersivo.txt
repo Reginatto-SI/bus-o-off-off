@@ -1,0 +1,99 @@
+# PRD — Modelo de Conteúdo Emocional e Imersivo
+
+## Referência obrigatória — Conteúdo emocional
+
+Este PRD é a referência central obrigatória para todos os PRDs SEO em `docs/PRD/SEO`.
+
+---
+
+## Objetivo
+
+Definir o padrão obrigatório para transformar páginas SEO do SmartBus BR em experiências de leitura que geram identificação, imersão no problema e condução natural para conversão.
+
+---
+
+## Estrutura obrigatória de conteúdo emocional
+
+Todas as páginas SEO devem seguir, obrigatoriamente, esta sequência narrativa:
+
+1. **Contexto real (imersão)**
+   - abrir com uma cena reconhecível do dia a dia do organizador
+   - apresentar ambiente, pressão e responsabilidade real
+
+2. **Identificação (efeito espelho)**
+   - explicitar dores que o usuário já vive
+   - usar linguagem que faça o usuário pensar “isso acontece comigo”
+
+3. **Escalada da dor**
+   - mostrar impacto cumulativo de manter processos manuais
+   - deixar clara a consequência operacional, financeira e emocional
+
+4. **Momento de insight (obrigatório)**
+   - inserir virada de percepção, mostrando que o problema não é falta de esforço, e sim falta de sistema
+   - posicionar o insight como ponto de mudança da jornada
+
+5. **Transição natural para solução**
+   - conectar o insight ao SmartBus BR sem ruptura comercial brusca
+   - apresentar a solução como continuidade lógica da narrativa
+
+6. **CTA como conclusão lógica**
+   - CTA deve ser consequência natural do entendimento construído
+   - evitar CTA isolado ou desconectado da história
+
+---
+
+## Regras obrigatórias
+
+- a página NÃO pode ser apenas informativa
+- deve gerar identificação emocional desde o início
+- deve conduzir para conversão com progressão narrativa clara
+- deve manter linguagem simples, concreta e orientada a cenário real
+
+---
+
+## Regra de ouro
+
+Se o usuário não pensar:
+
+👉 **“isso é exatamente o meu problema”**
+
+a página está errada.
+
+---
+
+## Diretrizes complementares de conteúdo emocional
+
+Aplicação obrigatória em todos os PRDs SEO existentes:
+
+- storytelling com contexto real de operação
+- identificação do usuário com efeito espelho
+- momento de insight explícito como virada narrativa
+- transição natural para solução e CTA
+
+---
+
+## Critérios mínimos de validação por página
+
+- existe contexto real logo na abertura
+- existe bloco explícito de identificação
+- existe escalada de dor antes da solução
+- existe momento de insight claramente marcado
+- a transição para o SmartBus BR é natural
+- o CTA final funciona como fechamento lógico
+
+---
+
+- nível de imersão do usuário durante a leitura
+
+- identificação clara com o problema apresentado
+
+- retenção de leitura até o bloco de solução/CTA
+
+- condução natural para conversão sem quebra de contexto
+
+## Restrições
+
+- não remover arquitetura SEO existente
+- não alterar URLs, clusters ou interlinkagem
+- não substituir especificações técnicas de cada PRD
+- aplicar este modelo como camada complementar obrigatória
