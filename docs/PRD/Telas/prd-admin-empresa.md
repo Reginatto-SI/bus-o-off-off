@@ -163,3 +163,35 @@ where public_slug is null;
 - ✅ Backfill restrito a `where public_slug is null`, sem sobrescrever slugs existentes.
 - ✅ Fluxo de criação via `register-company` continua sem enviar `public_slug`, delegando geração automática ao banco.
 - ⚠️ Validação E2E em ambiente com banco ativo continua recomendada para comprovar runtime ponta a ponta.
+
+## 19) Validação Fase 1 (estrutura PRD comportamental)
+
+### 1. Objetivo
+Conforme seções 1, 5 e 6: centralizar configuração da empresa ativa e integração operacional de pagamentos.
+
+### 2. Contexto no sistema
+Conforme seções 3, 9, 10 e 11: conecta cadastro da empresa, regras multiempresa, RLS e integrações Asaas/Storage.
+
+### 3. Fluxo REAL da tela
+Conforme seções 4, 5, 6 e 12: carregamento da empresa ativa, hidratação de formulário por abas, persistência e feedback de operação.
+
+### 4. Regras de negócio
+Conforme seções 6, 8, 9 e 13: validações cadastrais, slug público, políticas operacionais e regras de isolamento por empresa.
+
+### 5. Integrações envolvidas
+Conforme seção 11: Asaas (diagnóstico/vínculo), Storage (logo/capa), QR Code da vitrine e RPC de slug.
+
+### 6. Estados possíveis
+Conforme seção 12: carregando (`Skeleton`), salvando, upload de mídia, sucesso/erro por `toast`.
+
+### 7. Cenários de falha
+Conforme seções 14 e 15: ausência/erro de slug, inconsistência de vitrine e falhas de configuração de pagamentos.
+
+### 8. Riscos operacionais
+Conforme seções 14, 15 e 18: dependência de configuração correta de empresa/Asaas e impacto comercial da ausência de slug.
+
+### 9. Logs e diagnóstico
+Conforme seções 11, 12, 17 e 18: diagnóstico por edge functions Asaas, consultas SQL de backfill e validações de trigger/índice.
+
+### 10. Dúvidas pendentes
+Validação E2E ponta a ponta em ambiente executando app permanece recomendada (já registrada na seção 18).
