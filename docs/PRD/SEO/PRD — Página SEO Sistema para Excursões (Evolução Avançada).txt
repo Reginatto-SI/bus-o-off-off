@@ -1,0 +1,98 @@
+# 🧠 PRD FINAL — Páginas Satélite SEO (SmartBus BR)
+
+## Página alvo
+- URL: `/sistema-para-excursoes`
+- Arquivo base: `src/pages/public/SystemForExcursionsPage.tsx`
+
+## 🎯 Objetivo
+Criar evolução da página satélite para:
+- Captura de tráfego orgânico (Google)
+- Conversão de usuários em clientes
+- Distribuição inteligente de tráfego entre páginas
+- Reforço de autoridade do produto
+
+## 📦 Estrutura obrigatória da página
+1. HERO com H1 principal, subtítulo e 2 CTAs.
+2. Bloco de autoridade com funcionalidades reais.
+3. Problema vs solução (caos atual x SmartBus).
+4. Separação de público (organizador x comprador).
+5. Como funciona (Criar, Configurar, Vender, Controlar).
+6. Bloco de diferencial com:
+   - Sem mensalidade
+   - Pagamento integrado
+   - QR Code
+   - Controle centralizado
+7. Bloco de prova/autoridade com:
+   - “Sistema completo de gestão de excursões”
+   - “Fluxo validado na prática”
+   - “Do pagamento ao embarque”
+8. Tipos de uso para SEO avançado:
+   - excursões para shows
+   - excursões religiosas
+   - excursões esportivas
+   - viagens em grupo
+9. Mini demonstração de uso real.
+10. Comparação (antes manual x depois SmartBus).
+11. FAQ com mínimo de 8 perguntas.
+12. Bloco de navegação com cenários específicos.
+13. CTA final forte de conversão.
+14. Personalização leve por página (obrigatório), mantendo estrutura base com adaptação textual por cenário.
+
+## 🔍 Regras de SEO
+### Palavra-chave principal
+- “sistema para excursões”
+- Distribuição obrigatória em H1, subtítulo e corpo (3 a 5 vezes, natural).
+
+### Palavras secundárias
+- organizar excursões
+- vender excursão online
+- controle de passageiros
+- excursão com pagamento online
+
+## 🧩 Regra adicional obrigatória — Personalização por página
+### 1. Evitar repetição literal entre páginas satélite
+- Não reutilizar frases idênticas em páginas diferentes.
+- Atenção especial para HERO, problema vs solução, bloco de prova e CTA.
+
+### 2. Adaptar linguagem para o cenário específico
+- Excursões: passageiros, embarque, pontos de saída.
+- Eventos: participantes, ingressos, check-in.
+- Viagens: roteiro, destinos, organização de viagem.
+
+### 3. Personalizar pelo menos 20% do conteúdo
+- Ajustar HERO (título e/ou subtítulo), problema, solução, tipos de uso e FAQ.
+- FAQ deve conter no mínimo 2 perguntas exclusivas do cenário da página.
+
+### 4. Tipos de uso devem ser específicos
+- Evitar lista genérica repetida.
+- Exemplo para excursões: shows, religiosas, esportivas, viagens de compras.
+
+### 5. Ajustar variações de palavras-chave secundárias
+- Usar termos aderentes ao cenário da página para reduzir canibalização SEO.
+
+### 6. Manter consistência estrutural
+- Não alterar layout base.
+- Não criar novos blocos.
+- Não remover seções obrigatórias.
+
+### Estrutura semântica
+- H1 único
+- H2 para seções principais
+- H3 para subtópicos
+
+## 🎯 Regras de conversão
+- Mínimo 3 CTAs
+- Linguagem simples
+- Evitar termos técnicos
+- Foco em resultado
+
+## 🚫 Restrições
+- Não inventar números
+- Não criar blocos desnecessários
+- Não quebrar layout padrão
+- Não criar fluxo novo
+- Não duplicar conteúdo entre páginas satélite
+- Não usar texto genérico idêntico para todos os cenários
+
+## 🧠 Regra final
+A página deve parecer específica para o nicho de excursões, reutilizando a estrutura base já existente com mínimo impacto estrutural.
