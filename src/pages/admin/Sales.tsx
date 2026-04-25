@@ -1261,7 +1261,7 @@ export default function Sales() {
     fetchSales();
   };
 
-  // ── Pagar taxa da plataforma (abre checkout da taxa reutilizando o mesmo fluxo do comprovante final) ──
+  // ── Ações da taxa da plataforma (consulta/reprocessa/gera conforme status da venda manual) ──
   const [payingFee, setPayingFee] = useState(false);
   const handlePayPlatformFee = async (sale: Sale) => {
     setPayingFee(true);
@@ -1281,11 +1281,85 @@ export default function Sales() {
     }
   };
 
+  /**
+   * Consulta estado da taxa antes de qualquer tentativa de reprocessar/gerar nova cobrança.
+   * Reutilizamos o verify-payment-status (fallback oficial) para convergir casos já pagos no Asaas.
+   */
+  const verifyPlatformFeeStatus = async (sale: Sale): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-payment-status', {
+        body: { sale_id: sale.id },
+      });
+
+      if (error) {
+        toast.error('Não foi possível consultar a taxa agora. Tente novamente em instantes.');
+        return false;
+      }
+
+      if (data?.paymentStatus === 'pago') {
+        toast.success('Taxa consultada e convergida como paga.');
+        await fetchSales();
+        return true;
+      }
+
+      await fetchSales();
+      return false;
+    } catch {
+      toast.error('Erro ao consultar status da taxa da plataforma.');
+      return false;
+    }
+  };
+
+  const handleConsultPlatformFee = async (sale: Sale) => {
+    const convergedAsPaid = await verifyPlatformFeeStatus(sale);
+    if (convergedAsPaid) return;
+
+    // Se já existe cobrança vinculada, abrimos/reutilizamos a mesma via fluxo oficial.
+    if ((sale as any).platform_fee_payment_id) {
+      await handlePayPlatformFee(sale);
+      return;
+    }
+
+    toast.info('Nenhuma cobrança de taxa foi encontrada para esta venda. Use "Gerar taxa" para iniciar.');
+  };
+
+  const handleViewPaidPlatformFee = async (sale: Sale) => {
+    // Em status pago não iniciamos nova cobrança. Só consultamos/reabrimos se houver cobrança vinculada.
+    if ((sale as any).platform_fee_payment_id) {
+      await handleConsultPlatformFee(sale);
+      return;
+    }
+
+    toast.info('Taxa marcada como paga sem link local disponível. Consulte o diagnóstico/logs para rastrear o comprovante.');
+  };
+
+  const handleReprocessPlatformFee = async (sale: Sale) => {
+    const convergedAsPaid = await verifyPlatformFeeStatus(sale);
+    if (convergedAsPaid) return;
+
+    // Regra de segurança: se já existe cobrança, consultamos/reutilizamos antes de criar nova.
+    if ((sale as any).platform_fee_payment_id) {
+      await handlePayPlatformFee(sale);
+      return;
+    }
+
+    await handlePayPlatformFee(sale);
+  };
+
   // ── Copy link ──
+  // Suporte operacional: centraliza cópia de identificadores críticos (UUID e IDs Asaas) sem alterar fluxo de negócio.
+  const copySupportValue = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado!`);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+    }
+  };
+
   const handleCopyLink = (saleId: string) => {
     const url = `${window.location.origin}/confirmacao/${saleId}`;
-    navigator.clipboard.writeText(url);
-    toast.success('Link copiado!');
+    copySupportValue(url, 'Link');
   };
 
   // ── Ticket Generation ──
@@ -1415,11 +1489,42 @@ export default function Sales() {
     }
 
     if (isGerente) {
-      if (feePending) {
+      const hasPlatformFeePaymentId = Boolean((sale as any).platform_fee_payment_id);
+
+      // Regra de segurança do menu:
+      // - pending sem cobrança: "Gerar taxa"
+      // - pending com cobrança: "Consultar taxa"
+      // - paid: "Ver taxa paga"
+      // - failed: "Consultar/Reprocessar taxa"
+      if (feeStatus === 'pending' && !hasPlatformFeePaymentId) {
         actions.push({
-          label: `Pagar Taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
+          label: `Gerar taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
           icon: CreditCard,
           onClick: () => handlePayPlatformFee(sale),
+        });
+      }
+
+      if (feeStatus === 'pending' && hasPlatformFeePaymentId) {
+        actions.push({
+          label: 'Consultar taxa',
+          icon: RefreshCw,
+          onClick: () => handleConsultPlatformFee(sale),
+        });
+      }
+
+      if (feeStatus === 'paid') {
+        actions.push({
+          label: 'Ver taxa paga',
+          icon: Eye,
+          onClick: () => handleViewPaidPlatformFee(sale),
+        });
+      }
+
+      if (feeStatus === 'failed') {
+        actions.push({
+          label: 'Reprocessar taxa',
+          icon: RefreshCw,
+          onClick: () => handleReprocessPlatformFee(sale),
         });
       }
 
@@ -2128,6 +2233,61 @@ export default function Sales() {
                             value={format(new Date(detailSale.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           />
                         </div>
+
+                        {/* Diagnóstico de suporte: expõe identificadores internos sem depender de consulta direta ao banco. */}
+                        {detailSale.status !== 'bloqueado' && (
+                          <div className="mt-4 rounded-md border bg-muted/20 p-3 space-y-3">
+                            <p className="text-sm font-semibold">Diagnóstico de Suporte</p>
+
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">ID interno da venda</p>
+                              <div className="flex items-center gap-2">
+                                <code className="rounded bg-muted px-2 py-1 text-xs break-all">{detailSale.id}</code>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => copySupportValue(detailSale.id, 'ID interno da venda')}
+                                >
+                                  <Copy className="h-4 w-4 mr-2" />
+                                  Copiar
+                                </Button>
+                              </div>
+                            </div>
+
+                            {(detailSale as any).platform_fee_payment_id && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">platform_fee_payment_id</p>
+                                <div className="flex items-center gap-2">
+                                  <code className="rounded bg-muted px-2 py-1 text-xs break-all">{(detailSale as any).platform_fee_payment_id}</code>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => copySupportValue((detailSale as any).platform_fee_payment_id, 'platform_fee_payment_id')}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copiar
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {(detailSale as any).platform_fee_status && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">platform_fee_status</p>
+                                <code className="inline-block rounded bg-muted px-2 py-1 text-xs break-all">{String((detailSale as any).platform_fee_status)}</code>
+                              </div>
+                            )}
+
+                            {(detailSale as any).payment_environment && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">payment_environment</p>
+                                <code className="inline-block rounded bg-muted px-2 py-1 text-xs break-all">{String((detailSale as any).payment_environment)}</code>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Bloco de taxa da plataforma (vendas administrativas) */}
                         {(detailSale as any).platform_fee_status && (detailSale as any).platform_fee_status !== 'not_applicable' && detailSale.status !== 'bloqueado' && (
