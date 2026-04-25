@@ -381,7 +381,8 @@ serve(async (req) => {
             platform_fee_paid_at: confirmedAt,
             payment_confirmed_at: confirmedAt,
             status: sale.status === "reservado" ? "pago" : sale.status,
-            platform_fee_payment_id: platformFeePaymentData.id ?? sale.platform_fee_payment_id,
+            // Regra de imutabilidade: verify nunca troca o `platform_fee_payment_id` já vinculado.
+            platform_fee_payment_id: sale.platform_fee_payment_id,
           })
           .eq("id", sale.id)
           .in("platform_fee_status", ["pending", "failed"])

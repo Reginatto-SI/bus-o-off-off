@@ -40,6 +40,10 @@ export async function startPlatformFeeCheckout({
       if (data?.error_code === 'consult_only_without_reusable_payment') {
         toast.info(data?.error || 'Não existe cobrança reutilizável para consulta desta taxa.');
         await onMissingReusablePayment?.();
+      } else if (data?.error_code === 'existing_platform_fee_terminal_requires_admin_action') {
+        // Regra de segurança: se já existe cobrança vinculada em status terminal,
+        // o operador não pode gerar nova cobrança automaticamente neste fluxo.
+        toast.warning(data?.error || 'Cobrança vinculada em status terminal. É necessária ação administrativa explícita para nova cobrança.');
       } else {
         toast.error(data?.error || 'Erro ao criar checkout da taxa');
       }

@@ -1264,6 +1264,12 @@ export default function Sales() {
   // ── Ações da taxa da plataforma (consulta/reprocessa/gera conforme status da venda manual) ──
   const [payingFee, setPayingFee] = useState(false);
   const handlePayPlatformFee = async (sale: Sale) => {
+    // Regra de imutabilidade: "Gerar/Pagar taxa" não cria nova cobrança se já houver vínculo.
+    if ((sale as any).platform_fee_payment_id) {
+      await handleOpenExistingPlatformFee(sale);
+      return;
+    }
+
     setPayingFee(true);
     try {
       // Comentário de suporte: a listagem e o comprovante final precisam abrir
@@ -1353,13 +1359,14 @@ export default function Sales() {
     const convergedAsPaid = await verifyPlatformFeeStatus(sale);
     if (convergedAsPaid) return;
 
-    // Regra de segurança: reprocessar sempre consulta/reutiliza cobrança vinculada primeiro.
+    // Regra de segurança: reprocessar nunca cria nova cobrança quando já existe vínculo.
     if ((sale as any).platform_fee_payment_id) {
-      const reusedExisting = await handleOpenExistingPlatformFee(sale);
-      if (reusedExisting) return;
+      await handleOpenExistingPlatformFee(sale);
+      toast.info('Cobrança vinculada consultada. Para gerar nova cobrança após status terminal, é necessária ação administrativa explícita.');
+      return;
     }
 
-    // Somente aqui o fluxo pode solicitar criação de nova cobrança (quando permitido no backend).
+    // Só sem vínculo local o fluxo pode solicitar geração inicial.
     await handlePayPlatformFee(sale);
   };
 

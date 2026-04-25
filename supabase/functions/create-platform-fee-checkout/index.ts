@@ -289,6 +289,18 @@ serve(async (req) => {
       });
     }
 
+    if (existingOutcome?.type === "blocked_terminal_or_invalid") {
+      return new Response(JSON.stringify({
+        error: "Existe uma cobrança vinculada em status terminal. Para gerar uma nova cobrança, é necessária ação administrativa explícita.",
+        error_code: "existing_platform_fee_terminal_requires_admin_action",
+        payment_id: existingOutcome.paymentId,
+        asaas_status: existingOutcome.asaasStatus,
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (consultOnly) {
       await logSaleOperationalEvent({
         supabaseAdmin,
@@ -393,7 +405,9 @@ serve(async (req) => {
     await supabaseAdmin
       .from("sales")
       .update({ platform_fee_payment_id: paymentData.id })
-      .eq("id", sale.id);
+      .eq("id", sale.id)
+      // Blindagem de corrida: não sobrescreve vínculo já preenchido por outro fluxo concorrente.
+      .is("platform_fee_payment_id", null);
 
     await supabaseAdmin.from("sale_logs").insert({
       sale_id: sale.id,
@@ -447,6 +461,7 @@ async function resolveExistingPlatformFeePayment(params: {
   | { type: "already_paid"; paymentId: string; asaasStatus: string; invoiceUrl: string | null }
   | { type: "reused_pending"; paymentId: string; asaasStatus: string; invoiceUrl: string | null }
   | { type: "blocked_unverifiable"; paymentId: string | null }
+  | { type: "blocked_terminal_or_invalid"; paymentId: string | null; asaasStatus: string | null }
   | null
 > {
   const { supabaseAdmin, sale, paymentContext, apiKey, startedAt } = params;
@@ -513,6 +528,8 @@ async function resolveExistingPlatformFeePayment(params: {
   let existingPayment: Record<string, any> | null = null;
 
   if (sale.platform_fee_payment_id) {
+    // Regra de imutabilidade: se já existe `platform_fee_payment_id`, só consultamos esse ID.
+    // Nunca buscamos por externalReference para substituir/corrigir automaticamente.
     const byId = await checkExistingByPaymentId(String(sale.platform_fee_payment_id));
     if (byId === "unverifiable") {
       await logSaleOperationalEvent({
@@ -529,10 +546,30 @@ async function resolveExistingPlatformFeePayment(params: {
 
       return { type: "blocked_unverifiable", paymentId: sale.platform_fee_payment_id };
     }
+    if (!byId) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "platform_fee_checkout_blocked_existing_payment_not_found",
+        source: "create-platform-fee-checkout",
+        result: "warning",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: "existing_platform_fee_not_found_on_asaas",
+        detail: `payment_id=${sale.platform_fee_payment_id}`,
+      });
+
+      return {
+        type: "blocked_terminal_or_invalid",
+        paymentId: sale.platform_fee_payment_id,
+        asaasStatus: "NOT_FOUND",
+      };
+    }
     existingPayment = byId;
   }
 
   if (!existingPayment) {
+    // Busca por externalReference só é permitida quando o vínculo local ainda está vazio.
     const byExternalReference = await choosePaymentFromExternalReference();
     if (byExternalReference === "unverifiable") {
       await logSaleOperationalEvent({
@@ -550,13 +587,6 @@ async function resolveExistingPlatformFeePayment(params: {
       return { type: "blocked_unverifiable", paymentId: sale.platform_fee_payment_id ?? null };
     }
     existingPayment = byExternalReference;
-
-    if (existingPayment?.id && sale.platform_fee_payment_id !== existingPayment.id) {
-      await supabaseAdmin
-        .from("sales")
-        .update({ platform_fee_payment_id: existingPayment.id })
-        .eq("id", sale.id);
-    }
   }
 
   if (!existingPayment?.id) {
@@ -574,7 +604,8 @@ async function resolveExistingPlatformFeePayment(params: {
         platform_fee_status: "paid",
         platform_fee_paid_at: confirmedAt,
         payment_confirmed_at: confirmedAt,
-        platform_fee_payment_id: existingPayment.id,
+        // Congela ID original quando já havia vínculo; só preenche quando estava nulo.
+        platform_fee_payment_id: sale.platform_fee_payment_id ?? existingPayment.id,
         status: sale.status === "reservado" ? "pago" : sale.status,
       })
       .eq("id", sale.id)
@@ -626,6 +657,15 @@ async function resolveExistingPlatformFeePayment(params: {
   }
 
   if (ASAAS_REUSABLE_PENDING_STATUS.has(asaasStatus)) {
+    if (!sale.platform_fee_payment_id && existingPayment?.id) {
+      // Primeira vinculação local (legado sem ID): permitido apenas quando estava vazio.
+      await supabaseAdmin
+        .from("sales")
+        .update({ platform_fee_payment_id: existingPayment.id })
+        .eq("id", sale.id)
+        .is("platform_fee_payment_id", null);
+    }
+
     await logSaleOperationalEvent({
       supabaseAdmin,
       saleId: sale.id,
@@ -670,6 +710,50 @@ async function resolveExistingPlatformFeePayment(params: {
     };
   }
 
+  if (ASAAS_ALLOW_NEW_CHARGE_STATUS.has(asaasStatus)) {
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "platform_fee_checkout_blocked_terminal_status_requires_admin_action",
+      source: "create-platform-fee-checkout",
+      result: "warning",
+      paymentEnvironment: paymentContext.environment,
+      errorCode: "platform_fee_existing_payment_terminal_status",
+      detail: `payment_id=${existingPayment.id}|asaas_status=${asaasStatus}`,
+    });
+
+    await logSaleIntegrationEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      paymentEnvironment: paymentContext.environment,
+      provider: "asaas",
+      direction: "outgoing_request",
+      eventType: "platform_fee_checkout_idempotency",
+      paymentId: existingPayment.id,
+      externalReference,
+      httpStatus: 409,
+      processingStatus: "warning",
+      resultCategory: "warning",
+      warningCode: "platform_fee_existing_payment_terminal_status",
+      durationMs: Date.now() - startedAt,
+      message: "Cobrança existente em status terminal; nova cobrança bloqueada (ação administrativa explícita necessária)",
+      payloadJson: { sale_id: sale.id },
+      responseJson: {
+        payment_id: existingPayment.id,
+        asaas_status: asaasStatus,
+        allow_new_charge: false,
+      },
+    });
+
+    return {
+      type: "blocked_terminal_or_invalid",
+      paymentId: existingPayment.id,
+      asaasStatus,
+    };
+  }
+
   if (!ASAAS_ALLOW_NEW_CHARGE_STATUS.has(asaasStatus)) {
     await logSaleOperationalEvent({
       supabaseAdmin,
@@ -685,42 +769,6 @@ async function resolveExistingPlatformFeePayment(params: {
 
     return { type: "blocked_unverifiable", paymentId: existingPayment.id };
   }
-
-  // Status finalizado/expirado: permitimos nova cobrança e mantemos trilha explícita.
-  await logSaleOperationalEvent({
-    supabaseAdmin,
-    saleId: sale.id,
-    companyId: sale.company_id,
-    action: "platform_fee_checkout_allow_new_charge_after_terminal_status",
-    source: "create-platform-fee-checkout",
-    result: "warning",
-    paymentEnvironment: paymentContext.environment,
-    detail: `previous_payment_id=${existingPayment.id}|asaas_status=${asaasStatus}`,
-  });
-
-  await logSaleIntegrationEvent({
-    supabaseAdmin,
-    saleId: sale.id,
-    companyId: sale.company_id,
-    paymentEnvironment: paymentContext.environment,
-    provider: "asaas",
-    direction: "outgoing_request",
-    eventType: "platform_fee_checkout_idempotency",
-    paymentId: existingPayment.id,
-    externalReference,
-    httpStatus: 200,
-    processingStatus: "warning",
-    resultCategory: "warning",
-    warningCode: "platform_fee_existing_payment_terminal_status",
-    durationMs: Date.now() - startedAt,
-    message: "Cobrança anterior em status terminal; criação de nova cobrança permitida",
-    payloadJson: { sale_id: sale.id },
-    responseJson: {
-      payment_id: existingPayment.id,
-      asaas_status: asaasStatus,
-      allow_new_charge: true,
-    },
-  });
 
   return null;
 }
