@@ -11,6 +11,12 @@ import {
 } from "../_shared/payment-context-resolver.ts";
 import type { PaymentEnvironment } from "../_shared/runtime-env.ts";
 import { resolveAsaasSplitRecipients } from "../_shared/split-recipients-resolver.ts";
+import {
+  amountToGrossPercent,
+  computeProgressiveFeeForPassengers,
+  distributePlatformFee,
+  logFeeEngineTrace,
+} from "../_shared/platform-fee-engine.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,29 +110,28 @@ function buildFinancialSplitSnapshot(params: {
   };
 }
 
-function calculatePlatformFee(unitPrice: number, feePercent: number): number {
-  return roundCurrency(unitPrice * (feePercent / 100));
-}
-
 function calculateFeesTotal(params: {
-  unitPrice: number;
+  passengerUnitPrices: number[];
   eventFees: Array<{ fee_type: string; value: number; is_active: boolean }>;
   passPlatformFeeToCustomer: boolean;
-  platformFeePercent: number;
-  quantity: number;
+  progressivePlatformFeeTotal: number;
 }) {
   const activeFees = params.eventFees.filter((fee) => fee.is_active);
-  const fixedAndPercentTotal = activeFees.reduce((sum, fee) => {
+  const feesPerPassenger = params.passengerUnitPrices.map((unitPrice) => activeFees.reduce((sum, fee) => {
     if (fee.fee_type === "percent") {
-      return sum + roundCurrency(params.unitPrice * (Number(fee.value) / 100));
+      return sum + roundCurrency(unitPrice * (Number(fee.value) / 100));
     }
     return sum + roundCurrency(Number(fee.value) || 0);
-  }, 0);
+  }, 0));
+
+  const fixedAndPercentTotal = roundCurrency(
+    feesPerPassenger.reduce((sum, passengerFee) => sum + passengerFee, 0),
+  );
 
   const platformFee = params.passPlatformFeeToCustomer
-    ? calculatePlatformFee(params.unitPrice, params.platformFeePercent)
+    ? roundCurrency(params.progressivePlatformFeeTotal)
     : 0;
-  return roundCurrency((fixedAndPercentTotal + platformFee) * params.quantity);
+  return roundCurrency(fixedAndPercentTotal + platformFee);
 }
 
 serve(async (req) => {
@@ -558,8 +563,6 @@ serve(async (req) => {
     });
 
     const platformFeePercent = Number(company.platform_fee_percent ?? 0);
-    const socioSplitPercent = Number(company.socio_split_percent ?? 0);
-
     if (platformFeePercent < 0) {
       return jsonResponse(
         {
@@ -648,6 +651,10 @@ serve(async (req) => {
         409,
       );
     }
+    const passengerUnitPrices = passengerSnapshots
+      .filter((passenger) => passenger.trip_id === sale.trip_id)
+      .map((passenger) => roundCurrency(Number(passenger.final_price ?? 0)));
+    const platformFeeEngine = computeProgressiveFeeForPassengers(passengerUnitPrices);
     const avgFinalPrice = quantityFromSnapshot > 0
       ? roundCurrency(passengerFinalSum / quantityFromSnapshot)
       : 0;
@@ -675,15 +682,14 @@ serve(async (req) => {
     }
 
     const feesTotal = calculateFeesTotal({
-      unitPrice: avgFinalPrice,
+      passengerUnitPrices,
       eventFees: (eventFees ?? []) as Array<{
         fee_type: string;
         value: number;
         is_active: boolean;
       }>,
       passPlatformFeeToCustomer: Boolean(sale.event?.pass_platform_fee_to_customer),
-      platformFeePercent: platformFeePercent,
-      quantity: quantityFromSnapshot,
+      progressivePlatformFeeTotal: platformFeeEngine.totalFee,
     });
 
     const expectedGrossFromSnapshot = roundCurrency(passengerFinalSum + feesTotal);
@@ -811,14 +817,44 @@ serve(async (req) => {
       );
     }
 
-    const platformWalletId = splitEnabled && platformFeePercent > 0
+    const feeTotalPercent = amountToGrossPercent(platformFeeEngine.totalFee, grossAmount);
+    const platformWalletId = splitEnabled && feeTotalPercent > 0
       ? Deno.env.get(paymentContext.platformWalletSecretName)
       : null;
 
     // Fase 2: resolvedor único do split (plataforma/sócio/representante).
     // Mantém regra determinística e evita espalhar validações por função.
     let splitResolution;
+    let feeDistribution;
     try {
+      const preResolution = await resolveAsaasSplitRecipients({
+        supabaseAdmin,
+        source: "create-asaas-payment",
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentContext.environment,
+        splitEnabled,
+        platformFeePercent: feeTotalPercent,
+        socioSplitPercent: feeTotalPercent,
+        representativeId: sale.representative_id ?? null,
+        includePlatformRecipient: true,
+        platformWalletId,
+        distributionPercentages: {
+          platform: feeTotalPercent,
+          socio: feeTotalPercent,
+          representative: feeTotalPercent,
+        },
+      });
+
+      feeDistribution = distributePlatformFee({
+        totalFee: platformFeeEngine.totalFee,
+        representativeEligible: preResolution.representative.eligible,
+      });
+
+      const platformSplitPercent = amountToGrossPercent(feeDistribution.platformAmount, grossAmount);
+      const socioSplitPercentByEngine = amountToGrossPercent(feeDistribution.socioAmount, grossAmount);
+      const representativeSplitPercentByEngine = amountToGrossPercent(feeDistribution.representativeAmount, grossAmount);
+
       splitResolution = await resolveAsaasSplitRecipients({
         supabaseAdmin,
         source: "create-asaas-payment",
@@ -826,11 +862,16 @@ serve(async (req) => {
         companyId: sale.company_id,
         paymentEnvironment: paymentContext.environment,
         splitEnabled,
-        platformFeePercent,
-        socioSplitPercent,
+        platformFeePercent: platformSplitPercent,
+        socioSplitPercent: socioSplitPercentByEngine,
         representativeId: sale.representative_id ?? null,
         includePlatformRecipient: true,
         platformWalletId,
+        distributionPercentages: {
+          platform: platformSplitPercent,
+          socio: socioSplitPercentByEngine,
+          representative: representativeSplitPercentByEngine,
+        },
       });
     } catch (splitError) {
       const splitErrorMessage = splitError instanceof Error
@@ -886,11 +927,28 @@ serve(async (req) => {
     }));
     const financialSnapshot = buildFinancialSplitSnapshot({
       grossAmount,
-      platformFeePercent,
-      socioSplitPercent,
+      platformFeePercent: amountToGrossPercent(platformFeeEngine.totalFee, grossAmount),
+      socioSplitPercent: splitResolution.representative.eligible
+        ? 33.33
+        : 50,
       representativePercent: splitResolution.representative.eligible
         ? splitResolution.representative.percent
         : 0,
+    });
+
+    logFeeEngineTrace({
+      source: "create-asaas-payment",
+      saleId: sale.id,
+      companyId: sale.company_id,
+      grossAmount,
+      representativeEligible: splitResolution.representative.eligible,
+      engine: platformFeeEngine,
+      distribution: feeDistribution ?? {
+        platformAmount: 0,
+        socioAmount: 0,
+        representativeAmount: 0,
+        mode: "half_half",
+      },
     });
 
     const totalFee = splitArray.reduce((sum, recipient) => sum + recipient.percentualValue, 0);
@@ -1314,12 +1372,12 @@ serve(async (req) => {
         payment_environment: paymentContext.environment,
         // Bloqueante crítico: congelamos o snapshot financeiro usado na criação da cobrança.
         // Webhook/verify reutilizam estes valores para evitar recalcular com configuração mutável.
-        split_snapshot_platform_fee_percent: platformFeePercent,
-        split_snapshot_socio_split_percent: socioSplitPercent,
+        split_snapshot_platform_fee_percent: feeTotalPercent,
+        split_snapshot_socio_split_percent: splitResolution.representative.eligible ? 33.33 : 50,
         split_snapshot_representative_percent: financialSnapshot.representativePercent,
-        split_snapshot_platform_fee_total: financialSnapshot.platformFeeTotal,
-        split_snapshot_socio_fee_amount: financialSnapshot.socioFeeAmount,
-        split_snapshot_platform_net_amount: financialSnapshot.platformNetAmount,
+        split_snapshot_platform_fee_total: platformFeeEngine.totalFee,
+        split_snapshot_socio_fee_amount: feeDistribution?.socioAmount ?? 0,
+        split_snapshot_platform_net_amount: feeDistribution?.platformAmount ?? 0,
         split_snapshot_source: "create-asaas-payment",
         split_snapshot_captured_at: new Date().toISOString(),
       })

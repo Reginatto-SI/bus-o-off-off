@@ -14,10 +14,6 @@ import {
   resolvePaymentContext,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
-import {
-  computeSocioFinancialSnapshot,
-  resolveAsaasSplitRecipients,
-} from "../_shared/split-recipients-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1115,130 +1111,45 @@ async function upsertFinancialSnapshot(
     return;
   }
 
-  logPaymentTrace("warn", "asaas-webhook", "financial_snapshot_source_dynamic_recalculation", {
+  logPaymentTrace("error", "asaas-webhook", "financial_snapshot_missing", {
     sale_id: saleId,
     company_id: companyId,
     payment_environment: paymentEnvironment,
-    financial_snapshot_source: "dynamic_recalculation",
     reason: "snapshot_not_found_on_sale",
   });
 
-  const { data: company } = await supabaseAdmin
-    .from("companies")
-    .select("platform_fee_percent, socio_split_percent")
-    .eq("id", companyId)
-    .single();
-
-  if (company?.platform_fee_percent == null) {
-    await logSaleOperationalEvent({
-      supabaseAdmin,
-      saleId,
-      companyId,
-      action: "payment_confirmed",
-      source: "asaas-webhook",
-      result: "warning",
-      detail: `platform_fee_percent_missing|payment=${payment.id}`,
-    });
-    return;
-  }
-
-  const platformFeePercent = Number(company.platform_fee_percent);
-  const grossAmount = sale.gross_amount ?? sale.unit_price * sale.quantity;
-  const socioSplitPercent = Number(company?.socio_split_percent ?? 50);
-  let splitResolution;
-  try {
-    splitResolution = await resolveAsaasSplitRecipients({
-      supabaseAdmin,
-      source: "asaas-webhook",
-      saleId,
-      companyId,
-      paymentEnvironment,
-      splitEnabled: true,
-      platformFeePercent,
-      socioSplitPercent,
-      representativeId: sale.representative_id ?? null,
-      includePlatformRecipient: false,
-    });
-  } catch (splitError) {
-    const splitErrorMessage = splitError instanceof Error
-      ? splitError.message
-      : String(splitError);
-    const [splitErrorCode, ...rest] = splitErrorMessage.split(":");
-    const splitErrorDetail = rest.join(":").trim();
-
-    logPaymentTrace("error", "asaas-webhook", splitErrorCode || "split_resolution_failed", {
-      sale_id: saleId,
-      company_id: companyId,
-      payment_environment: paymentEnvironment,
-      error_message: splitErrorDetail || splitErrorMessage,
-    });
-
-    await logSaleOperationalEvent({
-      supabaseAdmin,
-      saleId,
-      companyId,
-      action: "payment_confirmed",
-      source: "asaas-webhook",
-      result: "error",
-      paymentEnvironment,
-      errorCode: splitErrorCode || "split_resolution_failed",
-      detail: splitErrorDetail || splitErrorMessage,
-    });
-    return;
-  }
-
-  const financialSnapshot = computeSocioFinancialSnapshot({
-    grossAmount,
-    platformFeePercent,
-    socioSplitPercent,
-    socioValidation: splitResolution.socioValidation,
+  await logSaleOperationalEvent({
+    supabaseAdmin,
+    saleId,
+    companyId,
+    action: "payment_confirmed",
+    source: "asaas-webhook",
+    result: "error",
     paymentEnvironment,
+    errorCode: "financial_snapshot_missing",
+    detail: `payment=${payment.id}|snapshot_not_found_on_sale`,
   });
 
-  logPaymentTrace("info", "asaas-webhook", "financial_socio_selected", {
-    sale_id: saleId,
-    company_id: companyId,
-    payment_environment: paymentEnvironment,
-    socio_id: financialSnapshot.socio?.id ?? null,
-    socio_wallet_selected: financialSnapshot.socioWalletId,
-    socio_wallet_source:
-      paymentEnvironment === "production"
-        ? financialSnapshot.socio?.asaas_wallet_id_production
-          ? "socio.production"
-          : "none"
-        : financialSnapshot.socio?.asaas_wallet_id_sandbox
-          ? "socio.sandbox"
-          : "none",
+  await logSaleIntegrationEvent({
+    supabaseAdmin,
+    saleId,
+    companyId,
+    paymentEnvironment,
+    provider: "asaas",
+    direction: "incoming_webhook",
+    eventType: "payment_confirmed",
+    paymentId: payment.id ?? null,
+    externalReference: payment.externalReference ?? null,
+    httpStatus: 200,
+    processingStatus: "warning",
+    resultCategory: "warning",
+    warningCode: "financial_snapshot_missing",
+    message: "Webhook não recalculou financeiro por ausência de snapshot congelado",
+    payloadJson: payment,
+    responseJson: {
+      action: "blocked_without_snapshot",
+    },
   });
-
-  if (splitResolution.representative.eligible) {
-    logPaymentTrace("info", "asaas-webhook", "split_representative_eligible", {
-      sale_id: saleId,
-      company_id: companyId,
-      payment_environment: paymentEnvironment,
-      representative_id: splitResolution.representative.representativeId,
-      representative_percent: splitResolution.representative.percent,
-    });
-  } else if (sale.representative_id) {
-    logPaymentTrace("warn", "asaas-webhook", "split_representative_ignored", {
-      sale_id: saleId,
-      company_id: companyId,
-      payment_environment: paymentEnvironment,
-      representative_id: sale.representative_id,
-      representative_reason: splitResolution.representative.reason,
-    });
-  }
-
-  await supabaseAdmin
-    .from("sales")
-    .update({
-      gross_amount: grossAmount,
-      platform_fee_total: financialSnapshot.platformFeeTotal,
-      socio_fee_amount: financialSnapshot.socioFeeAmount,
-      platform_net_amount: financialSnapshot.platformNetAmount,
-      asaas_payment_status: payment.status,
-    })
-    .eq("id", saleId);
 }
 
 async function processPaymentFailed(

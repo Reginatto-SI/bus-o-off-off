@@ -10,6 +10,7 @@ Ser a porta de entrada oficial da documentação Asaas do SmartBus BR, com ordem
 4. [04-asaas-split-comissoes-e-representantes.md](./04-asaas-split-comissoes-e-representantes.md) — **Alta / Financeira**
 5. [05-asaas-configuracao-empresa-e-validacao.md](./05-asaas-configuracao-empresa-e-validacao.md) — **Alta / Configuração**
 6. [06-asaas-operacao-erros-e-diagnostico.md](./06-asaas-operacao-erros-e-diagnostico.md) — **Suporte / Operação**
+7. [07-asaas-motor-taxa-e-distribuicao-financeira.md](./07-asaas-motor-taxa-e-distribuicao-financeira.md) — **Crítica Máxima / Financeira**
 
 ## Papel de cada PRD (resumo executivo)
 - **01**: visão macro do contrato operacional Asaas no SmartBus BR (multiempresa, ambiente, confirmação, auditoria).
@@ -33,6 +34,7 @@ Ser a porta de entrada oficial da documentação Asaas do SmartBus BR, com ordem
 - **Alta Financeira (04)**: quebra causa divergência de repasse/comissão.
 - **Alta Configuração (05)**: quebra impede venda online e gera erros recorrentes.
 - **Operação (06)**: quebra aumenta tempo de diagnóstico e risco de resposta incorreta.
+- **Crítica Máxima Financeira (07)**: quebra causa divergência direta entre cobrança, split, snapshot e ledger.
 
 ## Escopo e limites
 - Este índice não define novas regras de negócio.

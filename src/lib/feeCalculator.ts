@@ -18,11 +18,19 @@ export interface FeeBreakdown {
 
 export interface PlatformFeeConfig {
   passToCustomer: boolean;
-  feePercent?: number;
 }
 
-export function calculatePlatformFee(unitPrice: number, feePercent: number): number {
-  return Math.round(unitPrice * (feePercent / 100) * 100) / 100;
+export function resolvePlatformFeePercentByTicketPrice(unitPrice: number): number {
+  if (unitPrice <= 100) return 6;
+  if (unitPrice <= 300) return 5;
+  if (unitPrice <= 600) return 4;
+  return 3;
+}
+
+export function calculatePlatformFee(unitPrice: number): number {
+  const percent = resolvePlatformFeePercentByTicketPrice(unitPrice);
+  const uncapped = Math.round(unitPrice * (percent / 100) * 100) / 100;
+  return Math.min(uncapped, 25);
 }
 
 /**
@@ -47,16 +55,15 @@ export function calculateFees(
         : Math.round(f.value * 100) / 100,
   }));
 
-  // Suporte: somente adiciona taxa da plataforma ao cliente quando o repasse do evento está ativo.
-  // Importante: o percentual deve vir da empresa (fonte de verdade), sem fallback silencioso.
+  // IMPORTANTE (blindagem PRD 07):
+  // este cálculo no frontend é apenas estimativa visual de checkout.
+  // A fonte oficial financeira é o snapshot calculado no backend (create-asaas-payment).
   if (platformFeeConfig?.passToCustomer) {
-    if (platformFeeConfig.feePercent == null || Number.isNaN(Number(platformFeeConfig.feePercent))) {
-      throw new Error('platform_fee_percent indisponível para cálculo de taxa da plataforma');
-    }
+    const resolvedPercent = resolvePlatformFeePercentByTicketPrice(unitPrice);
 
     feeLines.unshift({
-      name: `Taxa da plataforma (${platformFeeConfig.feePercent}%)`,
-      amount: calculatePlatformFee(unitPrice, platformFeeConfig.feePercent),
+      name: `Taxa da plataforma (${resolvedPercent}% | máx. R$ 25)`,
+      amount: calculatePlatformFee(unitPrice),
     });
   }
 
