@@ -8,7 +8,12 @@ import {
   Coins,
   CreditCard,
   FileSpreadsheet,
+  MapPin,
   MessageCircle,
+  QrCode,
+  Route,
+  ShieldCheck,
+  Ticket,
   Users,
 } from "lucide-react";
 
@@ -63,10 +68,26 @@ const DIFFERENTIAL_ITEMS = [
 ];
 
 const EXCURSION_TYPES = [
-  "Bate-volta para shows e festivais",
-  "Caravanas religiosas com saída em grupo",
-  "Excursões para jogos e campeonatos",
-  "Viagens de compras em grupo",
+  {
+    icon: CalendarCheck2,
+    title: "Bate-volta para shows e festivais",
+    description: "Organize saídas pontuais com embarque e confirmação centralizados.",
+  },
+  {
+    icon: Users,
+    title: "Caravanas religiosas com saída em grupo",
+    description: "Mantenha lista de passageiros e comunicação da viagem no mesmo fluxo.",
+  },
+  {
+    icon: Ticket,
+    title: "Excursões para jogos e campeonatos",
+    description: "Venda passagens online e acompanhe lotação antes da saída.",
+  },
+  {
+    icon: MapPin,
+    title: "Viagens de compras em grupo",
+    description: "Defina pontos de saída e controle o embarque sem planilhas soltas.",
+  },
 ];
 
 // Descrições orientadas por cenário para aumentar clareza de valor em cada rota satélite.
@@ -147,10 +168,26 @@ const FAQ_ITEMS = [
 ];
 
 const TRUST_ELEMENTS = [
-  "Sistema completo de gestão de excursões",
-  "Fluxo validado na prática para operação real",
-  "Do pagamento ao embarque em um único processo",
-  "Controle total da operação com confirmação automática",
+  {
+    icon: Ticket,
+    title: "Sistema completo de gestão de excursões",
+    description: "Venda e confirmação em um único fluxo digital.",
+  },
+  {
+    icon: Route,
+    title: "Fluxo validado na prática para operação real",
+    description: "Da criação da excursão ao controle de embarque.",
+  },
+  {
+    icon: QrCode,
+    title: "Do pagamento ao embarque em um único processo",
+    description: "Validação por QR Code para reduzir conferência manual.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Controle total da operação com confirmação automática",
+    description: "Mais previsibilidade para lotação, saída e equipe.",
+  },
 ];
 
 export default function SystemForExcursionsPage() {
@@ -166,7 +203,7 @@ export default function SystemForExcursionsPage() {
             <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
               <div>
                 <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white/90">
-                  Página piloto SEO · SmartBus BR
+                  Gestão completa para excursões
                 </p>
                 <h1 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-5xl">
                   Sistema para organizar excursões e vender passagens com facilidade
@@ -220,15 +257,39 @@ export default function SystemForExcursionsPage() {
                 Vendas, embarque, controle de passageiros e gestão da operação acontecem dentro da mesma plataforma,
                 com fluxo contínuo para o organizador e para quem vai viajar.
               </p>
-              <div className="mt-6 grid gap-3 md:grid-cols-4">
+              {/* Cards com apoio visual para o piloto SEO ficar mais comercial e reaproveitável nas próximas satélites. */}
+              <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
-                  "Vendas com link de pagamento e confirmação",
-                  "Validação de embarque no momento da saída",
-                  "Lista de passageiros atualizada em tempo real",
-                  "Gestão centralizada da excursão em um painel",
+                  {
+                    icon: CreditCard,
+                    title: "Vendas com link de pagamento",
+                    description: "Compartilhe o link e receba confirmações automáticas.",
+                  },
+                  {
+                    icon: QrCode,
+                    title: "Validação no embarque",
+                    description: "Conferência rápida no momento da saída do ônibus.",
+                  },
+                  {
+                    icon: Users,
+                    title: "Lista sempre atualizada",
+                    description: "Acompanhe passageiros confirmados em tempo real.",
+                  },
+                  {
+                    icon: ClipboardList,
+                    title: "Painel centralizado",
+                    description: "Operação de ponta a ponta em um único lugar.",
+                  },
                 ].map((item) => (
-                  <div key={item} className="rounded-2xl border border-border bg-muted/30 p-4 text-sm font-medium text-foreground">
-                    {item}
+                  <div
+                    key={item.title}
+                    className="rounded-2xl border border-border bg-muted/30 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <item.icon className="h-4 w-4" />
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
                   </div>
                 ))}
               </div>
@@ -394,16 +455,41 @@ export default function SystemForExcursionsPage() {
                 O SmartBus BR é um sistema real para organizar excursões com fluxo completo, do pagamento ao embarque,
                 mantendo operação prática para equipes que precisam vender excursão com controle de lotação e saída.
               </p>
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {[
-                  "Sistema completo de gestão de excursões",
-                  "Fluxo validado na prática",
-                  "Do pagamento ao embarque",
-                ].map((item) => (
-                  <div key={item} className="rounded-2xl border border-border bg-muted/30 p-4 text-sm font-medium text-foreground">
-                    {item}
+              <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Fluxo completo da excursão</p>
+                  <div className="mt-4 space-y-2">
+                    {[
+                      { icon: CreditCard, label: "Pagamento confirmado" },
+                      { icon: Users, label: "Passageiros centralizados" },
+                      { icon: Bus, label: "Embarque validado com QR Code" },
+                    ].map((step, index) => (
+                      <div key={step.label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                          {index + 1}
+                        </span>
+                        <step.icon className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium text-foreground">{step.label}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { icon: Ticket, title: "Gestão de vendas", description: "Acompanhe confirmações sem planilhas paralelas." },
+                    { icon: MapPin, title: "Pontos de saída", description: "Organize locais e horários de embarque com clareza." },
+                    { icon: QrCode, title: "Check-in digital", description: "Valide passageiros na saída sem lista em papel." },
+                    { icon: ShieldCheck, title: "Controle operacional", description: "Tenha visão da lotação antes da viagem." },
+                  ].map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <item.icon className="h-4 w-4" />
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-foreground">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -415,9 +501,17 @@ export default function SystemForExcursionsPage() {
             <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
               <h2 className="text-2xl font-bold text-foreground sm:text-3xl">O sistema funciona para diferentes tipos de excursão</h2>
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Refino visual: reaproveita padrão de card com ícone + microdescrição para evitar aparência crua. */}
                 {EXCURSION_TYPES.map((type) => (
-                  <div key={type} className="rounded-2xl border border-border bg-muted/30 p-4 text-sm font-medium text-foreground">
-                    {type}
+                  <div
+                    key={type.title}
+                    className="rounded-2xl border border-border bg-muted/30 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/5"
+                  >
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <type.icon className="h-4 w-4" />
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{type.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{type.description}</p>
                   </div>
                 ))}
               </div>
@@ -478,16 +572,22 @@ export default function SystemForExcursionsPage() {
 
         <section className="pb-16 sm:pb-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl border border-primary/20 bg-[hsl(222_47%_11%)] p-8 text-white sm:p-10">
+            <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-[hsl(222_47%_11%)] p-8 text-white sm:p-10">
+              <div className="pointer-events-none absolute -left-16 -top-24 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 right-0 h-60 w-60 rounded-full bg-cyan-400/10 blur-3xl" />
               <h2 className="text-3xl font-bold tracking-tight">Sua excursão pode operar com muito mais controle</h2>
               <p className="mt-3 max-w-3xl text-white/75 sm:text-lg">
                 Venda passagens online, organize passageiros e conduza embarques com uma estrutura clara, moderna e sem
                 custo fixo mensal, pagando apenas por venda com possibilidade de repasse da taxa.
               </p>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="relative mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {TRUST_ELEMENTS.map((item) => (
-                  <div key={item} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/90">
-                    {item}
+                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white/90 backdrop-blur-sm">
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-primary">
+                      <item.icon className="h-4 w-4" />
+                    </div>
+                    <p className="mt-2 font-semibold text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-white/70">{item.description}</p>
                   </div>
                 ))}
               </div>

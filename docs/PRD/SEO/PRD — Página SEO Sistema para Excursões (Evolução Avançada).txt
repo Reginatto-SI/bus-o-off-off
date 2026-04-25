@@ -38,6 +38,23 @@ Criar evolução da página satélite para:
 13. CTA final forte de conversão.
 14. Personalização leve por página (obrigatório), mantendo estrutura base com adaptação textual por cenário.
 
+## 🎨 Padrão visual piloto (referência para novas páginas satélite)
+- O selo do HERO deve ter linguagem comercial (nunca texto interno de desenvolvimento).
+- Cards de autoridade e diferenciais devem ter:
+  - Ícone consistente com o design system;
+  - Título curto + microdescrição objetiva;
+  - Espaçamento premium e hierarquia visual clara;
+  - Hover sutil quando houver card interativo.
+- O bloco “sistema completo” deve evidenciar fluxo operacional real:
+  - Jornada compacta (pagamento → passageiros → embarque);
+  - Apoio visual com ícones de viagem/check-in/controle;
+  - Layout elegante em duas colunas quando couber.
+- O bloco final escuro deve manter visual premium com:
+  - Elemento de fundo discreto (gradiente, brilho suave ou linhas);
+  - Cards com ícones e textos curtos de autoridade;
+  - Hierarquia clara entre título, texto, prova e CTA.
+- Evitar cards apenas textuais com aparência de rascunho.
+
 ## 🔍 Regras de SEO
 ### Palavra-chave principal
 - “sistema para excursões”
