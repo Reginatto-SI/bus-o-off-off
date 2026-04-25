@@ -331,6 +331,119 @@ serve(async (req) => {
       ? company.asaas_pix_ready_production === true
       : company.asaas_pix_ready_sandbox === true;
 
+    // ============================================================
+    // GUARDA DE IDEMPOTÊNCIA (Análise 14):
+    // se a venda já tem `asaas_payment_id`, NÃO criamos uma nova cobrança no gateway.
+    // Em vez disso, consultamos a cobrança existente e devolvemos o link/status atual.
+    // Isso evita duplicação quando o usuário clica "Continuar para pagamento" mais de uma vez,
+    // recarrega a tela ou o checkout é reinvocado por qualquer motivo (rede, retry de UI, etc).
+    // ============================================================
+    if (sale.asaas_payment_id) {
+      const existingPaymentId = sale.asaas_payment_id as string;
+      try {
+        const existingRes = await fetch(
+          `${asaasBaseUrl}/payments/${existingPaymentId}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              access_token: companyApiKey,
+            },
+          },
+        );
+        const existingBody = await existingRes.json().catch(() => null);
+
+        if (existingRes.ok && existingBody) {
+          await logSaleOperationalEvent({
+            supabaseAdmin,
+            saleId: sale.id,
+            companyId: sale.company_id,
+            action: "payment_create_reused",
+            source: "create-asaas-payment",
+            result: "ignored",
+            paymentEnvironment: paymentEnv,
+            errorCode: null,
+            detail: `existing_payment_reused payment_id=${existingPaymentId}`,
+          });
+          logPaymentTrace("info", "create-asaas-payment", "payment_create_reused", {
+            sale_id: sale.id,
+            company_id: sale.company_id,
+            payment_environment: paymentEnv,
+            asaas_payment_id: existingPaymentId,
+            reason: "sale_already_has_asaas_payment_id",
+          });
+          return jsonResponse({
+            id: existingBody.id ?? existingPaymentId,
+            status: existingBody.status ?? sale.asaas_payment_status,
+            url: existingBody.invoiceUrl ?? existingBody.bankSlipUrl ?? null,
+            reused: true,
+          });
+        }
+
+        // Se a cobrança existente não puder ser lida (ex.: 401 por rotação de chave),
+        // ainda assim NÃO criamos uma nova: registramos o incidente e exigimos ação operacional.
+        if (existingRes.status === 401 || existingRes.status === 403) {
+          await logSaleOperationalEvent({
+            supabaseAdmin,
+            saleId: sale.id,
+            companyId: sale.company_id,
+            action: "payment_create_blocked",
+            source: "create-asaas-payment",
+            result: "rejected",
+            paymentEnvironment: paymentEnv,
+            errorCode: "ASAAS_AUTH_FAILED",
+            detail: `existing_payment_reuse_blocked http=${existingRes.status} payment_id=${existingPaymentId}`,
+          });
+          return jsonResponse(
+            {
+              error:
+                "Não foi possível autenticar na conta Asaas da empresa para reabrir esta cobrança. Revise a integração.",
+              error_code: "ASAAS_AUTH_FAILED",
+            },
+            502,
+          );
+        }
+
+        // Outras falhas na consulta da cobrança existente: também não recriamos.
+        await logSaleOperationalEvent({
+          supabaseAdmin,
+          saleId: sale.id,
+          companyId: sale.company_id,
+          action: "payment_create_blocked",
+          source: "create-asaas-payment",
+          result: "rejected",
+          paymentEnvironment: paymentEnv,
+          errorCode: "existing_payment_lookup_failed",
+          detail: `http=${existingRes.status} payment_id=${existingPaymentId}`,
+        });
+        return jsonResponse(
+          {
+            error:
+              "Cobrança já existe para esta venda, mas não foi possível recuperá-la agora. Tente novamente em alguns instantes.",
+            error_code: "existing_payment_lookup_failed",
+          },
+          502,
+        );
+      } catch (lookupError) {
+        logPaymentTrace("error", "create-asaas-payment", "existing_payment_lookup_exception", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentEnv,
+          asaas_payment_id: existingPaymentId,
+          error_message:
+            lookupError instanceof Error ? lookupError.message : String(lookupError),
+        });
+        return jsonResponse(
+          {
+            error:
+              "Cobrança já existe para esta venda, mas não foi possível recuperá-la agora. Tente novamente em alguns instantes.",
+            error_code: "existing_payment_lookup_failed",
+          },
+          502,
+        );
+      }
+    }
+
     // Etapa 4: trilha operacional mínima por sale_id para criação de pagamento.
     await logSaleOperationalEvent({
       supabaseAdmin,
