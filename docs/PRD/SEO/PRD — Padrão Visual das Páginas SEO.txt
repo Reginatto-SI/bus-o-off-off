@@ -1,0 +1,105 @@
+# PRD — Padrão Visual das Páginas SEO
+
+## Objetivo do padrão visual SEO
+
+Consolidar uma fonte central de verdade para o padrão visual e estrutural das páginas satélite SEO do SmartBus BR, garantindo consistência de experiência, leitura, autoridade percebida e conversão.
+
+Este documento reduz duplicação entre PRDs individuais e orienta decisões visuais sem substituir regras específicas de SEO de cada página.
+
+## Página piloto oficial de referência
+
+A página `/sistema-para-excursoes` é a página piloto oficial de referência visual para as páginas satélite SEO.
+
+Referência principal de conteúdo e estrutura:
+`docs/PRD/SEO/PRD — Página SEO Sistema para Excursões (Evolução Avançada).txt`
+
+Essa referência deve ser usada como exemplo prático de execução visual. Não é um template para cópia literal de texto.
+
+## Estrutura visual esperada das páginas satélite
+
+As páginas satélite devem manter uma hierarquia clara de blocos, com progressão de leitura orientada à conversão:
+
+1. Hero com posicionamento principal da página.
+2. Bloco de autoridade com funcionalidades e confiança.
+3. Problema vs solução (estado atual x proposta SmartBus BR).
+4. Segmentação de público ou contexto de uso.
+5. Como funciona em etapas objetivas.
+6. Blocos de diferenciais/prova.
+7. FAQ com perguntas reais do cenário.
+8. CTA final forte.
+
+A estrutura pode ter pequenos ajustes de ordem apenas quando melhorar compreensão do público-alvo, sem descaracterizar o fluxo principal.
+
+## Regras para hero
+
+- Deve conter H1 único e específico para a palavra-chave principal da página.
+- Subtítulo deve reforçar benefício prático e reduzir ambiguidade.
+- Incluir CTAs visíveis acima da dobra sempre que possível.
+- Selo/chamada auxiliar com linguagem comercial (evitar texto técnico interno).
+- Evitar hero genérico sem proposta de valor clara.
+
+## Regras para blocos de autoridade
+
+- Devem demonstrar capacidade real do produto (não promessas vagas).
+- Priorizar argumentos de operação real: pagamento, gestão, controle e embarque.
+- Usar microcopys curtos, objetivos e verificáveis.
+- Manter contraste e escaneabilidade para leitura rápida.
+
+## Regras para cards
+
+- Cards devem seguir padrão visual consistente entre páginas.
+- Estrutura recomendada: ícone + título curto + descrição curta.
+- Evitar parágrafos longos dentro de cards.
+- Aplicar espaçamento uniforme e hierarquia tipográfica previsível.
+- Hover/interação sutil apenas quando houver ganho real de UX.
+
+## Regras para uso de ícones e elementos visuais
+
+- Ícones devem ser semanticamente compatíveis com o conteúdo do bloco.
+- Manter família visual consistente com o design system já usado no projeto.
+- Evitar mistura de estilos conflitantes (outline vs preenchido sem critério).
+- Elementos visuais de apoio (gradientes, brilhos, divisores) devem ser discretos.
+- Não usar decoração que reduza legibilidade.
+
+## Regras para CTAs
+
+- Garantir distribuição ao longo da página (início, meio e fechamento).
+- Texto do CTA deve ser direto, orientado à ação e ao resultado.
+- Manter consistência de estilo entre botões primários e secundários.
+- Evitar excesso de variações de texto para a mesma ação principal.
+
+## Regras para blocos escuros/de conversão
+
+- Usar como seção de fechamento de alto foco em conversão.
+- Manter aparência premium com fundo escuro/contraste controlado.
+- Permitir elementos visuais sutis, sem competir com título e CTA.
+- Combinar prova de valor + reforço de confiança + ação final.
+
+## Regras de consistência visual
+
+- Manter ritmo vertical, respiro e densidade visual equilibrados.
+- Preservar padrão de tipografia, pesos e tamanhos por nível de informação.
+- Repetir lógica de composição entre blocos equivalentes.
+- Priorizar previsibilidade de navegação e leitura em todas as páginas satélite.
+
+## O que pode variar entre páginas
+
+- Palavra-chave principal e secundárias.
+- Texto do hero, exemplos e cenários específicos.
+- Público-alvo e linguagem contextual (excursões, caravanas, eventos, etc.).
+- FAQ e casos de uso aderentes à intenção de busca da página.
+
+## O que não deve variar entre páginas
+
+- Base da hierarquia visual e ordem macro de leitura orientada à conversão.
+- Padrão de qualidade dos cards, ícones, blocos de autoridade e CTAs.
+- Nível de clareza visual e consistência com a página piloto.
+- Compromisso com experiência legível, profissional e confiável.
+
+## Restrições importantes
+
+- Não duplicar integralmente o PRD piloto em outros PRDs.
+- Não reescrever PRDs completos sem necessidade.
+- Não remover conteúdo SEO específico já definido por página.
+- Não tratar a página piloto como conteúdo para cópia cega.
+- Em caso de dúvida, priorizar consistência visual com a página piloto `/sistema-para-excursoes`.

@@ -1,5 +1,16 @@
 # PRD — Página SEO: Caravana Religiosa
 
+
+## Referência visual obrigatória
+
+Esta página deve seguir o padrão visual definido em:
+
+`docs/PRD/SEO/PRD — Padrão Visual das Páginas SEO.txt`
+
+A página `/sistema-para-excursoes` é a página piloto oficial de referência visual para as páginas satélite SEO do SmartBus BR.
+
+Em caso de dúvida sobre estrutura visual, hierarquia de blocos, cards, CTAs, uso de ícones, densidade visual ou organização da página, priorizar consistência com a página piloto.
+
 ## Ação Desejada
 
 Criar a página `/caravana-religiosa`, focada em grupos religiosos.
