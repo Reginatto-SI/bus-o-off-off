@@ -278,6 +278,29 @@ const PRICING_POINTS = [
   "Sem taxa de adesão",
   "Apenas uma pequena taxa por venda realizada",
 ];
+// Navegação estratégica entre cenários: reaproveita o padrão de cards para ampliar descoberta sem adicionar nova arquitetura.
+const LANDING_SCENARIO_LINKS = [
+  {
+    title: "Sistema para excursões",
+    href: "/sistema-para-excursoes",
+    description: "Organize excursões com vendas e embarque em um só lugar",
+  },
+  {
+    title: "Sistema para eventos",
+    href: "/sistema-para-eventos",
+    description: "Venda ingressos e gerencie participantes com facilidade",
+  },
+  {
+    title: "Sistema para caravanas",
+    href: "/sistema-para-caravanas",
+    description: "Coordene grupos grandes com mais controle e organização",
+  },
+  {
+    title: "Sistema para viagens",
+    href: "/sistema-para-viagens",
+    description: "Estruture sua operação com mais profissionalismo",
+  },
+];
 // Bloco de indicação: aproveita o programa existente para transformar clientes em canal orgânico de crescimento
 // sem criar uma nova jornada visual fora do padrão comercial atual da landing.
 const REFERRAL_STEPS = [
@@ -941,6 +964,38 @@ export default function LandingPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      {/* Bloco enxuto de cenários: reforça adaptabilidade do SmartBus mantendo o mesmo layout de grid com cards e CTA simples. */}
+      <section className="bg-muted/30 py-16 sm:py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">O SmartBus se adapta ao seu tipo de operação</h2>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
+              Seja para excursões, eventos ou viagens, você pode organizar e vender com uma operação simples e profissional.
+            </p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {LANDING_SCENARIO_LINKS.map((item) => (
+                <Link
+                  key={item.title}
+                  to={item.href}
+                  className="group rounded-2xl border border-border bg-muted/30 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                    Ver página
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <div className="mt-6">
+              <Button asChild variant="outline">
+                <Link to="/sistema-para-excursoes">Ver todos os cenários</Link>
+              </Button>
             </div>
           </div>
         </div>

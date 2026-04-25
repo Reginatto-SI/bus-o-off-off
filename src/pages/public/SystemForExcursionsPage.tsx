@@ -56,11 +56,28 @@ const HOW_IT_WORKS = [
   "Controle seus passageiros até a saída",
 ];
 
+// Descrições orientadas por cenário para aumentar clareza de valor em cada rota satélite.
 const NAV_LINKS = [
-  { title: "Landing principal SmartBus BR", href: "/" },
-  { title: "Sistema para caravanas", href: "/sistema-para-caravanas" },
-  { title: "Sistema para eventos", href: "/sistema-para-eventos" },
-  { title: "Sistema para viagens", href: "/sistema-para-viagens" },
+  {
+    title: "Landing principal SmartBus BR",
+    href: "/",
+    description: "Conheça a visão geral da plataforma e como começar",
+  },
+  {
+    title: "Sistema para caravanas",
+    href: "/sistema-para-caravanas",
+    description: "Coordene grupos grandes com mais controle e organização",
+  },
+  {
+    title: "Sistema para eventos",
+    href: "/sistema-para-eventos",
+    description: "Venda ingressos e gerencie participantes com facilidade",
+  },
+  {
+    title: "Sistema para viagens",
+    href: "/sistema-para-viagens",
+    description: "Estruture sua operação com mais profissionalismo",
+  },
 ];
 
 const FAQ_ITEMS = [
@@ -348,8 +365,8 @@ export default function SystemForExcursionsPage() {
       <section className="bg-muted/30 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-bold text-foreground">Você também pode usar o sistema para:</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Além de excursões, você também pode usar o sistema em outros cenários:</p>
+            <h2 className="text-2xl font-bold text-foreground">Explore outras formas de usar o SmartBus</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Cada tipo de operação tem necessidades diferentes. Veja como o sistema se adapta a cada cenário.</p>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {NAV_LINKS.map((item) => (
                 <Link
@@ -358,7 +375,7 @@ export default function SystemForExcursionsPage() {
                   className="group rounded-2xl border border-border bg-muted/30 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5"
                 >
                   <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Navegação do ecossistema SmartBus BR</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
                   <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
                     Ver página
                     <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
