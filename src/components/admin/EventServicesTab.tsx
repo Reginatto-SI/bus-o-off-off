@@ -68,6 +68,7 @@ interface FormState {
   total_capacity: string;
   allow_checkout: boolean;
   allow_standalone_sale: boolean;
+  // PRD "ativo/inativo": no vínculo com evento o campo técnico é `is_active`.
   is_active: boolean;
 }
 
