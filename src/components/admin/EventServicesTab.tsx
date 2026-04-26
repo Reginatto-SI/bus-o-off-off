@@ -562,5 +562,6 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </div>
   );
 }
