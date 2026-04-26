@@ -32,7 +32,7 @@ import {
   Share2,
   UserRoundCheck,
   Gift,
-} from 'lucide-react';
+  Sparkles,
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
