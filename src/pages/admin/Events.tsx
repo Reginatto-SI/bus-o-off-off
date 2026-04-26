@@ -1632,6 +1632,18 @@ export default function Events() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Defesa em profundidade contra submits acidentais originados em sub-componentes
+    // (ex.: aba Serviços renderizada dentro deste form). Só aceitamos submits cujo
+    // submitter explícito seja um <button type="submit"> — o botão "Finalizar" da
+    // etapa publicacao em modo edição. Qualquer outro caminho (Enter em Input,
+    // bubbling de Radix dentro de modal aninhado, etc.) é ignorado para evitar
+    // fechar o dialog ou disparar toast indevido.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
+    const isExplicitSubmit = submitter?.getAttribute('type') === 'submit';
+    if (!isExplicitSubmit) {
+      return;
+    }
+
     // No modo wizard de criação, o submit final é sempre mediado pelo popup celebrativo.
     if (isCreateWizardMode) {
       if (activeTab !== 'publicacao') {
