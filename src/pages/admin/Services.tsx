@@ -327,130 +327,134 @@ export default function Services() {
 
   return (
     <AdminLayout>
-      <PageHeader
-        title="Passeios & Serviços"
-        description="Cadastre os serviços (passeios, atrações, transfers) que sua agência poderá vincular aos eventos."
-        actions={
-          <Button onClick={openCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Novo serviço
-          </Button>
-        }
-      />
+      {/* Ajuste visual: usa o mesmo container das telas admin consolidadas para alinhar largura e espaçamentos. */}
+      <div className="page-container">
+        <PageHeader
+          title="Passeios & Serviços"
+          description="Cadastre os serviços (passeios, atrações, transfers) que sua agência poderá vincular aos eventos."
+          actions={
+            <Button onClick={openCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Novo serviço
+            </Button>
+          }
+        />
 
-      <FilterCard
-        searchValue={filters.search}
-        onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
-        searchPlaceholder="Buscar por nome ou descrição..."
-        selects={[
-          {
-            id: 'status',
-            label: 'Status',
-            placeholder: 'Todos',
-            value: filters.status,
-            onChange: (v) =>
-              setFilters((f) => ({ ...f, status: v as ServiceFilters['status'] })),
-            options: [
-              { value: 'all', label: 'Todos' },
-              { value: 'ativo', label: 'Ativo' },
-              { value: 'inativo', label: 'Inativo' },
-            ],
-          },
-          {
-            id: 'unit_type',
-            label: 'Tipo de unidade',
-            placeholder: 'Todos',
-            value: filters.unit_type,
-            onChange: (v) =>
-              setFilters((f) => ({ ...f, unit_type: v as ServiceFilters['unit_type'] })),
-            options: [
-              { value: 'all', label: 'Todos' },
-              { value: 'pessoa', label: 'Pessoa' },
-              { value: 'veiculo', label: 'Veículo' },
-              { value: 'unitario', label: 'Unitário' },
-            ],
-          },
-        ]}
-        onClearFilters={() => setFilters(initialFilters)}
-        hasActiveFilters={hasActiveFilters}
-      />
+        {/* Ajuste visual: segue a mesma estrutura de /admin/frota (sem margem isolada no FilterCard). */}
+        <FilterCard
+          searchValue={filters.search}
+          onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+          searchPlaceholder="Buscar por nome ou descrição..."
+          selects={[
+            {
+              id: 'status',
+              label: 'Status',
+              placeholder: 'Todos',
+              value: filters.status,
+              onChange: (v) =>
+                setFilters((f) => ({ ...f, status: v as ServiceFilters['status'] })),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'ativo', label: 'Ativo' },
+                { value: 'inativo', label: 'Inativo' },
+              ],
+            },
+            {
+              id: 'unit_type',
+              label: 'Tipo de unidade',
+              placeholder: 'Todos',
+              value: filters.unit_type,
+              onChange: (v) =>
+                setFilters((f) => ({ ...f, unit_type: v as ServiceFilters['unit_type'] })),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'pessoa', label: 'Pessoa' },
+                { value: 'veiculo', label: 'Veículo' },
+                { value: 'unitario', label: 'Unitário' },
+              ],
+            },
+          ]}
+          onClearFilters={() => setFilters(initialFilters)}
+          hasActiveFilters={hasActiveFilters}
+        />
 
-      <Card className="mt-4">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <EmptyState
-              icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
-              title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
-              description={
-                services.length === 0
-                  ? 'Cadastre seu primeiro passeio ou serviço para começar a vinculá-lo aos eventos.'
-                  : 'Ajuste os filtros para visualizar outros serviços.'
-              }
-              action={
-                services.length === 0 ? (
-                  <Button onClick={openCreate} className="gap-2">
-                    <Plus className="h-4 w-4" /> Novo serviço
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Tipo de unidade</TableHead>
-                  <TableHead>Controle</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[60px] text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((service) => {
-                  const actions: ActionItem[] = [
-                    { label: 'Editar', icon: Pencil, onClick: () => openEdit(service) },
-                    {
-                      label: service.status === 'ativo' ? 'Inativar' : 'Ativar',
-                      icon: Power,
-                      onClick: () => toggleStatus(service),
-                    },
-                    {
-                      label: 'Excluir',
-                      icon: Trash2,
-                      variant: 'destructive',
-                      onClick: () => setConfirmDeleteId(service.id),
-                    },
-                  ];
-                  return (
-                    <TableRow key={service.id}>
-                      <TableCell>
-                        <div className="font-medium">{service.name}</div>
-                        {service.description && (
-                          <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                            {service.description}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{UNIT_TYPE_LABELS[service.unit_type]}</TableCell>
-                      <TableCell>{CONTROL_TYPE_LABELS[service.control_type]}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={service.status} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <ActionsDropdown actions={actions} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex h-64 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
+                title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
+                description={
+                  services.length === 0
+                    ? 'Cadastre seu primeiro passeio ou serviço para começar a vinculá-lo aos eventos.'
+                    : 'Ajuste os filtros para visualizar outros serviços.'
+                }
+                action={
+                  services.length === 0 ? (
+                    <Button onClick={openCreate} className="gap-2">
+                      <Plus className="h-4 w-4" /> Novo serviço
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Tipo de unidade</TableHead>
+                    <TableHead>Controle</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[60px] text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((service) => {
+                    const actions: ActionItem[] = [
+                      { label: 'Editar', icon: Pencil, onClick: () => openEdit(service) },
+                      {
+                        label: service.status === 'ativo' ? 'Inativar' : 'Ativar',
+                        icon: Power,
+                        onClick: () => toggleStatus(service),
+                      },
+                      {
+                        label: 'Excluir',
+                        icon: Trash2,
+                        variant: 'destructive',
+                        onClick: () => setConfirmDeleteId(service.id),
+                      },
+                    ];
+                    return (
+                      <TableRow key={service.id}>
+                        <TableCell>
+                          <div className="font-medium">{service.name}</div>
+                          {service.description && (
+                            <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                              {service.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>{UNIT_TYPE_LABELS[service.unit_type]}</TableCell>
+                        <TableCell>{CONTROL_TYPE_LABELS[service.control_type]}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={service.status} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ActionsDropdown actions={actions} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Modal de cadastro/edição */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
