@@ -438,10 +438,7 @@ export default function Services() {
                       <TableCell>{UNIT_TYPE_LABELS[service.unit_type]}</TableCell>
                       <TableCell>{CONTROL_TYPE_LABELS[service.control_type]}</TableCell>
                       <TableCell>
-                        <StatusBadge
-                          variant={service.status === 'ativo' ? 'success' : 'muted'}
-                          label={service.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                        />
+                        <StatusBadge status={service.status} />
                       </TableCell>
                       <TableCell className="text-right">
                         <ActionsDropdown actions={actions} />
