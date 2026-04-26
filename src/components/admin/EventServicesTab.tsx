@@ -269,6 +269,7 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
   };
 
   const noCatalog = !loading && services.length === 0;
+  const hasLinkedServices = !loading && eventServices.length > 0;
   const noLinkableServices = !loading && !editingId && services.length > 0 && linkableServices.length === 0;
 
   // -------------------------------------------------------------------------
@@ -318,95 +319,103 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
             description="Cadastre serviços em /admin/servicos para vinculá-los a este evento."
             className="py-8"
           />
+        ) : hasLinkedServices ? (
+          <>
+            {/* Mensagem separada: todos os serviços do catálogo já foram vinculados, mas os vínculos continuam listados abaixo. */}
+            {noLinkableServices && (
+              <p className="mb-4 text-sm text-muted-foreground">
+                Todos os serviços do catálogo já estão vinculados para este evento.
+              </p>
+            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Serviço</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-right">Valor base</TableHead>
+                  <TableHead className="text-right">Capacidade</TableHead>
+                  <TableHead className="text-right">Vendidos</TableHead>
+                  <TableHead className="text-right">Disponível</TableHead>
+                  <TableHead>Checkout</TableHead>
+                  <TableHead>Avulsa</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[60px] text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {eventServices.map((es) => {
+                  const available = Math.max(
+                    (es.total_capacity ?? 0) - (es.sold_quantity ?? 0),
+                    0,
+                  );
+                  const actions: ActionItem[] = [
+                    { label: 'Editar', icon: Pencil, onClick: () => openEdit(es) },
+                    {
+                      label: 'Remover',
+                      icon: Trash2,
+                      variant: 'destructive',
+                      onClick: () => setConfirmDeleteId(es.id),
+                    },
+                  ];
+                  return (
+                    <TableRow key={es.id}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {es.service?.name ?? 'Serviço'}
+                        </div>
+                        {es.service?.description && (
+                          <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                            {es.service.description}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {es.service ? UNIT_TYPE_LABELS[es.service.unit_type] : '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrencyBRL(Number(es.base_price ?? 0))}
+                      </TableCell>
+                      <TableCell className="text-right">{es.total_capacity ?? 0}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {es.sold_quantity ?? 0}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{available}</TableCell>
+                      <TableCell>{es.allow_checkout ? 'Sim' : 'Não'}</TableCell>
+                      <TableCell>{es.allow_standalone_sale ? 'Sim' : 'Não'}</TableCell>
+                      <TableCell>
+                        <span
+                          className={
+                            es.is_active
+                              ? 'text-xs font-medium text-emerald-700'
+                              : 'text-xs font-medium text-muted-foreground'
+                          }
+                        >
+                          {es.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <ActionsDropdown actions={actions} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </>
         ) : noLinkableServices ? (
           <EmptyState
             icon={<Sparkles className="h-6 w-6 text-muted-foreground" />}
-            title="Todos os serviços já estão vinculados"
-            description="Não há novos serviços disponíveis para este evento. Edite um vínculo existente ou cadastre outro serviço em /admin/servicos."
+            title="Nenhum serviço vinculado"
+            description="Não há serviços disponíveis para novo vínculo. Cadastre outro serviço em /admin/servicos."
             className="py-8"
           />
-        ) : eventServices.length === 0 ? (
+        ) : (
           <EmptyState
             icon={<Sparkles className="h-6 w-6 text-muted-foreground" />}
             title="Nenhum serviço vinculado"
             description="Vincule serviços do seu catálogo a este evento e defina preço e capacidade."
             className="py-8"
           />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Serviço</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-right">Valor base</TableHead>
-                <TableHead className="text-right">Capacidade</TableHead>
-                <TableHead className="text-right">Vendidos</TableHead>
-                <TableHead className="text-right">Disponível</TableHead>
-                <TableHead>Checkout</TableHead>
-                <TableHead>Avulsa</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[60px] text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {eventServices.map((es) => {
-                const available = Math.max(
-                  (es.total_capacity ?? 0) - (es.sold_quantity ?? 0),
-                  0,
-                );
-                const actions: ActionItem[] = [
-                  { label: 'Editar', icon: Pencil, onClick: () => openEdit(es) },
-                  {
-                    label: 'Remover',
-                    icon: Trash2,
-                    variant: 'destructive',
-                    onClick: () => setConfirmDeleteId(es.id),
-                  },
-                ];
-                return (
-                  <TableRow key={es.id}>
-                    <TableCell>
-                      <div className="font-medium">
-                        {es.service?.name ?? 'Serviço'}
-                      </div>
-                      {es.service?.description && (
-                        <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          {es.service.description}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {es.service ? UNIT_TYPE_LABELS[es.service.unit_type] : '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrencyBRL(Number(es.base_price ?? 0))}
-                    </TableCell>
-                    <TableCell className="text-right">{es.total_capacity ?? 0}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {es.sold_quantity ?? 0}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">{available}</TableCell>
-                    <TableCell>{es.allow_checkout ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>{es.allow_standalone_sale ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell>
-                      <span
-                        className={
-                          es.is_active
-                            ? 'text-xs font-medium text-emerald-700'
-                            : 'text-xs font-medium text-muted-foreground'
-                        }
-                      >
-                        {es.is_active ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <ActionsDropdown actions={actions} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
         )}
       </CardContent>
 
