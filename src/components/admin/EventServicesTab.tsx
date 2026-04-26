@@ -271,7 +271,27 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
   const noCatalog = !loading && services.length === 0;
   const noLinkableServices = !loading && !editingId && services.length > 0 && linkableServices.length === 0;
 
+  // -------------------------------------------------------------------------
+  // Isolamento contra o <form> pai do wizard de evento (src/pages/admin/Events.tsx).
+  // Mesmo com <Dialog> em Portal no DOM, eventos sintéticos do React sobem pela
+  // árvore de componentes até o form pai. Sem essa barreira, pressionar Enter em
+  // um Input do modal ou interações em sub-componentes Radix podiam disparar
+  // handleSubmit do evento e fechar o dialog antes de salvar o vínculo.
+  // -------------------------------------------------------------------------
+  const blockBubblingSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const blockEnterImplicitSubmit = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (e.key === 'Enter' && target?.tagName === 'INPUT') {
+      e.preventDefault();
+    }
+  };
+
   return (
+    <div onSubmitCapture={blockBubblingSubmit} onKeyDown={blockEnterImplicitSubmit}>
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Serviços do evento</CardTitle>
@@ -542,5 +562,6 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    </div>
   );
 }
