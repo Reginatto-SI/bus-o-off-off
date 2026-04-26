@@ -175,6 +175,9 @@ const vehicleTypeLabels: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  pendente: 'Pendente',
+  pendente_taxa: 'Pendente de taxa',
+  pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   pago: 'Pago',
   cancelado: 'Cancelado',
@@ -265,6 +268,10 @@ function getSalesOperationalSignal(params: {
   }
 
   return null;
+}
+
+function isStandaloneServiceSale(sale: Sale): boolean {
+  return !sale.trip_id && !sale.boarding_location_id;
 }
 
 // ── Helper to build TicketCardData ──
@@ -937,6 +944,7 @@ export default function Sales() {
   };
 
   const getSaleBoardingLabel = (sale: Sale) => {
+    if (isStandaloneServiceSale(sale)) return 'Sem embarque — serviço avulso';
     // Sempre prioriza o horário do embarque vinculado à venda (evento + viagem + local).
     const key = `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`;
     return formatBoardingLocationLabel(sale.boarding_location?.name, boardingTimeMap[key]);
@@ -1718,6 +1726,8 @@ export default function Sales() {
                 onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
                 options: [
                   { value: 'all', label: 'Todos' },
+                  { value: 'pendente', label: 'Pendente' },
+                  { value: 'pendente_taxa', label: 'Pendente de taxa' },
                   { value: 'pendente_pagamento', label: 'Pendente pagamento' },
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
@@ -1926,7 +1936,9 @@ export default function Sales() {
                         <TableCell>
                           <div className="space-y-0.5">
                             <p className="text-sm font-medium">
-                              {vehicle
+                              {isStandaloneServiceSale(sale)
+                                ? 'Venda de serviço avulsa'
+                                : vehicle
                                 ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
                                 : '-'}
                             </p>
@@ -2230,12 +2242,17 @@ export default function Sales() {
                           <InfoRow
                             label="Veículo"
                             value={
-                              (detailSale.trip as any)?.vehicle
+                              isStandaloneServiceSale(detailSale)
+                                ? 'Venda de serviço avulsa'
+                                : (detailSale.trip as any)?.vehicle
                                 ? `${vehicleTypeLabels[(detailSale.trip as any).vehicle.type] ?? (detailSale.trip as any).vehicle.type} • ${(detailSale.trip as any).vehicle.plate}`
                                 : '-'
                             }
                           />
-                          <InfoRow label="Local Embarque" value={detailSale.boarding_location?.name ?? '-'} />
+                          <InfoRow
+                            label="Local Embarque"
+                            value={isStandaloneServiceSale(detailSale) ? 'Sem embarque — serviço avulso' : (detailSale.boarding_location?.name ?? '-')}
+                          />
                           <InfoRow
                             label="Horário de Embarque"
                             value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}

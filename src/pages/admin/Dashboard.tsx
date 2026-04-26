@@ -111,12 +111,16 @@ type OnboardingStage =
    ═══════════════════════════════════════════════════ */
 const STATUS_COLORS: Record<string, string> = {
   pago: 'hsl(var(--success))',
+  pendente: 'hsl(var(--warning))',
+  pendente_taxa: 'hsl(var(--warning))',
   pendente_pagamento: 'hsl(var(--warning))',
   reservado: 'hsl(var(--warning))',
   cancelado: 'hsl(var(--destructive))',
 };
 const STATUS_LABELS: Record<string, string> = {
   pago: 'Pago',
+  pendente: 'Pendente',
+  pendente_taxa: 'Pendente de taxa',
   pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   cancelado: 'Cancelado',

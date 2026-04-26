@@ -119,6 +119,8 @@ const vehicleTypeLabels: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  pendente: 'Pendente',
+  pendente_taxa: 'Pendente de taxa',
   pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   pago: 'Pago',
@@ -228,6 +230,7 @@ export default function SalesReport() {
   };
 
   const getSaleBoardingLabel = (sale: Sale) => {
+    if (!sale.trip_id && !sale.boarding_location_id) return 'Sem embarque — serviço avulso';
     // Usa a combinação evento + viagem + local para buscar o horário correto daquele embarque vendido.
     const key = `${sale.event_id}::${sale.trip_id}::${sale.boarding_location_id}`;
     return formatBoardingLocationLabel(sale.boarding_location?.name, boardingTimeMap[key]);
@@ -715,6 +718,8 @@ export default function SalesReport() {
                 onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
                 options: [
                   { value: 'all', label: 'Todos' },
+                  { value: 'pendente', label: 'Pendente' },
+                  { value: 'pendente_taxa', label: 'Pendente de taxa' },
                   { value: 'pendente_pagamento', label: 'Pendente pagamento' },
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
@@ -932,7 +937,9 @@ export default function SalesReport() {
                             </TableCell>
                             <TableCell>{formatEventDisplayName(sale.event) || '-'}</TableCell>
                             <TableCell>
-                              {vehicle
+                              {!sale.trip_id && !sale.boarding_location_id
+                                ? 'Venda de serviço avulsa'
+                                : vehicle
                                 ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}`
                                 : '-'}
                             </TableCell>
