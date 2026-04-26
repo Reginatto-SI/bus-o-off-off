@@ -132,6 +132,12 @@ const navigationGroups: NavigationGroup[] = [{
     icon: Gift,
     roles: ['gerente', 'developer']
   }, {
+    // Módulo Passeios & Serviços (base inicial). Acesso restrito ao gerente, igual aos demais cadastros sensíveis.
+    name: 'Serviços',
+    href: '/admin/servicos',
+    icon: Sparkles,
+    roles: ['gerente']
+  }, {
     name: 'Sócios',
     href: '/admin/socios',
     icon: Handshake,
