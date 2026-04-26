@@ -79,9 +79,9 @@ Fluxo funcional esperado (estado atual + padronização para Validador):
 
 ## 6. Fluxo de validação de serviços
 Fluxo funcional esperado (novo):
-1. usuário escaneia o QR da venda;
-2. sistema identifica se há itens de serviço vinculados elegíveis para validação;
-3. exibe lista de serviços disponíveis para consumo;
+1. usuário escaneia o **QR de serviços** (venda/comprovante de serviços);
+2. sistema identifica a venda de serviços vinculada ao QR;
+3. exibe lista de serviços comprados elegíveis para consumo;
 4. para cada serviço, mostra:
    - nome do serviço;
    - quantidade comprada;
@@ -99,16 +99,26 @@ Fluxo funcional esperado (novo):
 ---
 
 ## 7. QR Code
-### 7.1 Regra desta fase
-- **Não criar QR separado por serviço nesta etapa**;
-- **Reutilizar o QR da venda/passagem quando possível** para abrir o contexto de validação;
-- quando a venda for exclusivamente de serviço avulso, o mecanismo de QR deve ser tratado como evolução controlada.
+### 7.1 Regra oficial
+- QR de passagem valida passagem (direito de embarque);
+- QR de serviços valida venda/comprovante de serviços (direito de consumo);
+- não misturar QR da passagem com QR de serviços;
+- QR de serviços é único por venda/comprovante e pode agrupar múltiplos serviços da mesma venda;
+- ao escanear QR de serviços, o Validador deve abrir o contexto da venda e listar os serviços comprados;
+- cada serviço listado deve exibir quantidade comprada, utilizada e restante;
+- operador escolhe qual serviço consumir;
+- consumo é unitário por ação;
+- se todos os serviços estiverem sem saldo, bloquear uso e exibir mensagem clara.
 
-### 7.2 Diretriz para venda avulsa de serviço
-Se o fluxo atual ainda não materializa QR dedicado para serviço avulso, registrar como **próxima etapa**:
-- definir origem do token (venda, item ou comprovante);
-- definir canal de entrega (comprovante digital/consulta);
-- definir política de expiração/reativação do token.
+### 7.2 Exemplo normativo
+Venda de serviços com:
+- 1 passeio de buggy;
+- 1 passeio de lancha.
+
+Resultado esperado:
+- cliente recebe um único QR de serviços;
+- ao escanear no Validador, exibir os dois serviços com saldo individual;
+- operador decide qual serviço consumir em cada validação.
 
 ---
 
@@ -209,7 +219,7 @@ Assim, o módulo de serviços cuida de catálogo/venda/capacidade, e o Validador
 Não faz parte desta etapa:
 - implementação da nova tela;
 - alteração técnica de rota em produção;
-- criação de novo QR por serviço;
+- criação de QR individual por item de serviço;
 - checkout público com serviços;
 - relatórios analíticos;
 - split e repasse financeiro;
@@ -227,9 +237,7 @@ Também fora de escopo:
 1. **Estratégia final de migração da rota** (`/motorista` → `/validador`) com prazo e janela de descontinuação.
 2. **Política final para perfil vendedor** (sem acesso, acesso condicionado, ou acesso por configuração da empresa).
 3. **Modelo definitivo de persistência de consumo de serviço** (manter temporário em `sale_logs` ou evoluir para estrutura dedicada).
-4. **QR para venda avulsa de serviço**: padrão de geração, entrega e lifecycle.
-5. **Taxonomia final de reason codes** para serviços, alinhada ao padrão já existente de validação de passagem.
-6. **Regra por `control_type`** no Validador para serviços sem validação obrigatória (ocultar ou exibir como “informativo”).
+4. **Taxonomia final de reason codes** para serviços, alinhada ao padrão já existente de validação de passagem.
 
 ---
 
@@ -240,7 +248,7 @@ Também fora de escopo:
 - [ ] Perfis autorizados foram mapeados, incluindo análise justificada de vendedor.
 - [ ] Fluxo de validação de passagem foi documentado ponta a ponta.
 - [ ] Fluxo de validação de serviços (com lista e consumo unitário) foi documentado.
-- [ ] Regra de QR da fase está clara (reuso do QR existente, sem QR novo por serviço agora).
+- [ ] Regra oficial de QR está clara (QR de passagem separado do QR de serviços, sem mistura de contextos).
 - [ ] Regra de consumo parcial está explícita com exemplo prático.
 - [ ] Estados e mensagens operacionais foram definidos.
 - [ ] Diretrizes de UX de campo foram definidas.

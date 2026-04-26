@@ -205,8 +205,12 @@ Para `unit_type = pessoa`:
 
 ## 10. Geração de QR Code
 
-- gerar QR por **item validável (serviço)**
-- NÃO usar QR único da venda
+- venda de passagem gera **QR de passagem**
+- venda de serviços gera **QR próprio de serviços**
+- gerar **um QR Code por venda/comprovante de serviços**
+- esse QR de serviços representa o conjunto de serviços comprados na mesma venda
+- não gerar QR individual por item/serviço no MVP
+- ao escanear o QR de serviços no Validador, abrir a lista de serviços validáveis vinculados à venda
 
 ---
 
@@ -222,23 +226,30 @@ Cada item possui:
 
 ## 12. Regra de validação
 
-Ao ler QR:
+Ao ler QR de serviços no Validador:
 
-- se restante > 0 → permitir uso
-- decrementa 1
-- registra log
+- listar os serviços validáveis vinculados à venda
+- cada serviço deve exibir quantidade comprada, utilizada e restante
+- operador escolhe qual serviço consumir
+- se restante > 0 → permitir uso unitário (decrementa 1 por ação)
+- registrar log de consumo a cada validação
 
-Se restante = 0:
+Se restante = 0 para um serviço:
 
-- bloquear uso
-- mostrar “já utilizado”
+- bloquear novo consumo desse serviço
+- mostrar mensagem clara de saldo esgotado
+
+Se todos os serviços validáveis estiverem com restante = 0:
+
+- bloquear uso da venda de serviços no Validador
+- mostrar mensagem clara de que não há saldo disponível
 
 ---
 
 ## 13. Serviços sem validação
 
-- não geram QR
-- apenas controle financeiro
+- serviços com `tipo_controle = sem_validacao` não precisam aparecer como consumíveis no Validador
+- permanecem com controle financeiro sem consumo operacional
 
 ---
 
@@ -266,7 +277,7 @@ Lista:
 
 - Nome do serviço
 - quantidade
-- QR (se aplicável)
+- controle de consumo no Validador (se `tipo_controle = validacao_obrigatoria`)
 
 ---
 
