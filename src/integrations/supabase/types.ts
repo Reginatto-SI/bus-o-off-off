@@ -1095,6 +1095,51 @@ export type Database = {
           },
         ]
       }
+      event_services: {
+        Row: {
+          allow_checkout: boolean
+          allow_standalone_sale: boolean
+          base_price: number
+          company_id: string
+          created_at: string
+          event_id: string
+          id: string
+          is_active: boolean
+          service_id: string
+          sold_quantity: number
+          total_capacity: number
+          updated_at: string
+        }
+        Insert: {
+          allow_checkout?: boolean
+          allow_standalone_sale?: boolean
+          base_price?: number
+          company_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          is_active?: boolean
+          service_id: string
+          sold_quantity?: number
+          total_capacity?: number
+          updated_at?: string
+        }
+        Update: {
+          allow_checkout?: boolean
+          allow_standalone_sale?: boolean
+          base_price?: number
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          service_id?: string
+          sold_quantity?: number
+          total_capacity?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       event_sponsors: {
         Row: {
           company_id: string
@@ -2102,6 +2147,42 @@ export type Database = {
           },
         ]
       }
+      services: {
+        Row: {
+          company_id: string
+          control_type: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          unit_type: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          control_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          unit_type?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          control_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          unit_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       socios_split: {
         Row: {
           asaas_wallet_id: string | null
@@ -2862,6 +2943,10 @@ export type Database = {
         Returns: number
       }
       generate_representative_code: { Args: never; Returns: string }
+      generate_unique_company_public_slug: {
+        Args: { base_input: string; exclude_company_id?: string }
+        Returns: string
+      }
       get_benefit_eligibility_matches: {
         Args: {
           p_company_id: string

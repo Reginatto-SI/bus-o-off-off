@@ -32,6 +32,7 @@ import {
   Share2,
   UserRoundCheck,
   Gift,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -130,6 +131,12 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/programas-beneficio',
     icon: Gift,
     roles: ['gerente', 'developer']
+  }, {
+    // Módulo Passeios & Serviços (base inicial). Acesso restrito ao gerente, igual aos demais cadastros sensíveis.
+    name: 'Serviços',
+    href: '/admin/servicos',
+    icon: Sparkles,
+    roles: ['gerente']
   }, {
     name: 'Sócios',
     href: '/admin/socios',

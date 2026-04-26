@@ -34,6 +34,7 @@ import EventReport from "./pages/admin/EventReport";
 import Referrals from "./pages/admin/Referrals";
 import BenefitPrograms from "./pages/admin/BenefitPrograms";
 import BenefitProgramEditor from "./pages/admin/BenefitProgramEditor";
+import Services from "./pages/admin/Services";
 
 // Seller (mobile-first, fora do admin)
 import SellerDashboard from "./pages/seller/SellerDashboard";
@@ -136,6 +137,7 @@ const App = () => (
             <Route path="/admin/programas-beneficio" element={<BenefitPrograms />} />
             <Route path="/admin/programas-beneficio/novo" element={<BenefitProgramEditor />} />
             <Route path="/admin/programas-beneficio/:id" element={<BenefitProgramEditor />} />
+            <Route path="/admin/servicos" element={<Services />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
             <Route path="/admin/relatorios/eventos" element={<EventReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
