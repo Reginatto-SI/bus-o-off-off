@@ -241,7 +241,8 @@ export default function ServiceSales() {
       // PRD: dinheiro => pendente_taxa | pix/link => pendente.
       // Compatibilização mínima aplicada via migration de enum para não mapear silenciosamente.
       const saleStatus = paymentMethod === 'dinheiro' ? 'pendente_taxa' : 'pendente';
-      const safeBuyerName = buyerName.trim() || 'Venda avulsa de serviço';
+      // Padronização semântica para vendas sem identificação explícita do comprador.
+      const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
 
       if (!runtimePaymentEnvironment) {
         throw new Error('Ambiente de pagamento ainda não foi resolvido. Tente novamente em alguns segundos.');
@@ -532,7 +533,7 @@ export default function ServiceSales() {
                       <p className="font-medium">Resumo da venda</p>
                       <p className="text-sm text-muted-foreground">Evento: {selectedEvent.name}</p>
                       <p className="text-sm text-muted-foreground">Serviço: {selectedEventService.service.name}</p>
-                      <p className="text-sm text-muted-foreground">Comprador: {buyerName.trim() || 'Venda avulsa de serviço'}</p>
+                      <p className="text-sm text-muted-foreground">Comprador: {buyerName.trim() || 'Cliente não informado (venda de serviço)'}</p>
                       <p className="text-sm text-muted-foreground">
                         Quantidade: {quantity} {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
                       </p>

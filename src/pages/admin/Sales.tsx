@@ -274,6 +274,38 @@ function isStandaloneServiceSale(sale: Sale): boolean {
   return !sale.trip_id && !sale.boarding_location_id;
 }
 
+const STANDALONE_SERVICE_CUSTOMER_FALLBACK = 'Cliente não informado (venda de serviço)';
+
+function getSaleCustomerDisplayName(sale: Sale): string {
+  // Regra semântica: para venda avulsa de serviço, padroniza fallback sem parecer venda de passagem.
+  if (!isStandaloneServiceSale(sale)) return sale.customer_name;
+  const normalized = (sale.customer_name ?? '').trim();
+  if (!normalized || normalized.toLowerCase() === 'venda avulsa de serviço') {
+    return STANDALONE_SERVICE_CUSTOMER_FALLBACK;
+  }
+  return normalized;
+}
+
+function getStandaloneServiceNameFromLogs(logs: SaleLog[]): string | null {
+  // Tentativa sem alterar banco: reaproveita payload já persistido em sale_logs.
+  const serviceLog = logs.find((log) => log.action === 'service_item_registered');
+  if (!serviceLog) return null;
+
+  if (typeof serviceLog.new_value === 'string') {
+    try {
+      const parsed = JSON.parse(serviceLog.new_value);
+      if (parsed && typeof parsed.service_name === 'string' && parsed.service_name.trim()) {
+        return parsed.service_name.trim();
+      }
+    } catch {
+      // Fallback seguro: ignora parse inválido e tenta extrair do texto descritivo.
+    }
+  }
+
+  const descriptionMatch = serviceLog.description.match(/Item de serviço registrado:\s*(.+)$/i);
+  return descriptionMatch?.[1]?.trim() || null;
+}
+
 // ── Helper to build TicketCardData ──
 function buildTicketCardData(
   ticket: TicketRecord,
@@ -375,6 +407,7 @@ export default function Sales() {
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailBoardingDepartureTime, setDetailBoardingDepartureTime] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailStandaloneServiceName = useMemo(() => getStandaloneServiceNameFromLogs(detailLogs), [detailLogs]);
 
   // Edit passenger modal
   const [editingTicket, setEditingTicket] = useState<TicketRecord | null>(null);
@@ -1033,6 +1066,10 @@ export default function Sales() {
   const openDetail = async (sale: Sale) => {
     setDetailSale(sale);
     setDetailLoading(true);
+    // Evita estado residual no modal quando abrimos detalhes de outra venda.
+    setDetailTickets([]);
+    setDetailLogs([]);
+    setDetailBoardingDepartureTime(null);
     const [ticketsRes, logsRes, boardingRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase.from('sale_logs').select('*').eq('sale_id', sale.id).order('created_at', { ascending: false }),
@@ -1923,7 +1960,7 @@ export default function Sales() {
                           ) : (
                             <div>
                               <div className="flex items-center gap-1.5">
-                                <p className="font-medium text-sm">{sale.customer_name}</p>
+                                <p className="font-medium text-sm">{getSaleCustomerDisplayName(sale)}</p>
                               </div>
                               <p className="text-xs text-muted-foreground">{sale.customer_cpf}</p>
                               {sale.seller?.name && (
@@ -1948,12 +1985,17 @@ export default function Sales() {
                         {/* Passagem: quantidade + poltronas agrupados */}
                         <TableCell>
                           <div className="space-y-0.5">
-                            <p className="text-sm">{sale.quantity} {sale.quantity === 1 ? (isBlock ? 'poltrona' : 'passagem') : (isBlock ? 'poltronas' : 'passagens')}</p>
+                            <p className="text-sm">
+                              {sale.quantity}{' '}
+                              {sale.quantity === 1
+                                ? (isBlock ? 'poltrona' : isStandaloneServiceSale(sale) ? 'serviço' : 'passagem')
+                                : (isBlock ? 'poltronas' : isStandaloneServiceSale(sale) ? 'serviços' : 'passagens')}
+                            </p>
                             {/* Número oficial da passagem visível na listagem para suporte operacional rápido. */}
                             {!isBlock && ticketNumbers.length > 0 && (
                               <p className="text-xs text-muted-foreground">Nº {ticketNumbers[0]}{ticketNumbers.length > 1 ? ` +${ticketNumbers.length - 1}` : ''}</p>
                             )}
-                            {seatLabels && seatLabels.length > 3 ? (
+                            {!isStandaloneServiceSale(sale) && seatLabels && seatLabels.length > 3 ? (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -1962,9 +2004,9 @@ export default function Sales() {
                                   <TooltipContent><p>{seatsFull}</p></TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            ) : (
+                            ) : !isStandaloneServiceSale(sale) ? (
                               <p className="text-xs text-muted-foreground">Poltr. {seatsDisplay}</p>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                         {canViewFinancials && (
@@ -2187,6 +2229,8 @@ export default function Sales() {
         <Dialog open={!!detailSale} onOpenChange={(open) => {
           if (!open) {
             setDetailSale(null);
+            setDetailTickets([]);
+            setDetailLogs([]);
             setDetailBoardingDepartureTime(null);
           }
         }}>
@@ -2201,10 +2245,12 @@ export default function Sales() {
                     <Eye className="h-4 w-4" />
                     Dados da Venda
                   </TabsTrigger>
-                  <TabsTrigger value="passageiros" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
-                    <Users className="h-4 w-4" />
-                    Passageiros
-                  </TabsTrigger>
+                  {detailTickets.length > 0 && (
+                    <TabsTrigger value="passageiros" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
+                      <Users className="h-4 w-4" />
+                      Passageiros
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="historico" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
                     <History className="h-4 w-4" />
                     Histórico
@@ -2233,9 +2279,15 @@ export default function Sales() {
                             </>
                           ) : (
                             <>
-                              <InfoRow label="Cliente" value={detailSale.customer_name} />
+                              <InfoRow label="Cliente" value={getSaleCustomerDisplayName(detailSale)} />
                               <InfoRow label="CPF" value={detailSale.customer_cpf} />
                               <InfoRow label="Telefone" value={detailSale.customer_phone} />
+                              {isStandaloneServiceSale(detailSale) && (
+                                <InfoRow label="Tipo" value="Venda de serviço avulsa" />
+                              )}
+                              {isStandaloneServiceSale(detailSale) && detailStandaloneServiceName && (
+                                <InfoRow label="Serviço" value={detailStandaloneServiceName} />
+                              )}
                             </>
                           )}
                           <InfoRow label="Evento" value={detailSale.event?.name ?? '-'} />
@@ -2253,19 +2305,32 @@ export default function Sales() {
                             label="Local Embarque"
                             value={isStandaloneServiceSale(detailSale) ? 'Sem embarque — serviço avulso' : (detailSale.boarding_location?.name ?? '-')}
                           />
+                          {!isStandaloneServiceSale(detailSale) && (
+                            <InfoRow
+                              label="Horário de Embarque"
+                              value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
+                            />
+                          )}
                           <InfoRow
-                            label="Horário de Embarque"
-                            value={detailBoardingDepartureTime ? detailBoardingDepartureTime.slice(0, 5) : 'Horário não informado'}
+                            label="Quantidade"
+                            value={`${detailSale.quantity} ${
+                              detailSale.status === 'bloqueado'
+                                ? 'poltrona(s)'
+                                : isStandaloneServiceSale(detailSale)
+                                  ? 'serviço(s)'
+                                  : 'passagem(ns)'
+                            }`}
                           />
-                          <InfoRow label="Quantidade" value={`${detailSale.quantity} ${detailSale.status === 'bloqueado' ? 'poltrona(s)' : ''}`} />
-                          <InfoRow
-                            label="Poltrona(s)"
-                            value={detailTickets.length > 0 ? detailTickets.map(t => t.seat_label).sort((a, b) => {
-                              const na = parseInt(a, 10); const nb = parseInt(b, 10);
-                              if (!isNaN(na) && !isNaN(nb)) return na - nb;
-                              return a.localeCompare(b);
-                            }).join(', ') : '-'}
-                          />
+                          {!isStandaloneServiceSale(detailSale) && (
+                            <InfoRow
+                              label="Poltrona(s)"
+                              value={detailTickets.length > 0 ? detailTickets.map(t => t.seat_label).sort((a, b) => {
+                                const na = parseInt(a, 10); const nb = parseInt(b, 10);
+                                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                                return a.localeCompare(b);
+                              }).join(', ') : '-'}
+                            />
+                          )}
                           {canViewFinancials && detailSale.status !== 'bloqueado' && (
                             <>
                               <InfoRow label="Valor Unitário" value={formatCurrencyBRL(Number(detailSale.unit_price))} />
@@ -2417,7 +2482,8 @@ export default function Sales() {
                       </TabsContent>
 
                       {/* Tab: Passageiros */}
-                      <TabsContent value="passageiros" className="mt-0">
+                      {detailTickets.length > 0 && (
+                        <TabsContent value="passageiros" className="mt-0">
                         <p className="mb-3 text-xs text-muted-foreground">
                           Correção oficial de dados cadastrais do passageiro (nome, telefone e CPF com motivo obrigatório).
                         </p>
@@ -2469,7 +2535,8 @@ export default function Sales() {
                             </TableBody>
                           </Table>
                         )}
-                      </TabsContent>
+                        </TabsContent>
+                      )}
 
                       {/* Tab: Histórico */}
                       <TabsContent value="historico" className="mt-0">
