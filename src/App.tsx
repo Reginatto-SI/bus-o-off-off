@@ -108,10 +108,15 @@ const App = () => (
             <Route path="/admin/minhas-vendas" element={<Navigate to="/vendedor/minhas-vendas" replace />} />
 
             {/* Driver Portal (mobile-first, fora do admin) */}
-            <Route path="/motorista" element={<DriverHome />} />
-            <Route path="/motorista/validar" element={<DriverValidate />} />
-            <Route path="/motorista/embarque" element={<DriverBoarding />} />
-            <Route path="/motorista/preferencias" element={<DriverPreferences />} />
+            <Route path="/validador" element={<DriverHome />} />
+            <Route path="/validador/validar" element={<DriverValidate />} />
+            <Route path="/validador/embarque" element={<DriverBoarding />} />
+            <Route path="/validador/preferencias" element={<DriverPreferences />} />
+            {/* Compatibilidade legado: mantém links antigos de /motorista funcionando via redirect automático. */}
+            <Route path="/motorista" element={<Navigate to="/validador" replace />} />
+            <Route path="/motorista/validar" element={<Navigate to="/validador/validar" replace />} />
+            <Route path="/motorista/embarque" element={<Navigate to="/validador/embarque" replace />} />
+            <Route path="/motorista/preferencias" element={<Navigate to="/validador/preferencias" replace />} />
 
             {/* Representative Portal (área exclusiva, fora do admin) */}
             <Route path="/representante/painel" element={<RepresentativeDashboard />} />
