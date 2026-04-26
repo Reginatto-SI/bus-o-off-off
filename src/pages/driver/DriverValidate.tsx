@@ -27,6 +27,42 @@ type ValidationResponse = {
   boarding_status: string | null;
 };
 
+type ServiceQrItem = {
+  item_id: string;
+  service_id: string;
+  service_name: string;
+  unit_type: string;
+  control_type: string;
+  quantity_total: number;
+  quantity_used: number;
+  quantity_remaining: number;
+  status: string;
+  unit_price: number | null;
+  total_price: number | null;
+  is_consumable: boolean;
+  consume_block_reason: string | null;
+};
+
+type ServiceQrResponse = {
+  result: 'success' | 'blocked';
+  reason_code: string;
+  message: string;
+  sale_id: string | null;
+  event_id: string | null;
+  customer_name: string | null;
+  payment_method: string | null;
+  status: string | null;
+  payment_confirmed_at: string | null;
+  service_qr_code_token: string | null;
+  items: ServiceQrItem[];
+};
+
+type ServiceConsumeResponse = {
+  result: 'success' | 'blocked';
+  reason_code: string;
+  message: string;
+};
+
 type BarcodeDetection = { rawValue?: string };
 type BarcodeDetectorInstance = { detect: (source: HTMLVideoElement) => Promise<BarcodeDetection[]> };
 type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorInstance;
@@ -190,6 +226,10 @@ export default function DriverValidate() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<ValidationResponse | null>(null);
+  const [serviceOverlay, setServiceOverlay] = useState<ServiceQrResponse | null>(null);
+  const [serviceEventName, setServiceEventName] = useState<string | null>(null);
+  const [serviceActionFeedback, setServiceActionFeedback] = useState<string | null>(null);
+  const [consumingItemId, setConsumingItemId] = useState<string | null>(null);
   const [scannerStatusMessage, setScannerStatusMessage] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
@@ -206,6 +246,31 @@ export default function DriverValidate() {
     return REASON_MESSAGES[overlay.reason_code] ?? 'Validação bloqueada';
   }, [overlay]);
 
+  const serviceReasonLabel = useMemo(() => {
+    if (!serviceOverlay) return '';
+    const serviceMessages: Record<string, string> = {
+      service_qr_not_found: 'QR de serviços inválido ou não reconhecido.',
+      service_qr_resolved: 'Serviços da venda carregados com sucesso.',
+      service_item_consumed: '1 unidade consumida com sucesso.',
+      sale_cancelled: 'Venda cancelada. Não é possível consumir o serviço.',
+      sale_pending_fee: 'Venda pendente de taxa. Consumo indisponível.',
+      sale_not_paid: 'Venda ainda não está paga. Não é possível consumir o serviço.',
+      control_not_required: 'Serviço sem validação obrigatória. Nada para consumir.',
+      no_balance: 'Saldo esgotado para este serviço.',
+      item_inactive: 'Item de serviço inativo para consumo.',
+      service_qr_mismatch: 'Este item não pertence ao QR de serviços lido.',
+      concurrent_update_blocked: 'Outro operador consumiu este item. Releia para atualizar.',
+      not_allowed_company: 'Você não tem permissão para validar esta venda.',
+    };
+    return serviceMessages[serviceOverlay.reason_code] ?? serviceOverlay.message ?? 'Validação de serviço bloqueada.';
+  }, [serviceOverlay]);
+
+  const itemBlockReasonMessages: Record<string, string> = {
+    control_not_required: 'Serviço sem validação obrigatória.',
+    no_balance: 'Saldo esgotado para este serviço.',
+    item_inactive: 'Item inativo para consumo.',
+  };
+
   /* ---------- helpers ---------- */
 
   const updateDebug = useCallback((patch: Partial<DebugInfo>) => {
@@ -219,11 +284,36 @@ export default function DriverValidate() {
 
   /* ---------- RPC validate ---------- */
 
+  const resolveServiceQr = useCallback(async (serviceToken: string) => {
+    const { data, error } = await supabase.rpc('resolve_service_qr', {
+      p_service_qr_code_token: serviceToken,
+    });
+
+    if (error) return null;
+    const payload = (Array.isArray(data) ? data[0] : data) as Omit<ServiceQrResponse, 'items'> & { items: unknown } | null;
+    if (!payload) return null;
+
+    let eventName: string | null = null;
+    if (payload.event_id) {
+      const { data: eventData } = await supabase.from('events').select('name').eq('id', payload.event_id).maybeSingle();
+      eventName = eventData?.name ?? null;
+    }
+
+    setServiceEventName(eventName);
+    const parsedItems = Array.isArray(payload.items) ? payload.items as ServiceQrItem[] : [];
+    const serviceData: ServiceQrResponse = { ...payload, items: parsedItems };
+    setServiceOverlay(serviceData);
+    return serviceData;
+  }, []);
+
   const handleValidate = useCallback(async (qrCodeToken: string, action: 'checkin' | 'checkout' | 'reboard') => {
     if (!qrCodeToken || processing) return;
     setProcessing(true);
     lockScannerTemporarily();
     setScannerStatusMessage(null);
+    setServiceOverlay(null);
+    setServiceEventName(null);
+    setServiceActionFeedback(null);
 
     const { data, error } = await supabase.rpc('validate_ticket_scan', {
       p_qr_code_token: qrCodeToken,
@@ -244,6 +334,19 @@ export default function DriverValidate() {
     }
 
     const payload = (Array.isArray(data) ? data[0] : data) as ValidationResponse | null;
+    const shouldTryServiceQr = payload?.reason_code === 'invalid_qr';
+
+    // Mantemos primeiro o fluxo de passagem e só tentamos serviços quando o ticket não é reconhecido.
+    if (shouldTryServiceQr) {
+      const servicePayload = await resolveServiceQr(qrCodeToken);
+      if (servicePayload && servicePayload.reason_code !== 'service_qr_not_found') {
+        setOverlay(null);
+        setManualToken(qrCodeToken);
+        setProcessing(false);
+        return;
+      }
+    }
+
     // Feedback operacional obrigatório: ao menos uma resposta clara após leitura reconhecida.
     setOverlay(payload ?? {
       result: 'blocked', reason_code: 'invalid_response', checkout_enabled: false,
@@ -254,7 +357,32 @@ export default function DriverValidate() {
     scanErrorCountRef.current = 0;
     setManualToken(qrCodeToken);
     setProcessing(false);
-  }, [lockScannerTemporarily, processing]);
+  }, [lockScannerTemporarily, processing, resolveServiceQr]);
+
+  const handleConsumeServiceItem = useCallback(async (itemId: string) => {
+    if (!serviceOverlay?.service_qr_code_token || consumingItemId) return;
+    setConsumingItemId(itemId);
+    setServiceActionFeedback(null);
+
+    // O consumo é sempre via RPC para manter atomicidade e evitar ajuste local de saldo no frontend.
+    const { data, error } = await supabase.rpc('consume_service_item', {
+      p_sale_service_item_id: itemId,
+      p_service_qr_code_token: serviceOverlay.service_qr_code_token,
+    });
+
+    if (error) {
+      setServiceActionFeedback('Erro ao consumir item. Tente novamente.');
+      setConsumingItemId(null);
+      return;
+    }
+
+    const payload = (Array.isArray(data) ? data[0] : data) as ServiceConsumeResponse | null;
+    setServiceActionFeedback(payload?.message ?? 'Consumo processado.');
+
+    // Recarrega o estado via resolve_service_qr para garantir saldo atualizado após concorrência.
+    await resolveServiceQr(serviceOverlay.service_qr_code_token);
+    setConsumingItemId(null);
+  }, [consumingItemId, resolveServiceQr, serviceOverlay?.service_qr_code_token]);
 
   /* ---------- torch ---------- */
 
@@ -523,10 +651,10 @@ export default function DriverValidate() {
   /* ---------- QR scanning loop ---------- */
 
   useEffect(() => {
-    if (!scannerSupported || !cameraReady || !videoEl || overlay || processing) return;
+    if (!scannerSupported || !cameraReady || !videoEl || overlay || serviceOverlay || processing) return;
 
     scanIntervalRef.current = window.setInterval(async () => {
-      if (!videoEl || scanLocked || processing || overlay) return;
+      if (!videoEl || scanLocked || processing || overlay || serviceOverlay) return;
       try {
         let token = '';
         if (scannerEngineRef.current === 'barcode_detector') {
@@ -579,7 +707,7 @@ export default function DriverValidate() {
         scanIntervalRef.current = null;
       }
     };
-  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, startCamera, videoEl]);
+  }, [cameraReady, handleValidate, overlay, processing, scanLocked, scannerSupported, serviceOverlay, startCamera, videoEl]);
 
   useEffect(() => {
     if (!cameraReady || overlay || processing) return;
@@ -627,6 +755,10 @@ export default function DriverValidate() {
       autoResetTimerRef.current = null;
     }
     setOverlay(null);
+    setServiceOverlay(null);
+    setServiceEventName(null);
+    setServiceActionFeedback(null);
+    setConsumingItemId(null);
     setScannerStatusMessage(null);
     setProcessing(false);
     // Re-read prefs in case user changed them
@@ -708,7 +840,7 @@ export default function DriverValidate() {
                     <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-white/80 rounded-br-lg" />
                   </div>
                   <p className="absolute bottom-4 left-0 right-0 text-center text-xs text-white/90 drop-shadow-md px-4">
-                    Aponte a câmera para o QR Code da passagem
+                    Aponte a câmera para o QR Code da passagem ou dos serviços
                   </p>
                 </div>
               )}
@@ -772,6 +904,57 @@ export default function DriverValidate() {
                 </div>
               )}
             </div>
+
+            {serviceOverlay && (
+              <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <div className="space-y-1 text-sm">
+                  <p className="font-semibold">Validação de serviços</p>
+                  <p className="text-muted-foreground">{serviceReasonLabel}</p>
+                  <p><strong>Cliente:</strong> {serviceOverlay.customer_name ?? '—'}</p>
+                  <p><strong>Status da venda:</strong> {serviceOverlay.status ?? '—'}</p>
+                  <p><strong>Pagamento:</strong> {serviceOverlay.payment_method ?? '—'}</p>
+                  <p><strong>Evento:</strong> {serviceEventName ?? '—'}</p>
+                </div>
+
+                <div className="space-y-2">
+                  {serviceOverlay.items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhum serviço encontrado para esta venda.</p>
+                  ) : serviceOverlay.items.map((item) => (
+                    <div key={item.item_id} className="rounded-lg border bg-background p-3 text-sm">
+                      <p className="font-medium">{item.service_name}</p>
+                      <p><strong>Unidade:</strong> {item.unit_type}</p>
+                      <p><strong>Comprada:</strong> {item.quantity_total}</p>
+                      <p><strong>Usada:</strong> {item.quantity_used}</p>
+                      <p><strong>Restante:</strong> {item.quantity_remaining}</p>
+                      <p><strong>Status:</strong> {item.status}</p>
+                      <p><strong>Consumível:</strong> {item.is_consumable ? 'Sim' : 'Não'}</p>
+                      {!item.is_consumable && item.consume_block_reason && (
+                        <p className="text-xs text-destructive">
+                          Motivo: {itemBlockReasonMessages[item.consume_block_reason] ?? item.consume_block_reason}
+                        </p>
+                      )}
+                      {item.is_consumable && (
+                        <Button
+                          className="mt-2"
+                          size="sm"
+                          disabled={consumingItemId === item.item_id}
+                          onClick={() => handleConsumeServiceItem(item.item_id)}
+                        >
+                          {consumingItemId === item.item_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Consumir 1
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {serviceActionFeedback && <p className="text-xs text-muted-foreground">{serviceActionFeedback}</p>}
+                <Button className="w-full" onClick={resetOverlay}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Ler próximo
+                </Button>
+              </div>
+            )}
 
             {/* Camera error with retry */}
             {cameraError && (
