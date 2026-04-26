@@ -1803,6 +1803,100 @@ export type Database = {
           },
         ]
       }
+      sale_service_items: {
+        Row: {
+          company_id: string
+          control_type: string
+          created_at: string
+          event_id: string | null
+          event_service_id: string | null
+          id: string
+          quantity_remaining: number
+          quantity_total: number
+          quantity_used: number
+          sale_id: string
+          service_id: string
+          service_name: string
+          status: string
+          total_price: number
+          unit_price: number
+          unit_type: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          control_type: string
+          created_at?: string
+          event_id?: string | null
+          event_service_id?: string | null
+          id?: string
+          quantity_total: number
+          quantity_used?: number
+          sale_id: string
+          service_id: string
+          service_name: string
+          status?: string
+          total_price: number
+          unit_price: number
+          unit_type: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          control_type?: string
+          created_at?: string
+          event_id?: string | null
+          event_service_id?: string | null
+          id?: string
+          quantity_total?: number
+          quantity_used?: number
+          sale_id?: string
+          service_id?: string
+          service_name?: string
+          status?: string
+          total_price?: number
+          unit_price?: number
+          unit_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_service_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_service_items_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_service_items_event_service_id_fkey"
+            columns: ["event_service_id"]
+            isOneToOne: false
+            referencedRelation: "event_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_service_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_service_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales: {
         Row: {
           asaas_payment_id: string | null
@@ -1838,6 +1932,7 @@ export type Database = {
           reservation_expires_at: string | null
           sale_origin: string
           seller_id: string | null
+          service_qr_code_token: string | null
           socio_fee_amount: number | null
           split_snapshot_captured_at: string | null
           split_snapshot_platform_fee_percent: number | null
@@ -1886,6 +1981,7 @@ export type Database = {
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
+          service_qr_code_token?: string | null
           socio_fee_amount?: number | null
           split_snapshot_captured_at?: string | null
           split_snapshot_platform_fee_percent?: number | null
@@ -1934,6 +2030,7 @@ export type Database = {
           reservation_expires_at?: string | null
           sale_origin?: string
           seller_id?: string | null
+          service_qr_code_token?: string | null
           socio_fee_amount?: number | null
           split_snapshot_captured_at?: string | null
           split_snapshot_platform_fee_percent?: number | null
@@ -2244,6 +2341,89 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_item_validations: {
+        Row: {
+          company_id: string
+          created_at: string
+          detail: string | null
+          id: string
+          quantity_consumed: number
+          quantity_remaining_after: number | null
+          quantity_remaining_before: number | null
+          quantity_used_after: number | null
+          quantity_used_before: number | null
+          reason_code: string
+          result: string
+          sale_id: string
+          sale_service_item_id: string
+          service_id: string
+          validated_by_user_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          quantity_consumed?: number
+          quantity_remaining_after?: number | null
+          quantity_remaining_before?: number | null
+          quantity_used_after?: number | null
+          quantity_used_before?: number | null
+          reason_code: string
+          result: string
+          sale_id: string
+          sale_service_item_id: string
+          service_id: string
+          validated_by_user_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          quantity_consumed?: number
+          quantity_remaining_after?: number | null
+          quantity_remaining_before?: number | null
+          quantity_used_after?: number | null
+          quantity_used_before?: number | null
+          reason_code?: string
+          result?: string
+          sale_id?: string
+          sale_service_item_id?: string
+          service_id?: string
+          validated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_item_validations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_sale_service_item_id_fkey"
+            columns: ["sale_service_item_id"]
+            isOneToOne: false
+            referencedRelation: "sale_service_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -2945,6 +3125,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      consume_service_item: {
+        Args: { p_sale_service_item_id: string; p_service_qr_code_token?: string }
+        Returns: {
+          message: string
+          quantity_remaining: number | null
+          quantity_total: number | null
+          quantity_used: number | null
+          reason_code: string
+          result: string
+          sale_id: string | null
+          sale_service_item_id: string | null
+          service_id: string | null
+        }[]
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
@@ -3161,6 +3355,22 @@ export type Database = {
       resolve_event_seller_ref: {
         Args: { p_company_id: string; p_seller_id: string }
         Returns: string
+      }
+      resolve_service_qr: {
+        Args: { p_service_qr_code_token: string }
+        Returns: {
+          customer_name: string | null
+          event_id: string | null
+          items: Json
+          message: string
+          payment_confirmed_at: string | null
+          payment_method: string | null
+          reason_code: string
+          result: string
+          sale_id: string | null
+          service_qr_code_token: string | null
+          status: Database["public"]["Enums"]["sale_status"] | null
+        }[]
       }
       resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
