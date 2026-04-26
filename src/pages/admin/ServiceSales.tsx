@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PageHeader } from '@/components/admin/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,18 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronsUpDown,
+  CircleDollarSign,
+  ClipboardList,
+  Loader2,
+  Package,
+  Sparkles,
+  UserRound,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -76,6 +88,12 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   pix: 'Pix',
   link: 'Link',
 };
+
+const STEP_DETAILS: Array<{ value: WizardStep; label: string; icon: typeof Sparkles }> = [
+  { value: 'selecionar', label: 'Escolher evento', icon: CalendarDays },
+  { value: 'quantidade', label: 'Definir quantidade', icon: ClipboardList },
+  { value: 'pagamento', label: 'Confirmar venda', icon: CircleDollarSign },
+];
 
 export default function ServiceSales() {
   const { activeCompanyId, user } = useAuth();
@@ -194,6 +212,19 @@ export default function ServiceSales() {
 
   const canAdvanceToQuantity = Boolean(selectedEventId && selectedEventServiceId);
   const canAdvanceToPayment = Boolean(quantity > 0 && quantity <= availableQuantity);
+  const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
+  const currentStepIndex = STEP_DETAILS.findIndex((stepItem) => stepItem.value === step);
+
+  // Estado visual do card lateral para orientar a operação sem alterar o fluxo funcional.
+  const summaryState: 'incompleto' | 'preenchendo' | 'pronto' = !canAdvanceToQuantity
+    ? 'incompleto'
+    : (step === 'pagamento' && canAdvanceToPayment ? 'pronto' : 'preenchendo');
+
+  const summaryStateClasses = {
+    incompleto: 'border-border/70 bg-card',
+    preenchendo: 'border-primary/30 bg-primary/5',
+    pronto: 'border-emerald-200 bg-emerald-50/70',
+  } as const;
 
   function resetWizard(options?: { keepEvent?: boolean }) {
     // Reset centralizado para reduzir risco de inconsistência entre estados ao concluir venda.
@@ -241,8 +272,6 @@ export default function ServiceSales() {
       // PRD: dinheiro => pendente_taxa | pix/link => pendente.
       // Compatibilização mínima aplicada via migration de enum para não mapear silenciosamente.
       const saleStatus = paymentMethod === 'dinheiro' ? 'pendente_taxa' : 'pendente';
-      // Padronização semântica para vendas sem identificação explícita do comprador.
-      const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
 
       if (!runtimePaymentEnvironment) {
         throw new Error('Ambiente de pagamento ainda não foi resolvido. Tente novamente em alguns segundos.');
@@ -338,222 +367,327 @@ export default function ServiceSales() {
 
   return (
     <AdminLayout>
-      <div className="page-container space-y-6">
-        <PageHeader
-          title="Venda de Serviços"
-          description="Wizard operacional para venda rápida vinculada ao evento"
-        />
+      <div className="page-container space-y-4 lg:space-y-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <PageHeader
+            title="Venda de Serviços"
+            description="Fluxo guiado e rápido para registrar vendas vinculadas ao evento"
+          />
+          <Badge variant="secondary" className="w-fit gap-1 px-3 py-1 text-xs font-medium">
+            <Sparkles className="h-3.5 w-3.5" />
+            Fluxo rápido
+          </Badge>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Fluxo rápido</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
-              <TabsList className="grid w-full grid-cols-3 h-12">
-                <TabsTrigger value="selecionar">1. Seleção</TabsTrigger>
-                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity}>2. Quantidade</TabsTrigger>
-                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity}>3. Pagamento</TabsTrigger>
-              </TabsList>
-            </Tabs>
+        <Card className="border-border/70">
+          <CardContent className="p-4 lg:p-5">
+            {/* Layout UX em duas colunas para reduzir rolagem e manter resumo visível no desktop. */}
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-4">
+                {/* Stepper visual com destaque ativo e ícones para leitura operacional mais rápida. */}
+                <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
+                  <p className="mb-2 text-right text-xs font-medium text-muted-foreground">
+                    Progresso: {currentStepIndex + 1}/{STEP_DETAILS.length}
+                  </p>
+                  <TabsList className="grid h-14 w-full grid-cols-3 gap-2 bg-muted/40 p-1">
+                    {STEP_DETAILS.map((stepItem, index) => {
+                      const StepIcon = stepItem.icon;
+                      const isCompleted = index < currentStepIndex;
+                      const isDisabled =
+                        (stepItem.value === 'quantidade' && !canAdvanceToQuantity)
+                        || (stepItem.value === 'pagamento' && (!canAdvanceToPayment || !canAdvanceToQuantity));
 
-            {loading ? (
-              <div className="h-40 flex items-center justify-center text-muted-foreground gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados...
-              </div>
-            ) : (
-              <>
-                {step === 'selecionar' && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Evento</Label>
-                      <Popover open={eventPopoverOpen} onOpenChange={setEventPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" role="combobox" className="w-full justify-between h-12">
-                            <span className="truncate">{selectedEventLabel}</span>
-                            <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[420px] p-0" align="start">
-                          <Command>
-                            <CommandInput
-                              placeholder="Buscar evento..."
-                              value={eventSearch}
-                              onValueChange={setEventSearch}
-                            />
-                            <CommandList>
-                              <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
-                              <CommandGroup>
-                                {filteredEvents.map((event) => {
-                                  const label = `${formatDateOnlyBR(event.date)} — ${event.name}${event.city ? ` (${event.city})` : ''}`;
-                                  return (
-                                    <CommandItem
-                                      key={event.id}
-                                      value={label}
-                                      onSelect={() => {
-                                        setSelectedEventId(event.id);
-                                        setSelectedEventServiceId('');
-                                        setEventPopoverOpen(false);
-                                      }}
-                                    >
-                                      <Check className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
-                                      {label}
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Serviço</Label>
-                      <Select value={selectedEventServiceId} onValueChange={setSelectedEventServiceId}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Selecione o serviço" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {!selectedEventId ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">
-                              Selecione um evento para carregar os serviços.
-                            </div>
-                          ) : availableEventServices.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">
-                              Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
-                            </div>
-                          ) : (
-                            availableEventServices.map((service) => (
-                              <SelectItem key={service.id} value={service.id}>
-                                {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
-                              </SelectItem>
-                            ))
+                      return (
+                        <TabsTrigger
+                          key={stepItem.value}
+                          value={stepItem.value}
+                          disabled={isDisabled}
+                          className={cn(
+                            'group h-full gap-2 rounded-md border border-transparent px-2',
+                            'data-[state=active]:border-primary/40 data-[state=active]:bg-background data-[state=active]:shadow-sm',
+                            isCompleted && 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
                           )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        >
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <StepIcon className="h-4 w-4 text-muted-foreground transition-colors group-data-[state=active]:text-primary" />
+                          )}
+                          <span className="hidden text-xs font-medium md:inline">{index + 1}. {stepItem.label}</span>
+                          <span className="text-xs font-medium md:hidden">{index + 1}</span>
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </Tabs>
 
-                    <div className="rounded-lg border p-4">
-                      <p className="text-sm text-muted-foreground">Valor do serviço</p>
-                      <p className="text-2xl font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
-                    </div>
-
-                    <div className="rounded-lg border p-4">
-                      <p className="text-sm text-muted-foreground">Vagas disponíveis</p>
-                      <p className="text-2xl font-semibold">{availableQuantity}</p>
-                    </div>
-
-                    <div className="md:col-span-2 flex justify-end">
-                      <Button disabled={!canAdvanceToQuantity} onClick={() => setStep('quantidade')} className="h-12 px-8">
-                        Continuar
-                      </Button>
-                    </div>
+                {loading ? (
+                  <div className="flex h-40 items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados...
                   </div>
-                )}
+                ) : (
+                  <div className="rounded-lg border bg-card p-4 lg:p-5 transition-all duration-200">
+                    {step === 'selecionar' && (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-2 md:col-span-2">
+                          <Label>Evento</Label>
+                          <Popover open={eventPopoverOpen} onOpenChange={setEventPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" role="combobox" className="h-10 w-full justify-between hover:border-primary/40">
+                                <span className="truncate">{selectedEventLabel}</span>
+                                <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[420px] p-0" align="start">
+                              <Command>
+                                <CommandInput
+                                  placeholder="Buscar evento..."
+                                  value={eventSearch}
+                                  onValueChange={setEventSearch}
+                                />
+                                <CommandList>
+                                  <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                                  <CommandGroup>
+                                    {filteredEvents.map((event) => {
+                                      const label = `${formatDateOnlyBR(event.date)} — ${event.name}${event.city ? ` (${event.city})` : ''}`;
+                                      return (
+                                        <CommandItem
+                                          key={event.id}
+                                          value={label}
+                                          onSelect={() => {
+                                            setSelectedEventId(event.id);
+                                            setSelectedEventServiceId('');
+                                            setEventPopoverOpen(false);
+                                          }}
+                                        >
+                                          <Check className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
+                                          {label}
+                                        </CommandItem>
+                                      );
+                                    })}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
 
-                {step === 'quantidade' && selectedEventService?.service && (
-                  <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2 md:col-span-2">
-                        <Label>Comprador/Responsável (opcional)</Label>
-                        <Input
-                          value={buyerName}
-                          onChange={(event) => setBuyerName(event.target.value)}
-                          placeholder="Ex: Maria da Silva"
-                          className="h-12"
-                        />
-                      </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label>Serviço</Label>
+                          <Select value={selectedEventServiceId} onValueChange={setSelectedEventServiceId}>
+                            <SelectTrigger className="h-10">
+                              <SelectValue placeholder="Selecione o serviço" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {!selectedEventId ? (
+                                <div className="px-3 py-2 text-sm text-muted-foreground">
+                                  Selecione um evento para carregar os serviços.
+                                </div>
+                              ) : availableEventServices.length === 0 ? (
+                                <div className="px-3 py-2 text-sm text-muted-foreground">
+                                  Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
+                                </div>
+                              ) : (
+                                availableEventServices.map((service) => (
+                                  <SelectItem key={service.id} value={service.id}>
+                                    {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div className="space-y-2">
-                        <Label>
-                          Quantidade de {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
-                        </Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={Math.max(availableQuantity, 1)}
-                          value={quantity}
-                          onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
-                          className="h-12"
-                        />
-                      </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">Valor do serviço</p>
+                          <p className="text-xl font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
+                        </div>
 
-                      <div className="rounded-lg border p-4">
-                        <p className="text-sm text-muted-foreground">Unidade</p>
-                        <p className="text-2xl font-semibold">{formatCurrencyBRL(selectedEventService.base_price)}</p>
-                      </div>
+                        <div className="rounded-md border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">Vagas disponíveis</p>
+                          <p className="text-xl font-semibold">{availableQuantity}</p>
+                        </div>
 
-                      <div className="rounded-lg border p-4 md:col-span-2">
-                        <p className="text-sm text-muted-foreground">Total</p>
-                        <p className="text-3xl font-semibold">{formatCurrencyBRL(totalAmount)}</p>
-                      </div>
-                    </div>
-
-                    {selectedEventService.service.unit_type === 'pessoa' && (
-                      <div className="space-y-2">
-                        <Label>Nomes (opcional, um por linha)</Label>
-                        <Textarea
-                          value={personNames}
-                          onChange={(event) => setPersonNames(event.target.value)}
-                          placeholder="Ex: Maria\nJoão"
-                          className="min-h-24"
-                        />
+                        <div className="flex justify-end md:col-span-2">
+                          <Button disabled={!canAdvanceToQuantity} onClick={() => setStep('quantidade')} className="h-10 px-6">
+                            Continuar
+                          </Button>
+                        </div>
                       </div>
                     )}
 
-                    <div className="flex justify-between gap-2">
-                      <Button variant="outline" className="h-12 px-8" onClick={() => setStep('selecionar')}>
-                        Voltar
-                      </Button>
-                      <Button disabled={!canAdvanceToPayment} className="h-12 px-8" onClick={() => setStep('pagamento')}>
-                        Continuar
-                      </Button>
-                    </div>
+                    {step === 'quantidade' && selectedEventService?.service && (
+                      <div className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>Comprador/Responsável (opcional)</Label>
+                            <Input
+                              value={buyerName}
+                              onChange={(event) => setBuyerName(event.target.value)}
+                              placeholder="Ex: Maria da Silva"
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>
+                              Quantidade de {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={Math.max(availableQuantity, 1)}
+                              value={quantity}
+                              onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
+                              className="h-10"
+                            />
+                          </div>
+
+                          <div className="rounded-md border bg-muted/20 p-3">
+                            <p className="text-xs text-muted-foreground">Unidade</p>
+                            <p className="text-xl font-semibold">{formatCurrencyBRL(selectedEventService.base_price)}</p>
+                          </div>
+
+                          <div className="rounded-md border bg-muted/20 p-3 md:col-span-2">
+                            <p className="text-xs text-muted-foreground">Total estimado</p>
+                            <p className="text-2xl font-semibold">{formatCurrencyBRL(totalAmount)}</p>
+                          </div>
+                        </div>
+
+                        {selectedEventService.service.unit_type === 'pessoa' && (
+                          <div className="space-y-2">
+                            <Label>Nomes (opcional, um por linha)</Label>
+                            <Textarea
+                              value={personNames}
+                              onChange={(event) => setPersonNames(event.target.value)}
+                              placeholder="Ex: Maria\nJoão"
+                              className="min-h-20"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex justify-between gap-2">
+                          <Button variant="outline" className="h-10 px-6" onClick={() => setStep('selecionar')}>
+                            Voltar
+                          </Button>
+                          <Button disabled={!canAdvanceToPayment} className="h-10 px-6" onClick={() => setStep('pagamento')}>
+                            Continuar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {step === 'pagamento' && selectedEventService?.service && selectedEvent && (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>Forma de pagamento</Label>
+                          <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
+                            <SelectTrigger className="h-10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                              <SelectItem value="pix">Pix</SelectItem>
+                              <SelectItem value="link">Link</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Microcopy para reforçar revisão final antes da ação irreversível de confirmação. */}
+                        <p className="text-sm text-muted-foreground">
+                          Revise os dados antes de confirmar a venda.
+                        </p>
+
+                        <div className="flex justify-between gap-2">
+                          <Button variant="outline" className="h-10 px-6" onClick={() => setStep('quantidade')}>
+                            Voltar
+                          </Button>
+                          <Button className="h-10 px-6" disabled={saving} onClick={handleConfirmSale}>
+                            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirmar venda
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
+              </div>
 
-                {step === 'pagamento' && selectedEventService?.service && selectedEvent && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Forma de pagamento</Label>
-                      <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                          <SelectItem value="pix">Pix</SelectItem>
-                          <SelectItem value="link">Link</SelectItem>
-                        </SelectContent>
-                      </Select>
+              {/* Card lateral de contexto rápido com status visual para apoiar operação sem sair da etapa atual. */}
+              <Card className={cn('h-fit xl:sticky xl:top-24', summaryStateClasses[summaryState])}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Resumo da venda</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+                    <p className="flex items-center gap-2 text-muted-foreground">
+                      <CalendarDays className="h-4 w-4" />
+                      Evento
+                    </p>
+                    <p className="font-medium leading-snug">{selectedEventLabel}</p>
+                  </div>
+
+                  <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+                    <p className="flex items-center gap-2 text-muted-foreground">
+                      <Package className="h-4 w-4" />
+                      Serviço
+                    </p>
+                    <p className="font-medium leading-snug">{selectedEventService?.service?.name ?? 'Selecione um serviço'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Unidade: {UNIT_LABELS[selectedEventService?.service?.unit_type ?? 'unitario']}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Valor unitário</p>
+                      <p className="text-base font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
                     </div>
-
-                    <div className="rounded-lg border p-4 space-y-2">
-                      <p className="font-medium">Resumo da venda</p>
-                      <p className="text-sm text-muted-foreground">Evento: {selectedEvent.name}</p>
-                      <p className="text-sm text-muted-foreground">Serviço: {selectedEventService.service.name}</p>
-                      <p className="text-sm text-muted-foreground">Comprador: {buyerName.trim() || 'Cliente não informado (venda de serviço)'}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Quantidade: {quantity} {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Pagamento: {PAYMENT_LABELS[paymentMethod]}</p>
-                      <p className="text-xl font-semibold">Total: {formatCurrencyBRL(totalAmount)}</p>
-                    </div>
-
-                    <div className="flex justify-between gap-2">
-                      <Button variant="outline" className="h-12 px-8" onClick={() => setStep('quantidade')}>
-                        Voltar
-                      </Button>
-                      <Button className="h-12 px-8" disabled={saving} onClick={handleConfirmSale}>
-                        {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        Confirmar venda
-                      </Button>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Vagas disponíveis</p>
+                      <p className="text-base font-semibold">{availableQuantity}</p>
                     </div>
                   </div>
-                )}
-              </>
-            )}
+
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Quantidade</p>
+                      <p className="text-base font-semibold">{quantity}</p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Pagamento</p>
+                      <p className="text-base font-semibold">{PAYMENT_LABELS[paymentMethod]}</p>
+                    </div>
+                  </div>
+
+                  {/* Total com maior prioridade visual para apoiar decisão em tempo real ao selecionar evento/serviço. */}
+                  <div className="rounded-md border border-primary/30 bg-primary/10 p-3">
+                    <p className="text-xs text-muted-foreground">Total estimado</p>
+                    <p className="text-3xl font-bold text-primary">{formatCurrencyBRL(totalAmount)}</p>
+                  </div>
+
+                  <div className="rounded-md border p-3">
+                    <p className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <UserRound className="h-4 w-4" />
+                      Comprador
+                    </p>
+                    <p className="font-medium">{safeBuyerName}</p>
+                  </div>
+
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Status operacional</p>
+                    <p className={cn(
+                      'mt-1 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
+                      summaryState === 'pronto' && 'bg-emerald-100 text-emerald-700',
+                      summaryState === 'preenchendo' && 'bg-primary/15 text-primary',
+                      summaryState === 'incompleto' && 'bg-muted text-muted-foreground',
+                    )}>
+                      {summaryState === 'pronto' ? 'Pronto para confirmar' : summaryState === 'preenchendo' ? 'Preenchendo dados' : 'Aguardando seleção'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </CardContent>
         </Card>
       </div>
