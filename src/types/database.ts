@@ -651,3 +651,40 @@ export interface EventWithCompany extends Event {
     whatsapp?: string | null;
   };
 }
+
+// =====================================================================
+// Módulo de Passeios & Serviços (base inicial — sem venda nesta etapa)
+// =====================================================================
+export type ServiceUnitType = 'pessoa' | 'veiculo' | 'unitario';
+export type ServiceControlType = 'validacao_obrigatoria' | 'sem_validacao';
+export type ServiceStatus = 'ativo' | 'inativo';
+
+export interface Service {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  unit_type: ServiceUnitType;
+  control_type: ServiceControlType;
+  status: ServiceStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventService {
+  id: string;
+  event_id: string;
+  service_id: string;
+  company_id: string;
+  base_price: number;
+  total_capacity: number;
+  // Reservado para evolução futura; nesta etapa é sempre 0.
+  sold_quantity: number;
+  allow_checkout: boolean;
+  allow_standalone_sale: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  service?: Service;
+}
+
