@@ -84,6 +84,7 @@ import {
   PartyPopper,
   Star,
   Tag,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
