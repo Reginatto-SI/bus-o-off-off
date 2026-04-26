@@ -150,10 +150,9 @@ export default function ServiceSales() {
             .order('date', { ascending: true }),
           supabase
             .from('event_services')
-            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, allow_standalone_sale, service:services!inner(id, name, unit_type, status)')
+            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, service:services!inner(id, name, unit_type, status)')
             .eq('company_id', activeCompanyId)
             .eq('is_active', true)
-            .eq('allow_standalone_sale', true)
             .eq('service.status', 'ativo'),
         ]);
 
@@ -415,11 +414,21 @@ export default function ServiceSales() {
                           <SelectValue placeholder="Selecione o serviço" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableEventServices.map((service) => (
-                            <SelectItem key={service.id} value={service.id}>
-                              {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
-                            </SelectItem>
-                          ))}
+                          {!selectedEventId ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Selecione um evento para carregar os serviços.
+                            </div>
+                          ) : availableEventServices.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
+                            </div>
+                          ) : (
+                            availableEventServices.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>
+                                {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

@@ -77,7 +77,7 @@ const emptyForm: FormState = {
   base_price: '0',
   total_capacity: '0',
   allow_checkout: false,
-  allow_standalone_sale: false,
+  allow_standalone_sale: true,
   is_active: true,
 };
 
@@ -269,12 +269,15 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
   };
 
   const noCatalog = !loading && services.length === 0;
+  const noLinkableServices = !loading && !editingId && services.length > 0 && linkableServices.length === 0;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Serviços do evento</CardTitle>
         <Button
+          // Evita submit acidental do formulário pai (/admin/eventos) ao abrir o modal de vínculo.
+          type="button"
           size="sm"
           onClick={openCreate}
           disabled={noCatalog || (linkableServices.length === 0 && !editingId)}
@@ -293,6 +296,13 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
             icon={<Sparkles className="h-6 w-6 text-muted-foreground" />}
             title="Nenhum serviço cadastrado"
             description="Cadastre serviços em /admin/servicos para vinculá-los a este evento."
+            className="py-8"
+          />
+        ) : noLinkableServices ? (
+          <EmptyState
+            icon={<Sparkles className="h-6 w-6 text-muted-foreground" />}
+            title="Todos os serviços já estão vinculados"
+            description="Não há novos serviços disponíveis para este evento. Edite um vínculo existente ou cadastre outro serviço em /admin/servicos."
             className="py-8"
           />
         ) : eventServices.length === 0 ? (
@@ -494,13 +504,14 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
 
           <div className="mt-2 flex justify-end gap-2">
             <Button
+              type="button"
               variant="outline"
               onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button type="button" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingId ? 'Salvar alterações' : 'Vincular serviço'}
             </Button>
