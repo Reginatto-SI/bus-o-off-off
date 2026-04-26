@@ -49,6 +49,7 @@ import { toast } from 'sonner';
 import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { EventServicesTab } from '@/components/admin/EventServicesTab';
 
 // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
 const vehicleTypeLabels: Record<Vehicle['type'], string> = {
@@ -286,6 +287,8 @@ export default function EventDetail() {
             <TabsTrigger value="trips">Viagens</TabsTrigger>
             <TabsTrigger value="locations">Locais de Embarque</TabsTrigger>
             <TabsTrigger value="sales">Vendas</TabsTrigger>
+            {/* PRD Passeios & Serviços: aba operacional do evento para vínculo de serviços. */}
+            <TabsTrigger value="services">Serviços</TabsTrigger>
           </TabsList>
 
           <TabsContent value="trips">
@@ -604,6 +607,11 @@ export default function EventDetail() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="services">
+            {/* Reuso do componente existente para manter padrão visual e regras já implementadas. */}
+            <EventServicesTab eventId={event.id} companyId={event.company_id} />
           </TabsContent>
         </Tabs>
       </div>

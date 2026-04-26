@@ -73,6 +73,8 @@ const UNIT_TYPE_LABELS: Record<ServiceUnitType, string> = {
   unitario: 'Unitário',
 };
 
+// Mapeamento de nomenclatura com o PRD:
+// - PRD "tipo_controle" => coluna/contrato técnico "control_type".
 const CONTROL_TYPE_LABELS: Record<ServiceControlType, string> = {
   validacao_obrigatoria: 'Com validação',
   sem_validacao: 'Sem validação',
@@ -95,6 +97,7 @@ interface ServiceFormState {
   description: string;
   unit_type: ServiceUnitType;
   control_type: ServiceControlType;
+  // PRD "ativo/inativo": em services este estado técnico é persistido em `status`.
   status: ServiceStatus;
 }
 
