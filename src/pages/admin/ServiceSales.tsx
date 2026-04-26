@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -23,7 +24,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Copy, Loader2, Printer } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,6 +68,23 @@ interface EventBoardingWindowRow {
   departure_time: string | null;
 }
 
+interface ServiceSaleReceipt {
+  saleId: string;
+  serviceQrCodeToken: string;
+  status: 'pendente' | 'pendente_taxa' | 'pago';
+  paymentMethod: PaymentMethod;
+  customerName: string;
+  customerCpf: string | null;
+  customerPhone: string | null;
+  eventName: string;
+  serviceName: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  unitLabel: string;
+  issuedAt: string;
+}
+
 const UNIT_LABELS: Record<ServiceUnitType, string> = {
   pessoa: 'Pessoas',
   veiculo: 'Veículos',
@@ -98,7 +117,10 @@ export default function ServiceSales() {
   const [quantity, setQuantity] = useState(1);
   const [personNames, setPersonNames] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [cashReceivedConfirmed, setCashReceivedConfirmed] = useState(false);
   const [buyerName, setBuyerName] = useState('');
+  const [latestReceipt, setLatestReceipt] = useState<ServiceSaleReceipt | null>(null);
+  const [copyingQrToken, setCopyingQrToken] = useState(false);
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId),
@@ -204,7 +226,25 @@ export default function ServiceSales() {
     setQuantity(1);
     setPersonNames('');
     setPaymentMethod('pix');
+    setCashReceivedConfirmed(false);
     setBuyerName('');
+  }
+
+  async function handleCopyQrToken(token: string) {
+    try {
+      // Ação operacional mínima para repasse rápido do código ao cliente.
+      await navigator.clipboard.writeText(token);
+      setCopyingQrToken(true);
+      toast.success('Código do QR copiado.');
+      window.setTimeout(() => setCopyingQrToken(false), 1500);
+    } catch {
+      toast.error('Não foi possível copiar o código do QR.');
+    }
+  }
+
+  function handlePrintReceipt() {
+    // A impressão desta etapa usa uma área dedicada e regras @media print para evitar menu/sidebar.
+    window.print();
   }
 
   async function handleConfirmSale() {
@@ -239,9 +279,14 @@ export default function ServiceSales() {
         throw new Error(`Capacidade indisponível no momento. Restam ${latestAvailableQuantity} vaga(s).`);
       }
 
-      // PRD: dinheiro => pendente_taxa | pix/link => pendente.
+      // Regra mínima desta etapa:
+      // - dinheiro sem confirmação explícita => pendente_taxa;
+      // - dinheiro confirmado presencialmente => pago;
+      // - pix/link continuam pendente.
       // Compatibilização mínima aplicada via migration de enum para não mapear silenciosamente.
-      const saleStatus = paymentMethod === 'dinheiro' ? 'pendente_taxa' : 'pendente';
+      const saleStatus: 'pendente' | 'pendente_taxa' | 'pago' = paymentMethod === 'dinheiro'
+        ? (cashReceivedConfirmed ? 'pago' : 'pendente_taxa')
+        : 'pendente';
       // Padronização semântica para vendas sem identificação explícita do comprador.
       const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
       // QR próprio de serviços: token no nível da venda/comprovante (separado do ticket de passagem).
@@ -270,6 +315,7 @@ export default function ServiceSales() {
           seller_id: null,
           sale_origin: 'admin_manual',
           payment_environment: runtimePaymentEnvironment,
+          payment_confirmed_at: saleStatus === 'pago' ? new Date().toISOString() : null,
           service_qr_code_token: serviceQrCodeToken,
         } as never)
         .select('id')
@@ -349,7 +395,46 @@ export default function ServiceSales() {
 
       if (saleLogError) throw saleLogError;
 
+      if (paymentMethod === 'dinheiro' && cashReceivedConfirmed) {
+        // Mantemos trilha explícita da confirmação presencial manual para auditoria operacional.
+        const { error: manualConfirmationLogError } = await supabase
+          .from('sale_logs')
+          .insert({
+            sale_id: saleData.id,
+            action: 'manual_payment_confirmed',
+            description: 'Pagamento em dinheiro confirmado manualmente no ato da venda de serviço.',
+            old_value: JSON.stringify({ status_before: 'pendente_taxa' }),
+            new_value: JSON.stringify({ status_after: 'pago', payment_method: paymentMethod }),
+            company_id: activeCompanyId,
+            performed_by: user?.id ?? null,
+          });
+
+        if (manualConfirmationLogError) throw manualConfirmationLogError;
+      }
+
       toast.success('Venda de serviço registrada com sucesso.');
+
+      // Mantém comprovante operacional em tela após o reset do wizard.
+      setLatestReceipt({
+        saleId: saleData.id,
+        serviceQrCodeToken: serviceQrCodeToken,
+        status: saleStatus,
+        paymentMethod,
+        customerName: safeBuyerName,
+        customerCpf: null,
+        customerPhone: null,
+        eventName: selectedEvent.name,
+        serviceName: selectedEventService.service.name,
+        quantity,
+        unitPrice: selectedEventService.base_price,
+        totalAmount,
+        unitLabel: UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase(),
+        issuedAt: new Date().toISOString(),
+      });
+
+      if (saleStatus !== 'pago') {
+        toast.warning('Venda registrada como pendente. O QR só valida no /validador quando a venda estiver paga.');
+      }
 
       resetWizard({ keepEvent: true });
 
@@ -368,6 +453,27 @@ export default function ServiceSales() {
   return (
     <AdminLayout>
       <div className="page-container space-y-6">
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            .service-receipt-print,
+            .service-receipt-print * {
+              visibility: visible !important;
+            }
+            .service-receipt-print {
+              position: absolute;
+              inset: 0;
+              width: 100%;
+              padding: 16px;
+              background: white;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+        `}</style>
         <PageHeader
           title="Venda de Serviços"
           description="Wizard operacional para venda rápida vinculada ao evento"
@@ -558,6 +664,26 @@ export default function ServiceSales() {
                       </Select>
                     </div>
 
+                    {paymentMethod === 'dinheiro' && (
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            id="cash-received-confirmed"
+                            checked={cashReceivedConfirmed}
+                            onCheckedChange={(checked) => setCashReceivedConfirmed(Boolean(checked))}
+                          />
+                          <div className="space-y-1">
+                            <Label htmlFor="cash-received-confirmed" className="text-sm font-medium cursor-pointer">
+                              Confirmo que o pagamento em dinheiro foi recebido presencialmente.
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Marcado: venda salva como <strong>pago</strong>. Desmarcado: venda fica em <strong>pendente_taxa</strong>.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="rounded-lg border p-4 space-y-2">
                       <p className="font-medium">Resumo da venda</p>
                       <p className="text-sm text-muted-foreground">Evento: {selectedEvent.name}</p>
@@ -567,6 +693,15 @@ export default function ServiceSales() {
                         Quantidade: {quantity} {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
                       </p>
                       <p className="text-sm text-muted-foreground">Pagamento: {PAYMENT_LABELS[paymentMethod]}</p>
+                      {paymentMethod === 'dinheiro' ? (
+                        <p className="text-sm text-muted-foreground">
+                          Status ao confirmar: {cashReceivedConfirmed ? 'Pago (confirmação manual presencial)' : 'Pendente de taxa'}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Status ao confirmar: Pendente (aguarda confirmação real do pagamento)
+                        </p>
+                      )}
                       <p className="text-xl font-semibold">Total: {formatCurrencyBRL(totalAmount)}</p>
                     </div>
 
@@ -585,6 +720,88 @@ export default function ServiceSales() {
             )}
           </CardContent>
         </Card>
+
+        {latestReceipt && (
+          <Card className="service-receipt-print">
+            <CardHeader>
+              <CardTitle>Comprovante de Serviço SmartBus BR</CardTitle>
+              <p className="text-sm text-muted-foreground">SmartBus BR · Operação de Serviços</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border p-4 grid gap-2 md:grid-cols-2">
+                <p className="text-sm text-muted-foreground">Venda: {latestReceipt.saleId}</p>
+                <p className={`text-sm font-medium ${latestReceipt.status === 'pago' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  Status: {latestReceipt.status}
+                </p>
+                <p className="text-sm text-muted-foreground">Forma de pagamento: {PAYMENT_LABELS[latestReceipt.paymentMethod]}</p>
+                <p className="text-sm text-muted-foreground">Emissão: {new Date(latestReceipt.issuedAt).toLocaleString('pt-BR')}</p>
+                <p className="text-sm text-muted-foreground">Evento: {latestReceipt.eventName}</p>
+                <p className="text-sm text-muted-foreground">Serviço: {latestReceipt.serviceName}</p>
+                <p className="text-sm text-muted-foreground">Cliente: {latestReceipt.customerName}</p>
+                {latestReceipt.customerCpf && (
+                  <p className="text-sm text-muted-foreground">CPF: {latestReceipt.customerCpf}</p>
+                )}
+                {latestReceipt.customerPhone && (
+                  <p className="text-sm text-muted-foreground">Telefone: {latestReceipt.customerPhone}</p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Quantidade: {latestReceipt.quantity} {latestReceipt.unitLabel}
+                </p>
+                <p className="text-sm text-muted-foreground">Valor unitário: {formatCurrencyBRL(latestReceipt.unitPrice)}</p>
+                <p className="text-sm text-muted-foreground">Valor total: {formatCurrencyBRL(latestReceipt.totalAmount)}</p>
+              </div>
+
+              {latestReceipt.status !== 'pago' && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  QR exibido para referência, mas a validação no `/validador` só é liberada quando a venda estiver com status <strong>pago</strong>.
+                </div>
+              )}
+
+              <div className={`rounded-lg border p-3 text-sm ${latestReceipt.status === 'pago' ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                {latestReceipt.status === 'pago'
+                  ? 'Apresente este QR Code ao responsável pelo serviço.'
+                  : 'Este comprovante ainda não libera consumo do serviço.'}
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-4 md:items-center">
+                <div className="w-fit rounded-lg border p-3 bg-white mx-auto md:mx-0">
+                  <QRCodeSVG
+                    value={latestReceipt.serviceQrCodeToken}
+                    size={180}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <Label>Código do QR de serviços</Label>
+                  <Input value={latestReceipt.serviceQrCodeToken} readOnly />
+                  <div className="flex gap-2 no-print">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleCopyQrToken(latestReceipt.serviceQrCodeToken)}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      {copyingQrToken ? 'Copiado!' : 'Copiar código do QR'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handlePrintReceipt}
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Imprimir comprovante
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-3 text-xs text-muted-foreground text-center">
+                Gerado por SmartBus BR — www.smartbusbr.com.br — Contato: (31) 99207-4309
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AdminLayout>
   );
