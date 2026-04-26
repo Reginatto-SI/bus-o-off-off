@@ -124,6 +124,9 @@ const REPORT_TABS = {
 type ReportTab = (typeof REPORT_TABS)[keyof typeof REPORT_TABS];
 
 const statusLabels: Record<string, string> = {
+  pendente: 'Pendente',
+  pendente_taxa: 'Pendente de taxa',
+  pendente_pagamento: 'Pendente pagamento',
   reservado: 'Reservado',
   pago: 'Pago',
   cancelado: 'Cancelado',
@@ -591,6 +594,9 @@ export default function SellersCommissionReport() {
                 onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
                 options: [
                   { value: 'all', label: 'Todos' },
+                  { value: 'pendente', label: 'Pendente' },
+                  { value: 'pendente_taxa', label: 'Pendente de taxa' },
+                  { value: 'pendente_pagamento', label: 'Pendente pagamento' },
                   { value: 'reservado', label: 'Reservado' },
                   { value: 'pago', label: 'Pago' },
                   { value: 'cancelado', label: 'Cancelado' },

@@ -293,6 +293,8 @@ function formatHumanRelativeWithDirection(targetDate: string): string {
 
 function getSaleStatusLabel(status: SaleStatus): string {
   const labels: Record<SaleStatus, string> = {
+    pendente: 'Pendente',
+    pendente_taxa: 'Pendente de taxa',
     pendente_pagamento: 'Pendente de pagamento',
     reservado: 'Reservado',
     pago: 'Pago',
@@ -2513,6 +2515,8 @@ export default function SalesDiagnostic() {
       onChange: (v: string) => setFilters((f) => ({ ...f, status: v as DiagnosticFilters['status'] })),
       options: [
         { value: 'all', label: 'Todos' },
+        { value: 'pendente', label: 'Pendente' },
+        { value: 'pendente_taxa', label: 'Pendente de taxa' },
         { value: 'pendente_pagamento', label: 'Pendente pagamento' },
         { value: 'reservado', label: 'Reservado' },
         { value: 'pago', label: 'Pago' },

@@ -7,7 +7,14 @@ export type VehicleType = 'onibus' | 'van' | 'micro_onibus';
 export type TemplateVehicleType = VehicleType | 'double_deck';
 export type VehicleStatus = 'ativo' | 'inativo';
 export type DriverStatus = 'ativo' | 'inativo';
-export type SaleStatus = 'pendente_pagamento' | 'reservado' | 'pago' | 'cancelado' | 'bloqueado';
+export type SaleStatus =
+  | 'pendente'
+  | 'pendente_taxa'
+  | 'pendente_pagamento'
+  | 'reservado'
+  | 'pago'
+  | 'cancelado'
+  | 'bloqueado';
 export type SellerStatus = 'ativo' | 'inativo';
 export type ProfileStatus = 'ativo' | 'inativo';
 export type TripType = 'ida' | 'volta';
@@ -687,4 +694,3 @@ export interface EventService {
   updated_at: string;
   service?: Service;
 }
-

@@ -3,7 +3,17 @@ import { DriverStatus, EventStatus, SaleStatus, SellerStatus, VehicleStatus } fr
 
 // "processando" é um status visual-only usado no frontend quando a venda está
 // "reservado" no banco mas existe uma cobrança online oficial em andamento.
-type StatusType = EventStatus | SaleStatus | SellerStatus | VehicleStatus | DriverStatus | 'processando' | 'pendente_pagamento' | 'bloqueado';
+type StatusType =
+  | EventStatus
+  | SaleStatus
+  | SellerStatus
+  | VehicleStatus
+  | DriverStatus
+  | 'processando'
+  | 'pendente'
+  | 'pendente_taxa'
+  | 'pendente_pagamento'
+  | 'bloqueado';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -14,6 +24,8 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   rascunho: { label: 'Rascunho', className: 'status-badge-draft' },
   a_venda: { label: 'À Venda', className: 'status-badge-available' },
   encerrado: { label: 'Encerrado', className: 'status-badge-closed' },
+  pendente: { label: 'Pendente', className: 'status-badge-reserved' },
+  pendente_taxa: { label: 'Pendente de Taxa', className: 'status-badge-reserved' },
   pendente_pagamento: { label: 'Aguardando Pagamento', className: 'status-badge-reserved' },
   reservado: { label: 'Reservado', className: 'status-badge-reserved' },
   processando: { label: 'Processando', className: 'status-badge-reserved' },

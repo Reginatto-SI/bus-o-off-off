@@ -3217,6 +3217,8 @@ export type Database = {
         | "bloqueado"
         | "pendente_validacao"
       sale_status:
+        | "pendente"
+        | "pendente_taxa"
         | "pendente_pagamento"
         | "reservado"
         | "pago"
@@ -3367,6 +3369,8 @@ export const Constants = {
         "pendente_validacao",
       ],
       sale_status: [
+        "pendente",
+        "pendente_taxa",
         "pendente_pagamento",
         "reservado",
         "pago",

@@ -91,6 +91,11 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Vendas',
     href: '/admin/vendas',
     icon: ShoppingCart
+  }, {
+    // Atalho operacional para venda avulsa em campo (ônibus/destino) sem navegar por telas de cadastro.
+    name: 'Venda de Serviços',
+    href: '/vendas/servicos',
+    icon: Sparkles
   }]
 }, {
   id: 'cadastros',
