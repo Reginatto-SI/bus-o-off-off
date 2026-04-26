@@ -1,212 +1,320 @@
 # 🧠 PRD — Módulo de Passeios & Serviços (SmartBus BR)
 
 ## 🎯 Ação Desejada
-Criar um novo módulo no SmartBus BR para permitir a **venda e controle de passeios/serviços turísticos** durante excursões, com operação simples, rápida e integrada ao sistema atual, sem alterar o fluxo de venda de passagens.
+Criar um módulo no SmartBus BR para permitir a **venda e controle de passeios/serviços turísticos durante excursões**, com operação rápida, simples e integrada ao sistema atual, sem alterar o fluxo de venda de passagens.
 
 ---
 
 ## 📌 Contexto
 
-Atualmente, o SmartBus BR atende a venda de passagens de excursão (pré-viagem).
+O SmartBus hoje atende a venda de passagens (pré-viagem).
 
-Na prática operacional dos clientes (agências):
-- Muitos passeios são vendidos **durante a viagem ou no destino**
-- A venda é **impulsiva e descentralizada (ônibus, praia, guia, etc.)**
-- Nem todos os passageiros compram antecipadamente
-- Existe necessidade de:
+Na prática das agências:
+- Passeios são vendidos **durante a viagem ou no destino**
+- Venda é **impulsiva e operacional**
+- Nem todos compram antecipadamente
+- É necessário:
   - controle financeiro
   - controle de capacidade
-  - controle operacional (quem comprou o quê)
+  - controle de vendas por vendedor
 
-👉 O sistema hoje não cobre esse momento da jornada.
-
-Este módulo resolve isso sem alterar o fluxo principal de passagens.
+👉 Este módulo cobre esse momento sem alterar o core do sistema.
 
 ---
 
 ## 🧩 Premissas do Projeto
 
-- O módulo é **complementar ao evento (excursão)**, não independente neste momento
-- NÃO altera o fluxo de checkout de passagens
+- Módulo **acoplado ao evento (excursão)**
+- NÃO altera o checkout atual
 - Reutiliza o motor de vendas existente
-- Segue todas as diretrizes do projeto:
+- Reutiliza lógica de pagamento (Asaas)
+- Segue diretrizes:
   - sem fluxos paralelos desnecessários
   - comportamento previsível
-  - reutilização de componentes
+  - reutilização de estrutura existente
 
 ---
 
-## 🏗️ Estrutura Funcional
-
-### 1. Novo conceito: Serviço / Passeio
-
-Cada evento poderá possuir **serviços vinculados**, como:
-
-- Buggy
-- Lancha
-- Tirolesa
-- Mergulho
-- Outros
+## 🏗️ Estrutura do Sistema
 
 ---
 
-### 2. Cadastro de Serviço (no evento)
+## 1. Cadastro de Serviços (Base)
 
-Cada serviço deve conter:
+Tela:
+👉 `/admin/servicos`
 
-- Nome
-- Descrição
-- Preço
-- Tipo de controle:
+Objetivo:
+Cadastrar serviços reutilizáveis.
+
+Campos:
+
+- nome
+- descrição
+- tipo de unidade (`unit_type`):
+  - `pessoa`
+  - `veiculo`
+  - `unitario`
+- tipo de controle:
   - `validacao_obrigatoria`
   - `sem_validacao`
-- Capacidade total (número máximo)
-- Ativo / Inativo
+- ativo/inativo
 
 ---
 
-### 3. Controle de Capacidade
+## 2. Serviços dentro do Evento
 
-O sistema deve:
+Tela:
+👉 Evento → Aba **Serviços**
 
-- Controlar quantidade vendida
-- Calcular vagas disponíveis
-- Bloquear venda ao atingir limite
+Objetivo:
+Configurar serviços disponíveis naquela excursão.
+
+Campos:
+
+- serviço (referência ao cadastro base)
+- valor base
+- tipo de cobrança (herdado ou sobrescrito)
+- capacidade total
+- permite venda no checkout (sim/não)
+- permite venda avulsa (sim/não)
+- ativo/inativo
+
+---
+
+## 3. Controle de Capacidade
+
+Para cada serviço no evento:
+
+- quantidade vendida
+- quantidade disponível
+- bloqueio automático ao atingir limite
 
 ---
 
 ## 💰 Venda de Serviços
 
-### 4. Novo fluxo: Venda Operacional
+---
 
-Criar uma nova tela:
+## 4. Novo fluxo operacional
 
+Tela:
 👉 `/vendas/servicos`
 
-Com foco em operação rápida:
+Fluxo:
 
-- Selecionar evento
-- Selecionar serviço
-- Informar quantidade
-- Selecionar forma de pagamento:
-  - Pix
-  - Dinheiro
-  - Link
-- Confirmar venda
+1. Selecionar evento
+2. Selecionar serviço
+3. Informar quantidade (dinâmica por tipo)
+4. Aplicar preço (automático)
+5. Selecionar forma de pagamento:
+   - Pix
+   - Dinheiro
+   - Link
+6. Confirmar venda
 
----
-
-### 5. Tipos de venda
-
-#### Venda avulsa
-- Não depende de passagem
-- Pode ser feita a qualquer momento
-
-#### Venda durante excursão
-- Associada ao evento
+Tempo ideal:
+👉 menos de 10 segundos
 
 ---
 
-### 6. Regras de pagamento
+## 5. Unidade de Venda (Regra Crítica)
 
-O sistema deve seguir o padrão atual:
-
-- Venda nasce como `pendente`
-- Só é considerada válida quando:
-  - pagamento confirmado  
-  OU  
-  - taxa da plataforma paga
-
-👉 Reutilizar fluxo atual do Asaas (sem alterações)
+Cada serviço possui `unit_type`:
 
 ---
 
-### 7. Venda em dinheiro
+### 🧍 Pessoa
+
+Ex: mergulho, catamarã
+
+- usuário informa quantidade de pessoas
+- pode informar nomes (opcional)
+- NÃO exigir CPF
+
+---
+
+### 🚗 Veículo
+
+Ex: buggy
+
+- usuário informa quantidade de veículos
+- não exige dados adicionais no MVP
+
+---
+
+### 📦 Unitário
+
+- quantidade simples
+
+---
+
+## 6. Estrutura da Venda
+
+Reutilizar `sales` existente.
+
+Adicionar conceito:
+
+### `sale_items`
+
+Campos:
+
+- sale_id
+- service_id
+- unit_type
+- quantidade
+- valor_unitario
+- valor_total
+
+---
+
+## 7. Pessoas na Venda (Opcional)
+
+Para serviços tipo `pessoa`:
+
+- permitir adicionar nomes (opcional)
+- não obrigar CPF
+- foco operacional
+
+---
+
+## 💸 Regras de Pagamento
+
+---
+
+## 8. Padrão de pagamento
+
+Seguir fluxo atual:
+
+- venda nasce como `pendente`
+- confirmação via webhook
+- fallback via verify
+
+👉 sem alteração no gateway
+
+---
+
+## 9. Venda em dinheiro
 
 Permitido:
 
-- Registrar venda manual
-- Status inicial: `pendente_taxa`
-- Só libera validação (se houver) após regularização
+- criar venda normalmente
+- status inicial: `pendente_taxa`
+- sistema só valida após regularização
 
 ---
 
-## 🎫 Validação de Serviço
-
-### 8. Serviços com validação
-
-Quando `validacao_obrigatoria`:
-
-- Gerar ingresso (QR Code ou código)
-- Permitir leitura/validação
-- Exigir status válido (pago/taxa ok)
+## 🎫 Validação
 
 ---
 
-### 9. Serviços sem validação
+## 10. QR Code
 
-- Não gerar ingresso
-- Apenas controle de venda
+- gerar **QR único por venda**
+- não gerar QR por pessoa
+
+---
+
+## 11. Regras de validação
+
+### Quando `validacao_obrigatoria`:
+
+- exige status válido (pago ou taxa ok)
+- permite leitura/validação
+
+---
+
+### Quando `sem_validacao`:
+
+- não gera QR
+- apenas controle financeiro
+
+---
+
+## 💰 Preço e Variação
+
+---
+
+## 12. Regra de preço
+
+O sistema deve permitir:
+
+- preço base
+- variação por quantidade
+
+Ex:
+
+- 1 buggy → R$ 250  
+- 2 buggies → R$ 480  
+
+Implementação:
+
+- permitir ajuste manual no momento da venda
+OU
+- regra futura de tabela de preço
+
+(MVP: ajuste manual permitido)
 
 ---
 
 ## 👤 Vendedor
 
-- Qualquer usuário com permissão pode vender
-- Utilizar sistema de vendedor já existente
-- Comissão já existente deve ser aplicada normalmente
+- qualquer usuário autorizado pode vender
+- reutilizar controle de vendedor existente
+- comissão continua funcionando normalmente
 
 ---
 
 ## 📊 Relatórios
 
-Reutilizar estrutura existente, adicionando:
+Adicionar:
 
-- Receita por serviço
-- Quantidade vendida por serviço
-- Vendas por vendedor (já existente)
-- Total arrecadado por evento (incluindo serviços)
+- receita por serviço
+- quantidade vendida por serviço
+- vendas por vendedor (já existente)
+- total por evento (passagem + serviços)
 
 ---
 
 ## 💸 Repasse (Manual)
 
-O sistema deve permitir:
+Permitir:
 
-- Definir valor de custo do serviço
-- Calcular margem da empresa
-- Exibir valores para controle
+- definir custo do serviço
+- calcular margem
+- visualizar valores
 
-⚠️ Não implementar split automático neste momento
+⚠️ Não implementar split automático nesta fase
 
 ---
 
 ## 🎯 Critérios de Sucesso
 
-- Vendedor consegue registrar uma venda em menos de 10 segundos
-- Sistema não trava operação mesmo com venda em dinheiro
-- Controle de capacidade evita overbooking
-- Não interfere no fluxo de venda de passagens
-- Mantém consistência com sistema atual de pagamento e vendas
+- venda realizada em menos de 10 segundos
+- sistema não trava com venda em dinheiro
+- controle de capacidade funciona corretamente
+- não interfere no fluxo de passagens
+- mantém consistência financeira
 
 ---
 
 ## 🚫 Restrições
 
-- Não alterar o checkout atual
-- Não criar novo sistema de pagamento
-- Não criar fluxo separado de vendas (reutilizar `sales`)
-- Não implementar split financeiro nesta fase
-- Não criar dependência obrigatória com passageiro/CPF
+- não alterar checkout atual
+- não criar novo sistema de pagamento
+- não exigir CPF
+- não criar módulo de logística (guia, horário, veículo)
+- não implementar split nesta fase
 
 ---
 
-## 🔮 Evoluções Futuras (fora deste escopo)
+## 🔮 Evolução futura
 
-- Split por serviço
-- Controle de fornecedor (parceiros)
-- Agenda de horários por passeio
-- Venda online pública de serviços
-- Operação independente de excursão
+- horários por passeio
+- controle de guias
+- controle de veículos
+- split por serviço
+- venda pública online
+- operação independente de excursão
 
 ---
