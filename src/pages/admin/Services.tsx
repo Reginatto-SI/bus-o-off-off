@@ -383,7 +383,7 @@ export default function Services() {
             </div>
           ) : filtered.length === 0 ? (
             <EmptyState
-              icon={Sparkles}
+              icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
               title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
               description={
                 services.length === 0
