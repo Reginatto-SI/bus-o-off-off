@@ -392,7 +392,7 @@ export default function DriverBoarding() {
       <div className="mx-auto w-full max-w-md space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/motorista')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/validador')}>
             <ArrowLeft className="mr-1 h-4 w-4" />
             Voltar
           </Button>

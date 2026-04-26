@@ -675,7 +675,7 @@ export default function DriverValidate() {
     <div className="min-h-screen bg-background px-4 py-4">
       <div className="mx-auto w-full max-w-md space-y-4">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => navigate('/motorista')}>Voltar</Button>
+          <Button variant="ghost" onClick={() => navigate('/validador')}>Voltar</Button>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs font-medium">
               {phaseConfig.label}
@@ -763,7 +763,7 @@ export default function DriverValidate() {
                       </Button>
                     )}
                     {overlay.result === 'success' && (
-                      <Button variant="secondary" className="w-full" onClick={() => navigate('/motorista/embarque')}>
+                      <Button variant="secondary" className="w-full" onClick={() => navigate('/validador/embarque')}>
                         <Users className="mr-2 h-4 w-4" />
                         Lista de passageiros
                       </Button>

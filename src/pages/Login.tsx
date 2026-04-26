@@ -21,7 +21,7 @@ function getRedirectByRole(role: string | null, isRepresentative: boolean): stri
   // Papéis administrativos têm precedência sobre representante para evitar prender admins no painel rep.
   if (role === "gerente" || role === "developer" || role === "operador") return "/admin/dashboard";
   if (role === "vendedor") return "/vendedor/minhas-vendas";
-  if (role === "motorista") return "/motorista";
+  if (role === "motorista") return "/validador";
   if (isRepresentative) return "/representante/painel";
   return "/admin/dashboard";
 }

@@ -368,7 +368,7 @@ export default function DriverHome() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate('/motorista/preferencias')}>
+              <DropdownMenuItem onClick={() => navigate('/validador/preferencias')}>
                 <Settings className="mr-2 h-4 w-4" />
                 Preferências
               </DropdownMenuItem>
@@ -550,7 +550,7 @@ export default function DriverHome() {
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          <Button className="h-14 w-full text-base" onClick={() => navigate('/motorista/validar')}>
+          <Button className="h-14 w-full text-base" onClick={() => navigate('/validador/validar')}>
             <QrCode className="mr-2 h-5 w-5" />
             Escanear passagens
           </Button>
@@ -558,7 +558,7 @@ export default function DriverHome() {
           <Button
             variant="outline"
             className="h-14 w-full text-base"
-            onClick={() => navigate('/motorista/embarque')}
+            onClick={() => navigate('/validador/embarque')}
             disabled={!activeTrip}
           >
             <Users className="mr-2 h-5 w-5" />
