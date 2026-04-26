@@ -125,7 +125,7 @@ export function EventServicesTab({ eventId, companyId }: EventServicesTabProps) 
         context: { action: 'select', table: 'event_services', userId: user?.id },
       });
     } else {
-      setEventServices((eventServicesRes.data ?? []) as EventService[]);
+      setEventServices(((eventServicesRes.data ?? []) as unknown) as EventService[]);
     }
 
     setLoading(false);
