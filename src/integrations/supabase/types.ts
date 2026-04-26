@@ -1138,7 +1138,22 @@ export type Database = {
           total_capacity?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "event_services_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_sponsors: {
         Row: {
@@ -1795,15 +1810,15 @@ export type Database = {
           asaas_transfer_id: string | null
           benefit_total_discount: number
           block_reason: string | null
-          boarding_location_id: string
+          boarding_location_id: string | null
           cancel_reason: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           company_id: string
           created_at: string
-          customer_cpf: string
+          customer_cpf: string | null
           customer_name: string
-          customer_phone: string
+          customer_phone: string | null
           event_id: string
           gross_amount: number | null
           id: string
@@ -1833,7 +1848,7 @@ export type Database = {
           split_snapshot_socio_split_percent: number | null
           split_snapshot_source: string | null
           status: Database["public"]["Enums"]["sale_status"]
-          trip_id: string
+          trip_id: string | null
           unit_price: number
           updated_at: string
         }
@@ -1843,15 +1858,15 @@ export type Database = {
           asaas_transfer_id?: string | null
           benefit_total_discount?: number
           block_reason?: string | null
-          boarding_location_id: string
+          boarding_location_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           company_id: string
           created_at?: string
-          customer_cpf: string
+          customer_cpf?: string | null
           customer_name: string
-          customer_phone: string
+          customer_phone?: string | null
           event_id: string
           gross_amount?: number | null
           id?: string
@@ -1881,7 +1896,7 @@ export type Database = {
           split_snapshot_socio_split_percent?: number | null
           split_snapshot_source?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
-          trip_id: string
+          trip_id?: string | null
           unit_price?: number
           updated_at?: string
         }
@@ -1891,15 +1906,15 @@ export type Database = {
           asaas_transfer_id?: string | null
           benefit_total_discount?: number
           block_reason?: string | null
-          boarding_location_id?: string
+          boarding_location_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           company_id?: string
           created_at?: string
-          customer_cpf?: string
+          customer_cpf?: string | null
           customer_name?: string
-          customer_phone?: string
+          customer_phone?: string | null
           event_id?: string
           gross_amount?: number | null
           id?: string
@@ -1929,7 +1944,7 @@ export type Database = {
           split_snapshot_socio_split_percent?: number | null
           split_snapshot_source?: string | null
           status?: Database["public"]["Enums"]["sale_status"]
-          trip_id?: string
+          trip_id?: string | null
           unit_price?: number
           updated_at?: string
         }
@@ -3217,13 +3232,13 @@ export type Database = {
         | "bloqueado"
         | "pendente_validacao"
       sale_status:
-        | "pendente"
-        | "pendente_taxa"
         | "pendente_pagamento"
         | "reservado"
         | "pago"
         | "cancelado"
         | "bloqueado"
+        | "pendente"
+        | "pendente_taxa"
       seller_status: "ativo" | "inativo"
       user_role: "gerente" | "operador" | "vendedor" | "motorista" | "developer"
       vehicle_type: "onibus" | "van" | "micro_onibus"
@@ -3369,13 +3384,13 @@ export const Constants = {
         "pendente_validacao",
       ],
       sale_status: [
-        "pendente",
-        "pendente_taxa",
         "pendente_pagamento",
         "reservado",
         "pago",
         "cancelado",
         "bloqueado",
+        "pendente",
+        "pendente_taxa",
       ],
       seller_status: ["ativo", "inativo"],
       user_role: ["gerente", "operador", "vendedor", "motorista", "developer"],

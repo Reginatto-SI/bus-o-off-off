@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { Bell, Building2, ChevronDown, LogOut, User, Check, AlertTriangle, CheckCircle2, Info, Siren } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
@@ -20,10 +21,28 @@ import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-enviro
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import type { Company } from '@/types/database';
 
 export function AdminHeader() {
   const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany } = useAuth();
   const hasMultipleCompanies = userCompanies.length > 1;
+  const [companySelectorOpen, setCompanySelectorOpen] = useState(false);
+  const [companySearch, setCompanySearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [selectorCompanies, setSelectorCompanies] = useState<Company[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    companyId: string;
+    companyName: string;
+    nextIsActive: boolean;
+  } | null>(null);
   const canAccessAdminNotifications = userRole === 'gerente' || userRole === 'operador' || userRole === 'developer';
   const { isSandbox } = useRuntimePaymentEnvironment();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useAdminNotifications({
@@ -76,36 +95,226 @@ export function AdminHeader() {
     }
   };
 
+  const filteredCompanies = useMemo(() => {
+    const normalizedSearch = companySearch.trim().toLowerCase();
+
+    return selectorCompanies.filter((company) => {
+      const matchesStatus =
+        statusFilter === 'all'
+          ? true
+          : statusFilter === 'active'
+            ? company.is_active
+            : !company.is_active;
+
+      if (!matchesStatus) return false;
+      if (!normalizedSearch) return true;
+
+      const companyName = (company.name ?? '').toLowerCase();
+      const tradeName = (company.trade_name ?? '').toLowerCase();
+      const legalName = (company.legal_name ?? '').toLowerCase();
+      const document = (company.document_number ?? company.cnpj ?? company.document ?? '').toLowerCase();
+
+      return (
+        companyName.includes(normalizedSearch)
+        || tradeName.includes(normalizedSearch)
+        || legalName.includes(normalizedSearch)
+        || document.includes(normalizedSearch)
+      );
+    });
+  }, [companySearch, statusFilter, selectorCompanies]);
+
+  const isDeveloper = userRole === 'developer';
+
+  const loadSelectorCompanies = async () => {
+    // Fase 2: preservamos comportamento para perfis não-developer usando a mesma lista já resolvida no AuthContext.
+    if (!isDeveloper) {
+      setSelectorCompanies(userCompanies);
+      return;
+    }
+
+    setLoadingCompanies(true);
+    const { data, error } = await supabase
+      .from('companies')
+      // Otimização Fase 2: carregar apenas colunas usadas no modal do header.
+      .select('id, name, trade_name, legal_name, document_number, cnpj, is_active')
+      .order('name', { ascending: true })
+      .limit(100);
+
+
+    if (error) {
+      toast.error('Não foi possível carregar a lista completa de empresas.');
+      setSelectorCompanies(userCompanies);
+      setLoadingCompanies(false);
+      return;
+    }
+
+    setSelectorCompanies((data as Company[]) ?? []);
+    setLoadingCompanies(false);
+  };
+
+  const handleCompanySelectorOpenChange = (open: boolean) => {
+    setCompanySelectorOpen(open);
+
+    if (!open) return;
+
+    // Fase 2: sempre resetamos busca/filtro ao abrir para evitar estado antigo no modal.
+    setCompanySearch('');
+    setStatusFilter('all');
+    void loadSelectorCompanies();
+  };
+
+  const handleConfirmStatusChange = async () => {
+    if (!pendingStatusChange) return;
+
+    const target = pendingStatusChange;
+    const { error } = await supabase
+      .from('companies')
+      .update({ is_active: target.nextIsActive })
+      .eq('id', target.companyId);
+
+    if (error) {
+      toast.error(target.nextIsActive ? 'Erro ao ativar empresa.' : 'Erro ao inativar empresa.');
+      return;
+    }
+
+    toast.success(target.nextIsActive ? 'Empresa ativada com sucesso.' : 'Empresa inativada com sucesso.');
+    setPendingStatusChange(null);
+    await loadSelectorCompanies();
+  };
+
   return (
     <header className="hidden lg:flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-6">
       {/* Company Selector / Indicator */}
       <div className="flex items-center gap-2">
         {hasMultipleCompanies ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Dialog open={companySelectorOpen} onOpenChange={handleCompanySelectorOpenChange}>
+            <DialogTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 h-auto py-1.5 px-3">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium text-foreground">{activeCompany?.name || 'Selecionar empresa'}</span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Trocar empresa</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {userCompanies.map((company) => (
-                <DropdownMenuItem
-                  key={company.id}
-                  className="flex items-center justify-between cursor-pointer"
-                  onClick={() => switchCompany(company.id)}
-                >
-                  <span>{company.name}</span>
-                  {company.id === activeCompany?.id && (
-                    <Check className="h-4 w-4 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Seletor avançado de empresas</DialogTitle>
+              </DialogHeader>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Input
+                  value={companySearch}
+                  onChange={(event) => setCompanySearch(event.target.value)}
+                  placeholder="Buscar por nome ou CPF/CNPJ"
+                  className="sm:flex-1"
+                />
+                <Select value={statusFilter} onValueChange={(value: 'all' | 'active' | 'inactive') => setStatusFilter(value)}>
+                  <SelectTrigger className="sm:w-44">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="active">Ativas</SelectItem>
+                    <SelectItem value="inactive">Inativas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="max-h-[55vh] overflow-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Documento</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[120px] text-right">Ação</TableHead>
+                      {isDeveloper && <TableHead className="w-[120px] text-right">Status</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingCompanies ? (
+                      <TableRow>
+                        <TableCell colSpan={isDeveloper ? 5 : 4} className="py-8 text-center text-sm text-muted-foreground">
+                          Carregando empresas...
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredCompanies.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={isDeveloper ? 5 : 4} className="py-8 text-center text-sm text-muted-foreground">
+                          Nenhuma empresa encontrada para os filtros aplicados.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredCompanies.map((company) => {
+                        const document = company.document_number || company.cnpj || company.document || '—';
+                        const isCurrent = company.id === activeCompany?.id;
+                        const canSelectCompany = company.is_active;
+                        const canToggleStatus = isDeveloper;
+
+                        return (
+                          <TableRow
+                            key={company.id}
+                            className={cn(!company.is_active && 'opacity-60')}
+                          >
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <span>{company.name}</span>
+                                {isCurrent && <Check className="h-4 w-4 text-primary" />}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{document}</TableCell>
+                            <TableCell>
+                              <Badge variant={company.is_active ? 'default' : 'secondary'}>
+                                {company.is_active ? 'Ativa' : 'Inativa'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!canSelectCompany}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (!canSelectCompany) return;
+                                  switchCompany(company.id);
+                                  setCompanySelectorOpen(false);
+                                }}
+                              >
+                                Selecionar
+                              </Button>
+                            </TableCell>
+                            {canToggleStatus && (
+                              <TableCell className="text-right">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={company.is_active ? 'destructive' : 'secondary'}
+                                  onClick={() => {
+                                    if (company.is_active && isCurrent) {
+                                      toast.warning('Não é possível inativar a empresa atualmente selecionada. Troque para outra empresa antes.');
+                                      return;
+                                    }
+
+                                    setPendingStatusChange({
+                                      companyId: company.id,
+                                      companyName: company.name,
+                                      nextIsActive: !company.is_active,
+                                    });
+                                  }}
+                                >
+                                  {company.is_active ? 'Inativar' : 'Ativar'}
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </DialogContent>
+          </Dialog>
         ) : activeCompany ? (
           <div className="flex items-center gap-2 px-3 py-1.5">
             <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -123,6 +332,27 @@ export function AdminHeader() {
           </Badge>
         )}
       </div>
+
+      <AlertDialog open={!!pendingStatusChange} onOpenChange={(open) => !open && setPendingStatusChange(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingStatusChange?.nextIsActive ? 'Reativar empresa?' : 'Inativar empresa?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStatusChange?.nextIsActive
+                ? 'Tem certeza que deseja reativar esta empresa? Ela voltará a aparecer como empresa ativa para seleção operacional.'
+                : 'Tem certeza que deseja inativar esta empresa? Ela deixará de aparecer no seletor rápido e não deverá ser usada operacionalmente até ser reativada. O histórico será preservado.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmStatusChange}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="flex items-center gap-2 xl:gap-4">
       {/* CTA "Indique e Ganhe" ocultado no header global por decisão de produto. */}

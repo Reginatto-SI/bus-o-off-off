@@ -340,7 +340,7 @@ export default function ServiceSales() {
       <div className="page-container space-y-6">
         <PageHeader
           title="Venda de Serviços"
-          subtitle="Wizard operacional para venda rápida vinculada ao evento"
+          description="Wizard operacional para venda rápida vinculada ao evento"
         />
 
         <Card>
