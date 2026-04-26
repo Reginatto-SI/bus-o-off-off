@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -24,18 +25,8 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import {
-  CalendarDays,
-  Check,
-  CheckCircle2,
-  ChevronsUpDown,
-  CircleDollarSign,
-  ClipboardList,
-  Loader2,
-  Package,
-  Sparkles,
-  UserRound,
-} from 'lucide-react';
+import { Check, ChevronsUpDown, Copy, Loader2, Printer } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -78,6 +69,23 @@ interface EventBoardingWindowRow {
   departure_time: string | null;
 }
 
+interface ServiceSaleReceipt {
+  saleId: string;
+  serviceQrCodeToken: string;
+  status: 'pendente' | 'pendente_taxa' | 'pago';
+  paymentMethod: PaymentMethod;
+  customerName: string;
+  customerCpf: string | null;
+  customerPhone: string | null;
+  eventName: string;
+  serviceName: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  unitLabel: string;
+  issuedAt: string;
+}
+
 const UNIT_LABELS: Record<ServiceUnitType, string> = {
   pessoa: 'Pessoas',
   veiculo: 'Veículos',
@@ -116,7 +124,10 @@ export default function ServiceSales() {
   const [quantity, setQuantity] = useState(1);
   const [personNames, setPersonNames] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [cashReceivedConfirmed, setCashReceivedConfirmed] = useState(false);
   const [buyerName, setBuyerName] = useState('');
+  const [latestReceipt, setLatestReceipt] = useState<ServiceSaleReceipt | null>(null);
+  const [copyingQrToken, setCopyingQrToken] = useState(false);
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId),
@@ -235,7 +246,25 @@ export default function ServiceSales() {
     setQuantity(1);
     setPersonNames('');
     setPaymentMethod('pix');
+    setCashReceivedConfirmed(false);
     setBuyerName('');
+  }
+
+  async function handleCopyQrToken(token: string) {
+    try {
+      // Ação operacional mínima para repasse rápido do código ao cliente.
+      await navigator.clipboard.writeText(token);
+      setCopyingQrToken(true);
+      toast.success('Código do QR copiado.');
+      window.setTimeout(() => setCopyingQrToken(false), 1500);
+    } catch {
+      toast.error('Não foi possível copiar o código do QR.');
+    }
+  }
+
+  function handlePrintReceipt() {
+    // A impressão desta etapa usa uma área dedicada e regras @media print para evitar menu/sidebar.
+    window.print();
   }
 
   async function handleConfirmSale() {
@@ -270,9 +299,18 @@ export default function ServiceSales() {
         throw new Error(`Capacidade indisponível no momento. Restam ${latestAvailableQuantity} vaga(s).`);
       }
 
-      // PRD: dinheiro => pendente_taxa | pix/link => pendente.
+      // Regra mínima desta etapa:
+      // - dinheiro sem confirmação explícita => pendente_taxa;
+      // - dinheiro confirmado presencialmente => pago;
+      // - pix/link continuam pendente.
       // Compatibilização mínima aplicada via migration de enum para não mapear silenciosamente.
-      const saleStatus = paymentMethod === 'dinheiro' ? 'pendente_taxa' : 'pendente';
+      const saleStatus: 'pendente' | 'pendente_taxa' | 'pago' = paymentMethod === 'dinheiro'
+        ? (cashReceivedConfirmed ? 'pago' : 'pendente_taxa')
+        : 'pendente';
+      // Padronização semântica para vendas sem identificação explícita do comprador.
+      const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
+      // QR próprio de serviços: token no nível da venda/comprovante (separado do ticket de passagem).
+      const serviceQrCodeToken = crypto.randomUUID();
 
       if (!runtimePaymentEnvironment) {
         throw new Error('Ambiente de pagamento ainda não foi resolvido. Tente novamente em alguns segundos.');
@@ -297,6 +335,7 @@ export default function ServiceSales() {
           seller_id: null,
           sale_origin: 'admin_manual',
           payment_environment: runtimePaymentEnvironment,
+          payment_confirmed_at: saleStatus === 'pago' ? new Date().toISOString() : null,
           service_qr_code_token: serviceQrCodeToken,
         } as never)
         .select('id')
@@ -376,7 +415,46 @@ export default function ServiceSales() {
 
       if (saleLogError) throw saleLogError;
 
+      if (paymentMethod === 'dinheiro' && cashReceivedConfirmed) {
+        // Mantemos trilha explícita da confirmação presencial manual para auditoria operacional.
+        const { error: manualConfirmationLogError } = await supabase
+          .from('sale_logs')
+          .insert({
+            sale_id: saleData.id,
+            action: 'manual_payment_confirmed',
+            description: 'Pagamento em dinheiro confirmado manualmente no ato da venda de serviço.',
+            old_value: JSON.stringify({ status_before: 'pendente_taxa' }),
+            new_value: JSON.stringify({ status_after: 'pago', payment_method: paymentMethod }),
+            company_id: activeCompanyId,
+            performed_by: user?.id ?? null,
+          });
+
+        if (manualConfirmationLogError) throw manualConfirmationLogError;
+      }
+
       toast.success('Venda de serviço registrada com sucesso.');
+
+      // Mantém comprovante operacional em tela após o reset do wizard.
+      setLatestReceipt({
+        saleId: saleData.id,
+        serviceQrCodeToken: serviceQrCodeToken,
+        status: saleStatus,
+        paymentMethod,
+        customerName: safeBuyerName,
+        customerCpf: null,
+        customerPhone: null,
+        eventName: selectedEvent.name,
+        serviceName: selectedEventService.service.name,
+        quantity,
+        unitPrice: selectedEventService.base_price,
+        totalAmount,
+        unitLabel: UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase(),
+        issuedAt: new Date().toISOString(),
+      });
+
+      if (saleStatus !== 'pago') {
+        toast.warning('Venda registrada como pendente. O QR só valida no /validador quando a venda estiver paga.');
+      }
 
       resetWizard({ keepEvent: true });
 
@@ -394,49 +472,112 @@ export default function ServiceSales() {
 
   return (
     <AdminLayout>
-      <div className="page-container space-y-4 lg:space-y-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <PageHeader
-            title="Venda de Serviços"
-            description="Fluxo guiado e rápido para registrar vendas vinculadas ao evento"
-          />
-          <Badge variant="secondary" className="w-fit gap-1 px-3 py-1 text-xs font-medium">
-            <Sparkles className="h-3.5 w-3.5" />
-            Fluxo rápido
-          </Badge>
-        </div>
+      <div className="page-container space-y-6">
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            .service-receipt-print,
+            .service-receipt-print * {
+              visibility: visible !important;
+            }
+            .service-receipt-print {
+              position: absolute;
+              inset: 0;
+              width: 100%;
+              padding: 16px;
+              background: white;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+        `}</style>
+        <PageHeader
+          title="Venda de Serviços"
+          description="Wizard operacional para venda rápida vinculada ao evento"
+        />
 
-        <Card className="border-border/70">
-          <CardContent className="p-4 lg:p-5">
-            {/* Layout UX em duas colunas para reduzir rolagem e manter resumo visível no desktop. */}
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="space-y-4">
-                {/* Stepper visual com destaque ativo e ícones para leitura operacional mais rápida. */}
-                <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
-                  <p className="mb-2 text-right text-xs font-medium text-muted-foreground">
-                    Progresso: {currentStepIndex + 1}/{STEP_DETAILS.length}
-                  </p>
-                  <TabsList className="grid h-14 w-full grid-cols-3 gap-2 bg-muted/40 p-1">
-                    {STEP_DETAILS.map((stepItem, index) => {
-                      const StepIcon = stepItem.icon;
-                      const isCompleted = index < currentStepIndex;
-                      const isDisabled =
-                        (stepItem.value === 'quantidade' && !canAdvanceToQuantity)
-                        || (stepItem.value === 'pagamento' && (!canAdvanceToPayment || !canAdvanceToQuantity));
+        <Card>
+          <CardHeader>
+            <CardTitle>Fluxo rápido</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
+              <TabsList className="grid w-full grid-cols-3 h-12">
+                <TabsTrigger value="selecionar">1. Seleção</TabsTrigger>
+                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity}>2. Quantidade</TabsTrigger>
+                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity}>3. Pagamento</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-                      return (
-                        <TabsTrigger
-                          key={stepItem.value}
-                          value={stepItem.value}
-                          disabled={isDisabled}
-                          className={cn(
-                            'group h-full gap-2 rounded-md border border-transparent px-2',
-                            'data-[state=active]:border-primary/40 data-[state=active]:bg-background data-[state=active]:shadow-sm',
-                            isCompleted && 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
-                          )}
-                        >
-                          {isCompleted ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            {loading ? (
+              <div className="h-40 flex items-center justify-center text-muted-foreground gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados...
+              </div>
+            ) : (
+              <>
+                {step === 'selecionar' && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Evento</Label>
+                      <Popover open={eventPopoverOpen} onOpenChange={setEventPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" role="combobox" className="w-full justify-between h-12">
+                            <span className="truncate">{selectedEventLabel}</span>
+                            <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[420px] p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Buscar evento..."
+                              value={eventSearch}
+                              onValueChange={setEventSearch}
+                            />
+                            <CommandList>
+                              <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
+                              <CommandGroup>
+                                {filteredEvents.map((event) => {
+                                  const label = `${formatDateOnlyBR(event.date)} — ${event.name}${event.city ? ` (${event.city})` : ''}`;
+                                  return (
+                                    <CommandItem
+                                      key={event.id}
+                                      value={label}
+                                      onSelect={() => {
+                                        setSelectedEventId(event.id);
+                                        setSelectedEventServiceId('');
+                                        setEventPopoverOpen(false);
+                                      }}
+                                    >
+                                      <Check className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
+                                      {label}
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Serviço</Label>
+                      <Select value={selectedEventServiceId} onValueChange={setSelectedEventServiceId}>
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Selecione o serviço" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!selectedEventId ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Selecione um evento para carregar os serviços.
+                            </div>
+                          ) : availableEventServices.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
+                            </div>
                           ) : (
                             <StepIcon className="h-4 w-4 text-muted-foreground transition-colors group-data-[state=active]:text-primary" />
                           )}
@@ -654,25 +795,45 @@ export default function ServiceSales() {
                     <p className="font-medium leading-snug">{selectedEventLabel}</p>
                   </div>
 
-                  <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-                    <p className="flex items-center gap-2 text-muted-foreground">
-                      <Package className="h-4 w-4" />
-                      Serviço
-                    </p>
-                    <p className="font-medium leading-snug">{selectedEventService?.service?.name ?? 'Selecione um serviço'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Unidade: {UNIT_LABELS[selectedEventService?.service?.unit_type ?? 'unitario']}
-                    </p>
-                  </div>
+                    {paymentMethod === 'dinheiro' && (
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            id="cash-received-confirmed"
+                            checked={cashReceivedConfirmed}
+                            onCheckedChange={(checked) => setCashReceivedConfirmed(Boolean(checked))}
+                          />
+                          <div className="space-y-1">
+                            <Label htmlFor="cash-received-confirmed" className="text-sm font-medium cursor-pointer">
+                              Confirmo que o pagamento em dinheiro foi recebido presencialmente.
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Marcado: venda salva como <strong>pago</strong>. Desmarcado: venda fica em <strong>pendente_taxa</strong>.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Valor unitário</p>
-                      <p className="text-base font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Vagas disponíveis</p>
-                      <p className="text-base font-semibold">{availableQuantity}</p>
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <p className="font-medium">Resumo da venda</p>
+                      <p className="text-sm text-muted-foreground">Evento: {selectedEvent.name}</p>
+                      <p className="text-sm text-muted-foreground">Serviço: {selectedEventService.service.name}</p>
+                      <p className="text-sm text-muted-foreground">Comprador: {buyerName.trim() || 'Cliente não informado (venda de serviço)'}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Quantidade: {quantity} {UNIT_LABELS[selectedEventService.service.unit_type].toLowerCase()}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Pagamento: {PAYMENT_LABELS[paymentMethod]}</p>
+                      {paymentMethod === 'dinheiro' ? (
+                        <p className="text-sm text-muted-foreground">
+                          Status ao confirmar: {cashReceivedConfirmed ? 'Pago (confirmação manual presencial)' : 'Pendente de taxa'}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Status ao confirmar: Pendente (aguarda confirmação real do pagamento)
+                        </p>
+                      )}
+                      <p className="text-xl font-semibold">Total: {formatCurrencyBRL(totalAmount)}</p>
                     </div>
                   </div>
 
@@ -717,6 +878,88 @@ export default function ServiceSales() {
             </div>
           </CardContent>
         </Card>
+
+        {latestReceipt && (
+          <Card className="service-receipt-print">
+            <CardHeader>
+              <CardTitle>Comprovante de Serviço SmartBus BR</CardTitle>
+              <p className="text-sm text-muted-foreground">SmartBus BR · Operação de Serviços</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border p-4 grid gap-2 md:grid-cols-2">
+                <p className="text-sm text-muted-foreground">Venda: {latestReceipt.saleId}</p>
+                <p className={`text-sm font-medium ${latestReceipt.status === 'pago' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  Status: {latestReceipt.status}
+                </p>
+                <p className="text-sm text-muted-foreground">Forma de pagamento: {PAYMENT_LABELS[latestReceipt.paymentMethod]}</p>
+                <p className="text-sm text-muted-foreground">Emissão: {new Date(latestReceipt.issuedAt).toLocaleString('pt-BR')}</p>
+                <p className="text-sm text-muted-foreground">Evento: {latestReceipt.eventName}</p>
+                <p className="text-sm text-muted-foreground">Serviço: {latestReceipt.serviceName}</p>
+                <p className="text-sm text-muted-foreground">Cliente: {latestReceipt.customerName}</p>
+                {latestReceipt.customerCpf && (
+                  <p className="text-sm text-muted-foreground">CPF: {latestReceipt.customerCpf}</p>
+                )}
+                {latestReceipt.customerPhone && (
+                  <p className="text-sm text-muted-foreground">Telefone: {latestReceipt.customerPhone}</p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Quantidade: {latestReceipt.quantity} {latestReceipt.unitLabel}
+                </p>
+                <p className="text-sm text-muted-foreground">Valor unitário: {formatCurrencyBRL(latestReceipt.unitPrice)}</p>
+                <p className="text-sm text-muted-foreground">Valor total: {formatCurrencyBRL(latestReceipt.totalAmount)}</p>
+              </div>
+
+              {latestReceipt.status !== 'pago' && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  QR exibido para referência, mas a validação no `/validador` só é liberada quando a venda estiver com status <strong>pago</strong>.
+                </div>
+              )}
+
+              <div className={`rounded-lg border p-3 text-sm ${latestReceipt.status === 'pago' ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                {latestReceipt.status === 'pago'
+                  ? 'Apresente este QR Code ao responsável pelo serviço.'
+                  : 'Este comprovante ainda não libera consumo do serviço.'}
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-4 md:items-center">
+                <div className="w-fit rounded-lg border p-3 bg-white mx-auto md:mx-0">
+                  <QRCodeSVG
+                    value={latestReceipt.serviceQrCodeToken}
+                    size={180}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <Label>Código do QR de serviços</Label>
+                  <Input value={latestReceipt.serviceQrCodeToken} readOnly />
+                  <div className="flex gap-2 no-print">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleCopyQrToken(latestReceipt.serviceQrCodeToken)}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      {copyingQrToken ? 'Copiado!' : 'Copiar código do QR'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handlePrintReceipt}
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Imprimir comprovante
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-3 text-xs text-muted-foreground text-center">
+                Gerado por SmartBus BR — www.smartbusbr.com.br — Contato: (31) 99207-4309
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AdminLayout>
   );
