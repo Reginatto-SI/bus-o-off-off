@@ -103,6 +103,7 @@ import { CardHeader, CardTitle } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
+import { EventServicesTab } from '@/components/admin/EventServicesTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
@@ -713,6 +714,13 @@ export default function Events() {
       return null;
     }
 
+    if (tabValue === 'servicos') {
+      if (!effectiveEventId) {
+        return 'Salve o evento na aba Geral para liberar Serviços.';
+      }
+      return null;
+    }
+
     if (tabValue === 'patrocinadores') {
       if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Patrocinadores.';
@@ -752,12 +760,13 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'patrocinadores', 'publicacao'] as const;
+  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'servicos', 'patrocinadores', 'publicacao'] as const;
   const WIZARD_TAB_LABELS: Record<string, string> = {
     geral: 'Geral',
     viagens: 'Frotas',
     embarques: 'Embarques',
     passagens: 'Passagens',
+    servicos: 'Serviços',
     patrocinadores: 'Patrocinadores',
     publicacao: 'Publicação',
   };
@@ -3004,6 +3013,7 @@ export default function Events() {
                     { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
                     { value: 'embarques', label: 'Embarques', icon: MapPin, count: editingId ? eventBoardingLocations.length : null },
                     { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
+                    { value: 'servicos', label: 'Serviços', icon: Sparkles, count: null },
                     { value: 'patrocinadores', label: 'Patrocinadores', icon: Star, count: null },
                     { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
                   ].map((tab) => {
@@ -4236,6 +4246,18 @@ export default function Events() {
                           </div>
                         </div>
                       </Card>
+                    )}
+                  </TabsContent>
+
+                  {/* Tab Serviços */}
+                  <TabsContent value="servicos" className="mt-0">
+                    {editingId && activeCompanyId ? (
+                      // Compatibilização mínima: reaproveita a aba já existente do EventDetail no wizard real usado pelo time.
+                      <EventServicesTab eventId={editingId} companyId={activeCompanyId} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-8 text-center">
+                        Salve o evento primeiro para vincular serviços.
+                      </p>
                     )}
                   </TabsContent>
 
