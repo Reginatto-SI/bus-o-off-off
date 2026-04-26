@@ -31,6 +31,7 @@ import { formatCurrencyBRL } from '@/lib/currency';
 import { toast } from 'sonner';
 import { formatDateOnlyBR } from '@/lib/date';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
 type WizardStep = 'selecionar' | 'quantidade' | 'pagamento';
 type ServiceUnitType = 'pessoa' | 'veiculo' | 'unitario';
@@ -56,6 +57,12 @@ interface EventServiceOption {
     unit_type: ServiceUnitType;
     status: string;
   } | null;
+}
+
+interface EventBoardingWindowRow {
+  event_id: string;
+  departure_date: string | null;
+  departure_time: string | null;
 }
 
 const UNIT_LABELS: Record<ServiceUnitType, string> = {
@@ -138,21 +145,41 @@ export default function ServiceSales() {
             .from('events')
             .select('id, name, date, city')
             .eq('company_id', activeCompanyId)
+            .neq('status', 'encerrado')
+            .eq('is_archived', false)
             .order('date', { ascending: true }),
           supabase
             .from('event_services')
-            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, service:services(id, name, unit_type, status)')
+            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, service:services!inner(id, name, unit_type, status)')
             .eq('company_id', activeCompanyId)
-            .eq('is_active', true),
+            .eq('is_active', true)
+            .eq('service.status', 'ativo'),
         ]);
 
         if (eventsError) throw eventsError;
         if (servicesError) throw servicesError;
 
-        setEvents(eventsData ?? []);
+        const baseEventRows = eventsData ?? [];
+        if (baseEventRows.length > 0) {
+          const { data: boardingsData } = await supabase
+            .from('event_boarding_locations')
+            .select('event_id, departure_date, departure_time')
+            .in('event_id', baseEventRows.map((event) => event.id))
+            .eq('company_id', activeCompanyId)
+            .not('departure_date', 'is', null);
+
+          const operationalEndMap = buildEventOperationalEndMap(
+            baseEventRows,
+            ((boardingsData ?? []) as EventBoardingWindowRow[]),
+          );
+          setEvents(filterOperationallyVisibleEvents(baseEventRows, operationalEndMap));
+        } else {
+          setEvents([]);
+        }
         setEventServices((eventServicesData as EventServiceOption[]) ?? []);
-      } catch (error: any) {
-        toast.error(error?.message ?? 'Erro ao carregar dados da venda de serviços.');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Erro ao carregar dados da venda de serviços.';
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -239,7 +266,7 @@ export default function ServiceSales() {
           seller_id: null,
           sale_origin: 'admin_manual',
           payment_environment: runtimePaymentEnvironment,
-        } as any)
+        } as never)
         .select('id')
         .single();
 
@@ -300,8 +327,9 @@ export default function ServiceSales() {
         if (item.id !== selectedEventService.id) return item;
         return { ...item, sold_quantity: latestSoldQuantity + quantity };
       }));
-    } catch (error: any) {
-      toast.error(error?.message ?? 'Não foi possível confirmar a venda.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Não foi possível confirmar a venda.';
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -309,13 +337,13 @@ export default function ServiceSales() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="page-container space-y-6">
         <PageHeader
           title="Venda de Serviços"
           subtitle="Wizard operacional para venda rápida vinculada ao evento"
         />
 
-        <Card className="max-w-4xl">
+        <Card>
           <CardHeader>
             <CardTitle>Fluxo rápido</CardTitle>
           </CardHeader>
@@ -386,11 +414,21 @@ export default function ServiceSales() {
                           <SelectValue placeholder="Selecione o serviço" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableEventServices.map((service) => (
-                            <SelectItem key={service.id} value={service.id}>
-                              {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
-                            </SelectItem>
-                          ))}
+                          {!selectedEventId ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Selecione um evento para carregar os serviços.
+                            </div>
+                          ) : availableEventServices.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
+                            </div>
+                          ) : (
+                            availableEventServices.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>
+                                {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
