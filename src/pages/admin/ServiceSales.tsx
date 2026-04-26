@@ -67,6 +67,7 @@ interface EventServiceOption {
     id: string;
     name: string;
     unit_type: ServiceUnitType;
+    control_type: 'validacao_obrigatoria' | 'sem_validacao';
     status: string;
   } | null;
 }
@@ -168,7 +169,7 @@ export default function ServiceSales() {
             .order('date', { ascending: true }),
           supabase
             .from('event_services')
-            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, service:services!inner(id, name, unit_type, status)')
+            .select('id, event_id, service_id, base_price, total_capacity, sold_quantity, service:services!inner(id, name, unit_type, control_type, status)')
             .eq('company_id', activeCompanyId)
             .eq('is_active', true)
             .eq('service.status', 'ativo'),
@@ -296,11 +297,36 @@ export default function ServiceSales() {
           seller_id: null,
           sale_origin: 'admin_manual',
           payment_environment: runtimePaymentEnvironment,
+          service_qr_code_token: serviceQrCodeToken,
         } as never)
         .select('id')
         .single();
 
       if (saleError) throw saleError;
+
+      // Base estruturada do item de serviço: deixa de depender de sale_logs como fonte principal.
+      const { error: serviceItemError } = await supabase
+        .from('sale_service_items')
+        .insert({
+          sale_id: saleData.id,
+          company_id: activeCompanyId,
+          event_id: selectedEvent.id,
+          service_id: selectedEventService.service.id,
+          event_service_id: selectedEventService.id,
+          service_name: selectedEventService.service.name,
+          unit_type: selectedEventService.service.unit_type,
+          control_type: selectedEventService.service.control_type,
+          quantity_total: quantity,
+          quantity_used: 0,
+          unit_price: selectedEventService.base_price,
+          total_price: totalAmount,
+          status: 'ativo',
+        } as never);
+
+      if (serviceItemError) {
+        await supabase.from('sales').delete().eq('id', saleData.id).eq('company_id', activeCompanyId);
+        throw serviceItemError;
+      }
 
       const { data: capacityUpdateRows, error: capacityError } = await supabase
         .from('event_services')
@@ -329,12 +355,13 @@ export default function ServiceSales() {
         quantity,
         unit_price: selectedEventService.base_price,
         total_amount: totalAmount,
+        service_qr_code_token: serviceQrCodeToken,
         names: selectedEventService.service.unit_type === 'pessoa'
           ? personNames.split('\n').map((name) => name.trim()).filter(Boolean)
           : [],
       };
 
-      // solução provisória: item de serviço segue em sale_logs até avaliação de sale_items em fase futura.
+      // Trilhas operacionais continuam em sale_logs, mas a fonte principal do item fica em sale_service_items.
       const { error: saleLogError } = await supabase
         .from('sale_logs')
         .insert({
