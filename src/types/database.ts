@@ -563,6 +563,8 @@ export interface Sale {
   platform_fee_payment_id: string | null;
   reservation_expires_at: string | null;
   block_reason: string | null;
+  // QR próprio de venda/comprovante de serviços (separado do QR de passagem/ticket).
+  service_qr_code_token: string | null;
   created_at: string;
   updated_at: string;
   event?: Event;
@@ -580,6 +582,48 @@ export interface SaleLog {
   new_value: string | null;
   performed_by: string | null;
   company_id: string;
+  created_at: string;
+}
+
+export type SaleServiceItemStatus = 'ativo' | 'cancelado';
+
+export interface SaleServiceItem {
+  id: string;
+  sale_id: string;
+  company_id: string;
+  event_id: string | null;
+  service_id: string;
+  event_service_id: string | null;
+  service_name: string;
+  unit_type: ServiceUnitType;
+  control_type: ServiceControlType;
+  quantity_total: number;
+  quantity_used: number;
+  quantity_remaining: number;
+  unit_price: number;
+  total_price: number;
+  status: SaleServiceItemStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ServiceItemValidationResult = 'success' | 'blocked';
+
+export interface ServiceItemValidation {
+  id: string;
+  company_id: string;
+  sale_id: string;
+  sale_service_item_id: string;
+  service_id: string;
+  validated_by_user_id: string | null;
+  quantity_consumed: number;
+  quantity_used_before: number | null;
+  quantity_used_after: number | null;
+  quantity_remaining_before: number | null;
+  quantity_remaining_after: number | null;
+  result: ServiceItemValidationResult;
+  reason_code: string;
+  detail: string | null;
   created_at: string;
 }
 
