@@ -103,7 +103,6 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
     const breakdown = hasFeeConfig
       ? calculateFees(unitPrice, eventFees, {
           passToCustomer,
-          feePercent: Number(feePercent),
         })
       : null;
 

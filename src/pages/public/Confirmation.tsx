@@ -155,7 +155,6 @@ export default function Confirmation() {
             } else {
               const breakdown = calculateFees(saleRes.data.unit_price, (feesData ?? []) as EventFeeInput[], {
                 passToCustomer: Boolean((saleRes.data.event as any)?.pass_platform_fee_to_customer),
-                feePercent: Number(companyFeePercent),
               });
               setFeeLines(breakdown.fees);
             }
