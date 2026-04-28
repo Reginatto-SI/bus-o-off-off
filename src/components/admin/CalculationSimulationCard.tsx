@@ -10,6 +10,8 @@ interface CalculationSimulationCardProps {
   showSaleTotals?: boolean;
   platformFeePercent?: number;
   passPlatformFeeToCustomer?: boolean;
+  platformFeeAmountOverride?: number;
+  platformFeeLabelOverride?: string;
 }
 
 /**
@@ -23,6 +25,8 @@ export function CalculationSimulationCard({
   showSaleTotals = false,
   platformFeePercent,
   passPlatformFeeToCustomer = false,
+  platformFeeAmountOverride,
+  platformFeeLabelOverride,
 }: CalculationSimulationCardProps) {
   const activeFees = fees.filter((fee) => fee.is_active);
   const totalAdditionalFees = activeFees.reduce(
@@ -34,6 +38,8 @@ export function CalculationSimulationCard({
 
   const hasValidCompanyPlatformFee =
     typeof platformFeePercent === 'number' && Number.isFinite(platformFeePercent) && platformFeePercent > 0;
+  const hasPlatformFeeOverride =
+    typeof platformFeeAmountOverride === 'number' && Number.isFinite(platformFeeAmountOverride) && platformFeeAmountOverride >= 0;
 
   const platformFee = hasValidCompanyPlatformFee
     ? Math.round(grossPerTicket * (platformFeePercent / 100) * 100) / 100
@@ -56,6 +62,12 @@ export function CalculationSimulationCard({
   const totalSale = Math.round(customerTotal * quantity * 100) / 100;
   const totalPlatformFee = Math.round(platformFee * quantity * 100) / 100;
   const totalOrganizerNet = Math.round(organizerNet * quantity * 100) / 100;
+  // Override opcional para cenários em que o valor oficial da taxa vem de motor externo
+  // (ex.: taxa progressiva por passageiro), evitando divergência visual no resumo.
+  const resolvedPlatformFee = hasPlatformFeeOverride
+    ? Math.round((platformFeeAmountOverride ?? 0) * 100) / 100
+    : (isAggregatedSaleView ? totalPlatformFee : platformFee);
+  const shouldRenderPlatformSection = hasPlatformFeeOverride || hasValidCompanyPlatformFee;
 
   return (
     <Card className="p-3 bg-muted/50">
@@ -108,12 +120,12 @@ export function CalculationSimulationCard({
           </>
         )}
 
-        {hasValidCompanyPlatformFee && (
+        {shouldRenderPlatformSection && (
           <>
             <Separator className="my-1" />
             <div className="flex justify-between text-muted-foreground">
-              <span>Comissão da plataforma ({platformFeePercent}%)</span>
-              <span>{formatCurrencyBRL(isAggregatedSaleView ? totalPlatformFee : platformFee)}</span>
+              <span>{platformFeeLabelOverride ?? `Comissão da plataforma (${platformFeePercent}%)`}</span>
+              <span>{formatCurrencyBRL(resolvedPlatformFee)}</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
               <span>Responsável</span>

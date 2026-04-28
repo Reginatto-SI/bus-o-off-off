@@ -661,6 +661,41 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     };
   }, [activeTab, unitPrice, passengers.length, eventFees]);
 
+  const calculateManualPlatformFeeFromSnapshots = (snapshots: PassengerBenefitSnapshot[]): number => {
+    // Função única de cálculo para manter o preview e o submit usando exatamente
+    // a mesma regra progressiva por passageiro (evita divergência entre UI e validação).
+    const progressiveFee = roundCurrency(
+      snapshots.reduce((sum, snapshot) => sum + calculatePlatformFee(snapshot.final_price), 0),
+    );
+    // Regra de produto: taxa da plataforma em venda manual possui piso obrigatório de R$ 5,00.
+    // Se o cálculo progressivo ficar abaixo do piso, elevamos para o mínimo em vez de bloquear a venda.
+    return progressiveFee > 0
+      ? Math.max(progressiveFee, ASAAS_MIN_PLATFORM_FEE_AMOUNT)
+      : 0;
+  };
+
+  const manualPlatformFeePreview = useMemo(() => {
+    if (activeTab !== 'manual') return null;
+
+    // Mantém a prévia do card coerente com a validação real do submit:
+    // taxa progressiva por passageiro (PRD 07), sem depender do percentual comercial fixo.
+    const resolvedSnapshots = passengerBenefitSnapshots.filter(
+      (snapshot): snapshot is PassengerBenefitSnapshot => snapshot !== null,
+    );
+
+    if (resolvedSnapshots.length > 0) {
+      return calculateManualPlatformFeeFromSnapshots(resolvedSnapshots);
+    }
+
+    const pricePerTicket = parseCurrencyInputBRL(unitPrice);
+    if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
+
+    const progressiveFallback = roundCurrency(calculatePlatformFee(pricePerTicket) * passengers.length);
+    return progressiveFallback > 0
+      ? Math.max(progressiveFallback, ASAAS_MIN_PLATFORM_FEE_AMOUNT)
+      : 0;
+  }, [activeTab, passengerBenefitSnapshots, unitPrice, passengers.length]);
+
   const getPassengerBasePrice = (seatId: string, basePrice: number, usesCatPricing: boolean) => {
     if (!usesCatPricing) return roundCurrency(basePrice);
     const seat = seats.find((s) => s.id === seatId);
@@ -889,24 +924,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // Vendas online usam o fluxo oficial do Asaas e não geram cobrança separada da taxa da plataforma aqui (platform_fee_status = 'not_applicable').
       // Vendas manuais precisam de cobrança separada da taxa (platform_fee_status = 'pending').
       // Bloqueios não representam venda real e ficam como 'not_applicable'.
-      const platformFeeAmountByPassenger = resolvedSnapshots.reduce(
-        (sum, snapshot) => sum + calculatePlatformFee(snapshot.final_price),
-        0,
-      );
+      const platformFeeAmountByPassenger = calculateManualPlatformFeeFromSnapshots(resolvedSnapshots);
       const platformFeeAmount = isManual && grossTotal > 0
-        ? roundCurrency(platformFeeAmountByPassenger)
+        ? platformFeeAmountByPassenger
         : null;
       const hasPlatformFee = isManual && (platformFeeAmount ?? 0) > 0;
-
-      // Regra financeira oficial: o Asaas não permite cobrança abaixo de R$ 5,00.
-      // Para evitar criar reserva manual sem monetização válida da plataforma,
-      // bloqueamos a venda antes de inserir qualquer dado em sales/tickets/logs.
-      if (isManual && hasPlatformFee && platformFeeAmount !== null && platformFeeAmount < ASAAS_MIN_PLATFORM_FEE_AMOUNT) {
-        toast.error(
-          'Não é possível criar esta venda manual porque a taxa da plataforma calculada ficou abaixo do mínimo permitido para cobrança no Asaas (R$ 5,00). Ajuste o valor da venda antes de continuar.'
-        );
-        return;
-      }
 
       // Determinar sale_origin para rastreabilidade
       const saleOrigin = isBlock ? 'admin_block' : (isManual ? 'admin_manual' : 'admin_manual');
@@ -1711,7 +1733,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           fees={eventFees}
                           quantity={passengers.length}
                           showSaleTotals
-                          platformFeePercent={company?.platform_fee_percent}
+                          platformFeeAmountOverride={manualPlatformFeePreview ?? undefined}
+                          platformFeeLabelOverride="Taxa da plataforma (motor progressivo)"
                           passPlatformFeeToCustomer={false}
                         />
                       );

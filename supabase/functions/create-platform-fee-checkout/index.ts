@@ -173,37 +173,35 @@ serve(async (req) => {
       );
     }
 
-    const feeAmount = Number(sale.platform_fee_amount);
-    if (!feeAmount || feeAmount <= 0) {
+    const originalFeeAmount = Number(sale.platform_fee_amount);
+    if (!originalFeeAmount || originalFeeAmount <= 0) {
       return new Response(
         JSON.stringify({ error: "Valor da taxa inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Asaas exige mínimo de R$ 5,00 para billingType UNDEFINED.
+    // Regra oficial: taxa da plataforma manual possui piso obrigatório de R$ 5,00.
+    // Mantemos defesa no backend para corrigir registros legados/chamadas indiretas.
     const ASAAS_MIN_CHARGE = 5.0;
-    if (feeAmount < ASAAS_MIN_CHARGE) {
-      // Defesa em profundidade: o frontend já bloqueia a criação da venda manual abaixo do mínimo,
-      // porém este backend mantém proteção explícita para chamadas indiretas/legadas fora do fluxo esperado.
-      // Regra oficial atual: não gerar novos casos `waived` para taxa manual < R$ 5,00.
+    const feeAmount = originalFeeAmount < ASAAS_MIN_CHARGE
+      ? ASAAS_MIN_CHARGE
+      : originalFeeAmount;
+
+    if (feeAmount !== originalFeeAmount) {
+      // Ajuste automático obrigatório: não bloqueia venda/manual checkout por taxa abaixo do piso.
+      // Persistimos o valor ajustado para manter coerência entre UI, logs e cobrança Asaas.
+      await supabaseAdmin
+        .from("sales")
+        .update({ platform_fee_amount: feeAmount })
+        .eq("id", sale.id);
+
       await supabaseAdmin.from("sale_logs").insert({
         sale_id: sale.id,
-        action: "platform_fee_minimum_blocked",
-        description: `Tentativa bloqueada: taxa da plataforma (R$ ${feeAmount.toFixed(2)}) abaixo do mínimo Asaas (R$ ${ASAAS_MIN_CHARGE.toFixed(2)}).`,
+        action: "platform_fee_minimum_applied",
+        description: `Taxa da plataforma ajustada para o piso mínimo (de R$ ${originalFeeAmount.toFixed(2)} para R$ ${feeAmount.toFixed(2)}).`,
         company_id: sale.company_id,
       });
-
-      return new Response(
-        JSON.stringify({
-          error:
-            "Não é possível gerar cobrança: taxa da plataforma abaixo do mínimo permitido no Asaas (R$ 5,00).",
-          error_code: "platform_fee_below_minimum",
-          minimum_amount: ASAAS_MIN_CHARGE,
-          fee_amount: feeAmount,
-        }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
     // Regra de blindagem: cobrança de taxa usa estritamente o ambiente persistido na venda.
