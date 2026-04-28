@@ -1811,7 +1811,7 @@ export type Database = {
           event_id: string | null
           event_service_id: string | null
           id: string
-          quantity_remaining: number
+          quantity_remaining: number | null
           quantity_total: number
           quantity_used: number
           sale_id: string
@@ -1830,6 +1830,7 @@ export type Database = {
           event_id?: string | null
           event_service_id?: string | null
           id?: string
+          quantity_remaining?: number | null
           quantity_total: number
           quantity_used?: number
           sale_id: string
@@ -1848,6 +1849,7 @@ export type Database = {
           event_id?: string | null
           event_service_id?: string | null
           id?: string
+          quantity_remaining?: number | null
           quantity_total?: number
           quantity_used?: number
           sale_id?: string
@@ -2259,6 +2261,89 @@ export type Database = {
           },
         ]
       }
+      service_item_validations: {
+        Row: {
+          company_id: string
+          created_at: string
+          detail: string | null
+          id: string
+          quantity_consumed: number
+          quantity_remaining_after: number | null
+          quantity_remaining_before: number | null
+          quantity_used_after: number | null
+          quantity_used_before: number | null
+          reason_code: string
+          result: string
+          sale_id: string
+          sale_service_item_id: string
+          service_id: string
+          validated_by_user_id: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          quantity_consumed?: number
+          quantity_remaining_after?: number | null
+          quantity_remaining_before?: number | null
+          quantity_used_after?: number | null
+          quantity_used_before?: number | null
+          reason_code: string
+          result: string
+          sale_id: string
+          sale_service_item_id: string
+          service_id: string
+          validated_by_user_id?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          quantity_consumed?: number
+          quantity_remaining_after?: number | null
+          quantity_remaining_before?: number | null
+          quantity_used_after?: number | null
+          quantity_used_before?: number | null
+          reason_code?: string
+          result?: string
+          sale_id?: string
+          sale_service_item_id?: string
+          service_id?: string
+          validated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_item_validations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_sale_service_item_id_fkey"
+            columns: ["sale_service_item_id"]
+            isOneToOne: false
+            referencedRelation: "sale_service_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_item_validations_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           company_id: string
@@ -2341,89 +2426,6 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      service_item_validations: {
-        Row: {
-          company_id: string
-          created_at: string
-          detail: string | null
-          id: string
-          quantity_consumed: number
-          quantity_remaining_after: number | null
-          quantity_remaining_before: number | null
-          quantity_used_after: number | null
-          quantity_used_before: number | null
-          reason_code: string
-          result: string
-          sale_id: string
-          sale_service_item_id: string
-          service_id: string
-          validated_by_user_id: string | null
-        }
-        Insert: {
-          company_id: string
-          created_at?: string
-          detail?: string | null
-          id?: string
-          quantity_consumed?: number
-          quantity_remaining_after?: number | null
-          quantity_remaining_before?: number | null
-          quantity_used_after?: number | null
-          quantity_used_before?: number | null
-          reason_code: string
-          result: string
-          sale_id: string
-          sale_service_item_id: string
-          service_id: string
-          validated_by_user_id?: string | null
-        }
-        Update: {
-          company_id?: string
-          created_at?: string
-          detail?: string | null
-          id?: string
-          quantity_consumed?: number
-          quantity_remaining_after?: number | null
-          quantity_remaining_before?: number | null
-          quantity_used_after?: number | null
-          quantity_used_before?: number | null
-          reason_code?: string
-          result?: string
-          sale_id?: string
-          sale_service_item_id?: string
-          service_id?: string
-          validated_by_user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "service_item_validations_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_item_validations_sale_id_fkey"
-            columns: ["sale_id"]
-            isOneToOne: false
-            referencedRelation: "sales"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_item_validations_sale_service_item_id_fkey"
-            columns: ["sale_service_item_id"]
-            isOneToOne: false
-            referencedRelation: "sale_service_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "service_item_validations_service_id_fkey"
-            columns: ["service_id"]
-            isOneToOne: false
-            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -3100,6 +3102,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_service_item: {
+        Args: {
+          p_sale_service_item_id: string
+          p_service_qr_code_token?: string
+        }
+        Returns: {
+          message: string
+          quantity_remaining: number
+          quantity_total: number
+          quantity_used: number
+          reason_code: string
+          result: string
+          sale_id: string
+          sale_service_item_id: string
+          service_id: string
+        }[]
+      }
       correct_sale_passenger: {
         Args: {
           p_company_id: string
@@ -3124,20 +3143,6 @@ export type Database = {
           p_type: string
         }
         Returns: undefined
-      }
-      consume_service_item: {
-        Args: { p_sale_service_item_id: string; p_service_qr_code_token?: string }
-        Returns: {
-          message: string
-          quantity_remaining: number | null
-          quantity_total: number | null
-          quantity_used: number | null
-          reason_code: string
-          result: string
-          sale_id: string | null
-          sale_service_item_id: string | null
-          service_id: string | null
-        }[]
       }
       delete_email: {
         Args: { message_id: number; queue_name: string }
@@ -3356,23 +3361,23 @@ export type Database = {
         Args: { p_company_id: string; p_seller_id: string }
         Returns: string
       }
+      resolve_seller_short_code: { Args: { code: string }; Returns: string }
       resolve_service_qr: {
         Args: { p_service_qr_code_token: string }
         Returns: {
-          customer_name: string | null
-          event_id: string | null
+          customer_name: string
+          event_id: string
           items: Json
           message: string
-          payment_confirmed_at: string | null
-          payment_method: string | null
+          payment_confirmed_at: string
+          payment_method: string
           reason_code: string
           result: string
-          sale_id: string | null
-          service_qr_code_token: string | null
-          status: Database["public"]["Enums"]["sale_status"] | null
+          sale_id: string
+          service_qr_code_token: string
+          status: Database["public"]["Enums"]["sale_status"]
         }[]
       }
-      resolve_seller_short_code: { Args: { code: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
