@@ -25,7 +25,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown, Copy, Loader2, Printer } from 'lucide-react';
+import { CalendarDays, Check, ChevronsUpDown, CircleDollarSign, ClipboardList, Copy, Loader2, Printer, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
