@@ -1271,13 +1271,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               {/* Reuso de TabsTrigger existente para evitar novo componente e preservar acessibilidade/teclado. */}
               <TabsTrigger
                 value="manual"
-                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-4 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
               >
                 <div className="flex w-full items-start gap-3">
                   <Bus className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
-                    <p className="text-sm font-bold leading-5">Venda Manual</p>
-                    <p className="text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
+                    {/* Ajuste fino de densidade: título menos pesado + descrição truncada para evitar quebra visual. */}
+                    <p className="text-sm font-semibold leading-5">Venda Manual</p>
+                    <p className="truncate text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
@@ -1285,26 +1286,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               <TabsTrigger
                 value="reserva"
                 disabled={!manualReservationPolicy.allowManualReservations}
-                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-4 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
               >
                 <div className="flex w-full items-start gap-3">
                   <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
-                    <p className="text-sm font-bold leading-5">Reserva</p>
-                    <p className="text-xs leading-4 text-muted-foreground">Garanta o assento sem cobrar agora</p>
+                    <p className="text-sm font-semibold leading-5">Reserva</p>
+                    <p className="truncate text-xs leading-4 text-muted-foreground">Garanta o assento sem cobrar agora</p>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
               </TabsTrigger>
               <TabsTrigger
                 value="bloqueio"
-                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-4 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
               >
                 <div className="flex w-full items-start gap-3">
                   <ShieldBan className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
-                    <p className="text-sm font-bold leading-5">Bloquear Poltrona</p>
-                    <p className="text-xs leading-4 text-muted-foreground">Bloqueie assentos manualmente</p>
+                    <p className="text-sm font-semibold leading-5">Bloquear Poltrona</p>
+                    <p className="truncate text-xs leading-4 text-muted-foreground">Bloqueie assentos manualmente</p>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
