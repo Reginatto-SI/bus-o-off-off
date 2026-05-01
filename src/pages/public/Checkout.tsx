@@ -1711,6 +1711,11 @@ export default function Checkout() {
                           Assento {seatLabel} —{" "}
                           {passenger.name.trim() || "Pendente"}
                         </span>
+                        {eventTicketTypes.length > 1 && passenger.ticket_type_name && (
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {passenger.ticket_type_name}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {hasError ? (
