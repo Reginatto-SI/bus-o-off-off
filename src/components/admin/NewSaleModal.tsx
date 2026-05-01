@@ -95,7 +95,11 @@ interface PassengerData {
   name: string;
   cpf: string;
   phone: string;
+  ticketTypeId: string | null;
+  ticketTypeName: string | null;
+  ticketTypePrice: number | null;
 }
+interface EventTicketType { id: string; name: string; price: number; is_active: boolean; }
 
 interface PassengerBenefitSnapshot {
   benefit_program_id: string | null;
@@ -257,6 +261,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [payingPlatformFee, setPayingPlatformFee] = useState(false);
   // activeTicketIndex removido — agora PassengerTicketList gerencia internamente
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
+  const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
   const [categoryPricesMap, setCategoryPricesMap] = useState<Map<string, number>>(new Map());
 
   // Derived
@@ -373,11 +378,12 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setSelectedReturnTripId(null);
       setIncludeReturnTrip(false);
       setEventFees([]);
+      setEventTicketTypes([]);
       return;
     }
     const fetchTrips = async () => {
       setLoadingTrips(true);
-      const [tripsRes, feesRes] = await Promise.all([
+      const [tripsRes, feesRes, ticketTypesRes] = await Promise.all([
         supabase
           .from('trips')
           .select('*, vehicle:vehicles(*), driver:drivers!trips_driver_id_fkey(*)')
@@ -389,10 +395,17 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           .eq('event_id', selectedEventId)
           .eq('is_active', true)
           .order('sort_order'),
+        supabase
+          .from('event_ticket_types')
+          .select('id, name, price, is_active')
+          .eq('event_id', selectedEventId)
+          .eq('is_active', true)
+          .order('sort_order'),
       ]);
       const tripsData = (tripsRes.data ?? []) as TripWithDetails[];
       setTrips(tripsData);
       setEventFees((feesRes.data ?? []) as EventFeeInput[]);
+      setEventTicketTypes((ticketTypesRes.data ?? []) as EventTicketType[]);
 
       // Fetch category prices if event uses category pricing
       const evt = events.find((e) => e.id === selectedEventId) ?? (await supabase.from('events').select('use_category_pricing').eq('id', selectedEventId).single()).data;
@@ -598,10 +611,20 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         name: isBlock ? 'BLOQUEIO' : '',
         cpf: isBlock ? '00000000000' : '',
         phone: '',
+        ticketTypeId: null,
+        ticketTypeName: null,
+        ticketTypePrice: null,
       };
     });
-    setPassengers(newPassengers);
-    setPassengerBenefitSnapshots(newPassengers.map(() => null));
+    const defaultType = eventTicketTypes[0] ?? null;
+    const seededPassengers = newPassengers.map((p) => ({
+      ...p,
+      ticketTypeId: defaultType?.id ?? null,
+      ticketTypeName: defaultType?.name ?? null,
+      ticketTypePrice: defaultType ? Number(defaultType.price ?? 0) : null,
+    }));
+    setPassengers(seededPassengers);
+    setPassengerBenefitSnapshots(seededPassengers.map(() => null));
     if (selectedEvent) {
       setUnitPrice(formatCurrencyBRL(selectedEvent.unit_price));
     }
@@ -712,7 +735,11 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     // Regra de segurança: benefício nunca pode bloquear venda administrativa.
     // Em falha técnica de elegibilidade, persistimos fallback com preço base.
     const snapshots = await Promise.all(passengers.map(async (passenger) => {
-      const originalPrice = getPassengerBasePrice(passenger.seatId, basePrice, usesCatPricing);
+      // Regra final: tipo de passagem tem precedência; categoria é fallback.
+      const typedBasePrice = Number(passenger.ticketTypePrice ?? 0);
+      const originalPrice = typedBasePrice > 0
+        ? roundCurrency(typedBasePrice)
+        : getPassengerBasePrice(passenger.seatId, basePrice, usesCatPricing);
       const fallbackSnapshot: PassengerBenefitSnapshot = {
         benefit_program_id: null,
         benefit_program_name: null,
@@ -1002,6 +1029,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         passenger_phone: p.phone?.replace(/\D/g, '') || null,
         boarding_status: 'pendente',
         company_id: activeCompanyId,
+        ticket_type_id: p.ticketTypeId,
+        ticket_type_name: p.ticketTypeName,
+        ticket_type_price: p.ticketTypePrice,
         // Benefício aplicado por CPF individual: cada ticket persiste seu próprio snapshot.
         // Nunca é por compra; apenas o CPF elegível recebe desconto e exibição de benefício.
         benefit_program_id: snapshot?.benefit_program_id ?? null,
@@ -1030,6 +1060,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           passenger_phone: p.phone?.replace(/\D/g, '') || null,
           boarding_status: 'pendente',
           company_id: activeCompanyId,
+          ticket_type_id: p.ticketTypeId,
+          ticket_type_name: p.ticketTypeName,
+          ticket_type_price: p.ticketTypePrice,
           // Trecho complementar sem composição financeira própria para evitar duplicidade.
           benefit_program_id: null,
           benefit_program_name: null,
@@ -1623,7 +1656,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                               <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
                               <span className="text-sm font-medium text-foreground">Passageiro {i + 1}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs">Nome *</Label>
                                 <Input
@@ -1662,6 +1695,33 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                   placeholder="(65) 99999-9999"
                                   maxLength={15}
                                 />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Tipo de passagem</Label>
+                                <Select
+                                  value={p.ticketTypeId ?? '__default__'}
+                                  onValueChange={(value) => {
+                                    const selectedType = eventTicketTypes.find((row) => row.id === value);
+                                    setPassengers((prev) => prev.map((row, idx) => idx === i ? {
+                                      ...row,
+                                      ticketTypeId: selectedType?.id ?? null,
+                                      ticketTypeName: selectedType?.name ?? null,
+                                      ticketTypePrice: selectedType ? Number(selectedType.price ?? 0) : null,
+                                    } : row));
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Tipo padrão" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__default__">Padrão do evento</SelectItem>
+                                    {eventTicketTypes.map((type) => (
+                                      <SelectItem key={type.id} value={type.id}>
+                                        {type.name} — {formatCurrencyBRL(Number(type.price ?? 0))}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                             </div>
                             {passengerSnapshot?.benefit_applied && (

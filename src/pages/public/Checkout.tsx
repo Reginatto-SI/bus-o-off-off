@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,6 +86,16 @@ interface PassengerData {
   name: string;
   cpf: string;
   phone: string;
+  ticket_type_id: string;
+  ticket_type_name: string;
+  ticket_type_price: number;
+}
+
+interface EventTicketType {
+  id: string;
+  name: string;
+  price: number;
+  is_active: boolean;
 }
 
 interface PassengerBenefitSnapshot {
@@ -178,6 +189,7 @@ export default function Checkout() {
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
+  const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
   const [companyPixStatus, setCompanyPixStatus] = useState<{
     productionReady: boolean;
     sandboxReady: boolean;
@@ -492,6 +504,33 @@ export default function Checkout() {
             .order("sort_order");
           setEventFees((feesData ?? []) as EventFeeInput[]);
 
+          const { data: ticketTypesData } = await supabase
+            .from("event_ticket_types")
+            .select("id, name, price, is_active")
+            .eq("event_id", id!)
+            .order("sort_order");
+
+          const activeTypes = (ticketTypesData ?? [])
+            .filter((row: any) => row.is_active)
+            .map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              price: Number(row.price ?? 0),
+              is_active: Boolean(row.is_active),
+            }));
+
+          // Retrocompatibilidade: evento legado sem tipos usa preço base como tipo único padrão.
+          setEventTicketTypes(
+            activeTypes.length > 0
+              ? activeTypes
+              : [{
+                  id: "__default_base_type__",
+                  name: "Adulto",
+                  price: Number(eventData.unit_price ?? 0),
+                  is_active: true,
+                }],
+          );
+
           // Fetch category prices if enabled
           if ((eventData as any).use_category_pricing) {
             const { data: catPrices } = await supabase
@@ -667,7 +706,20 @@ export default function Checkout() {
 
     if (!valid) return;
 
-    setPassengers(selectedSeats.map(() => ({ name: "", cpf: "", phone: "" })));
+    const defaultType = eventTicketTypes[0] ?? {
+      id: "__default_base_type__",
+      name: "Adulto",
+      price: Number(event?.unit_price ?? 0),
+      is_active: true,
+    };
+    setPassengers(selectedSeats.map(() => ({
+      name: "",
+      cpf: "",
+      phone: "",
+      ticket_type_id: defaultType.id,
+      ticket_type_name: defaultType.name,
+      ticket_type_price: defaultType.price,
+    })));
     setPassengerBenefitSnapshots(selectedSeats.map(() => null));
     setErrors({});
     setPayerIndex(0);
@@ -756,7 +808,8 @@ export default function Checkout() {
     const snapshots = await Promise.all(
       passengers.map(async (passenger, index) => {
         const seatId = selectedSeats[index];
-        const originalPrice = roundCurrency(getSeatPrice(seatId));
+        const typePrice = Number(passenger.ticket_type_price ?? 0);
+        const originalPrice = roundCurrency(typePrice > 0 ? typePrice : getSeatPrice(seatId));
 
         const fallbackSnapshot: PassengerBenefitSnapshot = {
           benefit_program_id: null,
@@ -1219,6 +1272,9 @@ export default function Checkout() {
       trip_id: tripId!,
       sort_order: i,
       company_id: event.company_id,
+      ticket_type_id: passengers[i].ticket_type_id || null,
+      ticket_type_name: passengers[i].ticket_type_name || "Adulto",
+      ticket_type_price: Number(passengers[i].ticket_type_price ?? 0),
     }));
 
     // Add return trip passengers if applicable
@@ -1234,6 +1290,9 @@ export default function Checkout() {
           trip_id: returnTripId,
           sort_order: selectedSeats.length + i,
           company_id: event.company_id,
+          ticket_type_id: passengers[i].ticket_type_id || null,
+          ticket_type_name: passengers[i].ticket_type_name || "Adulto",
+          ticket_type_price: Number(passengers[i].ticket_type_price ?? 0),
           // Trecho complementar de volta: nesta fase o valor cobrado já está
           // consolidado na ida; mantemos snapshot zerado para não duplicar o total.
           benefit_program_id: null,
@@ -1738,6 +1797,36 @@ export default function Checkout() {
                           maxLength={15}
                         />
                       </div>
+
+                      {eventTicketTypes.length > 1 && (
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Tipo de passagem</Label>
+                          <Select
+                            value={passenger.ticket_type_id}
+                            onValueChange={(value) => {
+                              const selectedType = eventTicketTypes.find((item) => item.id === value);
+                              if (!selectedType) return;
+                              setPassengers((prev) => prev.map((row, rowIdx) => rowIdx === idx ? {
+                                ...row,
+                                ticket_type_id: selectedType.id,
+                                ticket_type_name: selectedType.name,
+                                ticket_type_price: selectedType.price,
+                              } : row));
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {eventTicketTypes.map((type) => (
+                                <SelectItem key={type.id} value={type.id}>
+                                  {type.name} — {formatCurrencyBRL(type.price)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
 
                       {passengerSnapshot?.benefit_applied && (
                         <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs space-y-1">

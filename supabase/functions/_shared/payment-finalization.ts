@@ -174,6 +174,10 @@ export async function createTicketsFromPassengersShared(
       passenger_cpf: p.passenger_cpf as string,
       passenger_phone: (p.passenger_phone as string | null) ?? null,
       company_id: companyId,
+      // Snapshot do tipo de passagem: preserva auditoria histórica mesmo se catálogo mudar.
+      ticket_type_id: (p.ticket_type_id as string | null) ?? null,
+      ticket_type_name: (p.ticket_type_name as string | null) ?? null,
+      ticket_type_price: p.ticket_type_price == null ? null : Number(p.ticket_type_price),
       benefit_program_id: (p.benefit_program_id as string | null) ?? null,
       benefit_program_name: benefitProgramName,
       benefit_type: (p.benefit_type as string | null) ?? null,

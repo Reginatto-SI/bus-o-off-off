@@ -244,6 +244,15 @@ const transportPolicyOptions: Array<{ value: TransportPolicy; label: string; des
 ];
 
 type EventCategoryOptionValue = EventCategory;
+type EventTicketType = {
+  id: string;
+  event_id: string;
+  company_id: string;
+  name: string;
+  price: number;
+  is_active: boolean;
+  sort_order: number;
+};
 
 const eventCategoryOptions: Array<{ value: EventCategoryOptionValue; label: string; description: string; icon: string }> = [
   { value: 'evento', label: 'Evento', description: 'Ocasião pontual com rota principal definida.', icon: '🎟️' },
@@ -373,6 +382,8 @@ export default function Events() {
 
   // Event fees state
   const [eventFees, setEventFees] = useState<EventFee[]>([]);
+  const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
+  const [loadingTicketTypes, setLoadingTicketTypes] = useState(false);
   const [loadingFees, setLoadingFees] = useState(false);
   const [feeDialogOpen, setFeeDialogOpen] = useState(false);
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
@@ -1256,6 +1267,17 @@ export default function Events() {
     setLoadingFees(false);
   };
 
+  const fetchEventTicketTypes = async (eventId: string) => {
+    setLoadingTicketTypes(true);
+    const { data } = await supabase
+      .from('event_ticket_types')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('sort_order', { ascending: true });
+    setEventTicketTypes((data || []) as unknown as EventTicketType[]);
+    setLoadingTicketTypes(false);
+  };
+
   // Recarrega ao trocar empresa ativa (isolamento multi-tenant)
   useEffect(() => {
     if (activeCompanyId) {
@@ -1351,6 +1373,7 @@ export default function Events() {
       fetchEventTrips(eventId),
       fetchEventBoardingLocations(eventId),
       fetchEventFees(eventId),
+      fetchEventTicketTypes(eventId),
       fetchCategoryPrices(eventId),
     ]);
   };
@@ -1473,6 +1496,39 @@ export default function Events() {
         }
       }
       setUploadingImage(false);
+    }
+
+    if (!error && newEventId && activeCompanyId) {
+      // Retrocompatibilidade: garante 1 tipo padrão quando evento ainda não possui tipos cadastrados.
+      const { count: existingTicketTypesCount } = await supabase
+        .from('event_ticket_types')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', newEventId);
+
+      if ((existingTicketTypesCount ?? 0) === 0) {
+        await supabase.from('event_ticket_types').insert({
+          event_id: newEventId,
+          company_id: activeCompanyId,
+          name: 'Adulto',
+          price: parseCurrencyInputBRL(form.unit_price),
+          is_active: true,
+          sort_order: 0,
+        } as any);
+      }
+    }
+
+    // Regra de segurança: evento precisa manter pelo menos 1 tipo de passagem ativo.
+    if (!error && newEventId) {
+      const { count: activeTicketTypesCount } = await supabase
+        .from('event_ticket_types')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', newEventId)
+        .eq('is_active', true);
+      if ((activeTicketTypesCount ?? 0) <= 0) {
+        toast.error('Mantenha pelo menos 1 tipo de passagem ativo para salvar o evento.');
+        setActiveTab('passagens');
+        return { error: true, eventId: newEventId, isNew: false };
+      }
     }
 
     if (error) {
@@ -3856,6 +3912,121 @@ export default function Events() {
                               Use 0 para permitir compras sem limite por pedido
                             </p>
                           </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Tipos de passagem</Label>
+                            {editingId && !isReadOnly && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  const nextSort = eventTicketTypes.length;
+                                  await supabase.from('event_ticket_types').insert({
+                                    event_id: editingId,
+                                    company_id: activeCompanyId!,
+                                    name: `Tipo ${nextSort + 1}`,
+                                    price: parseCurrencyInputBRL(form.unit_price),
+                                    is_active: true,
+                                    sort_order: nextSort,
+                                  } as any);
+                                  await fetchEventTicketTypes(editingId);
+                                }}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Adicionar tipo de passagem
+                              </Button>
+                            )}
+                          </div>
+
+                          {!editingId ? (
+                            <p className="text-xs text-muted-foreground">
+                              Salve o evento para cadastrar tipos de passagem.
+                            </p>
+                          ) : loadingTicketTypes ? (
+                            <div className="flex items-center justify-center py-3">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            </div>
+                          ) : eventTicketTypes.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Nenhum tipo cadastrado. O tipo padrão será criado automaticamente ao salvar.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {eventTicketTypes.map((ticketType) => (
+                                <div key={ticketType.id} className="grid grid-cols-12 gap-2 items-center border rounded-md p-2">
+                                  <Input
+                                    className="col-span-5 h-8"
+                                    value={ticketType.name}
+                                    disabled={isReadOnly}
+                                    onChange={(e) =>
+                                      setEventTicketTypes((prev) => prev.map((row) => row.id === ticketType.id ? { ...row, name: e.target.value } : row))
+                                    }
+                                    onBlur={async () => {
+                                      if (!editingId || isReadOnly) return;
+                                      await supabase.from('event_ticket_types').update({ name: ticketType.name } as any).eq('id', ticketType.id);
+                                    }}
+                                  />
+                                  <Input
+                                    className="col-span-3 h-8"
+                                    value={formatCurrencyValueBRL(ticketType.price)}
+                                    inputMode="numeric"
+                                    disabled={isReadOnly}
+                                    onChange={(e) => {
+                                      const nextPrice = parseCurrencyInputBRL(formatCurrencyInputValueFromDigits(e.target.value));
+                                      setEventTicketTypes((prev) => prev.map((row) => row.id === ticketType.id ? { ...row, price: nextPrice } : row));
+                                    }}
+                                    onBlur={async () => {
+                                      if (!editingId || isReadOnly) return;
+                                      await supabase.from('event_ticket_types').update({ price: ticketType.price } as any).eq('id', ticketType.id);
+                                    }}
+                                  />
+                                  <div className="col-span-2 flex items-center gap-1">
+                                    <Switch
+                                      checked={ticketType.is_active}
+                                      disabled={isReadOnly}
+                                      onCheckedChange={async (checked) => {
+                                        if (!editingId) return;
+                                        const activeCount = eventTicketTypes.filter((row) => row.is_active).length;
+                                        if (!checked && activeCount <= 1) {
+                                          toast.error('Mantenha pelo menos 1 tipo ativo.');
+                                          return;
+                                        }
+                                        await supabase.from('event_ticket_types').update({ is_active: checked } as any).eq('id', ticketType.id);
+                                        await fetchEventTicketTypes(editingId);
+                                      }}
+                                    />
+                                    <Badge variant={ticketType.is_active ? 'default' : 'secondary'}>
+                                      {ticketType.is_active ? 'Ativo' : 'Inativo'}
+                                    </Badge>
+                                  </div>
+                                  <div className="col-span-2 flex justify-end">
+                                    {!isReadOnly && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={async () => {
+                                          if (!editingId) return;
+                                          if (eventTicketTypes.length <= 1) {
+                                            toast.error('Mantenha pelo menos 1 tipo de passagem.');
+                                            return;
+                                          }
+                                          await supabase.from('event_ticket_types').delete().eq('id', ticketType.id);
+                                          await fetchEventTicketTypes(editingId);
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <Separator />
