@@ -1655,8 +1655,47 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className="font-mono">{p.seatLabel}</Badge>
                               <span className="text-sm font-medium text-foreground">Passageiro {i + 1}</span>
+                              {eventTicketTypes.length > 0 && p.ticketTypeName && (
+                                <Badge variant="secondary" className="text-[10px] ml-auto">
+                                  {p.ticketTypeName}
+                                </Badge>
+                              )}
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                            {eventTicketTypes.length > 0 && (
+                              <div className="space-y-1">
+                                <Label className="text-xs font-medium">Tipo de passagem *</Label>
+                                <Select
+                                  value={p.ticketTypeId ?? undefined}
+                                  onValueChange={(value) => {
+                                    const selectedType = eventTicketTypes.find((row) => row.id === value);
+                                    if (!selectedType) return;
+                                    setPassengers((prev) => prev.map((row, idx) => idx === i ? {
+                                      ...row,
+                                      ticketTypeId: selectedType.id,
+                                      ticketTypeName: selectedType.name,
+                                      ticketTypePrice: Number(selectedType.price ?? 0),
+                                    } : row));
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o tipo" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {eventTicketTypes.map((type) => (
+                                      <SelectItem key={type.id} value={type.id}>
+                                        {type.name} — {formatCurrencyBRL(Number(type.price ?? 0))}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {p.ticketTypePrice !== null && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Preço base do tipo: {formatCurrencyBRL(Number(p.ticketTypePrice))}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs">Nome *</Label>
                                 <Input
@@ -1695,33 +1734,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                                   placeholder="(65) 99999-9999"
                                   maxLength={15}
                                 />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Tipo de passagem</Label>
-                                <Select
-                                  value={p.ticketTypeId ?? '__default__'}
-                                  onValueChange={(value) => {
-                                    const selectedType = eventTicketTypes.find((row) => row.id === value);
-                                    setPassengers((prev) => prev.map((row, idx) => idx === i ? {
-                                      ...row,
-                                      ticketTypeId: selectedType?.id ?? null,
-                                      ticketTypeName: selectedType?.name ?? null,
-                                      ticketTypePrice: selectedType ? Number(selectedType.price ?? 0) : null,
-                                    } : row));
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Tipo padrão" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__default__">Padrão do evento</SelectItem>
-                                    {eventTicketTypes.map((type) => (
-                                      <SelectItem key={type.id} value={type.id}>
-                                        {type.name} — {formatCurrencyBRL(Number(type.price ?? 0))}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
                               </div>
                             </div>
                             {passengerSnapshot?.benefit_applied && (

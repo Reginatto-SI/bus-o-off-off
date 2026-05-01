@@ -100,7 +100,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CardHeader, CardTitle } from '@/components/ui/card';
+import { CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
@@ -3869,59 +3869,44 @@ export default function Events() {
                       </Alert>
                     )}
 
-                    {/* Card 1 — Configuração da Passagem */}
+                    {/* Card 1 — Passagens e Tipos */}
                     <Card>
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Configuração da Passagem</CardTitle>
+                        <CardTitle className="text-base">Passagens e Tipos</CardTitle>
+                        <CardDescription className="text-xs">
+                          Defina os tipos de passagem que serão vendidos neste evento (ex.: Adulto, Criança, Estudante).
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="unit_price">Preço Base da Passagem *</Label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
-                              <Input
-                                id="unit_price"
-                                type="text"
-                                inputMode="numeric"
-                                className="pl-10"
-                                value={form.unit_price}
-                                onChange={(e) => setForm({ ...form, unit_price: formatCurrencyInputValueFromDigits(e.target.value) })}
-                                placeholder="0,00"
-                                disabled={isReadOnly}
-                              />
-                            </div>
-                            {form.use_category_pricing && (
-                              <p className="text-xs text-muted-foreground">
-                                Usado como fallback para categorias sem preço definido
-                              </p>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="max_tickets">Limite por Compra</Label>
-                            <Input
-                              id="max_tickets"
-                              type="number"
-                              min="0"
-                              max="20"
-                              value={form.max_tickets_per_purchase}
-                              onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
-                              disabled={isReadOnly}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Use 0 para permitir compras sem limite por pedido
-                            </p>
-                          </div>
-                        </div>
-
+                        {/* Bloco principal: Tipos de passagem (conteúdo principal do card) */}
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-sm font-medium">Tipos de passagem</Label>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Label className="text-sm font-medium">Tipos de passagem</Label>
+                              {editingId && eventTicketTypes.length > 0 && (
+                                <>
+                                  <Badge variant="secondary" className="text-[11px]">
+                                    {eventTicketTypes.length} {eventTicketTypes.length === 1 ? 'tipo' : 'tipos'} · {eventTicketTypes.filter((t) => t.is_active).length} {eventTicketTypes.filter((t) => t.is_active).length === 1 ? 'ativo' : 'ativos'}
+                                  </Badge>
+                                  {eventTicketTypes.length >= 1 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {(() => {
+                                        const prices = eventTicketTypes.map((t) => Number(t.price ?? 0));
+                                        const min = Math.min(...prices);
+                                        const max = Math.max(...prices);
+                                        return min === max
+                                          ? formatCurrencyBRL(min)
+                                          : `${formatCurrencyBRL(min)} – ${formatCurrencyBRL(max)}`;
+                                      })()}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
                             {editingId && !isReadOnly && (
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="outline"
                                 onClick={async () => {
                                   const nextSort = eventTicketTypes.length;
                                   await supabase.from('event_ticket_types').insert({
@@ -3936,27 +3921,58 @@ export default function Events() {
                                 }}
                               >
                                 <Plus className="h-4 w-4 mr-1" />
-                                Adicionar tipo de passagem
+                                Novo tipo
                               </Button>
                             )}
                           </div>
 
                           {!editingId ? (
-                            <p className="text-xs text-muted-foreground">
-                              Salve o evento para cadastrar tipos de passagem.
-                            </p>
+                            <Alert>
+                              <AlertDescription className="text-xs">
+                                Salve o evento para começar a cadastrar tipos de passagem. Um tipo padrão será criado automaticamente com o preço base.
+                              </AlertDescription>
+                            </Alert>
                           ) : loadingTicketTypes ? (
                             <div className="flex items-center justify-center py-3">
                               <Loader2 className="h-4 w-4 animate-spin text-primary" />
                             </div>
                           ) : eventTicketTypes.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">
-                              Nenhum tipo cadastrado. O tipo padrão será criado automaticamente ao salvar.
-                            </p>
+                            <div className="border border-dashed rounded-md p-4 text-center space-y-2">
+                              <Ticket className="h-6 w-6 mx-auto text-muted-foreground" />
+                              <p className="text-sm text-muted-foreground">Nenhum tipo cadastrado ainda</p>
+                              {!isReadOnly && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    await supabase.from('event_ticket_types').insert({
+                                      event_id: editingId,
+                                      company_id: activeCompanyId!,
+                                      name: 'Adulto',
+                                      price: parseCurrencyInputBRL(form.unit_price),
+                                      is_active: true,
+                                      sort_order: 0,
+                                    } as any);
+                                    await fetchEventTicketTypes(editingId);
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Adicionar primeiro tipo
+                                </Button>
+                              )}
+                            </div>
                           ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
+                              {/* Header de colunas */}
+                              <div className="grid grid-cols-12 gap-2 px-2 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                                <div className="col-span-5">Nome</div>
+                                <div className="col-span-3">Preço</div>
+                                <div className="col-span-2">Status</div>
+                                <div className="col-span-2 text-right">Ações</div>
+                              </div>
                               {eventTicketTypes.map((ticketType) => (
-                                <div key={ticketType.id} className="grid grid-cols-12 gap-2 items-center border rounded-md p-2">
+                                <div key={ticketType.id} className="grid grid-cols-12 gap-2 items-center border rounded-md px-2 py-1.5">
                                   <Input
                                     className="col-span-5 h-8"
                                     value={ticketType.name}
@@ -3983,7 +3999,7 @@ export default function Events() {
                                       await supabase.from('event_ticket_types').update({ price: ticketType.price } as any).eq('id', ticketType.id);
                                     }}
                                   />
-                                  <div className="col-span-2 flex items-center gap-1">
+                                  <div className="col-span-2 flex items-center gap-2">
                                     <Switch
                                       checked={ticketType.is_active}
                                       disabled={isReadOnly}
@@ -3998,9 +4014,9 @@ export default function Events() {
                                         await fetchEventTicketTypes(editingId);
                                       }}
                                     />
-                                    <Badge variant={ticketType.is_active ? 'default' : 'secondary'}>
+                                    <span className={`text-xs ${ticketType.is_active ? 'text-foreground' : 'text-muted-foreground'}`}>
                                       {ticketType.is_active ? 'Ativo' : 'Inativo'}
-                                    </Badge>
+                                    </span>
                                   </div>
                                   <div className="col-span-2 flex justify-end">
                                     {!isReadOnly && (
@@ -4027,6 +4043,46 @@ export default function Events() {
                               ))}
                             </div>
                           )}
+                        </div>
+
+                        <Separator />
+
+                        {/* Configurações secundárias: Preço base (fallback) + Limite */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="unit_price">Preço base (fallback) *</Label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
+                              <Input
+                                id="unit_price"
+                                type="text"
+                                inputMode="numeric"
+                                className="pl-10"
+                                value={form.unit_price}
+                                onChange={(e) => setForm({ ...form, unit_price: formatCurrencyInputValueFromDigits(e.target.value) })}
+                                placeholder="0,00"
+                                disabled={isReadOnly}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Usado quando não houver tipo de passagem ou categoria de assento aplicável.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="max_tickets">Limite por Compra</Label>
+                            <Input
+                              id="max_tickets"
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={form.max_tickets_per_purchase}
+                              onChange={(e) => setForm({ ...form, max_tickets_per_purchase: e.target.value })}
+                              disabled={isReadOnly}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Use 0 para permitir compras sem limite por pedido
+                            </p>
+                          </div>
                         </div>
 
                         <Separator />

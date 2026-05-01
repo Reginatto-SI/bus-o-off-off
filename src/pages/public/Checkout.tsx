@@ -1568,6 +1568,23 @@ export default function Checkout() {
                   {selectedSeats.length || quantity}
                 </span>
               </div>
+              {eventTicketTypes.length > 1 && (() => {
+                const counts = passengers.reduce<Record<string, number>>((acc, p) => {
+                  const name = p.ticket_type_name || "Padrão";
+                  acc[name] = (acc[name] ?? 0) + 1;
+                  return acc;
+                }, {});
+                const entries = Object.entries(counts);
+                if (entries.length === 0) return null;
+                return (
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Tipos</span>
+                    <span className="font-medium text-right">
+                      {entries.map(([name, qty]) => `${qty}× ${name}`).join(" · ")}
+                    </span>
+                  </div>
+                );
+              })()}
               {checkoutSummary.hasBenefitsApplied ? (
                 <>
                   {/* Regra visual: só mostramos “Subtotal com benefício” quando houver desconto real aplicado. */}
@@ -1711,6 +1728,11 @@ export default function Checkout() {
                           Assento {seatLabel} —{" "}
                           {passenger.name.trim() || "Pendente"}
                         </span>
+                        {eventTicketTypes.length > 1 && passenger.ticket_type_name && (
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {passenger.ticket_type_name}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {hasError ? (
@@ -1743,6 +1765,38 @@ export default function Checkout() {
                     </CollapsibleTrigger>
 
                     <CollapsibleContent className="px-4 pb-4 pt-2 border border-t-0 rounded-b-lg bg-card space-y-3">
+                      {eventTicketTypes.length > 1 && (
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Tipo de passagem *</Label>
+                          <Select
+                            value={passenger.ticket_type_id}
+                            onValueChange={(value) => {
+                              const selectedType = eventTicketTypes.find((item) => item.id === value);
+                              if (!selectedType) return;
+                              setPassengers((prev) => prev.map((row, rowIdx) => rowIdx === idx ? {
+                                ...row,
+                                ticket_type_id: selectedType.id,
+                                ticket_type_name: selectedType.name,
+                                ticket_type_price: selectedType.price,
+                              } : row));
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {eventTicketTypes.map((type) => (
+                                <SelectItem key={type.id} value={type.id}>
+                                  {type.name} — {formatCurrencyBRL(type.price)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Define o valor cobrado deste passageiro.
+                          </p>
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         <Label htmlFor={`name-${idx}`} className="text-sm">
                           Nome completo
@@ -1797,37 +1851,6 @@ export default function Checkout() {
                           maxLength={15}
                         />
                       </div>
-
-                      {eventTicketTypes.length > 1 && (
-                        <div className="space-y-1.5">
-                          <Label className="text-sm">Tipo de passagem</Label>
-                          <Select
-                            value={passenger.ticket_type_id}
-                            onValueChange={(value) => {
-                              const selectedType = eventTicketTypes.find((item) => item.id === value);
-                              if (!selectedType) return;
-                              setPassengers((prev) => prev.map((row, rowIdx) => rowIdx === idx ? {
-                                ...row,
-                                ticket_type_id: selectedType.id,
-                                ticket_type_name: selectedType.name,
-                                ticket_type_price: selectedType.price,
-                              } : row));
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o tipo" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {eventTicketTypes.map((type) => (
-                                <SelectItem key={type.id} value={type.id}>
-                                  {type.name} — {formatCurrencyBRL(type.price)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
                       {passengerSnapshot?.benefit_applied && (
                         <div className="rounded-md border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs space-y-1">
                           <p className="font-medium text-emerald-800">
