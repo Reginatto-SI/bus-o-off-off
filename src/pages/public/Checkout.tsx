@@ -1568,6 +1568,23 @@ export default function Checkout() {
                   {selectedSeats.length || quantity}
                 </span>
               </div>
+              {eventTicketTypes.length > 1 && (() => {
+                const counts = passengers.reduce<Record<string, number>>((acc, p) => {
+                  const name = p.ticket_type_name || "Padrão";
+                  acc[name] = (acc[name] ?? 0) + 1;
+                  return acc;
+                }, {});
+                const entries = Object.entries(counts);
+                if (entries.length === 0) return null;
+                return (
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Tipos</span>
+                    <span className="font-medium text-right">
+                      {entries.map(([name, qty]) => `${qty}× ${name}`).join(" · ")}
+                    </span>
+                  </div>
+                );
+              })()}
               {checkoutSummary.hasBenefitsApplied ? (
                 <>
                   {/* Regra visual: só mostramos “Subtotal com benefício” quando houver desconto real aplicado. */}
