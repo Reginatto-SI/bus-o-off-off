@@ -1888,7 +1888,83 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
                     {/* Simulação de cálculo compartilhada com /admin/eventos (sem card resumo extra). */}
                     {activeTab === 'manual' && passengers.length > 0 && unitPrice && (() => {
-                      const price = parseCurrencyInputBRL(unitPrice);
+                      const fallbackPrice = parseCurrencyInputBRL(unitPrice);
+                      const resolvedSubtotal = adminCheckoutSummary?.subtotalAfterBenefits
+                        ?? roundCurrency(
+                          passengers.reduce((sum, passenger) => {
+                            const passengerPrice = typeof passenger.ticketTypePrice === 'number'
+                              ? passenger.ticketTypePrice
+                              : fallbackPrice;
+                            return sum + passengerPrice;
+                          }, 0),
+                        );
+
+                      // Em venda manual com tipos diferentes não exibimos preço médio como unitário.
+                      const compositionMap = passengers.reduce((acc, passenger) => {
+                        const unitValue = typeof passenger.ticketTypePrice === 'number' ? passenger.ticketTypePrice : fallbackPrice;
+                        const roundedUnitValue = roundCurrency(unitValue);
+                        const label = passenger.ticketTypeName?.trim() || 'Tipo padrão';
+                        const key = `${label}::${roundedUnitValue}`;
+                        const current = acc.get(key) ?? { label, price: roundedUnitValue, quantity: 0 };
+                        current.quantity += 1;
+                        acc.set(key, current);
+                        return acc;
+                      }, new Map<string, { label: string; price: number; quantity: number }>());
+                      const composition = Array.from(compositionMap.values());
+                      const hasMixedTicketPrices = new Set(composition.map((item) => item.price)).size > 1;
+
+                      if (hasMixedTicketPrices) {
+                        const activeFees = eventFees.filter((fee) => fee.is_active);
+                        const totalServiceFee = roundCurrency(activeFees.reduce((sum, fee) => (
+                          sum + (fee.fee_type === 'percent'
+                            ? (resolvedSubtotal * fee.value) / 100
+                            : fee.value * passengers.length)
+                        ), 0));
+                        const totalSale = roundCurrency(resolvedSubtotal + totalServiceFee);
+                        const resolvedPlatformFee = roundCurrency(manualPlatformFeePreview ?? 0);
+                        const estimatedNet = roundCurrency(totalSale - resolvedPlatformFee);
+
+                        return (
+                          <div className="rounded-lg border bg-muted/50 p-3">
+                            <p className="text-xs text-muted-foreground mb-1">Simulação de cálculo</p>
+                            <div className="text-sm space-y-0.5">
+                              {composition.map((item) => (
+                                <div key={`${item.label}-${item.price}`} className="flex justify-between text-muted-foreground">
+                                  <span>{item.label}</span>
+                                  <span>{item.quantity} × {formatCurrencyBRL(item.price)}</span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between pt-1 border-t mt-1">
+                                <span>Subtotal</span>
+                                <span>{formatCurrencyBRL(resolvedSubtotal)}</span>
+                              </div>
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Taxa de serviço</span>
+                                <span>+ {formatCurrencyBRL(totalServiceFee)}</span>
+                              </div>
+                              <div className="flex justify-between font-medium border-t pt-1 mt-1">
+                                <span>Total da venda</span>
+                                <span>{formatCurrencyBRL(totalSale)}</span>
+                              </div>
+                              <Separator className="my-1" />
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Taxa da plataforma (motor progressivo)</span>
+                                <span>{formatCurrencyBRL(resolvedPlatformFee)}</span>
+                              </div>
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Responsável</span>
+                                <span>Organizador</span>
+                              </div>
+                              <div className="flex justify-between font-medium text-primary">
+                                <span>Líquido estimado</span>
+                                <span>{formatCurrencyBRL(estimatedNet)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const price = composition[0]?.price ?? fallbackPrice;
                       return (
                         <CalculationSimulationCard
                           basePrice={price}
