@@ -1,117 +1,95 @@
-## Diagnóstico real (após investigação no código + banco)
+## Objetivo
 
-### Estado atual no banco (multiempresa OK)
-- Tabela `services`: **1 serviço ativo** existe para a empresa (`company_id = a000…001`, `status = ativo`).
-- Tabela `event_services`: **0 registros** — confirma que o usuário **nunca conseguiu salvar nenhum vínculo**, apesar das tentativas das análises 6 e 7.
-- RLS: políticas `Admins can manage` + `Users can view` em `services` e `event_services` estão corretas e simétricas com o padrão multiempresa do projeto. **Não é problema de RLS.**
-
-### Causa raiz real (que escapou às análises 6 e 7)
-O `EventServicesTab` é renderizado **dentro** do `<form onSubmit={handleSubmit}>` do wizard de evento (linhas 2994–4576 de `Events.tsx`). A análise 7 já adicionou `type="button"` em todos os botões visíveis do `EventServicesTab` e do `ActionsDropdown`, **mas faltam dois pontos críticos**:
-
-1. **Submit implícito por `Enter` nos inputs** "Valor base" e "Capacidade total" do modal de vínculo. Apesar do `<Dialog>` usar Portal no DOM, **eventos React sintéticos sobem pela árvore de componentes React até o `<form>` pai**. Pressionar Enter dentro de qualquer `Input` do modal aciona o `onSubmit` do form do evento → executa `handleSubmit` em modo edição → exibe toast "Evento atualizado com sucesso" e fecha o dialog inteiro **antes** de o usuário conseguir clicar em "Vincular serviço".
-
-2. **Toda interação dentro do conteúdo da aba `Serviços`** (clique no `Select`, `Switch`, `SelectItem` do Radix) cria um caminho de bubbling pelo React tree. Mesmo que cada `<button>` tenha `type="button"`, qualquer evento `submit` disparado em sub-componentes (ex.: `form` interno gerado pelo Radix em algumas versões) propaga para o form pai.
-
-3. **Mensagem duplicada "Salve o evento na aba Geral para liberar Serviços"**: o toast é disparado por `handleTabChange` (linha 757). Quando o `submit` acidental fecha o dialog e o usuário reabre o evento, em alguns caminhos `editingId` ainda não foi remontado quando a aba ativa volta a "servicos", disparando o lock indevidamente.
-
-### Hipóteses validadas
-| # | Hipótese | Resultado |
-|---|---|---|
-| 1 | Serviço salvo na tabela correta? | ✅ Sim, em `services`. |
-| 2 | `company_id` igual ao `activeCompanyId`? | ✅ Sim. |
-| 3 | `status = ativo`? | ✅ Sim. |
-| 4 | Query do `EventServicesTab` correta? | ✅ Sim — filtra `company_id` + `status='ativo'`. |
-| 5 | RLS bloqueando leitura de `services`? | ❌ Não. |
-| 6 | RLS bloqueando insert/read em `event_services`? | ❌ Não. |
-| 7 | Modal está dentro do `<form>` do evento e sofre submit acidental? | ✅ **SIM — causa raiz.** |
-| 8 | Botões internos com `type="button"`? | Parcial — botões OK, mas falta isolar Enter dos `Input`s e o bubbling do submit. |
-| 9 | `Select` em modal aninhado funciona? | ✅ Sim (Radix). O problema é o bubbling do click até o form pai. |
-| 10 | `event_services` é criado? | ❌ Nunca, porque o dialog fecha antes do save. |
-| 11 | `/vendas/servicos` filtra corretamente? | ✅ Filtros estão corretos para listar vínculos ativos. |
-| 12 | Filtros escondem serviços indevidamente? | ❌ Não — análise 7 já removeu o filtro estrito de `allow_standalone_sale`. |
-| 13 | Erros no console/network? | Nenhum erro relevante (snapshot atual sem logs de service). |
-| 14 | `editingId`/`effectiveEventId`/`activeCompanyId` corretos? | ✅ Sim quando o dialog não é fechado por submit acidental. |
+Aplicar melhorias de UX/clareza no módulo **Tipos de Passagem por Evento**, sem refatorar arquitetura, sem mexer em pagamentos/Asaas e sem criar componentes novos. Foco em compactação visual, hierarquia, clareza conceitual e prevenção de erro do operador.
 
 ---
 
-## Correções mínimas a aplicar
+## 1. Tela `/admin/eventos` → guia "Passagens" (`src/pages/admin/Events.tsx`, ~linhas 3870–4030)
 
-### 1) `src/components/admin/EventServicesTab.tsx` — isolar do form pai
-- **Envolver toda a renderização do componente em um `<div>` que captura e bloqueia o `submit` propagado**: adicionar handler `onSubmitCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}` no wrapper externo. Isso impede que qualquer submit acidental gerado por sub-componentes do Radix/inputs internos chegue ao `<form>` pai do `Events.tsx`.
-- **Adicionar `onKeyDown` no wrapper interceptando `Enter`** quando o foco estiver em `INPUT` dentro do modal de vínculo: `if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); }`. Evita submit implícito do navegador.
-- Manter os `type="button"` já existentes (não regredir).
+**Problemas atuais**
 
-### 2) `src/components/admin/EventServicesTab.tsx` — robustez do Select
-- O `<Select>` do Radix usa Portal e funciona em modal aninhado. **Não mexer no Select.** Apenas a barreira do item 1 já resolve o sintoma de "modal piscando" quando o dropdown é aberto.
+- Bloco "Tipos de passagem" fica abaixo de "Preço base" + "Limite por compra", apenas como lista de inputs soltos. Usuário não percebe que **tipos** são o conceito principal.
+- Cabeçalho do card diz "Configuração da Passagem" — genérico.
+- Linhas dos tipos usam grid 12-col com inputs altos (`h-8` mas com padding generoso) e **sem header de coluna** (Nome / Preço / Status), gerando espaço desperdiçado e ambiguidade.
+- Botão "Adicionar tipo de passagem" só aparece quando há `editingId` e fica em texto pequeno acima da lista.
+- Não mostra resumo ("3 tipos • 2 ativos • R$ 80–R$ 150").
+- Estado vazio é texto cinza pequeno.
 
-### 3) `src/pages/admin/Events.tsx` — defesa em profundidade no `handleSubmit`
-- Adicionar guarda no início do `handleSubmit` (linha 1632): se `activeTab !== 'publicacao' && activeTab !== 'geral'` e o submit não veio do botão "Próximo"/"Finalizar" (detectável via `e.nativeEvent.submitter`), ignorar a submissão. Isso previne que QUALQUER submit indevido vindo de sub-componentes finalize o evento.
+**Mudanças (apenas no card "Configuração da Passagem")**
 
-  ```ts
-  const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
-  const isExplicitSubmit = submitter?.getAttribute('type') === 'submit';
-  if (!isExplicitSubmit) {
-    e.preventDefault();
-    return;
-  }
-  ```
+1. Renomear título do card para **"Passagens e Tipos"** e adicionar `CardDescription` curta: "Defina os tipos de passagem que serão vendidos neste evento (ex.: Adulto, Criança, Estudante)."
+2. **Reposicionar** o bloco "Tipos de passagem" para logo abaixo do título do card, **acima** de Preço Base / Limite. Tipos passam a ser o conteúdo principal; "Preço base" é rotulado como **"Preço base (fallback)"** com helper text reforçando que só é usado quando nenhum tipo está disponível.
+3. Adicionar **resumo inline** ao lado do label "Tipos de passagem":
+   `<Badge variant="secondary">{total} tipos · {ativos} ativos</Badge>` e, quando houver ≥1 tipo, intervalo de preço (`R$ menor – R$ maior`) em texto `text-xs text-muted-foreground`.
+4. **Botão "Adicionar tipo"** vira `size="sm" variant="default"` (não `outline`) e ganha alias mais curto: **"Novo tipo"**. Mantém na mesma linha do label.
+5. Adicionar **header de colunas** (uma linha cinza compacta `text-[11px] uppercase text-muted-foreground`):
+   `Nome | Preço | Status | Ações` — col-spans iguais aos das linhas (5/3/2/2).
+6. Reduzir padding das linhas de tipo: `p-2` → `px-2 py-1.5`, e `gap-2` mantém. Inputs já estão `h-8`. Trocar `Badge "Ativo/Inativo"` por texto curto ao lado do Switch (`text-xs`) para economizar largura — ou manter Badge mas remover label duplicado.
+7. **Estado vazio** vira um bloco com borda tracejada (`border-dashed rounded-md p-4 text-center`) + ícone `Ticket`/`Tags` + texto "Nenhum tipo cadastrado ainda" + botão "Adicionar primeiro tipo".
+8. Estado pré-save (`!editingId`): manter mensagem mas em formato `Alert` `variant="default"` discreto (sem novo componente — usa `Alert` existente do shadcn).
 
-### 4) `src/pages/admin/Events.tsx` — não remostrar mensagem de lock no render inicial
-- `getTabLockMessage('servicos')` é chamado em loop no `TabsList` (linha 3021) apenas para indicador visual (Lock icon). Está OK no render — não dispara toast. O toast só vem de `handleTabChange`. Após corrigir o submit acidental, a mensagem duplicada desaparece naturalmente porque o dialog para de fechar/reabrir.
+**O que NÃO muda**
 
-### 5) `src/pages/admin/ServiceSales.tsx` — sem mudanças funcionais
-- A query e os filtros já estão corretos após análise 7. Apenas validaremos manualmente que após criar o primeiro vínculo, o serviço aparece no dropdown.
-
-### 6) RLS / migrations
-- **Nenhuma alteração de RLS necessária**. As políticas atuais permitem leitura/escrita corretamente para admins da empresa.
-- **Nenhuma migration nova** será criada.
+- Lógica de insert/update/delete, validação "manter ao menos 1 ativo", regra de fallback, schema, RPC.
 
 ---
 
-## Fluxo manual de validação (critério de sucesso)
+## 2. Checkout público (`src/pages/public/Checkout.tsx`, ~linhas 1801–1829 e 1707–1714)
 
-1. Acessar `/admin/servicos` e confirmar que o serviço "Passeio De Buggy (Tamandaré)" está ativo.
-2. Ir para `/admin/eventos`, clicar em **Editar** em um evento existente.
-3. Abrir aba **Serviços** — não deve aparecer toast indevido.
-4. Clicar em **Vincular serviço** — modal abre.
-5. Abrir o dropdown **Serviço** — modal **não fecha**, **nenhum toast** de "Evento atualizado" aparece.
-6. Selecionar o serviço, informar valor (ex.: 150) e capacidade (ex.: 20).
-7. Pressionar Enter dentro de um Input — modal **não fecha**.
-8. Marcar "Permitir venda avulsa".
-9. Clicar em **Vincular serviço** (botão do modal) — vínculo é salvo, toast "Serviço vinculado ao evento", linha aparece na tabela.
-10. Fechar modal de evento.
-11. Acessar `/vendas/servicos`, selecionar o evento.
-12. O dropdown **Serviço** deve listar o serviço vinculado.
-13. Selecionar serviço, avançar para Quantidade e Pagamento normalmente.
+**Problemas atuais**
 
----
+- Seleção de tipo só aparece quando `eventTicketTypes.length > 1` — OK.
+- Está como `<Select>` simples no fim do accordion do passageiro. Passa despercebido (logo após "Telefone (opcional)").
+- Header do accordion mostra apenas `Assento X — Nome`. Não mostra qual tipo o passageiro tem.
+- Resumo ("Ver detalhes") não detalha tipos comprados.
 
-## Arquivos que serão alterados
+**Mudanças**
 
-1. `src/components/admin/EventServicesTab.tsx` — wrapper com `onSubmitCapture` + `onKeyDown` para barrar submit/Enter.
-2. `src/pages/admin/Events.tsx` — guarda em `handleSubmit` baseada em `e.nativeEvent.submitter`.
-3. `docs/Analises/analise-8-correcao-fluxo-servicos.md` — entregável obrigatório com diagnóstico, hipóteses, correções e checklist.
+1. **Mover** o `<Select>` "Tipo de passagem" para o **topo** do conteúdo do accordion (acima de Nome), pois é a primeira decisão comercial. Manter o mesmo `<Select>`.
+2. Reforçar o label: **"Tipo de passagem *"** + helper `text-xs text-muted-foreground`: "Define o valor cobrado deste passageiro."
+3. No header colapsado do accordion, adicionar **Badge** com o nome do tipo escolhido quando `eventTicketTypes.length > 1`:
+   `Assento {seatLabel} · {passenger.ticket_type_name} — {passenger.name || "Pendente"}`. Usar `Badge variant="outline" className="text-[10px]"` para o tipo. Não criar componente.
+4. No bloco de **Resumo expandido** (CollapsibleContent ~linha 1547), adicionar — somente quando houver mais de 1 tipo distinto comprado — uma linha "Tipos" agrupando: `2× Adulto · 1× Criança`. Calcular via `useMemo` simples sobre `passengers`.
+5. Manter validação atual; tipo padrão (primeiro ativo) já é pré-selecionado.
 
 ---
 
-## Fora de escopo (mantido conforme PRD)
+## 3. Venda manual (`src/components/admin/NewSaleModal.tsx`, ~linhas 1699–1725)
 
-- QR Code, validação de uso, consumo parcial, checkout público com serviços, relatórios novos, split/repasse, guias, horários, fornecedores, veículos específicos, nova arquitetura, entidade "agência".
+**Problemas atuais**
 
-## Restrições respeitadas
+- Select "Tipo de passagem" sempre visível com opção `__default__` "Padrão do evento" — confunde o operador (não fica claro qual o preço do "padrão").
+- Está em grid junto a Telefone, mesmo peso visual.
+- Sem feedback do preço resultante na hora.
 
-- Reuso total da entidade `companies` (sem nova entidade "agência").
-- Filtro multiempresa (`company_id`) preservado em todas as queries.
-- Sem alteração no fluxo de passagens / wizard de evento (apenas guarda defensiva no submit).
-- Sem refatoração — mudanças cirúrgicas em 2 arquivos.
-- Sem nova migration / sem alteração de RLS.
+**Mudanças**
 
-## Checklist final esperado
+1. Quando `eventTicketTypes.length === 0` → não renderizar o `<Select>` (evita ruído).
+2. Quando `eventTicketTypes.length >= 1` → remover a opção `__default__` e **pré-selecionar** o primeiro tipo automaticamente (`ticketTypeId` setado no momento de criar passageiro). Operador sempre escolhe um tipo real.
+3. Mover o select para a **primeira posição** dentro do bloco do passageiro (antes de Nome), com label `Tipo de passagem *` em destaque.
+4. Adicionar abaixo do select um helper inline com o preço efetivo: `text-[11px] text-muted-foreground` mostrando `Preço base do tipo: R$ XX,XX` (lê de `ticketTypePrice`).
+5. Manter override manual de preço onde já existe (não tocar nessa lógica).
 
-- [ ] Serviço cadastrado aparece no dropdown de vínculo do evento.
-- [ ] Vínculo é salvo em `event_services`.
-- [ ] Modal não fecha ao clicar no dropdown ou pressionar Enter.
-- [ ] Evento não é salvo indevidamente ao interagir com a aba Serviços.
-- [ ] Não aparecem mensagens duplicadas de "Salve o evento".
-- [ ] Serviço vinculado aparece em `/vendas/servicos` após selecionar o evento.
-- [ ] Documento `analise-8-correcao-fluxo-servicos.md` criado.
+---
+
+## 4. Consistência e regras
+
+- Reutilizar somente `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `Badge`, `Button`, `Input`, `Switch`, `Select`, `Alert` — todos já presentes.
+- Nenhuma migração SQL. Nenhuma mudança em edge functions. Nenhum impacto em snapshot/Asaas/RLS.
+- Manter precedência atual: tipo > categoria > preço base.
+- Manter regra "≥1 tipo ativo" e mensagens de erro existentes.
+
+---
+
+## Arquivos a editar
+
+1. `src/pages/admin/Events.tsx` — reorganizar card "Configuração da Passagem" (linhas ~3872–4030).
+2. `src/pages/public/Checkout.tsx` — reposicionar select de tipo no accordion, badge no header, linha de resumo (linhas ~1547–1610 e ~1690–1830).
+3. `src/components/admin/NewSaleModal.tsx` — pré-selecionar tipo, remover `__default__`, mover select para topo, adicionar helper de preço (linhas ~614–624 e ~1699–1725).
+
+## Validação manual após implementação
+
+1. `/admin/eventos` → editar evento: card "Passagens e Tipos" mostra resumo, header de colunas, novo tipo entra com 1 clique, estado vazio dá CTA claro.
+2. Checkout com 2+ tipos: select aparece no topo do passageiro, badge do tipo aparece no header colapsado, resumo lista quantidade por tipo.
+3. Venda manual com 2 tipos: passageiro nasce já com tipo selecionado (não `__default__`), preço do tipo aparece como helper.
+4. Conferir que venda real (checkout + manual) ainda persiste `ticket_type_*` em `sale_passengers`/`tickets` igual a hoje.

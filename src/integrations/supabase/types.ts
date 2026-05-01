@@ -1213,6 +1213,57 @@ export type Database = {
           },
         ]
       }
+      event_ticket_types: {
+        Row: {
+          company_id: string
+          created_at: string
+          event_id: string
+          id: string
+          is_active: boolean
+          name: string
+          price: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          price?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          price?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_ticket_types_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_ticket_types_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           allow_online_sale: boolean
@@ -1719,6 +1770,9 @@ export type Database = {
           seat_id: string | null
           seat_label: string
           sort_order: number
+          ticket_type_id: string | null
+          ticket_type_name: string | null
+          ticket_type_price: number | null
           trip_id: string
         }
         Insert: {
@@ -1741,6 +1795,9 @@ export type Database = {
           seat_id?: string | null
           seat_label: string
           sort_order?: number
+          ticket_type_id?: string | null
+          ticket_type_name?: string | null
+          ticket_type_price?: number | null
           trip_id: string
         }
         Update: {
@@ -1763,6 +1820,9 @@ export type Database = {
           seat_id?: string | null
           seat_label?: string
           sort_order?: number
+          ticket_type_id?: string | null
+          ticket_type_name?: string | null
+          ticket_type_price?: number | null
           trip_id?: string
         }
         Relationships: [
@@ -2773,6 +2833,9 @@ export type Database = {
           seat_id: string | null
           seat_label: string
           ticket_number: string | null
+          ticket_type_id: string | null
+          ticket_type_name: string | null
+          ticket_type_price: number | null
           trip_id: string
           updated_at: string
         }
@@ -2798,6 +2861,9 @@ export type Database = {
           seat_id?: string | null
           seat_label: string
           ticket_number?: string | null
+          ticket_type_id?: string | null
+          ticket_type_name?: string | null
+          ticket_type_price?: number | null
           trip_id: string
           updated_at?: string
         }
@@ -2823,6 +2889,9 @@ export type Database = {
           seat_id?: string | null
           seat_label?: string
           ticket_number?: string | null
+          ticket_type_id?: string | null
+          ticket_type_name?: string | null
+          ticket_type_price?: number | null
           trip_id?: string
           updated_at?: string
         }
