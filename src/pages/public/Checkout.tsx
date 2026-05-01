@@ -1743,6 +1743,38 @@ export default function Checkout() {
                     </CollapsibleTrigger>
 
                     <CollapsibleContent className="px-4 pb-4 pt-2 border border-t-0 rounded-b-lg bg-card space-y-3">
+                      {eventTicketTypes.length > 1 && (
+                        <div className="space-y-1.5">
+                          <Label className="text-sm font-medium">Tipo de passagem *</Label>
+                          <Select
+                            value={passenger.ticket_type_id}
+                            onValueChange={(value) => {
+                              const selectedType = eventTicketTypes.find((item) => item.id === value);
+                              if (!selectedType) return;
+                              setPassengers((prev) => prev.map((row, rowIdx) => rowIdx === idx ? {
+                                ...row,
+                                ticket_type_id: selectedType.id,
+                                ticket_type_name: selectedType.name,
+                                ticket_type_price: selectedType.price,
+                              } : row));
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {eventTicketTypes.map((type) => (
+                                <SelectItem key={type.id} value={type.id}>
+                                  {type.name} — {formatCurrencyBRL(type.price)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Define o valor cobrado deste passageiro.
+                          </p>
+                        </div>
+                      )}
                       <div className="space-y-1.5">
                         <Label htmlFor={`name-${idx}`} className="text-sm">
                           Nome completo
