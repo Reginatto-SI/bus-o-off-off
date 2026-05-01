@@ -47,6 +47,8 @@ import {
   ChevronsUpDown,
   ExternalLink,
   Check,
+  ShieldBan,
+  Sparkles,
   Clock3,
   MapPin,
 } from 'lucide-react';
@@ -1210,7 +1212,19 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
         <DialogHeader className="admin-modal__header px-6 py-4">
-          <DialogTitle>{step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}</DialogTitle>
+          {/* Ajuste fino de alinhamento: título e subtítulo compartilham a mesma coluna visual sem padding manual. */}
+          <div className="flex flex-col gap-1">
+            <DialogTitle className="flex items-center gap-2">
+              {step < 4 && <Sparkles className="h-4 w-4 text-primary/80" />}
+              {step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}
+            </DialogTitle>
+            {/* Melhoria visual orientativa: mantém o mesmo fluxo, mas deixa o objetivo do modal explícito. */}
+            {step < 4 && (
+              <p className="text-sm text-muted-foreground">
+                Registre uma venda, reserva ou bloqueio de assento
+              </p>
+            )}
+          </div>
         </DialogHeader>
 
         {step === 4 && confirmationData ? (
@@ -1253,34 +1267,81 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         ) : (
           // ── Steps 1-3: Wizard ──
           <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
-            <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-              <TabsTrigger value="manual">Venda Manual</TabsTrigger>
-              <TabsTrigger value="reserva" disabled={!manualReservationPolicy.allowManualReservations}>Reserva</TabsTrigger>
-              <TabsTrigger value="bloqueio">Bloquear Poltrona</TabsTrigger>
+            <TabsList className="admin-modal__tabs grid h-auto w-full grid-cols-1 gap-2 bg-transparent px-6 py-3 sm:grid-cols-3">
+              {/* Reuso de TabsTrigger existente para evitar novo componente e preservar acessibilidade/teclado. */}
+              <TabsTrigger
+                value="manual"
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+              >
+                <div className="flex w-full items-start gap-3">
+                  <Bus className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold leading-5">Venda Manual</p>
+                    <p className="text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
+                  </div>
+                  <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
+                </div>
+              </TabsTrigger>
+              <TabsTrigger
+                value="reserva"
+                disabled={!manualReservationPolicy.allowManualReservations}
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+              >
+                <div className="flex w-full items-start gap-3">
+                  <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold leading-5">Reserva</p>
+                    <p className="text-xs leading-4 text-muted-foreground">Garanta o assento sem cobrar agora</p>
+                  </div>
+                  <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
+                </div>
+              </TabsTrigger>
+              <TabsTrigger
+                value="bloqueio"
+                className="group relative h-auto items-start justify-start rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-all duration-150 hover:border-primary/40 hover:bg-primary/5 data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:shadow-sm"
+              >
+                <div className="flex w-full items-start gap-3">
+                  <ShieldBan className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold leading-5">Bloquear Poltrona</p>
+                    <p className="text-xs leading-4 text-muted-foreground">Bloqueie assentos manualmente</p>
+                  </div>
+                  <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
+                </div>
+              </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 px-6 py-4">
+            <ScrollArea className="flex-1 px-6 py-3">
               {/* Step indicators */}
-              <div className="mb-5 rounded-xl border bg-muted/20 px-4 py-3">
+              <div className="mb-4 rounded-xl border bg-muted/20 px-4 py-3">
                 <div className="flex items-center gap-2">
                   {stepMeta.map((item, index) => {
                     const isCompleted = item.value < step;
                     const isActive = item.value === step;
                     return (
-                      <div key={item.value} className="flex flex-1 items-center gap-2">
+                      <div key={item.value} className="flex min-w-0 flex-1 items-center gap-2">
                         <div
-                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 ${
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 ${
                             isActive
-                              ? 'border-primary bg-primary/10 text-primary'
+                              ? 'text-primary'
                               : isCompleted
-                              ? 'border-primary/30 bg-primary/5 text-primary'
-                              : 'border-border bg-background text-muted-foreground'
+                              ? 'text-primary'
+                              : 'text-muted-foreground'
                           }`}
                         >
-                          {isCompleted ? <CircleCheck className="h-4 w-4" /> : <item.Icon className="h-4 w-4" />}
-                          <span className="text-sm font-medium">{item.label}</span>
+                          {/* Stepper visual com progresso explícito (número, check e estado), sem trocar regras de step. */}
+                          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                            isActive
+                              ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                              : isCompleted
+                              ? 'border-primary/50 bg-primary/15 text-primary'
+                              : 'border-border bg-background text-muted-foreground'
+                          }`}>
+                            {isCompleted ? <CircleCheck className="h-3.5 w-3.5" /> : item.value}
+                          </div>
+                          <span className="truncate text-xs font-medium">{item.label}</span>
                         </div>
-                        {index < stepMeta.length - 1 && <div className="h-px w-4 bg-border" />}
+                        {index < stepMeta.length - 1 && <div className="h-[2px] w-7 rounded-full bg-border/80" />}
                       </div>
                     );
                   })}
@@ -1820,7 +1881,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
         {/* Footer navigation (steps 1-3 only) */}
         {step < 4 && (
-          <DialogFooter className="px-6 py-4 border-t flex-row justify-between">
+          <DialogFooter className="border-t px-6 py-3 flex-row justify-between">
             <div>
               {step > 1 && (
                 <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
@@ -1838,13 +1899,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   }}
                   disabled={step === 1 ? !canGoStep2 : !canGoStep3}
                 >
-                  Continuar para assentos <ChevronRight className="h-4 w-4 ml-1" />
+                  {step === 1 ? 'Escolher assentos' : 'Ir para pagamento'} <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
               {step === 3 && (
                 <Button onClick={handleConfirm} disabled={!canConfirm}>
                   {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  Confirmar
+                  Confirmar venda
                 </Button>
               )}
             </div>
