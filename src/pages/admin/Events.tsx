@@ -100,7 +100,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CardHeader, CardTitle } from '@/components/ui/card';
+import { CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
