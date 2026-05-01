@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Command,
   CommandEmpty,
@@ -1276,9 +1277,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 <div className="flex w-full items-start gap-3">
                   <Bus className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
-                    {/* Ajuste fino de densidade: título menos pesado + descrição truncada para evitar quebra visual. */}
+                    {/* Ajuste fino de densidade: título menos pesado + descrição truncada; tooltip preserva leitura completa. */}
                     <p className="text-sm font-semibold leading-5">Venda Manual</p>
-                    <p className="truncate text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="truncate text-xs leading-4 text-muted-foreground">Venda imediata com pagamento</p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Venda imediata com pagamento</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
@@ -1292,7 +1302,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   <Clock3 className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold leading-5">Reserva</p>
-                    <p className="truncate text-xs leading-4 text-muted-foreground">Garanta o assento sem cobrar agora</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="truncate text-xs leading-4 text-muted-foreground">Garanta o assento sem cobrar agora</p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Garanta o assento sem cobrar agora</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
@@ -1305,7 +1324,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                   <ShieldBan className="mt-0.5 h-4 w-4 text-muted-foreground group-data-[state=active]:text-primary" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold leading-5">Bloquear Poltrona</p>
-                    <p className="truncate text-xs leading-4 text-muted-foreground">Bloqueie assentos manualmente</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className="truncate text-xs leading-4 text-muted-foreground">Bloqueie assentos manualmente</p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Bloqueie assentos manualmente</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <CheckCircle2 className="ml-auto h-4 w-4 text-primary opacity-0 group-data-[state=active]:opacity-100" />
                 </div>
