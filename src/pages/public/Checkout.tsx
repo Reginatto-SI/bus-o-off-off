@@ -264,16 +264,23 @@ export default function Checkout() {
     }
 
     const selectedCount = selectedSeats.length;
-    const originalSeatsTotal = usesCategoryPricing
-      ? selectedSeats.reduce((sum, seatId) => {
-          const seat = seats.find((s) => s.id === seatId);
-          const catPrice = categoryPrices.find(
-            (cp) => cp.category === seat?.category,
-          );
-          const seatPrice = catPrice?.price ?? event.unit_price ?? 0;
-          return sum + seatPrice;
-        }, 0)
-      : (event.unit_price ?? 0) * selectedCount;
+    const hasPassengerTicketTypesSelected =
+      passengers.length === selectedCount && selectedCount > 0;
+    const originalSeatsTotal = hasPassengerTicketTypesSelected
+      ? passengers.reduce(
+          (sum, passenger) => sum + Number(passenger.ticket_type_price ?? 0),
+          0,
+        )
+      : usesCategoryPricing
+        ? selectedSeats.reduce((sum, seatId) => {
+            const seat = seats.find((s) => s.id === seatId);
+            const catPrice = categoryPrices.find(
+              (cp) => cp.category === seat?.category,
+            );
+            const seatPrice = catPrice?.price ?? event.unit_price ?? 0;
+            return sum + seatPrice;
+          }, 0)
+        : (event.unit_price ?? 0) * selectedCount;
 
     const hasResolvedBenefitSnapshot =
       passengerBenefitSnapshots.length === selectedCount &&
@@ -348,6 +355,7 @@ export default function Checkout() {
   }, [
     event,
     selectedSeats,
+    passengers,
     usesCategoryPricing,
     eventFees,
     seats,
@@ -1773,6 +1781,14 @@ export default function Checkout() {
                             onValueChange={(value) => {
                               const selectedType = eventTicketTypes.find((item) => item.id === value);
                               if (!selectedType) return;
+                              // Ajuste de reatividade: mudança de tipo precisa refletir no total imediatamente
+                              // e invalida snapshot anterior para evitar usar benefício calculado com preço antigo.
+                              setPassengerBenefitSnapshots((prev) => {
+                                if (!prev[idx]) return prev;
+                                const next = [...prev];
+                                next[idx] = null;
+                                return next;
+                              });
                               setPassengers((prev) => prev.map((row, rowIdx) => rowIdx === idx ? {
                                 ...row,
                                 ticket_type_id: selectedType.id,
