@@ -194,6 +194,7 @@ export default function Checkout() {
     productionReady: boolean;
     sandboxReady: boolean;
   } | null>(null);
+  const [companyPlatformFeePercent, setCompanyPlatformFeePercent] = useState(0);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
@@ -211,6 +212,8 @@ export default function Checkout() {
       : runtimePaymentEnvironment === "sandbox"
         ? Boolean(companyPixStatus?.sandboxReady)
         : false;
+  const hasConfiguredPlatformFee =
+    Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
 
   // Helper: get price for a seat based on category pricing
   const getSeatPrice = (seatId: string): number => {
@@ -304,7 +307,9 @@ export default function Checkout() {
       : (event.unit_price ?? 0);
 
     const breakdown = calculateFees(avgUnitPrice, eventFees, {
-      passToCustomer: event.pass_platform_fee_to_customer,
+      // Empresa piloto/isenta não recebe linha de taxa progressiva no checkout.
+      // O backend replica a mesma trava antes de montar o split Asaas.
+      passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee,
     });
 
     const totalFees = roundCurrency(breakdown.totalFees * selectedCount);
@@ -358,6 +363,7 @@ export default function Checkout() {
     passengers,
     usesCategoryPricing,
     eventFees,
+    hasConfiguredPlatformFee,
     seats,
     categoryPrices,
     passengerBenefitSnapshots,
@@ -498,6 +504,7 @@ export default function Checkout() {
             navigate(`/eventos/${id}`);
             return;
           }
+          setCompanyPlatformFeePercent(Number(companyData.platform_fee_percent ?? 0));
           setCompanyPixStatus({
             productionReady: Boolean(companyData.asaas_pix_ready_production),
             sandboxReady: Boolean(companyData.asaas_pix_ready_sandbox),
@@ -927,7 +934,8 @@ export default function Checkout() {
     const avgFinalPrice =
       passengerCount > 0 ? subtotalAfterBenefits / passengerCount : 0;
     const feeBreakdown = calculateFees(avgFinalPrice, eventFees, {
-      passToCustomer: event.pass_platform_fee_to_customer,
+      // Mantém o snapshot da venda coerente com empresas isentas de comissão.
+      passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee,
     });
     const totalFees = roundCurrency(feeBreakdown.totalFees * passengerCount);
     const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);

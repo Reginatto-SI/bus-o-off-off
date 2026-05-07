@@ -563,6 +563,7 @@ serve(async (req) => {
     });
 
     const platformFeePercent = Number(company.platform_fee_percent ?? 0);
+    const hasConfiguredPlatformFee = Number.isFinite(platformFeePercent) && platformFeePercent > 0;
     if (platformFeePercent < 0) {
       return jsonResponse(
         {
@@ -654,7 +655,25 @@ serve(async (req) => {
     const passengerUnitPrices = passengerSnapshots
       .filter((passenger) => passenger.trip_id === sale.trip_id)
       .map((passenger) => roundCurrency(Number(passenger.final_price ?? 0)));
-    const platformFeeEngine = computeProgressiveFeeForPassengers(passengerUnitPrices);
+    const computedPlatformFeeEngine = computeProgressiveFeeForPassengers(passengerUnitPrices);
+    // Empresas piloto/isentas (Taxa da Plataforma (%) zero em /admin/empresa) não
+    // podem gerar comissão/split da plataforma no Asaas, mesmo que o evento esteja
+    // configurado para repassar taxa ao cliente. Mantemos o motor progressivo apenas
+    // para empresas com comissão configurada maior que zero.
+    const platformFeeEngine = hasConfiguredPlatformFee
+      ? computedPlatformFeeEngine
+      : {
+        ...computedPlatformFeeEngine,
+        passengerBreakdown: computedPlatformFeeEngine.passengerBreakdown.map((item) => ({
+          ...item,
+          uncappedFee: 0,
+          cappedFee: 0,
+          capApplied: false,
+        })),
+        totalFee: 0,
+        totalUncappedFee: 0,
+        capHits: 0,
+      };
     const avgFinalPrice = quantityFromSnapshot > 0
       ? roundCurrency(passengerFinalSum / quantityFromSnapshot)
       : 0;
