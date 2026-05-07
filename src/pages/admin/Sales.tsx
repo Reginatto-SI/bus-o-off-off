@@ -373,6 +373,8 @@ export default function Sales() {
   const location = useLocation();
   const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
+  const activeCompanyPlatformFeePercent = Number(activeCompany?.platform_fee_percent ?? 0);
+  const hasConfiguredPlatformFee = Number.isFinite(activeCompanyPlatformFeePercent) && activeCompanyPlatformFeePercent > 0;
   const [totalSalesCount, setTotalSalesCount] = useState(0);
   const [events, setEvents] = useState<SalesEventFilterOption[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
@@ -1259,9 +1261,9 @@ export default function Sales() {
   const handleChangeStatus = async (sale: Sale, newStatus: SaleStatus) => {
     if (!user || !activeCompanyId) return;
 
-    // Bloqueio frontend: reforça regra oficial — reservado só vira pago após confirmação da taxa.
-    // Fluxos com platform_fee_status='waived' não são pagamento confirmado e não promovem para 'pago'.
-    if (newStatus === 'pago') {
+    // Bloqueio frontend: empresas com taxa > 0 só viram pago após confirmação da taxa.
+    // Empresas isentas (taxa zero/null/vazia) não devem ser bloqueadas por pendência legada.
+    if (newStatus === 'pago' && hasConfiguredPlatformFee) {
       const feeStatus = (sale as any).platform_fee_status;
       if (feeStatus && feeStatus !== 'paid' && feeStatus !== 'not_applicable') {
         toast.error('Não é possível marcar como pago: taxa da plataforma não está confirmada como paga.');
@@ -1283,6 +1285,12 @@ export default function Sales() {
     }
     if (newStatus === 'pago') {
       updatePayload.reservation_expires_at = null;
+      if (!hasConfiguredPlatformFee) {
+        // Empresa isenta: normalizamos registros manuais legados para não deixar
+        // o trigger tratar taxa zero como pendência de cobrança.
+        updatePayload.platform_fee_status = 'not_applicable';
+        updatePayload.platform_fee_amount = 0;
+      }
     }
 
     const { error } = await supabase
@@ -1521,7 +1529,10 @@ export default function Sales() {
   const getSaleActions = (sale: Sale): ActionItem[] => {
     const isBlock = sale.status === 'bloqueado';
     const feeStatus = (sale as any).platform_fee_status;
-    const feePending = feeStatus === 'pending' || feeStatus === 'failed';
+    // Empresas com Taxa da Plataforma (%) zero/null/vazia em /admin/empresa são isentas:
+    // não exibimos ações de cobrança. Empresas com taxa > 0 continuam sujeitas à taxa mínima.
+    const feePending = hasConfiguredPlatformFee && (feeStatus === 'pending' || feeStatus === 'failed');
+    const platformFeeSatisfied = !hasConfiguredPlatformFee || feeStatus === 'paid' || feeStatus === 'not_applicable';
 
     const actions: ActionItem[] = [
       { label: 'Ver Detalhes', icon: Eye, onClick: () => openDetail(sale) },
@@ -1575,7 +1586,7 @@ export default function Sales() {
       // - pending com cobrança: "Consultar taxa"
       // - paid: "Ver taxa paga"
       // - failed: "Consultar/Reprocessar taxa"
-      if (feeStatus === 'pending' && !hasPlatformFeePaymentId) {
+      if (hasConfiguredPlatformFee && feeStatus === 'pending' && !hasPlatformFeePaymentId) {
         actions.push({
           label: `Gerar taxa (${formatCurrencyBRL((sale as any).platform_fee_amount ?? 0)})`,
           icon: CreditCard,
@@ -1583,7 +1594,7 @@ export default function Sales() {
         });
       }
 
-      if (feeStatus === 'pending' && hasPlatformFeePaymentId) {
+      if (hasConfiguredPlatformFee && feeStatus === 'pending' && hasPlatformFeePaymentId) {
         actions.push({
           label: 'Consultar taxa',
           icon: RefreshCw,
@@ -1591,7 +1602,7 @@ export default function Sales() {
         });
       }
 
-      if (feeStatus === 'paid') {
+      if (hasConfiguredPlatformFee && feeStatus === 'paid') {
         actions.push({
           label: 'Ver taxa paga',
           icon: Eye,
@@ -1599,7 +1610,7 @@ export default function Sales() {
         });
       }
 
-      if (feeStatus === 'failed') {
+      if (hasConfiguredPlatformFee && feeStatus === 'failed') {
         actions.push({
           label: 'Reprocessar taxa',
           icon: RefreshCw,
@@ -1607,7 +1618,7 @@ export default function Sales() {
         });
       }
 
-      if (sale.status === 'reservado' && (feeStatus === 'paid' || feeStatus === 'not_applicable')) {
+      if (sale.status === 'reservado' && platformFeeSatisfied) {
         actions.push({
           label: 'Marcar como Pago',
           icon: CheckCircle,
@@ -2067,7 +2078,7 @@ export default function Sales() {
                                 </Tooltip>
                               </>
                             )}
-                            {(sale as any).platform_fee_status === 'pending' && (
+                            {hasConfiguredPlatformFee && (sale as any).platform_fee_status === 'pending' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground cursor-help">
@@ -2080,7 +2091,7 @@ export default function Sales() {
                                 </TooltipContent>
                               </Tooltip>
                             )}
-                            {(sale as any).platform_fee_status === 'failed' && (
+                            {hasConfiguredPlatformFee && (sale as any).platform_fee_status === 'failed' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive cursor-help">

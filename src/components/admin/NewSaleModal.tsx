@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, calculatePlatformFee, type EventFeeInput } from '@/lib/feeCalculator';
@@ -208,7 +208,7 @@ type CreatedSaleSummary = {
 };
 
 export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSaleModalProps) {
-  const { activeCompanyId, user, isGerente } = useAuth();
+  const { activeCompanyId, activeCompany, user, isGerente } = useAuth();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<SaleTab>('manual');
@@ -687,18 +687,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     };
   }, [activeTab, unitPrice, passengers.length, eventFees]);
 
-  const calculateManualPlatformFeeFromSnapshots = (snapshots: PassengerBenefitSnapshot[]): number => {
+  const companyPlatformFeePercent = Number((company ?? activeCompany)?.platform_fee_percent ?? 0);
+  const hasConfiguredPlatformFee = Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
+
+  const calculateManualPlatformFeeFromSnapshots = useCallback((snapshots: PassengerBenefitSnapshot[]): number => {
+    // Empresas piloto/isentas podem vender normalmente pelo Asaas, mas não geram
+    // cobrança/split da plataforma. A taxa mínima só existe para empresas com
+    // Taxa da Plataforma (%) maior que zero em /admin/empresa.
+    if (!hasConfiguredPlatformFee) return 0;
+
     // Função única de cálculo para manter o preview e o submit usando exatamente
     // a mesma regra progressiva por passageiro (evita divergência entre UI e validação).
     const progressiveFee = roundCurrency(
       snapshots.reduce((sum, snapshot) => sum + calculatePlatformFee(snapshot.final_price), 0),
     );
-    // Regra de produto: taxa da plataforma em venda manual possui piso obrigatório de R$ 5,00.
-    // Se o cálculo progressivo ficar abaixo do piso, elevamos para o mínimo em vez de bloquear a venda.
+    // Regra de produto: taxa da plataforma em venda manual possui piso obrigatório de R$ 5,00
+    // apenas quando a empresa tem comissão configurada maior que zero.
     return progressiveFee > 0
       ? Math.max(progressiveFee, ASAAS_MIN_PLATFORM_FEE_AMOUNT)
       : 0;
-  };
+  }, [hasConfiguredPlatformFee]);
 
   const manualPlatformFeePreview = useMemo(() => {
     if (activeTab !== 'manual') return null;
@@ -716,11 +724,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     const pricePerTicket = parseCurrencyInputBRL(unitPrice);
     if (isNaN(pricePerTicket) || pricePerTicket < 0) return null;
 
+    // Empresa com taxa zero/null/vazia é isenta: não aplicamos o piso de R$ 5,00.
+    if (!hasConfiguredPlatformFee) return 0;
+
     const progressiveFallback = roundCurrency(calculatePlatformFee(pricePerTicket) * passengers.length);
     return progressiveFallback > 0
       ? Math.max(progressiveFallback, ASAAS_MIN_PLATFORM_FEE_AMOUNT)
       : 0;
-  }, [activeTab, passengerBenefitSnapshots, unitPrice, passengers.length]);
+  }, [activeTab, passengerBenefitSnapshots, unitPrice, passengers.length, hasConfiguredPlatformFee, calculateManualPlatformFeeFromSnapshots]);
 
   const getPassengerBasePrice = (seatId: string, basePrice: number, usesCatPricing: boolean) => {
     if (!usesCatPricing) return roundCurrency(basePrice);
@@ -1971,7 +1982,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                           fees={eventFees}
                           quantity={passengers.length}
                           showSaleTotals
-                          platformFeeAmountOverride={manualPlatformFeePreview ?? undefined}
+                          platformFeeAmountOverride={hasConfiguredPlatformFee ? (manualPlatformFeePreview ?? undefined) : undefined}
                           platformFeeLabelOverride="Taxa da plataforma (motor progressivo)"
                           passPlatformFeeToCustomer={false}
                         />

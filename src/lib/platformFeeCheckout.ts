@@ -51,7 +51,7 @@ export async function startPlatformFeeCheckout({
     }
 
     if (data?.waived) {
-      toast.success('Taxa da plataforma dispensada explicitamente (valor abaixo do mínimo do gateway). A venda permanece reservada até quitação válida.');
+      toast.success(data?.message || 'Taxa da plataforma dispensada para esta venda.');
       await onWaived?.();
       return { status: 'waived' };
     }

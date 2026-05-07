@@ -173,6 +173,46 @@ serve(async (req) => {
       );
     }
 
+    const { data: companyFeeConfig } = await supabaseAdmin
+      .from("companies")
+      .select("platform_fee_percent")
+      .eq("id", sale.company_id)
+      .single();
+
+    const platformFeePercent = Number(companyFeeConfig?.platform_fee_percent ?? 0);
+    const hasConfiguredPlatformFee = Number.isFinite(platformFeePercent) && platformFeePercent > 0;
+
+    if (!hasConfiguredPlatformFee) {
+      // Empresas piloto/isentas podem vender normalmente pelo Asaas, mas não geram
+      // cobrança/split da plataforma. A taxa mínima de R$ 5,00 só é aplicada quando
+      // a Taxa da Plataforma (%) em /admin/empresa é maior que zero.
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          platform_fee_amount: 0,
+          platform_fee_status: "not_applicable",
+          platform_fee_payment_id: null,
+        })
+        .eq("id", sale.id)
+        .in("platform_fee_status", ["pending", "failed"]);
+
+      await supabaseAdmin.from("sale_logs").insert({
+        sale_id: sale.id,
+        action: "platform_fee_skipped_zero_percent",
+        description: "Taxa da plataforma não gerada: empresa configurada com Taxa da Plataforma (%) zero/isenta.",
+        company_id: sale.company_id,
+      });
+
+      return new Response(
+        JSON.stringify({
+          waived: true,
+          waived_reason: "company_platform_fee_zero",
+          message: "Taxa da plataforma não aplicável para empresa com comissão zero.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const originalFeeAmount = Number(sale.platform_fee_amount);
     if (!originalFeeAmount || originalFeeAmount <= 0) {
       return new Response(
@@ -181,7 +221,8 @@ serve(async (req) => {
       );
     }
 
-    // Regra oficial: taxa da plataforma manual possui piso obrigatório de R$ 5,00.
+    // Regra oficial: taxa da plataforma manual possui piso obrigatório de R$ 5,00
+    // somente para empresas com Taxa da Plataforma (%) maior que zero.
     // Mantemos defesa no backend para corrigir registros legados/chamadas indiretas.
     const ASAAS_MIN_CHARGE = 5.0;
     const feeAmount = originalFeeAmount < ASAAS_MIN_CHARGE
