@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,6 +38,7 @@ import {
   Calendar,
   Building2,
   CreditCard,
+  Check,
   CheckCircle,
   XCircle,
   Clock,
@@ -48,6 +51,7 @@ import {
   RefreshCw,
   ExternalLink,
   ChevronDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
@@ -62,6 +66,7 @@ import { useNavigate } from 'react-router-dom';
 // ── Types ──
 interface DiagnosticFilters {
   search: string;
+  companyId: string;
   status: 'all' | SaleStatus;
   eventId: string;
   gateway: string;
@@ -72,6 +77,7 @@ interface DiagnosticFilters {
 
 const initialFilters: DiagnosticFilters = {
   search: '',
+  companyId: 'all',
   status: 'all',
   eventId: 'all',
   gateway: 'all',
@@ -1139,7 +1145,7 @@ function buildTimeline(sale: DiagnosticSale, logs: SaleLog[]): TimelineEntry[] {
 // ── Component ──
 export default function SalesDiagnostic() {
   const navigate = useNavigate();
-  const { activeCompanyId, activeCompany } = useAuth();
+  const { activeCompanyId, activeCompany, userCompanies, isDeveloper } = useAuth();
   const {
     environment: runtimePaymentEnvironment,
     isReady: isRuntimePaymentEnvironmentReady,
@@ -1147,6 +1153,7 @@ export default function SalesDiagnostic() {
   const [sales, setSales] = useState<DiagnosticSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<DiagnosticFilters>(initialFilters);
+  const [companyFilterOpen, setCompanyFilterOpen] = useState(false);
   const [events, setEvents] = useState<{ id: string; name: string; date: string }[]>([]);
   const [availableGateways, setAvailableGateways] = useState<string[]>([]);
   const [isCompanyScopeRefreshing, setIsCompanyScopeRefreshing] = useState(false);
@@ -1223,15 +1230,46 @@ export default function SalesDiagnostic() {
     };
   }, [detailCompany, detailSale?.payment_environment]);
 
+  const allowedCompanyIds = useMemo(() => userCompanies.map((company) => company.id), [userCompanies]);
+
+  const selectedDiagnosticCompanyId = useMemo(() => {
+    if (!isDeveloper) return activeCompanyId;
+    return filters.companyId === 'all' ? null : filters.companyId;
+  }, [activeCompanyId, filters.companyId, isDeveloper]);
+
+  const selectedDiagnosticCompanyName = useMemo(() => {
+    if (isDeveloper && filters.companyId === 'all') return 'Todas as empresas';
+
+    const companyId = selectedDiagnosticCompanyId;
+    if (!companyId) return activeCompany?.name ?? 'empresa permitida';
+
+    return userCompanies.find((company) => company.id === companyId)?.name
+      ?? activeCompany?.name
+      ?? 'empresa permitida';
+  }, [activeCompany?.name, filters.companyId, isDeveloper, selectedDiagnosticCompanyId, userCompanies]);
+
+  const isGlobalDiagnosticMode = isDeveloper && !selectedDiagnosticCompanyId;
+
+  const resetFilters = useCallback(() => {
+    setFilters({
+      ...initialFilters,
+      // Usuários developer podem operar a tela em modo global; usuários comuns voltam ao company_id permitido.
+      companyId: isDeveloper ? 'all' : (activeCompanyId ?? 'all'),
+    });
+    setQuickFocusFilter('todos');
+  }, [activeCompanyId, isDeveloper]);
+
   const hasActiveFilters = useMemo(() => (
     filters.search !== '' ||
+    (isDeveloper && filters.companyId !== 'all') ||
+    (!isDeveloper && activeCompanyId !== null && filters.companyId !== activeCompanyId) ||
     filters.status !== 'all' ||
     filters.eventId !== 'all' ||
     filters.gateway !== 'all' ||
     filters.paymentStatus !== 'all' ||
     filters.dateFrom !== '' ||
     filters.dateTo !== ''
-  ), [filters]);
+  ), [activeCompanyId, filters, isDeveloper]);
 
   const salesWithOperationalView = useMemo(() => {
     return sales
@@ -1545,7 +1583,7 @@ export default function SalesDiagnostic() {
         saleId: saleId ?? null,
         externalReference: lastRelatedLog?.external_reference ?? externalReference ?? relatedSale?.external_reference ?? null,
         asaasPaymentId: lastRelatedLog?.payment_id ?? asaasPaymentId ?? relatedSale?.asaas_payment_id ?? null,
-        companyId: lastRelatedLog?.company_id ?? relatedSale?.company_id ?? activeCompanyId ?? null,
+        companyId: lastRelatedLog?.company_id ?? relatedSale?.company_id ?? technicalDiagnosticSnapshot?.companyId ?? null,
         paymentEnvironment: (lastRelatedLog?.payment_environment ?? paymentEnvironment ?? relatedSale?.payment_environment ?? technicalDiagnosticSnapshot?.paymentEnvironment ?? null) as "production" | "sandbox" | null,
         saleStatus: relatedSale?.status ?? null,
         gatewayStatus: relatedSale?.asaas_payment_status ?? null,
@@ -1743,7 +1781,7 @@ export default function SalesDiagnostic() {
         const bAt = b.lastDetectedAt ? new Date(b.lastDetectedAt).getTime() : 0;
         return bAt - aAt;
       });
-  }, [activeCompanyId, technicalDiagnosticDedupEntries, technicalDiagnosticLogs, technicalDiagnosticSaleLogs, technicalDiagnosticSales, technicalDiagnosticSnapshot?.paymentEnvironment]);
+  }, [technicalDiagnosticDedupEntries, technicalDiagnosticLogs, technicalDiagnosticSaleLogs, technicalDiagnosticSales, technicalDiagnosticSnapshot?.companyId, technicalDiagnosticSnapshot?.paymentEnvironment]);
 
   const filteredTechnicalDiagnosticDivergences = useMemo(() => {
     const now = Date.now();
@@ -1883,14 +1921,25 @@ export default function SalesDiagnostic() {
     // Ambiente também faz parte do escopo operacional da tela. Esperamos a fonte oficial do app
     // antes de consultar para evitar uma primeira renderização com dados de ambiente misturado.
     if (!isRuntimePaymentEnvironmentReady) {
+      setLoading(false);
+      setIsCompanyScopeRefreshing(false);
       return;
     }
 
-    if (!activeCompanyId) {
+    if (!selectedDiagnosticCompanyId && (!isDeveloper || allowedCompanyIds.length === 0)) {
       setSales([]);
       setAvailableGateways([]);
       setLoading(false);
       setIsCompanyScopeRefreshing(false);
+      return;
+    }
+
+    if (selectedDiagnosticCompanyId && isDeveloper && !allowedCompanyIds.includes(selectedDiagnosticCompanyId)) {
+      setSales([]);
+      setAvailableGateways([]);
+      setLoading(false);
+      setIsCompanyScopeRefreshing(false);
+      toast.error('Empresa selecionada não está disponível para o usuário atual.');
       return;
     }
 
@@ -1906,10 +1955,13 @@ export default function SalesDiagnostic() {
       // de resposta. A rastreabilidade da correção documenta essa decisão para não ficar ambígua.
       .limit(100);
 
-    // Correção mínima: esta tela deve seguir o mesmo contrato visual do restante do admin.
-    // Se o header mostra uma empresa ativa, a consulta precisa respeitar esse `company_id`,
-    // inclusive para developer, evitando leitura cross-company implícita nesta rota.
-    query = query.eq('company_id', activeCompanyId);
+    // O diagnóstico pode operar em modo global apenas para developer. Quando há empresa selecionada,
+    // o filtro volta a aplicar `company_id`; no modo global limitamos às empresas autorizadas.
+    if (selectedDiagnosticCompanyId) {
+      query = query.eq('company_id', selectedDiagnosticCompanyId);
+    } else {
+      query = query.in('company_id', allowedCompanyIds);
+    }
 
     if (runtimePaymentEnvironment) {
       query = query.eq('payment_environment', runtimePaymentEnvironment);
@@ -1931,8 +1983,10 @@ export default function SalesDiagnostic() {
             .ilike('customer_name', `%${searchTerm}%`)
             .limit(100);
 
-          if (activeCompanyId) {
-            salesByNameQuery = salesByNameQuery.eq('company_id', activeCompanyId);
+          if (selectedDiagnosticCompanyId) {
+            salesByNameQuery = salesByNameQuery.eq('company_id', selectedDiagnosticCompanyId);
+          } else {
+            salesByNameQuery = salesByNameQuery.in('company_id', allowedCompanyIds);
           }
 
           return salesByNameQuery;
@@ -1945,8 +1999,10 @@ export default function SalesDiagnostic() {
                 .ilike('customer_cpf', `%${normalizedCpf}%`)
                 .limit(100);
 
-              if (activeCompanyId) {
-                salesByCpfQuery = salesByCpfQuery.eq('company_id', activeCompanyId);
+              if (selectedDiagnosticCompanyId) {
+                salesByCpfQuery = salesByCpfQuery.eq('company_id', selectedDiagnosticCompanyId);
+              } else {
+                salesByCpfQuery = salesByCpfQuery.in('company_id', allowedCompanyIds);
               }
 
               return salesByCpfQuery;
@@ -1957,6 +2013,7 @@ export default function SalesDiagnostic() {
       if (nameSearchRes.error || cpfSearchRes.error) {
         toast.error('Erro ao resolver a busca de vendas para diagnóstico');
         setLoading(false);
+        setIsCompanyScopeRefreshing(false);
         return;
       }
 
@@ -1977,9 +2034,13 @@ export default function SalesDiagnostic() {
             .ilike('ticket_number', `%${searchTerm}%`)
             .limit(100);
 
-          // Blindagem multiempresa: a resolução de ticket também deve obedecer à empresa ativa,
-          // não apenas a query final de `sales`, para evitar encadeamento parcial do escopo.
-          ticketQuery = ticketQuery.eq('company_id', activeCompanyId);
+          // Blindagem multiempresa: a resolução de ticket também deve obedecer ao escopo
+          // de `company_id` desta tela, não apenas à query final de `sales`.
+          if (selectedDiagnosticCompanyId) {
+            ticketQuery = ticketQuery.eq('company_id', selectedDiagnosticCompanyId);
+          } else {
+            ticketQuery = ticketQuery.in('company_id', allowedCompanyIds);
+          }
 
           return ticketQuery;
         })(),
@@ -1990,7 +2051,11 @@ export default function SalesDiagnostic() {
             .ilike('name', `%${searchTerm}%`)
             .limit(50);
 
-          eventsQuery = eventsQuery.eq('company_id', activeCompanyId);
+          if (selectedDiagnosticCompanyId) {
+            eventsQuery = eventsQuery.eq('company_id', selectedDiagnosticCompanyId);
+          } else {
+            eventsQuery = eventsQuery.in('company_id', allowedCompanyIds);
+          }
 
           return eventsQuery;
         })(),
@@ -1999,6 +2064,7 @@ export default function SalesDiagnostic() {
       if (ticketSearchRes.error || eventSearchRes.error) {
         toast.error('Erro ao resolver a busca complementar do diagnóstico');
         setLoading(false);
+        setIsCompanyScopeRefreshing(false);
         return;
       }
 
@@ -2014,13 +2080,18 @@ export default function SalesDiagnostic() {
           .in('event_id', matchedEventIds)
           .limit(100);
 
-        salesByEventQuery = salesByEventQuery.eq('company_id', activeCompanyId);
+        if (selectedDiagnosticCompanyId) {
+          salesByEventQuery = salesByEventQuery.eq('company_id', selectedDiagnosticCompanyId);
+        } else {
+          salesByEventQuery = salesByEventQuery.in('company_id', allowedCompanyIds);
+        }
 
         const { data: salesByEvent, error: salesByEventError } = await salesByEventQuery;
 
         if (salesByEventError) {
           toast.error('Erro ao resolver a busca por evento no diagnóstico');
           setLoading(false);
+          setIsCompanyScopeRefreshing(false);
           return;
         }
 
@@ -2079,7 +2150,11 @@ export default function SalesDiagnostic() {
             .select('sale_id')
             .in('sale_id', saleIds);
 
-          ticketsQuery = ticketsQuery.eq('company_id', activeCompanyId);
+          if (selectedDiagnosticCompanyId) {
+            ticketsQuery = ticketsQuery.eq('company_id', selectedDiagnosticCompanyId);
+          } else {
+            ticketsQuery = ticketsQuery.in('company_id', allowedCompanyIds);
+          }
 
           return ticketsQuery;
         })(),
@@ -2090,8 +2165,12 @@ export default function SalesDiagnostic() {
             .in('sale_id', saleIds);
 
           // Blindagem explícita: seat_locks também carrega company_id no schema e precisa repetir
-          // o mesmo escopo da venda selecionada para evitar qualquer leitura cruzada implícita.
-          locksQuery = locksQuery.eq('company_id', activeCompanyId);
+          // o mesmo escopo da venda selecionada ou do modo global autorizado.
+          if (selectedDiagnosticCompanyId) {
+            locksQuery = locksQuery.eq('company_id', selectedDiagnosticCompanyId);
+          } else {
+            locksQuery = locksQuery.in('company_id', allowedCompanyIds);
+          }
 
           return locksQuery;
         })(),
@@ -2200,12 +2279,12 @@ export default function SalesDiagnostic() {
     previousSalesSnapshotRef.current = currentSnapshot;
     setLoading(false);
     setIsCompanyScopeRefreshing(false);
-  }, [activeCompanyId, autoRefreshEnabled, filters, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
+  }, [allowedCompanyIds, autoRefreshEnabled, filters, isDeveloper, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment, selectedDiagnosticCompanyId]);
 
   const fetchEvents = useCallback(async () => {
     const requestId = ++latestEventsRequestIdRef.current;
 
-    if (!activeCompanyId) {
+    if (!selectedDiagnosticCompanyId && (!isDeveloper || allowedCompanyIds.length === 0)) {
       setEvents([]);
       return;
     }
@@ -2216,9 +2295,11 @@ export default function SalesDiagnostic() {
       .order('date', { ascending: false })
       .limit(50);
 
-    // Mantemos o filtro de eventos coerente com a mesma empresa ativa usada na listagem.
-    if (activeCompanyId) {
-      query = query.eq('company_id', activeCompanyId);
+    // Eventos seguem o mesmo recorte de company_id aplicado na listagem de vendas.
+    if (selectedDiagnosticCompanyId) {
+      query = query.eq('company_id', selectedDiagnosticCompanyId);
+    } else {
+      query = query.in('company_id', allowedCompanyIds);
     }
 
     const { data } = await query;
@@ -2226,7 +2307,7 @@ export default function SalesDiagnostic() {
       return;
     }
     setEvents((data ?? []) as { id: string; name: string; date: string }[]);
-  }, [activeCompanyId]);
+  }, [allowedCompanyIds, isDeveloper, selectedDiagnosticCompanyId]);
 
   const openDetail = useCallback(async (sale: DiagnosticSale) => {
     setDetailSale(sale);
@@ -2277,6 +2358,13 @@ export default function SalesDiagnostic() {
     if (previousCompanyIdRef.current === activeCompanyId) return;
 
     previousCompanyIdRef.current = activeCompanyId;
+
+    // Developer não depende do header para esta tela: o filtro interno decide entre modo global
+    // e `company_id` específico. Usuários comuns continuam presos à empresa ativa permitida.
+    if (isDeveloper) {
+      return;
+    }
+
     latestSalesRequestIdRef.current += 1;
     latestEventsRequestIdRef.current += 1;
     setSales([]);
@@ -2293,12 +2381,14 @@ export default function SalesDiagnostic() {
     setFilters((currentFilters) => {
       const nextFilters = {
         ...currentFilters,
+        companyId: activeCompanyId ?? 'all',
         eventId: 'all',
         gateway: 'all',
         paymentStatus: 'all',
       };
 
       const filtersChanged =
+        nextFilters.companyId !== currentFilters.companyId ||
         nextFilters.eventId !== currentFilters.eventId ||
         nextFilters.gateway !== currentFilters.gateway ||
         nextFilters.paymentStatus !== currentFilters.paymentStatus;
@@ -2309,7 +2399,7 @@ export default function SalesDiagnostic() {
 
       return nextFilters;
     });
-  }, [activeCompanyId]);
+  }, [activeCompanyId, isDeveloper]);
 
   useEffect(() => {
     if (!autoRefreshEnabled || detailSale) return;
@@ -2398,16 +2488,20 @@ export default function SalesDiagnostic() {
   }, []);
 
   const handleOpenTechnicalDiagnostic = useCallback(async () => {
-    if (!activeCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady) {
-      toast.error('Contexto ativo indisponível para diagnóstico técnico.');
+    if (!selectedDiagnosticCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady) {
+      toast.error(
+        isGlobalDiagnosticMode
+          ? 'Selecione uma empresa específica para executar o diagnóstico técnico.'
+          : 'Contexto ativo indisponível para diagnóstico técnico.'
+      );
       return;
     }
 
-    // Snapshot fixo: congela empresa + ambiente + horário no clique.
-    // Toda a leitura do modal usa este contexto até o fechamento, evitando mistura durante troca no header.
+    // Snapshot fixo: congela empresa filtrada + ambiente + horário no clique.
+    // O diagnóstico técnico é por company_id; por isso o modo global não executa para não sugerir leitura incorreta.
     const snapshot: TechnicalDiagnosticSnapshot = {
-      companyId: activeCompanyId,
-      companyName: activeCompany?.name ?? 'Empresa ativa',
+      companyId: selectedDiagnosticCompanyId,
+      companyName: selectedDiagnosticCompanyName,
       paymentEnvironment: runtimePaymentEnvironment,
       executedAt: new Date().toISOString(),
     };
@@ -2504,7 +2598,67 @@ export default function SalesDiagnostic() {
     }
 
     setTechnicalDiagnosticLoading(false);
-  }, [activeCompany?.name, activeCompanyId, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment]);
+  }, [isGlobalDiagnosticMode, isRuntimePaymentEnvironmentReady, runtimePaymentEnvironment, selectedDiagnosticCompanyId, selectedDiagnosticCompanyName]);
+
+  const companyFilter = (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <Building2 className="h-4 w-4" />
+        Empresa
+      </label>
+      <Popover open={companyFilterOpen} onOpenChange={setCompanyFilterOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={companyFilterOpen}
+            disabled={!isDeveloper}
+            className="h-9 w-full justify-between font-normal sm:h-10"
+          >
+            <span className="truncate">{selectedDiagnosticCompanyName}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Buscar empresa..." />
+            <CommandList>
+              <CommandEmpty>Nenhuma empresa encontrada.</CommandEmpty>
+              <CommandGroup>
+                {isDeveloper && (
+                  <CommandItem
+                    value="Todas as empresas::__all__"
+                    onSelect={() => {
+                      setFilters((currentFilters) => ({ ...currentFilters, companyId: 'all', eventId: 'all', gateway: 'all', paymentStatus: 'all' }));
+                      setCompanyFilterOpen(false);
+                    }}
+                  >
+                    <Check className={cn('mr-2 h-4 w-4', filters.companyId === 'all' ? 'opacity-100' : 'opacity-0')} />
+                    Todas as empresas
+                  </CommandItem>
+                )}
+                {userCompanies.map((company) => (
+                  <CommandItem
+                    key={company.id}
+                    value={`${company.name}::${company.id}`}
+                    onSelect={() => {
+                      // Selecionar uma empresa aplica `company_id` nesta tela sem alterar a empresa do header global.
+                      setFilters((currentFilters) => ({ ...currentFilters, companyId: company.id, eventId: 'all', gateway: 'all', paymentStatus: 'all' }));
+                      setCompanyFilterOpen(false);
+                    }}
+                  >
+                    <Check className={cn('mr-2 h-4 w-4', selectedDiagnosticCompanyId === company.id ? 'opacity-100' : 'opacity-0')} />
+                    <span className="truncate">{company.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 
   const filterSelects = [
     {
@@ -2722,6 +2876,11 @@ export default function SalesDiagnostic() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {isGlobalDiagnosticMode && (
+                <Badge variant="outline" className="text-[11px] font-normal">
+                  Empresa: {sale.company_name ?? '-'}
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[11px] font-normal">
                 {gateway}
               </Badge>
@@ -2873,7 +3032,8 @@ export default function SalesDiagnostic() {
               type="button"
               variant="outline"
               onClick={() => void handleOpenTechnicalDiagnostic()}
-              disabled={!activeCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady}
+              disabled={!selectedDiagnosticCompanyId || !runtimePaymentEnvironment || !isRuntimePaymentEnvironmentReady}
+              title={isGlobalDiagnosticMode ? 'Selecione uma empresa específica para executar o diagnóstico técnico.' : undefined}
               className="gap-2"
             >
               <Code className="h-4 w-4" />
@@ -2886,11 +3046,9 @@ export default function SalesDiagnostic() {
           <CardContent className="space-y-4 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {activeCompany?.name && (
-                  <Badge variant="outline" className="text-xs">
-                    Empresa: {activeCompany.name}
-                  </Badge>
-                )}
+                <Badge variant="outline" className="text-xs">
+                  Escopo: {selectedDiagnosticCompanyName}
+                </Badge>
                 <Badge variant="outline" className="text-xs">
                   Ambiente: {runtimePaymentEnvironment
                     ? (runtimePaymentEnvironment === 'production' ? 'Produção' : 'Sandbox')
@@ -2971,7 +3129,7 @@ export default function SalesDiagnostic() {
             <div className="flex flex-col gap-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
               <p>
                 {isCompanyScopeRefreshing
-                  ? 'Atualizando o diagnóstico da empresa ativa...'
+                  ? `Atualizando o diagnóstico de ${selectedDiagnosticCompanyName}...`
                   : autoRefreshEnabled
                     ? 'Atualização automática ativa.'
                     : 'Atualização manual em modo estável.'}
@@ -2993,9 +3151,10 @@ export default function SalesDiagnostic() {
             searchPlaceholder="Nome, CPF, ticket, ID exato da venda ou evento..."
             searchIcon={Search}
             selects={filterSelects}
+            leadingFilters={companyFilter}
             mainFilters={mainFilters}
             onClearFilters={() => {
-              setFilters(initialFilters);
+              resetFilters();
               toast.success('Filtros dependentes limpos com sucesso.');
             }}
             hasActiveFilters={hasActiveFilters}
@@ -3036,7 +3195,7 @@ export default function SalesDiagnostic() {
 
         {isCompanyScopeRefreshing && !loading && (
           <div className="mb-4 text-xs text-muted-foreground">
-            Atualizando o diagnóstico da empresa ativa...
+            Atualizando o diagnóstico de {selectedDiagnosticCompanyName}...
           </div>
         )}
 
@@ -3048,7 +3207,7 @@ export default function SalesDiagnostic() {
           <EmptyState
             icon={<Activity className="h-8 w-8 text-muted-foreground" />}
             title="Nenhuma venda encontrada"
-            description={`Nenhuma venda encontrada para ${activeCompany?.name ?? 'a empresa ativa'} com os filtros atuais.`}
+            description={`Nenhuma venda encontrada para ${selectedDiagnosticCompanyName} com os filtros atuais.`}
           />
         ) : (
           <div className="space-y-4">

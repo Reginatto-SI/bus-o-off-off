@@ -45,6 +45,7 @@ interface FilterCardProps {
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
   selects?: FilterSelectConfig[];
+  leadingFilters?: ReactNode;
   mainFilters?: ReactNode;
   advancedFilters?: ReactNode;
   onClearFilters: () => void;
@@ -60,6 +61,7 @@ export function FilterCard({
   onSearchChange,
   searchPlaceholder = 'Pesquisar...',
   selects = [],
+  leadingFilters,
   mainFilters,
   advancedFilters,
   onClearFilters,
@@ -105,6 +107,8 @@ export function FilterCard({
               />
             </div>
           </div>
+
+          {leadingFilters}
 
           {selects.map((select) => (
             <div key={select.id} className="space-y-1.5">
