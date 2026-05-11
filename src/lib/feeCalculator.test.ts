@@ -21,6 +21,16 @@ describe('feeCalculator progressive platform fee engine (PRD 07)', () => {
     expect(calculatePlatformFee(500)).toBe(20);
   });
 
+  it('aplica 4% para passagem de R$ 520 (cenário VKL quarto compartilhado)', () => {
+    expect(resolvePlatformFeePercentByTicketPrice(520)).toBe(4);
+    expect(calculatePlatformFee(520)).toBe(20.8);
+  });
+
+  it('aplica 4% para passagem de R$ 580 (cenário VKL casal privativo)', () => {
+    expect(resolvePlatformFeePercentByTicketPrice(580)).toBe(4);
+    expect(calculatePlatformFee(580)).toBe(23.2);
+  });
+
   it('aplica 3% para passagem de R$ 800', () => {
     expect(resolvePlatformFeePercentByTicketPrice(800)).toBe(3);
     expect(calculatePlatformFee(800)).toBe(24);
