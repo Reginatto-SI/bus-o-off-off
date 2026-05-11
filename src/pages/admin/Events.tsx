@@ -4582,15 +4582,17 @@ export default function Events() {
                               // Valor bruto cobrado do cliente ANTES de eventual repasse da taxa da plataforma
                               const grossPerTicket = Math.round((basePrice + totalAdditionalFeesRounded) * 100) / 100;
 
-                              // Comissão da plataforma incide sobre o bruto (base + taxas adicionais)
-                              const feePercent = companyTotalPlatformFeePercent;
-                              const platformFee = Math.round(grossPerTicket * (feePercent / 100) * 100) / 100;
+                              // Empresa isenta/piloto não cobra taxa.
+                              const isCompanyExempt = (companyPlatformFeePercent ?? 0) === 0;
+                              // Regra oficial PRD 07: motor progressivo por passageiro com teto de R$ 25.
+                              const platformFee = isCompanyExempt ? 0 : calculatePlatformFee(grossPerTicket);
+                              const progressivePercent = resolvePlatformFeePercentByTicketPrice(grossPerTicket);
 
                               // Valor final ao cliente e líquido da empresa dependem de quem absorve a comissão
-                              const clientPrice = form.pass_platform_fee_to_customer
+                              const clientPrice = form.pass_platform_fee_to_customer && !isCompanyExempt
                                 ? Math.round((grossPerTicket + platformFee) * 100) / 100
                                 : grossPerTicket;
-                              const organizerNet = form.pass_platform_fee_to_customer
+                              const organizerNet = form.pass_platform_fee_to_customer || isCompanyExempt
                                 ? grossPerTicket
                                 : Math.round((grossPerTicket - platformFee) * 100) / 100;
 
@@ -4611,13 +4613,20 @@ export default function Events() {
                                     <span>{formatCurrencyBRL(clientPrice)}</span>
                                   </div>
                                   <Separator className="my-1" />
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Comissão plataforma + sócio ({feePercent}%)</span>
-                                    <span>{formatCurrencyBRL(platformFee)}</span>
-                                  </div>
+                                  {isCompanyExempt ? (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Taxa da plataforma</span>
+                                      <span>Empresa isenta</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Taxa da plataforma ({progressivePercent}% | máx. R$ 25)</span>
+                                      <span>{formatCurrencyBRL(platformFee)}</span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Responsável pela comissão</span>
-                                    <span>{form.pass_platform_fee_to_customer ? 'Cliente' : 'Organizador'}</span>
+                                    <span>{isCompanyExempt ? '—' : (form.pass_platform_fee_to_customer ? 'Cliente' : 'Organizador')}</span>
                                   </div>
                                   <Separator className="my-1" />
                                   <div className="flex justify-between font-medium text-primary">
