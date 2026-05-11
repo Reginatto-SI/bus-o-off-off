@@ -66,8 +66,7 @@ function buildAsaasPaymentDescription(params: {
   return truncateForAsaas(description, ASAAS_DESCRIPTION_MAX_LENGTH);
 }
 
-// deno-lint-ignore no-explicit-any
-async function safeJson(res: Response): Promise<any> {
+async function safeJson(res: Response): Promise<unknown> {
   try {
     const text = await res.text();
     if (!text || !text.trim()) return null;
@@ -711,7 +710,35 @@ serve(async (req) => {
       progressivePlatformFeeTotal: platformFeeEngine.totalFee,
     });
 
-    const expectedGrossFromSnapshot = roundCurrency(passengerFinalSum + feesTotal);
+    // Integridade financeira em três etapas: o valor dos passageiros deve bater com
+    // o subtotal, as taxas calculadas devem bater com a diferença persistida na venda,
+    // e apenas então subtotal + taxas deve bater com o total final cobrado.
+    const saleSubtotalFromPassengers = passengerFinalSum;
+    const saleFeesFromGross = roundCurrency(roundCurrency(grossAmount) - saleSubtotalFromPassengers);
+    const expectedGrossFromSnapshot = roundCurrency(saleSubtotalFromPassengers + feesTotal);
+
+    if (Math.abs(saleFeesFromGross - feesTotal) > 0.01) {
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_failed",
+        source: "create-asaas-payment",
+        result: "error",
+        paymentEnvironment: paymentContext.environment,
+        errorCode: "sale_fees_inconsistent_with_calculated_fees",
+        detail: `gross_amount=${grossAmount};subtotal_passengers=${saleSubtotalFromPassengers};sale_fees_from_gross=${saleFeesFromGross};calculated_fees=${feesTotal};pass_platform_fee_to_customer=${Boolean(sale.event?.pass_platform_fee_to_customer)}`,
+      });
+
+      return jsonResponse(
+        {
+          error: "O total da venda está inconsistente com os valores dos passageiros.",
+          error_code: "sale_fees_inconsistent_with_calculated_fees",
+        },
+        409,
+      );
+    }
+
     if (Math.abs(roundCurrency(grossAmount) - expectedGrossFromSnapshot) > 0.01) {
       await logSaleOperationalEvent({
         supabaseAdmin,
@@ -722,7 +749,7 @@ serve(async (req) => {
         result: "error",
         paymentEnvironment: paymentContext.environment,
         errorCode: "sale_total_inconsistent_with_passenger_snapshot",
-        detail: `gross_amount=${grossAmount};expected=${expectedGrossFromSnapshot};passenger_final_sum=${passengerFinalSum};fees_total=${feesTotal}`,
+        detail: `gross_amount=${grossAmount};expected=${expectedGrossFromSnapshot};subtotal_passengers=${saleSubtotalFromPassengers};calculated_fees=${feesTotal};sale_fees_from_gross=${saleFeesFromGross}`,
       });
 
       return jsonResponse(
@@ -1164,10 +1191,11 @@ serve(async (req) => {
       return jsonResponse({ error: "Erro ao buscar cliente no Asaas", error_code: "customer_search_http_error" }, 400);
     }
 
-    // deno-lint-ignore no-explicit-any
-    const searchDataAny = searchData as any;
-    const existingCustomers = Array.isArray(searchDataAny?.data)
-      ? searchDataAny.data
+    const searchDataRecord = searchData && typeof searchData === "object"
+      ? searchData as { data?: unknown }
+      : null;
+    const existingCustomers = Array.isArray(searchDataRecord?.data)
+      ? searchDataRecord.data
       : [];
 
     if (
