@@ -36,4 +36,14 @@ describe('feeCalculator progressive platform fee engine (PRD 07)', () => {
     expect(breakdown.totalFees).toBe(25);
     expect(breakdown.unitPriceWithFees).toBe(1025);
   });
+
+  it('mantém o cenário VKL Turismo separado entre subtotal de R$ 700, taxa de R$ 21 e total de R$ 721', () => {
+    const subtotalPassageiro = 700;
+    const breakdown = calculateFees(subtotalPassageiro, [], { passToCustomer: true });
+
+    expect(resolvePlatformFeePercentByTicketPrice(subtotalPassageiro)).toBe(3);
+    expect(breakdown.totalFees).toBe(21);
+    expect(breakdown.unitPriceWithFees).toBe(721);
+    expect(subtotalPassageiro + breakdown.totalFees).toBe(721);
+  });
 });
