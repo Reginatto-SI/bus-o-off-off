@@ -99,6 +99,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
+import { calculatePlatformFee, resolvePlatformFeePercentByTicketPrice } from '@/lib/feeCalculator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
