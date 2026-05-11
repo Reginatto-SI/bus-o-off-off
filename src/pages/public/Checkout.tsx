@@ -1456,9 +1456,14 @@ export default function Checkout() {
       toast.error(
         errorMessage || "Erro ao iniciar pagamento. Tente novamente.",
       );
-      await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+      // Não deletar sale/sale_passengers em falhas de integridade financeira:
+      // precisamos do snapshot para diagnóstico em /admin/diagnostico-pagamentos.
+      // Liberamos apenas os assentos (seat_locks) e marcamos a venda como cancelada.
       await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
-      await supabase.from("sales").delete().eq("id", sale.id);
+      await supabase
+        .from("sales")
+        .update({ status: "cancelado" })
+        .eq("id", sale.id);
       preOpenedPaymentTab?.close();
       setSubmitting(false);
       setPaymentCheckoutStatus("error");
