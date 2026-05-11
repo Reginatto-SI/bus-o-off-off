@@ -175,6 +175,37 @@ function maskCpfForLog(value: string): string {
   return `***${digits.slice(-4)}`;
 }
 
+const CHECKOUT_FALLBACK_TICKET_TYPE_ID = "__default_base_type__";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: string | null | undefined): boolean {
+  return Boolean(value && UUID_PATTERN.test(value));
+}
+
+function resolvePersistedTicketTypeId(value: string | null | undefined): string | null {
+  // Comentário de segurança: o tipo padrão do checkout é apenas estado visual/local;
+  // no banco `ticket_type_id` é UUID nullable, então fallbacks sintéticos viram null.
+  return isValidUuid(value) ? value! : null;
+}
+
+function resolveTicketTypeOriginForLog(value: string | null | undefined):
+  | "real_uuid"
+  | "fallback_base_type"
+  | "empty"
+  | "invalid_non_uuid" {
+  if (!value) return "empty";
+  if (value === CHECKOUT_FALLBACK_TICKET_TYPE_ID) return "fallback_base_type";
+  return isValidUuid(value) ? "real_uuid" : "invalid_non_uuid";
+}
+
+function maskPhoneForLog(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length <= 4) return "***";
+  return `***${digits.slice(-4)}`;
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -569,7 +600,7 @@ export default function Checkout() {
             activeTypes.length > 0
               ? activeTypes
               : [{
-                  id: "__default_base_type__",
+                  id: CHECKOUT_FALLBACK_TICKET_TYPE_ID,
                   name: "Adulto",
                   price: Number(eventData.unit_price ?? 0),
                   is_active: true,
@@ -752,7 +783,7 @@ export default function Checkout() {
     if (!valid) return;
 
     const defaultType = eventTicketTypes[0] ?? {
-      id: "__default_base_type__",
+      id: CHECKOUT_FALLBACK_TICKET_TYPE_ID,
       name: "Adulto",
       price: Number(event?.unit_price ?? 0),
       is_active: true,
@@ -1324,7 +1355,7 @@ export default function Checkout() {
       trip_id: tripId!,
       sort_order: i,
       company_id: event.company_id,
-      ticket_type_id: passengers[i].ticket_type_id || null,
+      ticket_type_id: resolvePersistedTicketTypeId(passengers[i].ticket_type_id),
       ticket_type_name: passengers[i].ticket_type_name || "Adulto",
       ticket_type_price: Number(passengers[i].ticket_type_price ?? 0),
     }));
@@ -1342,7 +1373,7 @@ export default function Checkout() {
           trip_id: returnTripId,
           sort_order: selectedSeats.length + i,
           company_id: event.company_id,
-          ticket_type_id: passengers[i].ticket_type_id || null,
+          ticket_type_id: resolvePersistedTicketTypeId(passengers[i].ticket_type_id),
           ticket_type_name: passengers[i].ticket_type_name || "Adulto",
           ticket_type_price: Number(passengers[i].ticket_type_price ?? 0),
           // Trecho complementar de volta: nesta fase o valor cobrado já está
@@ -1365,7 +1396,32 @@ export default function Checkout() {
       .insert(passengerInserts);
 
     if (passengersError) {
-      console.error("Passengers error:", passengersError);
+      console.error("[checkout] sale_passengers_insert_failed", {
+        stage: "insert_sale_passengers",
+        flow_origin: "public_checkout",
+        saleId: sale.id,
+        eventId: event.id,
+        companyId: event.company_id,
+        tripId,
+        returnTripId: shouldCreateReturn ? returnTripId : null,
+        error: {
+          code: passengersError.code,
+          message: passengersError.message,
+          details: passengersError.details,
+          hint: passengersError.hint,
+        },
+        passengers: passengers.map((passenger, index) => ({
+          index,
+          seatId: selectedSeats[index] ?? null,
+          seatLabel: seatLabelMap[selectedSeats[index]] ?? null,
+          cpfMasked: maskCpfForLog(passenger.cpf),
+          phoneMasked: maskPhoneForLog(passenger.phone),
+          ticketTypeOrigin: resolveTicketTypeOriginForLog(passenger.ticket_type_id),
+          persistedTicketTypeId: resolvePersistedTicketTypeId(passenger.ticket_type_id),
+          ticketTypeName: passenger.ticket_type_name || "Adulto",
+          ticketTypePrice: Number(passenger.ticket_type_price ?? 0),
+        })),
+      });
       // Rollback
       await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
       await supabase.from("sales").delete().eq("id", sale.id);
