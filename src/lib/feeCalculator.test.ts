@@ -56,4 +56,18 @@ describe('feeCalculator progressive platform fee engine (PRD 07)', () => {
     expect(breakdown.unitPriceWithFees).toBe(721);
     expect(subtotalPassageiro + breakdown.totalFees).toBe(721);
   });
+
+  it('soma taxa POR PASSAGEIRO em compras com pacotes diferentes (paridade backend)', () => {
+    // Cenário multi-passageiro: 700 + 520. Cálculo correto = 21 + 20.80 = 41.80.
+    // Regressão evitada: cálculo por média (610) daria 24.40 × 2 = 48.80 → divergência fatal.
+    const passageiros = [700, 520];
+    const totalTaxa = passageiros.reduce(
+      (sum, preco) => sum + calculateFees(preco, [], { passToCustomer: true }).totalFees,
+      0,
+    );
+    expect(Math.round(totalTaxa * 100) / 100).toBe(41.8);
+
+    const mediaErrada = calculateFees(610, [], { passToCustomer: true }).totalFees * 2;
+    expect(mediaErrada).not.toBe(41.8);
+  });
 });

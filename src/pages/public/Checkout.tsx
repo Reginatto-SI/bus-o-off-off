@@ -949,7 +949,7 @@ export default function Checkout() {
     const effectiveSnapshots = snapshots.filter(
       (snapshot): snapshot is PassengerBenefitSnapshot => snapshot !== null,
     );
-    const passengerCount = effectiveSnapshots.length;
+
 
     const originalSubtotal = roundCurrency(
       effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.original_price, 0),
@@ -961,13 +961,17 @@ export default function Checkout() {
       effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.final_price, 0),
     );
 
-    const avgFinalPrice =
-      passengerCount > 0 ? subtotalAfterBenefits / passengerCount : 0;
-    const feeBreakdown = calculateFees(avgFinalPrice, eventFees, {
-      // Mantém o snapshot da venda coerente com empresas isentas de comissão.
-      passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee,
-    });
-    const totalFees = roundCurrency(feeBreakdown.totalFees * passengerCount);
+    // Cálculo PRD 07: taxas progressivas devem ser somadas POR PASSAGEIRO (igual ao motor backend
+    // em supabase/functions/_shared/checkout-financial-integrity.ts). Não usar média — para
+    // múltiplos passageiros em faixas distintas (ex.: 700 + 520) a média gera divergência
+    // arredondada e quebra a validação de integridade financeira no create-asaas-payment.
+    const passToCustomer = event.pass_platform_fee_to_customer && hasConfiguredPlatformFee;
+    const totalFees = roundCurrency(
+      effectiveSnapshots.reduce((sum, snapshot) => {
+        const breakdown = calculateFees(snapshot.final_price, eventFees, { passToCustomer });
+        return sum + breakdown.totalFees;
+      }, 0),
+    );
     const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);
 
     return {
@@ -1452,9 +1456,14 @@ export default function Checkout() {
       toast.error(
         errorMessage || "Erro ao iniciar pagamento. Tente novamente.",
       );
-      await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+      // Não deletar sale/sale_passengers em falhas de integridade financeira:
+      // precisamos do snapshot para diagnóstico em /admin/diagnostico-pagamentos.
+      // Liberamos apenas os assentos (seat_locks) e marcamos a venda como cancelada.
       await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
-      await supabase.from("sales").delete().eq("id", sale.id);
+      await supabase
+        .from("sales")
+        .update({ status: "cancelado" })
+        .eq("id", sale.id);
       preOpenedPaymentTab?.close();
       setSubmitting(false);
       setPaymentCheckoutStatus("error");
