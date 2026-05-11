@@ -4476,10 +4476,58 @@ export default function Events() {
                           <CalculationSimulationCard
                             basePrice={parseCurrencyInputBRL(form.unit_price)}
                             fees={eventFees}
-                            platformFeePercent={hasValidCompanyPlatformFee ? companyTotalPlatformFeePercent : undefined}
+                            platformFeePercent={hasValidCompanyPlatformFee ? (companyPlatformFeePercent ?? 0) : undefined}
                             passPlatformFeeToCustomer={form.pass_platform_fee_to_customer}
                           />
                         )}
+
+                        {/* Simulação por tipo de passagem — mostra impacto da regra progressiva por tipo.
+                           Útil quando o evento tem múltiplos tipos com preços diferentes. */}
+                        {editingId && eventTicketTypes.filter((t) => t.is_active).length > 0 && hasValidCompanyPlatformFee && (() => {
+                          const isCompanyExempt = (companyPlatformFeePercent ?? 0) === 0;
+                          const activeTypes = eventTicketTypes.filter((t) => t.is_active);
+                          return (
+                            <Card className="p-3 bg-muted/50 mt-3">
+                              <p className="text-xs text-muted-foreground mb-2 font-medium">
+                                Simulação por tipo de passagem
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mb-2 italic">
+                                O preço base só é usado quando nenhum tipo de passagem se aplica.
+                              </p>
+                              <div className="space-y-1 text-sm">
+                                {activeTypes.map((t) => {
+                                  const price = Number(t.price ?? 0);
+                                  const fee = isCompanyExempt || !form.pass_platform_fee_to_customer
+                                    ? 0
+                                    : calculatePlatformFee(price);
+                                  const percent = resolvePlatformFeePercentByTicketPrice(price);
+                                  const total = Math.round((price + fee) * 100) / 100;
+                                  return (
+                                    <div key={t.id} className="flex justify-between gap-2">
+                                      <span className="truncate">{t.name}</span>
+                                      <span className="text-muted-foreground whitespace-nowrap">
+                                        {formatCurrencyBRL(price)}
+                                        {fee > 0 && ` + ${formatCurrencyBRL(fee)} (${percent}%)`}
+                                        {' = '}
+                                        <span className="font-medium text-foreground">{formatCurrencyBRL(total)}</span>
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {isCompanyExempt && (
+                                <p className="text-[11px] text-muted-foreground mt-2 italic">
+                                  Empresa sem taxa da plataforma ativa.
+                                </p>
+                              )}
+                              {!isCompanyExempt && !form.pass_platform_fee_to_customer && (
+                                <p className="text-[11px] text-muted-foreground mt-2 italic">
+                                  Repasse da taxa ao cliente desativado — total ao cliente é o preço da passagem.
+                                </p>
+                              )}
+                            </Card>
+                          );
+                        })()}
                       </div>
                     )}
 
