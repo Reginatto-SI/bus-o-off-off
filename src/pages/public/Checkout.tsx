@@ -98,6 +98,35 @@ interface EventTicketType {
   is_active: boolean;
 }
 
+interface CheckoutEventCompany {
+  name?: string | null;
+  trade_name?: string | null;
+}
+
+type CheckoutEvent = Event & { company?: CheckoutEventCompany | null };
+
+interface EventTicketTypeRow {
+  id: string;
+  name: string;
+  price: number | string | null;
+  is_active: boolean | null;
+}
+
+interface EventCategoryPriceRow {
+  category: string;
+  price: number | string | null;
+}
+
+interface SeatLockRow {
+  seat_id: string;
+}
+
+interface CheckoutErrorWithContext {
+  context?: {
+    json?: () => Promise<unknown>;
+  };
+}
+
 interface PassengerBenefitSnapshot {
   benefit_program_id: string | null;
   benefit_program_name: string | null;
@@ -218,17 +247,18 @@ export default function Checkout() {
   // Helper: get price for a seat based on category pricing
   const getSeatPrice = (seatId: string): number => {
     if (!event) return 0;
-    if (!(event as any).use_category_pricing) return event.unit_price ?? 0;
+    if (!event.use_category_pricing) return event.unit_price ?? 0;
     const seat = seats.find((s) => s.id === seatId);
     if (!seat) return event.unit_price ?? 0;
     const catPrice = categoryPrices.find((cp) => cp.category === seat.category);
     return catPrice?.price ?? event.unit_price ?? 0;
   };
 
-  const usesCategoryPricing = Boolean((event as any)?.use_category_pricing);
+  const usesCategoryPricing = Boolean(event?.use_category_pricing);
+  const checkoutEvent = event as CheckoutEvent | null;
   const eventCompanyName =
-    (event as any)?.company?.trade_name ||
-    (event as any)?.company?.name ||
+    checkoutEvent?.company?.trade_name ||
+    checkoutEvent?.company?.name ||
     "empresa organizadora";
   const hasMixedPrices =
     usesCategoryPricing &&
@@ -424,7 +454,7 @@ export default function Checkout() {
           .map((t) => t.seat_id as string);
 
         const occupiedFromLocks = (locksRes.data ?? []).map(
-          (l: any) => l.seat_id as string,
+          (l: SeatLockRow) => l.seat_id as string,
         );
 
         const allOccupied = [
@@ -526,8 +556,8 @@ export default function Checkout() {
             .order("sort_order");
 
           const activeTypes = (ticketTypesData ?? [])
-            .filter((row: any) => row.is_active)
-            .map((row: any) => ({
+            .filter((row: EventTicketTypeRow) => row.is_active)
+            .map((row: EventTicketTypeRow) => ({
               id: row.id,
               name: row.name,
               price: Number(row.price ?? 0),
@@ -547,13 +577,13 @@ export default function Checkout() {
           );
 
           // Fetch category prices if enabled
-          if ((eventData as any).use_category_pricing) {
+          if (eventData.use_category_pricing) {
             const { data: catPrices } = await supabase
               .from("event_category_prices")
               .select("category, price")
               .eq("event_id", id!);
             setCategoryPrices(
-              (catPrices ?? []).map((cp: any) => ({
+              (catPrices ?? []).map((cp: EventCategoryPriceRow) => ({
                 category: cp.category,
                 price: Number(cp.price),
               })),
@@ -592,8 +622,8 @@ export default function Checkout() {
           if (existingSeats && existingSeats.length > 0) {
             // Comentário P0: usar assentos materializados no banco — fonte única de verdade.
             // Filtrar seats técnicos (_legacy_/_tmp_) como proteção defensiva.
-            const validSeats = existingSeats.filter(
-              (s: any) =>
+            const validSeats = (existingSeats as Seat[]).filter(
+              (s) =>
                 !s.label.startsWith("_legacy_") && !s.label.startsWith("_tmp_"),
             );
             setSeats(validSeats as Seat[]);
@@ -677,7 +707,7 @@ export default function Checkout() {
       .map((t) => t.seat_id as string);
 
     const occupiedFromLocks = (locksRes.data ?? []).map(
-      (l: any) => l.seat_id as string,
+      (l: SeatLockRow) => l.seat_id as string,
     );
 
     const currentOccupied = [
@@ -1113,9 +1143,10 @@ export default function Checkout() {
     if (!hasResolvedSnapshots) {
       snapshotsToPersist = await resolvePassengerBenefitSnapshots();
       if (snapshotsToPersist.length !== passengers.length) {
-        // Fallback final: se algo inesperado quebrar o shape, mantemos venda com preço base.
-        snapshotsToPersist = selectedSeats.map((seatId) => {
-          const basePrice = roundCurrency(getSeatPrice(seatId));
+        // Fallback final: se algo inesperado quebrar o shape, mantemos venda com o preço do tipo selecionado antes de recorrer ao preço base.
+        snapshotsToPersist = selectedSeats.map((seatId, i) => {
+          const typePrice = Number(passengers[i]?.ticket_type_price ?? 0);
+          const basePrice = roundCurrency(typePrice > 0 ? typePrice : getSeatPrice(seatId));
           return {
             benefit_program_id: null,
             benefit_program_name: null,
@@ -1264,7 +1295,8 @@ export default function Checkout() {
       ...(() => {
         const snapshot = snapshotsToPersist[i];
         if (!snapshot) {
-          const basePrice = roundCurrency(getSeatPrice(seatId));
+          const typePrice = Number(passengers[i]?.ticket_type_price ?? 0);
+          const basePrice = roundCurrency(typePrice > 0 ? typePrice : getSeatPrice(seatId));
           return {
             benefit_program_id: null,
             benefit_program_name: null,
@@ -1298,7 +1330,7 @@ export default function Checkout() {
       passengers.forEach((passenger, i) => {
         passengerInserts.push({
           sale_id: sale.id,
-          seat_id: null as any,
+          seat_id: null as string | null,
           seat_label: `VOLTA-${i + 1}`,
           passenger_name: passenger.name.trim(),
           passenger_cpf: passenger.cpf.replace(/\D/g, ""),
@@ -1387,7 +1419,7 @@ export default function Checkout() {
       let errorBody = checkoutData;
       if (checkoutError && !errorBody) {
         try {
-          errorBody = await (checkoutError as any).context?.json?.();
+          errorBody = await (checkoutError as CheckoutErrorWithContext).context?.json?.();
         } catch {
           /* ignore parse failure */
         }
@@ -2121,12 +2153,13 @@ export default function Checkout() {
                   const resolvedSnapshots = await resolvePassengerBenefitSnapshots();
                   setSubmitting(false);
                   // Regra de negócio obrigatória: mesmo se benefício falhar tecnicamente,
-                  // o checkout deve continuar com fallback seguro (sem desconto).
+                  // o checkout deve continuar com fallback seguro (sem desconto) usando o tipo selecionado.
                   const snapshotsForStep =
                     resolvedSnapshots.length === passengers.length
                       ? resolvedSnapshots
-                      : selectedSeats.map((seatId) => {
-                          const basePrice = roundCurrency(getSeatPrice(seatId));
+                      : selectedSeats.map((seatId, index) => {
+                          const typePrice = Number(passengers[index]?.ticket_type_price ?? 0);
+                          const basePrice = roundCurrency(typePrice > 0 ? typePrice : getSeatPrice(seatId));
                           return {
                             benefit_program_id: null,
                             benefit_program_name: null,

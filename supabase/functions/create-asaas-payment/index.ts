@@ -17,6 +17,11 @@ import {
   distributePlatformFee,
   logFeeEngineTrace,
 } from "../_shared/platform-fee-engine.ts";
+import {
+  buildCheckoutFinancialIntegritySnapshot,
+  resolvePassengerFinancialUnitPrice,
+  roundCurrency,
+} from "../_shared/checkout-financial-integrity.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,10 +88,6 @@ function jsonResponse(payload: Record<string, unknown>, status: number) {
   });
 }
 
-function roundCurrency(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
 function buildFinancialSplitSnapshot(params: {
   grossAmount: number;
   platformFeePercent: number;
@@ -107,30 +108,6 @@ function buildFinancialSplitSnapshot(params: {
     platformNetAmount: (platformFeeCents - socioFeeCents) / 100,
     representativePercent: params.representativePercent,
   };
-}
-
-function calculateFeesTotal(params: {
-  passengerUnitPrices: number[];
-  eventFees: Array<{ fee_type: string; value: number; is_active: boolean }>;
-  passPlatformFeeToCustomer: boolean;
-  progressivePlatformFeeTotal: number;
-}) {
-  const activeFees = params.eventFees.filter((fee) => fee.is_active);
-  const feesPerPassenger = params.passengerUnitPrices.map((unitPrice) => activeFees.reduce((sum, fee) => {
-    if (fee.fee_type === "percent") {
-      return sum + roundCurrency(unitPrice * (Number(fee.value) / 100));
-    }
-    return sum + roundCurrency(Number(fee.value) || 0);
-  }, 0));
-
-  const fixedAndPercentTotal = roundCurrency(
-    feesPerPassenger.reduce((sum, passengerFee) => sum + passengerFee, 0),
-  );
-
-  const platformFee = params.passPlatformFeeToCustomer
-    ? roundCurrency(params.progressivePlatformFeeTotal)
-    : 0;
-  return roundCurrency(fixedAndPercentTotal + platformFee);
 }
 
 serve(async (req) => {
@@ -592,7 +569,7 @@ serve(async (req) => {
     // soma dos final_price dos passageiros + taxas oficiais = sales.gross_amount.
     const { data: passengerSnapshots, error: passengersError } = await supabaseAdmin
       .from("sale_passengers")
-      .select("trip_id, final_price, original_price, discount_amount")
+      .select("trip_id, final_price, original_price, discount_amount, benefit_applied, ticket_type_id, ticket_type_name, ticket_type_price")
       .eq("sale_id", sale.id)
       .order("sort_order", { ascending: true });
 
@@ -620,28 +597,10 @@ serve(async (req) => {
       );
     }
 
-    const passengerFinalSum = roundCurrency(
-      passengerSnapshots.reduce(
-        (sum, passenger) =>
-          passenger.trip_id === sale.trip_id
-            ? sum + Number(passenger.final_price ?? 0)
-            : sum,
-        0,
-      ),
-    );
-    const passengerDiscountSum = roundCurrency(
-      passengerSnapshots.reduce(
-        (sum, passenger) =>
-          passenger.trip_id === sale.trip_id
-            ? sum + Number(passenger.discount_amount ?? 0)
-            : sum,
-        0,
-      ),
-    );
-
-    const quantityFromSnapshot = passengerSnapshots.filter(
+    const primaryPassengerSnapshots = passengerSnapshots.filter(
       (passenger) => passenger.trip_id === sale.trip_id,
-    ).length;
+    );
+    const quantityFromSnapshot = primaryPassengerSnapshots.length;
     if (quantityFromSnapshot <= 0) {
       return jsonResponse(
         {
@@ -651,9 +610,8 @@ serve(async (req) => {
         409,
       );
     }
-    const passengerUnitPrices = passengerSnapshots
-      .filter((passenger) => passenger.trip_id === sale.trip_id)
-      .map((passenger) => roundCurrency(Number(passenger.final_price ?? 0)));
+
+    const passengerUnitPrices = primaryPassengerSnapshots.map(resolvePassengerFinancialUnitPrice);
     const computedPlatformFeeEngine = computeProgressiveFeeForPassengers(passengerUnitPrices);
     // Empresas piloto/isentas (Taxa da Plataforma (%) zero em /admin/empresa) não
     // podem gerar comissão/split da plataforma no Asaas, mesmo que o evento esteja
@@ -673,9 +631,6 @@ serve(async (req) => {
         totalUncappedFee: 0,
         capHits: 0,
       };
-    const avgFinalPrice = quantityFromSnapshot > 0
-      ? roundCurrency(passengerFinalSum / quantityFromSnapshot)
-      : 0;
 
     const { data: eventFees, error: eventFeesError } = await supabaseAdmin
       .from("event_fees")
@@ -699,8 +654,10 @@ serve(async (req) => {
       );
     }
 
-    const feesTotal = calculateFeesTotal({
-      passengerUnitPrices,
+    const financialIntegrity = buildCheckoutFinancialIntegritySnapshot({
+      saleTripId: sale.trip_id,
+      grossAmount,
+      passengerSnapshots,
       eventFees: (eventFees ?? []) as Array<{
         fee_type: string;
         value: number;
@@ -710,14 +667,45 @@ serve(async (req) => {
       progressivePlatformFeeTotal: platformFeeEngine.totalFee,
     });
 
-    // Integridade financeira em três etapas: o valor dos passageiros deve bater com
-    // o subtotal, as taxas calculadas devem bater com a diferença persistida na venda,
-    // e apenas então subtotal + taxas deve bater com o total final cobrado.
-    const saleSubtotalFromPassengers = passengerFinalSum;
-    const saleFeesFromGross = roundCurrency(roundCurrency(grossAmount) - saleSubtotalFromPassengers);
-    const expectedGrossFromSnapshot = roundCurrency(saleSubtotalFromPassengers + feesTotal);
+    const firstPassengerSnapshot = financialIntegrity.primaryPassengers[0] ?? null;
+    const validationLogContext = {
+      sale_id: sale.id,
+      company_id: sale.company_id,
+      event_id: sale.event_id,
+      gross_amount: roundCurrency(grossAmount),
+      event_base_price: sale.event?.unit_price == null ? null : Number(sale.event.unit_price),
+      selected_ticket_type_id: firstPassengerSnapshot?.ticket_type_id ?? null,
+      selected_ticket_type_name: firstPassengerSnapshot?.ticket_type_name ?? null,
+      selected_ticket_type_price: firstPassengerSnapshot?.ticket_type_price == null
+        ? null
+        : Number(firstPassengerSnapshot.ticket_type_price),
+      passenger_final_price: firstPassengerSnapshot?.final_price == null
+        ? null
+        : Number(firstPassengerSnapshot.final_price),
+      passenger_ticket_type_price: firstPassengerSnapshot?.ticket_type_price == null
+        ? null
+        : Number(firstPassengerSnapshot.ticket_type_price),
+      passenger_final_sum: financialIntegrity.passengerFinalSum,
+      fees_total: financialIntegrity.feesTotal,
+      expected_gross_from_snapshot: financialIntegrity.expectedGrossFromSnapshot,
+      pass_platform_fee_to_customer: Boolean(sale.event?.pass_platform_fee_to_customer),
+      passenger_price_sources: financialIntegrity.primaryPassengers.map((passenger, index) => ({
+        index,
+        ticket_type_id: passenger.ticket_type_id ?? null,
+        ticket_type_name: passenger.ticket_type_name ?? null,
+        ticket_type_price: passenger.ticket_type_price == null ? null : Number(passenger.ticket_type_price),
+        final_price: passenger.final_price == null ? null : Number(passenger.final_price),
+        effective_unit_price: financialIntegrity.passengerUnitPrices[index] ?? 0,
+        benefit_applied: Boolean(passenger.benefit_applied) || Number(passenger.discount_amount ?? 0) > 0,
+      })),
+    };
 
-    if (Math.abs(saleFeesFromGross - feesTotal) > 0.01) {
+    if (Math.abs(financialIntegrity.saleFeesFromGross - financialIntegrity.feesTotal) > 0.01) {
+      logPaymentTrace("error", "create-asaas-payment", "checkout_financial_validation_failed", {
+        ...validationLogContext,
+        error_code: "sale_fees_inconsistent_with_calculated_fees",
+        sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
+      });
       await logSaleOperationalEvent({
         supabaseAdmin,
         saleId: sale.id,
@@ -727,7 +715,10 @@ serve(async (req) => {
         result: "error",
         paymentEnvironment: paymentContext.environment,
         errorCode: "sale_fees_inconsistent_with_calculated_fees",
-        detail: `gross_amount=${grossAmount};subtotal_passengers=${saleSubtotalFromPassengers};sale_fees_from_gross=${saleFeesFromGross};calculated_fees=${feesTotal};pass_platform_fee_to_customer=${Boolean(sale.event?.pass_platform_fee_to_customer)}`,
+        detail: JSON.stringify({
+          ...validationLogContext,
+          sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
+        }),
       });
 
       return jsonResponse(
@@ -739,7 +730,12 @@ serve(async (req) => {
       );
     }
 
-    if (Math.abs(roundCurrency(grossAmount) - expectedGrossFromSnapshot) > 0.01) {
+    if (Math.abs(roundCurrency(grossAmount) - financialIntegrity.expectedGrossFromSnapshot) > 0.01) {
+      logPaymentTrace("error", "create-asaas-payment", "checkout_financial_validation_failed", {
+        ...validationLogContext,
+        error_code: "sale_total_inconsistent_with_passenger_snapshot",
+        sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
+      });
       await logSaleOperationalEvent({
         supabaseAdmin,
         saleId: sale.id,
@@ -749,7 +745,10 @@ serve(async (req) => {
         result: "error",
         paymentEnvironment: paymentContext.environment,
         errorCode: "sale_total_inconsistent_with_passenger_snapshot",
-        detail: `gross_amount=${grossAmount};expected=${expectedGrossFromSnapshot};subtotal_passengers=${saleSubtotalFromPassengers};calculated_fees=${feesTotal};sale_fees_from_gross=${saleFeesFromGross}`,
+        detail: JSON.stringify({
+          ...validationLogContext,
+          sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
+        }),
       });
 
       return jsonResponse(
@@ -760,6 +759,8 @@ serve(async (req) => {
         409,
       );
     }
+
+    const passengerDiscountSum = financialIntegrity.passengerDiscountSum;
 
     if (Math.abs(Number(sale.benefit_total_discount ?? 0) - passengerDiscountSum) > 0.01) {
       await logSaleOperationalEvent({
