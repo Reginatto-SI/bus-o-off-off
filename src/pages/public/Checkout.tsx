@@ -961,13 +961,17 @@ export default function Checkout() {
       effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.final_price, 0),
     );
 
-    const avgFinalPrice =
-      passengerCount > 0 ? subtotalAfterBenefits / passengerCount : 0;
-    const feeBreakdown = calculateFees(avgFinalPrice, eventFees, {
-      // Mantém o snapshot da venda coerente com empresas isentas de comissão.
-      passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee,
-    });
-    const totalFees = roundCurrency(feeBreakdown.totalFees * passengerCount);
+    // Cálculo PRD 07: taxas progressivas devem ser somadas POR PASSAGEIRO (igual ao motor backend
+    // em supabase/functions/_shared/checkout-financial-integrity.ts). Não usar média — para
+    // múltiplos passageiros em faixas distintas (ex.: 700 + 520) a média gera divergência
+    // arredondada e quebra a validação de integridade financeira no create-asaas-payment.
+    const passToCustomer = event.pass_platform_fee_to_customer && hasConfiguredPlatformFee;
+    const totalFees = roundCurrency(
+      effectiveSnapshots.reduce((sum, snapshot) => {
+        const breakdown = calculateFees(snapshot.final_price, eventFees, { passToCustomer });
+        return sum + breakdown.totalFees;
+      }, 0),
+    );
     const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);
 
     return {
