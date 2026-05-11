@@ -4271,9 +4271,17 @@ export default function Events() {
                             );
                           }
 
-                          const platformFee = Math.round(basePrice * (companyTotalPlatformFeePercent / 100) * 100) / 100;
-                          const clientPrice = form.pass_platform_fee_to_customer ? Math.round((basePrice + platformFee) * 100) / 100 : basePrice;
-                          const organizerNet = form.pass_platform_fee_to_customer ? basePrice : Math.round((basePrice - platformFee) * 100) / 100;
+                          // Empresa isenta/piloto (platform_fee_percent = 0): não cobra taxa.
+                          const isCompanyExempt = (companyPlatformFeePercent ?? 0) === 0;
+                          // Regra oficial PRD 07: motor progressivo por passageiro com teto de R$ 25.
+                          const platformFee = isCompanyExempt ? 0 : calculatePlatformFee(basePrice);
+                          const progressivePercent = resolvePlatformFeePercentByTicketPrice(basePrice);
+                          const clientPrice = form.pass_platform_fee_to_customer && !isCompanyExempt
+                            ? Math.round((basePrice + platformFee) * 100) / 100
+                            : basePrice;
+                          const organizerNet = form.pass_platform_fee_to_customer || isCompanyExempt
+                            ? basePrice
+                            : Math.round((basePrice - platformFee) * 100) / 100;
 
                           return (
                             <Card className="p-3 bg-muted/50">
@@ -4283,10 +4291,17 @@ export default function Events() {
                                   <span>Preço base</span>
                                   <span>{formatCurrencyBRL(basePrice)}</span>
                                 </div>
-                                <div className="flex justify-between text-muted-foreground">
-                                  <span>Taxa da plataforma ({companyTotalPlatformFeePercent}%)</span>
-                                  <span>{formatCurrencyBRL(platformFee)}</span>
-                                </div>
+                                {isCompanyExempt ? (
+                                  <div className="flex justify-between text-muted-foreground">
+                                    <span>Taxa da plataforma</span>
+                                    <span>Empresa isenta</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-between text-muted-foreground">
+                                    <span>Taxa da plataforma ({progressivePercent}% | máx. R$ 25)</span>
+                                    <span>{formatCurrencyBRL(platformFee)}</span>
+                                  </div>
+                                )}
                                 <Separator className="my-1" />
                                 <div className="flex justify-between font-medium">
                                   <span>Preço final ao cliente</span>
