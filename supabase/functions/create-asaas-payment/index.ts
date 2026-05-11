@@ -700,12 +700,24 @@ serve(async (req) => {
       })),
     };
 
-    if (Math.abs(financialIntegrity.saleFeesFromGross - financialIntegrity.feesTotal) > 0.01) {
-      logPaymentTrace("error", "create-asaas-payment", "checkout_financial_validation_failed", {
+    // Diagnóstico preservado: registramos o snapshot completo do motor financeiro em
+    // sale_integration_logs (ON DELETE SET NULL no sale_id) para que sobreviva ao
+    // rollback da venda no frontend e fique visível em /admin/diagnostico-pagamentos.
+    const persistFinancialIntegrityIncident = async (errorCode: string) => {
+      const enrichedContext = {
         ...validationLogContext,
-        error_code: "sale_fees_inconsistent_with_calculated_fees",
+        error_code: errorCode,
         sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
-      });
+        platform_fee_engine_total: platformFeeEngine.totalFee,
+        has_configured_platform_fee: hasConfiguredPlatformFee,
+        company_platform_fee_percent: platformFeePercent,
+        passenger_breakdown: platformFeeEngine.passengerBreakdown,
+        active_event_fees: (eventFees ?? []).map((f) => ({
+          fee_type: f.fee_type,
+          value: Number(f.value),
+        })),
+      };
+      logPaymentTrace("error", "create-asaas-payment", "checkout_financial_validation_failed", enrichedContext);
       await logSaleOperationalEvent({
         supabaseAdmin,
         saleId: sale.id,
@@ -714,13 +726,27 @@ serve(async (req) => {
         source: "create-asaas-payment",
         result: "error",
         paymentEnvironment: paymentContext.environment,
-        errorCode: "sale_fees_inconsistent_with_calculated_fees",
-        detail: JSON.stringify({
-          ...validationLogContext,
-          sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
-        }),
+        errorCode,
+        detail: JSON.stringify(enrichedContext),
       });
+      await logSaleIntegrationEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentContext.environment,
+        provider: "asaas",
+        direction: "outgoing_request",
+        eventType: "create_payment_validation",
+        processingStatus: "rejected",
+        resultCategory: "rejected",
+        incidentCode: errorCode,
+        message: "Validação de integridade financeira falhou antes de chamar o Asaas.",
+        payloadJson: enrichedContext,
+      });
+    };
 
+    if (Math.abs(financialIntegrity.saleFeesFromGross - financialIntegrity.feesTotal) > 0.01) {
+      await persistFinancialIntegrityIncident("sale_fees_inconsistent_with_calculated_fees");
       return jsonResponse(
         {
           error: "O total da venda está inconsistente com os valores dos passageiros.",
@@ -731,26 +757,7 @@ serve(async (req) => {
     }
 
     if (Math.abs(roundCurrency(grossAmount) - financialIntegrity.expectedGrossFromSnapshot) > 0.01) {
-      logPaymentTrace("error", "create-asaas-payment", "checkout_financial_validation_failed", {
-        ...validationLogContext,
-        error_code: "sale_total_inconsistent_with_passenger_snapshot",
-        sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
-      });
-      await logSaleOperationalEvent({
-        supabaseAdmin,
-        saleId: sale.id,
-        companyId: sale.company_id,
-        action: "payment_create_failed",
-        source: "create-asaas-payment",
-        result: "error",
-        paymentEnvironment: paymentContext.environment,
-        errorCode: "sale_total_inconsistent_with_passenger_snapshot",
-        detail: JSON.stringify({
-          ...validationLogContext,
-          sale_fees_from_gross: financialIntegrity.saleFeesFromGross,
-        }),
-      });
-
+      await persistFinancialIntegrityIncident("sale_total_inconsistent_with_passenger_snapshot");
       return jsonResponse(
         {
           error: "O total da venda está inconsistente com os valores dos passageiros.",
