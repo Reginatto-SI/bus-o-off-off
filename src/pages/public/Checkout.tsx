@@ -949,7 +949,7 @@ export default function Checkout() {
     const effectiveSnapshots = snapshots.filter(
       (snapshot): snapshot is PassengerBenefitSnapshot => snapshot !== null,
     );
-    void effectiveSnapshots.length;
+
 
     const originalSubtotal = roundCurrency(
       effectiveSnapshots.reduce((sum, snapshot) => sum + snapshot.original_price, 0),
