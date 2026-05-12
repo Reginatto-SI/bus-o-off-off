@@ -1,52 +1,68 @@
 ## Diagnóstico
 
-A mensagem "O total da venda está inconsistente com os valores dos passageiros." vem de `supabase/functions/create-asaas-payment/index.ts` (linhas 726/756) — validação de integridade financeira que compara `gross_amount` da venda com a soma `final_price + taxas` dos `sale_passengers`.
+Investiguei o fluxo de disponibilidade de assentos em `src/pages/public/Checkout.tsx`, `src/components/admin/NewSaleModal.tsx` e a finalização de pagamento em `supabase/functions/_shared/payment-finalization.ts`.
 
-Pontos confirmados:
-- VKL TURISMO tem `platform_fee_percent = 6` → `hasConfiguredPlatformFee = true` no backend.
-- Evento ARRAIAL DO CABO tem `pass_platform_fee_to_customer = true` e nenhum `event_fees`.
-- Vendas falhas: 540,80 (R$520+4%) e 721,00 (R$700+3%) — coerentes com motor progressivo.
-- Toda venda 409 é deletada pelo frontend (linha 1455-1457 em `Checkout.tsx`), o que **apaga `sale_passengers` por cascade** e impede inspeção forense (também limpa `sale_logs` por cascade — por isso não há log).
+A regra de fundo está correta:
+- Pagamento confirmado (webhook/verify) cria `tickets` para a venda.
+- Checkout público considera `tickets` + `seat_locks` ativos por `trip_id`.
+- Bloqueios operacionais (`sales.status = 'bloqueado'`) são separados visualmente.
 
-Como não conseguimos ver o estado real dos `sale_passengers` no momento da falha (cascata apaga tudo), e os edge logs só mostram os 2 primeiros eventos da execução, precisamos primeiro **preservar o diagnóstico** antes de qualquer outro ajuste.
+Porém existem três lacunas reais que reproduzem a queixa do usuário ("comprei e a poltrona não aparece marcada / outra pessoa pode comprar"):
 
-Hipóteses prováveis (a confirmar com diagnóstico preservado):
+1. **Sem refresh automático no mapa público.** `fetchOccupiedSeats` só roda no mount e na revalidação do submit. Não há realtime nem polling. Quem fica na aba aberta nunca vê outras compras chegando, e quem volta pela vitrine pode bater em cache de navegação. Isso cria a sensação de "minha poltrona não está marcada".
 
-1. **Mismatch frontend×backend em compra multi-passageiro com tipos diferentes**: o frontend (`Checkout.tsx` linha 964-970) calcula taxa sobre `avgFinalPrice` × quantidade; o backend calcula taxa progressiva **por passageiro**. Para 1 passageiro o resultado é igual, mas para 2 passageiros em faixas diferentes (ex: 700 + 520) o frontend dá 18,30×2=36,60 e o backend dá 21+20,80=41,80 → **gross_amount errado** → 409 garantido.
-2. **`sale.trip_id` aponta para `returnTripId`** quando a venda é ida+volta, fazendo o filtro `trip_id === sale.trip_id` capturar só o passageiro de volta (com `final_price=0`).
-3. **`ticket_type_price` salvo como 0** quando o passageiro foi inserido antes de o usuário escolher o pacote (snapshot persistido com `original_price = event.unit_price = 520`, mas `gross_amount` calculado depois com 700).
+2. **Venda manual em `/admin/vendas` ignora `seat_locks`.** Em `NewSaleModal.tsx` (linhas 549-563) só lê `tickets`. Um admin consegue selecionar um assento que está reservado por um checkout público em andamento (lock válido, ainda sem ticket). Quando o cliente público confirma o pagamento, há colisão: dois caminhos tentam ocupar o mesmo assento.
 
-## Mudanças
+3. **Não há proteção transacional contra dupla venda do mesmo assento.** A `tickets` provavelmente não tem índice único por `(trip_id, seat_id)` excluindo bloqueios/cancelados, então a corrida só é evitada pela concorrência otimista do `seat_locks` (que tem unique constraint). Se a colisão acontecer entre admin (sem lock) e checkout público (com lock), a tabela aceita os dois.
 
-### 1. Preservar diagnóstico antes de retornar 409 (backend)
-`supabase/functions/create-asaas-payment/index.ts`:
-- Antes dos `return 409` em ambas as validações de integridade (linhas 703 e 733), gravar um registro em `sale_integration_logs` (provider=`asaas`, direction=`outgoing_request`, processing_status=`rejected`, incident_code=`financial_integrity_failed`, payload_json com `validationLogContext` completo). Essa tabela tem `ON DELETE SET NULL` no `sale_id`, então o registro **sobrevive** ao rollback do frontend.
+Diferença entre "reservado" e "vendido" hoje: reservado = `seat_lock` ativo (pré-pagamento). Vendido = `tickets` gerado após `pago`. A UI pública trata os dois como "ocupado" (cinza/usuário), sem diferenciação visual — está dentro do escopo aceitável, mas pode ser melhorado.
 
-### 2. Não deletar a venda no rollback do checkout
-`src/pages/public/Checkout.tsx` (linhas 1455-1457):
-- Em vez de `DELETE` em `sale_passengers`/`sales`, marcar a venda como `cancelado` com motivo `financial_integrity_failed`. Mantém os `sale_passengers` e `sale_logs` para inspeção. (Mantém `seat_locks` deletado para liberar assentos.)
+## Mudanças propostas (mínimas e seguras)
 
-### 3. Alinhar cálculo frontend ao motor progressivo por passageiro
-`src/pages/public/Checkout.tsx` `calculateTotalsFromSnapshots`:
-- Substituir `calculateFees(avgFinalPrice, ...) × passengerCount` por: somar `calculateFees(snapshot.final_price, ...)` **por passageiro** (taxa progressiva individual + taxas fixas/percentuais por passageiro). Isso garante que `gross_amount` enviado ao backend seja exatamente o que o backend recalcula em `buildCheckoutFinancialIntegritySnapshot`.
+### 1. Realtime + refresh on focus no checkout público
+Arquivo: `src/pages/public/Checkout.tsx`
+- Adicionar canal Supabase Realtime em `tickets` e `seat_locks` filtrado por `trip_id`, chamando `fetchOccupiedSeats(tripId, () => true)` em qualquer INSERT/UPDATE/DELETE.
+- Adicionar listener `visibilitychange` / `focus` para re-buscar quando a aba volta ao foco (cobre o caso "voltei pela vitrine após pagar").
+- Habilitar realtime via migração: `ALTER PUBLICATION supabase_realtime ADD TABLE public.tickets, public.seat_locks;` (verificar primeiro se já está incluído, para não duplicar).
 
-### 4. Garantir que `sale.trip_id` seja sempre o trecho de ida
-`src/pages/public/Checkout.tsx` (criação da venda, ~linha 1242):
-- Confirmar (e ajustar se necessário) que `trip_id` do INSERT em `sales` é sempre `tripId` (ida) — nunca `returnTripId`. Adicionar comentário explicando a regra de que `sale.trip_id = ida` é contrato com a validação do backend.
+### 2. Venda manual considera `seat_locks` ativos
+Arquivo: `src/components/admin/NewSaleModal.tsx` (bloco 547-605)
+- Adicionar busca paralela em `seat_locks` ativos por `trip_id` (`expires_at > now()`), filtrando por `company_id`, e marcar esses assentos como `blockedSeatIds` (visual âmbar "Reservado") para evitar venda manual sobre um lock público em andamento.
+- Aplicar a mesma checagem na revalidação imediatamente antes de gravar tickets do admin (linhas ~915-1063), abortando com mensagem clara se algum assento ficou indisponível durante o preenchimento.
 
-### 5. Hardening: taxa zero quando empresa isenta também no frontend
-`Checkout.tsx`: a flag `passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee` já existe (linha 968). Confirmar que `hasConfiguredPlatformFee` no Checkout segue a mesma regra do backend (`platform_fee_percent > 0`) — sem esta paridade, vendas de empresas piloto também 409.
+### 3. Proteção transacional contra dupla venda
+Migração: criar índice único parcial em `tickets`:
+```sql
+create unique index if not exists tickets_trip_seat_unique
+  on public.tickets (trip_id, seat_id)
+  where seat_id is not null;
+```
+Isso garante: mesmo se admin e checkout público corrigirem para o mesmo assento ao mesmo tempo, o segundo INSERT falha. O frontend já faz rollback em erro, então a falha é tratada como "assento acabou de ser ocupado" com toast claro.
 
-### 6. Teste
-`src/lib/feeCalculator.test.ts`: adicionar caso multi-passageiro confirmando que soma de `calculateFees` por passageiro é igual ao motor backend (700+520 → 41,80; não 36,60).
+Se a base já tiver duplicidades históricas, a migração tenta criar `CONCURRENTLY` falha; nesse caso aplicar limpeza prévia (não esperado em base saudável).
 
-## Riscos / Não-objetivo
-- Não altera split do Asaas, webhook, snapshot financeiro do backend.
-- Não muda regra progressiva (PRD 07 mantido como fonte da verdade).
-- Mantém isolamento multi-tenant (`company_id` em todos os logs).
-- Após deploy, próxima tentativa da VKL deve concluir cobrança em R$721,00 e gerar log estruturado se ainda falhar.
+### 4. Mensagens claras (já parcialmente existem)
+- No 23505 do `seat_locks` ou do índice novo de tickets (no checkout público e no admin), mostrar: "Esta poltrona acabou de ser reservada ou vendida. Escolha outra poltrona disponível." e re-disparar `fetchOccupiedSeats`.
+- Quando lock expira: mensagem "Sua reserva expirou. Selecione a poltrona novamente para continuar." (já há toast equivalente — apenas padronizar texto se diferente).
 
-## Detalhes técnicos
-- Tabela `sale_integration_logs` já existe e suporta `incident_code`/`warning_code`/`payload_json` — sem migration.
-- Frontend não precisa de novas dependências.
-- Diagnóstico preservado fica visível no painel "Diagnóstico de Pagamentos" da empresa.
+### 5. Pequena melhoria visual (opcional, sem refactor)
+`src/components/public/SeatButton.tsx` já distingue `occupied` (ícone usuário) e `blocked` (ícone Ban âmbar). Ajustar `SeatMap.tsx` para mapear `seat_locks` (sem ticket) → estado `blocked` (âmbar = "Reservado"), e tickets pagos → `occupied` (cinza = "Ocupado"). Reaproveita componentes existentes; só muda como o array é montado em `fetchOccupiedSeats`. Atualizar `SeatLegend` se necessário.
+
+## Verificações
+
+- Testes unitários existentes em `feeCalculator.test.ts`, `checkoutFinancialIntegrity.test.ts` continuam passando (não tocados).
+- Cenários manuais 1-5 listados pelo usuário (compra confirmada, duas abas, admin × público, lock expirado, cancelamento).
+- Confirmar via `supabase--read_query` que a publicação realtime tem `tickets` e `seat_locks` antes de adicionar à migração (evita erro idempotente).
+
+## Arquivos impactados
+
+- `src/pages/public/Checkout.tsx` — realtime + focus refresh, mensagens.
+- `src/components/admin/NewSaleModal.tsx` — incluir seat_locks na consulta + revalidação.
+- `src/components/public/SeatMap.tsx` (opcional) — diferenciar reservado vs ocupado.
+- `supabase/migrations/*.sql` — índice único parcial em tickets + ALTER PUBLICATION (se faltar).
+
+## Riscos
+
+- Realtime aumenta consumo de canais; mitigação: 1 canal por trip, com cleanup no unmount.
+- Índice único pode rejeitar inserts em bases com duplicidades históricas — verificar antes via query.
+- Admin sentindo "assento sumiu" porque entrou em lock público; mitigado pela mensagem clara e refresh.

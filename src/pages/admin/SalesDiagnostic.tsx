@@ -4278,6 +4278,7 @@ export default function SalesDiagnostic() {
                           : 'not_identified';
                       const statusLabelMap: Record<SaleIntegrationLog['processing_status'], string> = {
                         received: 'Recebido',
+                        requested: 'Solicitado',
                         ignored: 'Ignorado',
                         success: 'Sucesso',
                         partial_failure: 'Parcial',
