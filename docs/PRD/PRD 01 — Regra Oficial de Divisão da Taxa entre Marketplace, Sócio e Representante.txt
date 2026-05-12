@@ -1,0 +1,609 @@
+
+# PRD 01 — Regra Oficial de Divisão da Taxa entre Marketplace, Sócio e Representante
+
+## 1. Objetivo
+
+Documentar de forma definitiva como a taxa da plataforma deve ser dividida entre Marketplace, Sócio e Representante no SmartBus BR.
+
+Esta regra deve ser aplicada igualmente em:
+
+- Venda pública pela vitrine
+- Checkout público de evento
+- Venda manual administrativa
+- Snapshot financeiro da venda
+- Payload enviado ao Asaas
+- Diagnóstico de vendas
+- Ledger de comissões
+- Simulações visuais administrativas
+
+A regra principal é:
+
+**Primeiro calcula-se a taxa total oficial da plataforma. Depois essa taxa é dividida entre os recebedores elegíveis.**
+
+A divisão interna nunca pode alterar o valor total da taxa.
+
+---
+
+## 2. Conceitos
+
+### Taxa total da plataforma
+
+É o valor total da taxa calculada sobre a passagem, conforme a regra oficial de faixas e teto.
+
+Exemplo:
+
+- Passagem: R$ 77,00
+- Faixa: até R$ 100,00
+- Percentual oficial: 6%
+- Taxa total da plataforma: R$ 4,62
+
+Esse valor de R$ 4,62 é a base para divisão entre Marketplace, Sócio e Representante.
+
+---
+
+### Marketplace
+
+A Marketplace SmartBus BR é sempre um recebedor válido da taxa da plataforma.
+
+Wallet oficial da Marketplace:
+
+```text
+54b2bcad-4015-4824-b0af-fb330c86e6bd
+````
+
+A Marketplace pode receber:
+
+* sua parte normal;
+* a parte do sócio, quando o sócio estiver inativo ou sem wallet válida;
+* a parte do representante, se houver regra futura documentada para isso.
+
+---
+
+### Sócio
+
+O sócio só pode receber split efetivo no Asaas se estiver:
+
+* ativo;
+* elegível;
+* com wallet válida para o ambiente da venda;
+* corretamente configurado no sistema.
+
+Se o sócio estiver inativo, sem wallet ou com wallet inválida, a parte dele deve ser redirecionada para a Marketplace.
+
+A ausência ou inelegibilidade do sócio não pode bloquear a venda.
+
+---
+
+### Representante
+
+O representante só participa quando houver representante elegível vinculado à empresa/venda.
+
+O representante deve receber sua parte quando estiver:
+
+* vinculado à empresa/venda;
+* ativo;
+* elegível;
+* com wallet válida para o ambiente da venda;
+* apto a receber split conforme regra operacional.
+
+A ausência ou inelegibilidade do sócio não pode retirar a parte do representante.
+
+---
+
+## 3. Regra oficial de divisão
+
+## Cenário 1 — Sem representante e com sócio ativo
+
+Quando não houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em 2 partes iguais:
+
+* Marketplace: 50%
+* Sócio: 50%
+
+### Exemplo com taxa de R$ 4,62
+
+* Marketplace: R$ 2,31
+* Sócio: R$ 2,31
+* Representante: R$ 0,00
+
+Total distribuído:
+
+* R$ 4,62
+
+---
+
+## Cenário 2 — Sem representante e com sócio inativo ou sem wallet válida
+
+Quando não houver representante elegível e o sócio estiver inativo, sem wallet ou com wallet inválida, a taxa total da plataforma deve ser direcionada integralmente para a Marketplace.
+
+* Marketplace: 100%
+* Sócio: 0%
+* Representante: 0%
+
+### Exemplo com taxa de R$ 4,62
+
+* Marketplace: R$ 4,62
+* Sócio: R$ 0,00
+* Representante: R$ 0,00
+
+Total distribuído:
+
+* R$ 4,62
+
+Regra importante:
+
+**Não enviar wallet inválida do sócio ao Asaas.**
+
+---
+
+## Cenário 3 — Com representante elegível e com sócio ativo
+
+Quando houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em 3 partes iguais:
+
+* Marketplace: 1/3
+* Sócio: 1/3
+* Representante: 1/3
+
+### Exemplo com taxa de R$ 4,62
+
+* Marketplace: R$ 1,54
+* Sócio: R$ 1,54
+* Representante: R$ 1,54
+
+Total distribuído:
+
+* R$ 4,62
+
+---
+
+## Cenário 4 — Com representante elegível e com sócio inativo ou sem wallet válida
+
+Quando houver representante elegível, mas o sócio estiver inativo, sem wallet ou com wallet inválida, a parte do sócio deve ser redirecionada para a Marketplace.
+
+O representante continua recebendo normalmente a parte dele.
+
+A divisão fica:
+
+* Marketplace: 2/3
+* Sócio: 0%
+* Representante: 1/3
+
+### Exemplo com taxa de R$ 4,62
+
+* Marketplace: R$ 3,08
+* Sócio: R$ 0,00
+* Representante: R$ 1,54
+
+Total distribuído:
+
+* R$ 4,62
+
+Regra importante:
+
+**A inelegibilidade do sócio não pode prejudicar a comissão do representante elegível.**
+
+---
+
+## 4. Exemplos por percentual da taxa
+
+## Taxa total de 6%
+
+### Sem representante e com sócio ativo
+
+* Marketplace: 3%
+* Sócio: 3%
+* Representante: 0%
+
+### Sem representante e com sócio inativo
+
+* Marketplace: 6%
+* Sócio: 0%
+* Representante: 0%
+
+### Com representante e com sócio ativo
+
+* Marketplace: 2%
+* Sócio: 2%
+* Representante: 2%
+
+### Com representante e com sócio inativo
+
+* Marketplace: 4%
+* Sócio: 0%
+* Representante: 2%
+
+---
+
+## Taxa total de 5%
+
+### Sem representante e com sócio ativo
+
+* Marketplace: 2,5%
+* Sócio: 2,5%
+* Representante: 0%
+
+### Sem representante e com sócio inativo
+
+* Marketplace: 5%
+* Sócio: 0%
+* Representante: 0%
+
+### Com representante e com sócio ativo
+
+* Marketplace: 1,6667%
+* Sócio: 1,6667%
+* Representante: 1,6667%
+
+### Com representante e com sócio inativo
+
+* Marketplace: 3,3334%
+* Sócio: 0%
+* Representante: 1,6667%
+
+---
+
+## Taxa total de 4%
+
+### Sem representante e com sócio ativo
+
+* Marketplace: 2%
+* Sócio: 2%
+* Representante: 0%
+
+### Sem representante e com sócio inativo
+
+* Marketplace: 4%
+* Sócio: 0%
+* Representante: 0%
+
+### Com representante e com sócio ativo
+
+* Marketplace: 1,3333%
+* Sócio: 1,3333%
+* Representante: 1,3333%
+
+### Com representante e com sócio inativo
+
+* Marketplace: 2,6667%
+* Sócio: 0%
+* Representante: 1,3333%
+
+---
+
+## Taxa total de 3%
+
+### Sem representante e com sócio ativo
+
+* Marketplace: 1,5%
+* Sócio: 1,5%
+* Representante: 0%
+
+### Sem representante e com sócio inativo
+
+* Marketplace: 3%
+* Sócio: 0%
+* Representante: 0%
+
+### Com representante e com sócio ativo
+
+* Marketplace: 1%
+* Sócio: 1%
+* Representante: 1%
+
+### Com representante e com sócio inativo
+
+* Marketplace: 2%
+* Sócio: 0%
+* Representante: 1%
+
+---
+
+## 5. Exemplo com teto de R$ 25,00
+
+Quando a taxa total atingir o teto de R$ 25,00 por passagem, a divisão deve ser feita sobre R$ 25,00.
+
+## Sem representante e com sócio ativo
+
+* Marketplace: R$ 12,50
+* Sócio: R$ 12,50
+* Representante: R$ 0,00
+
+## Sem representante e com sócio inativo
+
+* Marketplace: R$ 25,00
+* Sócio: R$ 0,00
+* Representante: R$ 0,00
+
+## Com representante e com sócio ativo
+
+* Marketplace: R$ 8,33
+* Sócio: R$ 8,33
+* Representante: R$ 8,33
+
+Diferenças de centavos devem ser ajustadas de forma determinística sem ultrapassar R$ 25,00.
+
+## Com representante e com sócio inativo
+
+* Marketplace: R$ 16,67
+* Sócio: R$ 0,00
+* Representante: R$ 8,33
+
+Diferenças de centavos devem ser ajustadas de forma determinística sem ultrapassar R$ 25,00.
+
+---
+
+## 6. Regra de elegibilidade
+
+Antes de montar o split efetivo para o Asaas, o sistema deve validar a elegibilidade de cada recebedor.
+
+## Marketplace
+
+A Marketplace é sempre elegível, desde que a wallet oficial esteja configurada corretamente no ambiente.
+
+## Sócio
+
+O sócio é elegível somente se:
+
+* estiver ativo;
+* tiver wallet válida;
+* a wallet corresponder ao ambiente da venda;
+* estiver habilitado para participar do split.
+
+Se qualquer validação falhar:
+
+* não enviar wallet do sócio ao Asaas;
+* redirecionar a parte do sócio para a Marketplace;
+* registrar log claro do redirecionamento.
+
+## Representante
+
+O representante é elegível somente se:
+
+* existir vínculo com a empresa/venda;
+* estiver ativo;
+* tiver wallet válida;
+* a wallet corresponder ao ambiente da venda;
+* estiver habilitado para participar do split.
+
+Se o representante não existir:
+
+* usar regra de divisão sem representante.
+
+Se o representante existir, mas estiver inelegível:
+
+* não enviar wallet inválida ao Asaas;
+* não bloquear a venda automaticamente, salvo regra futura explícita;
+* registrar log claro;
+* tratar a parte dele conforme regra operacional vigente.
+
+---
+
+## 7. Regra de redirecionamento da parte do sócio
+
+Esta regra é obrigatória:
+
+**Quando o sócio estiver inativo ou sem wallet válida, a parte dele deve ser redirecionada para a Marketplace.**
+
+Essa regra vale tanto para vendas com representante quanto para vendas sem representante.
+
+## Sem representante
+
+* Marketplace recebe a parte normal da Marketplace + a parte do sócio.
+* Resultado: Marketplace 100%.
+
+## Com representante
+
+* Marketplace recebe a parte normal da Marketplace + a parte do sócio.
+* Representante mantém a parte dele.
+* Resultado: Marketplace 2/3 e Representante 1/3.
+
+---
+
+## 8. O que não pode acontecer
+
+O sistema não pode:
+
+* reduzir a taxa total porque o sócio está inativo;
+* reduzir a comissão do representante porque o sócio está inativo;
+* enviar wallet inválida do sócio ao Asaas;
+* bloquear a venda apenas porque o sócio está sem wallet, se a regra permite redirecionamento;
+* deixar valor de taxa sem destino;
+* criar cálculo diferente entre venda manual e venda pública;
+* mostrar no diagnóstico que o sócio recebeu split efetivo quando a wallet dele não foi enviada ao Asaas.
+
+---
+
+## 9. Snapshot financeiro
+
+O snapshot financeiro da venda deve registrar:
+
+* taxa total da plataforma;
+* existência ou ausência de representante;
+* elegibilidade do representante;
+* elegibilidade do sócio;
+* parte original prevista da Marketplace;
+* parte original prevista do sócio;
+* parte original prevista do representante;
+* valores redirecionados;
+* motivo do redirecionamento;
+* composição final enviada ao Asaas.
+
+Exemplo de snapshot em venda com representante e sócio inativo:
+
+* Taxa total: R$ 4,62
+* Marketplace original: R$ 1,54
+* Sócio original: R$ 1,54
+* Representante original: R$ 1,54
+* Sócio elegível: não
+* Motivo: sócio sem wallet válida
+* Valor redirecionado para Marketplace: R$ 1,54
+* Marketplace final: R$ 3,08
+* Representante final: R$ 1,54
+* Sócio final: R$ 0,00
+
+---
+
+## 10. Payload Asaas
+
+O payload enviado ao Asaas deve conter apenas recebedores efetivamente elegíveis.
+
+## Exemplo — Sem representante e com sócio inativo
+
+Apenas Marketplace:
+
+```json
+{
+  "split": [
+    {
+      "walletId": "54b2bcad-4015-4824-b0af-fb330c86e6bd",
+      "value": "taxa_total"
+    }
+  ]
+}
+```
+
+## Exemplo — Com representante e com sócio inativo
+
+Marketplace + Representante:
+
+```json
+{
+  "split": [
+    {
+      "walletId": "wallet_marketplace",
+      "value": "parte_marketplace_original_mais_parte_socio"
+    },
+    {
+      "walletId": "wallet_representante",
+      "value": "parte_representante"
+    }
+  ]
+}
+```
+
+Não deve existir item de split para sócio quando ele estiver inativo ou sem wallet válida.
+
+---
+
+## 11. Logs obrigatórios
+
+Quando houver redirecionamento da parte do sócio, o sistema deve registrar log claro.
+
+## Exemplo sem representante
+
+```text
+Sócio sem wallet ativa ou inelegível. Parte do sócio redirecionada para Marketplace. Marketplace receberá 100% da taxa da plataforma.
+```
+
+## Exemplo com representante
+
+```text
+Sócio sem wallet ativa ou inelegível. Parte do sócio redirecionada para Marketplace. Representante elegível mantém sua comissão. Marketplace receberá 2/3 da taxa e representante receberá 1/3.
+```
+
+---
+
+## 12. Diagnóstico administrativo
+
+A tela `/admin/diagnostico-vendas` deve separar:
+
+1. Taxa total calculada
+2. Composição interna prevista
+3. Recebedores elegíveis
+4. Redirecionamentos aplicados
+5. Split efetivamente enviado ao Asaas
+6. Retorno efetivo do Asaas
+
+A tela não deve indicar que o sócio recebeu split efetivo se:
+
+* a wallet do sócio não apareceu no payload enviado;
+* a wallet do sócio não apareceu no retorno do Asaas.
+
+Quando a parte do sócio for redirecionada, a tela deve mostrar mensagem clara.
+
+## Exemplo com representante e sócio inativo
+
+```text
+Sócio inelegível para split efetivo. A parte do sócio foi redirecionada para a Marketplace. O representante permanece elegível e mantém sua comissão.
+```
+
+---
+
+## 13. Casos obrigatórios de teste
+
+## Caso 1 — Sem representante, sócio ativo
+
+* Taxa total: R$ 4,62
+* Marketplace: R$ 2,31
+* Sócio: R$ 2,31
+* Representante: R$ 0,00
+
+## Caso 2 — Sem representante, sócio inativo
+
+* Taxa total: R$ 4,62
+* Marketplace: R$ 4,62
+* Sócio: R$ 0,00
+* Representante: R$ 0,00
+
+## Caso 3 — Com representante, sócio ativo
+
+* Taxa total: R$ 4,62
+* Marketplace: R$ 1,54
+* Sócio: R$ 1,54
+* Representante: R$ 1,54
+
+## Caso 4 — Com representante, sócio inativo
+
+* Taxa total: R$ 4,62
+* Marketplace: R$ 3,08
+* Sócio: R$ 0,00
+* Representante: R$ 1,54
+
+## Caso 5 — Com representante, sócio inativo, teto de R$ 25,00
+
+* Taxa total: R$ 25,00
+* Marketplace: R$ 16,67
+* Sócio: R$ 0,00
+* Representante: R$ 8,33
+
+## Caso 6 — Sem representante, sócio inativo, teto de R$ 25,00
+
+* Taxa total: R$ 25,00
+* Marketplace: R$ 25,00
+* Sócio: R$ 0,00
+* Representante: R$ 0,00
+
+---
+
+## 14. Critérios de aceite
+
+A regra estará correta quando:
+
+* a taxa total for calculada antes da divisão;
+* a divisão não alterar a taxa total;
+* venda manual e venda pública usarem a mesma regra;
+* a ausência de representante mudar a divisão para 2 partes;
+* a presença de representante elegível mudar a divisão para 3 partes;
+* sócio inativo redirecionar sua parte para Marketplace;
+* representante elegível não perder sua parte por causa do sócio inativo;
+* wallet inválida nunca for enviada ao Asaas;
+* o diagnóstico mostrar apenas recebedores efetivos no split Asaas;
+* snapshot e payload forem conciliáveis;
+* logs explicarem qualquer redirecionamento.
+
+---
+
+## 15. Regra final
+
+A regra final de divisão é:
+
+| Cenário                           | Marketplace | Sócio | Representante |
+| --------------------------------- | ----------: | ----: | ------------: |
+| Sem representante + sócio ativo   |         1/2 |   1/2 |             0 |
+| Sem representante + sócio inativo |           1 |     0 |             0 |
+| Com representante + sócio ativo   |         1/3 |   1/3 |           1/3 |
+| Com representante + sócio inativo |         2/3 |     0 |           1/3 |
+
+Essa tabela é a referência oficial para implementação.
+
+```
+
