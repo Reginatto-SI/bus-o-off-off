@@ -242,6 +242,8 @@ export default function Confirmation() {
         return 'A cobrança foi encontrada, mas sem identificador válido para vinculação segura.';
       case 'missing_invoice_url':
         return 'A cobrança foi localizada, mas sem link público disponível. Atualize o status do pagamento ou contate o suporte.';
+      case 'disallowed_billing_type':
+        return 'Esta cobrança antiga possui uma forma de pagamento não permitida. Cancele a cobrança anterior e gere uma nova cobrança em Pix ou Cartão de crédito.';
       case 'sale_paid_not_reopenable':
         return 'Esta reserva já está com pagamento confirmado. Atualize a página para visualizar sua passagem.';
       case 'sale_cancelled_not_reopenable':

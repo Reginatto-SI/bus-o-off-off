@@ -44,6 +44,8 @@ export async function startPlatformFeeCheckout({
         // Regra de segurança: se já existe cobrança vinculada em status terminal,
         // o operador não pode gerar nova cobrança automaticamente neste fluxo.
         toast.warning(data?.error || 'Cobrança vinculada em status terminal. É necessária ação administrativa explícita para nova cobrança.');
+      } else if (data?.error_code === 'disallowed_billing_type') {
+        toast.warning(data?.error || 'Esta cobrança antiga possui uma forma de pagamento não permitida. Cancele a cobrança anterior e gere uma nova cobrança em Pix ou Cartão de crédito.');
       } else {
         toast.error(data?.error || 'Erro ao criar checkout da taxa');
       }

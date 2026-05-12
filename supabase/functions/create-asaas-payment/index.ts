@@ -335,6 +335,39 @@ serve(async (req) => {
         const existingBody = await existingRes.json().catch(() => null);
 
         if (existingRes.ok && existingBody) {
+          const existingBillingType = String(existingBody.billingType ?? "").toUpperCase();
+          if (existingBillingType !== billingType) {
+            // Blindagem anti-boleto/fallback genérico: não reabrimos cobranças antigas ou divergentes
+            // (ex.: BOLETO/UNDEFINED) quando o usuário selecionou Pix ou cartão de crédito.
+            await logSaleOperationalEvent({
+              supabaseAdmin,
+              saleId: sale.id,
+              companyId: sale.company_id,
+              action: "payment_create_blocked",
+              source: "create-asaas-payment",
+              result: "rejected",
+              paymentEnvironment: paymentEnv,
+              errorCode: "payment_method_mismatch",
+              detail: `existing_payment_method_mismatch payment_id=${existingPaymentId} requested=${billingType} existing=${existingBillingType || "unknown"}`,
+            });
+            logPaymentTrace("warn", "create-asaas-payment", "payment_method_mismatch", {
+              sale_id: sale.id,
+              company_id: sale.company_id,
+              payment_environment: paymentEnv,
+              selected_payment_method: normalizedPaymentMethod,
+              requested_billing_type: billingType,
+              existing_billing_type: existingBillingType || null,
+              asaas_payment_id: existingPaymentId,
+            });
+            return jsonResponse(
+              {
+                error: "A cobrança existente usa uma forma de pagamento diferente da selecionada. Cancele a cobrança antiga antes de gerar um novo link.",
+                error_code: "payment_method_mismatch",
+              },
+              409,
+            );
+          }
+
           await logSaleOperationalEvent({
             supabaseAdmin,
             saleId: sale.id,
@@ -350,6 +383,9 @@ serve(async (req) => {
             sale_id: sale.id,
             company_id: sale.company_id,
             payment_environment: paymentEnv,
+            selected_payment_method: normalizedPaymentMethod,
+            requested_billing_type: billingType,
+            existing_billing_type: existingBillingType,
             asaas_payment_id: existingPaymentId,
             reason: "sale_already_has_asaas_payment_id",
           });
@@ -1300,6 +1336,9 @@ serve(async (req) => {
 
     console.log("[create-asaas-payment] sending payment payload", {
       sale_id: sale.id,
+      company_id: sale.company_id,
+      sale_origin: sale.sale_origin ?? null,
+      selected_payment_method: normalizedPaymentMethod,
       billingType,
       grossAmount,
       splitArray,
