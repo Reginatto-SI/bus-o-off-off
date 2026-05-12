@@ -563,6 +563,15 @@ export interface Sale {
   platform_fee_payment_id: string | null;
   reservation_expires_at: string | null;
   block_reason: string | null;
+  // Snapshot de split persistido no momento da cobrança (ver diagnóstico de pagamentos).
+  split_snapshot_captured_at: string | null;
+  split_snapshot_platform_fee_percent: number | null;
+  split_snapshot_platform_fee_total: number | null;
+  split_snapshot_platform_net_amount: number | null;
+  split_snapshot_representative_percent: number | null;
+  split_snapshot_socio_fee_amount: number | null;
+  split_snapshot_socio_split_percent: number | null;
+  split_snapshot_source: string | null;
   // QR próprio de venda/comprovante de serviços (separado do QR de passagem/ticket).
   service_qr_code_token: string | null;
   created_at: string;
