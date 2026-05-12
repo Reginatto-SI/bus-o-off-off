@@ -1,47 +1,82 @@
-
-# PRD 01 — Regra Oficial de Divisão da Taxa entre Marketplace, Sócio e Representante
+# PRD 01 — Regra Oficial de Taxa da Plataforma, Base de Cálculo e Divisão entre Marketplace, Sócio e Representante
 
 ## 1. Objetivo
 
-Documentar de forma definitiva como a taxa da plataforma deve ser dividida entre Marketplace, Sócio e Representante no SmartBus BR.
+Documentar de forma definitiva como a taxa da plataforma deve ser calculada, aplicada, dividida, registrada e diagnosticada no SmartBus BR.
+
+Este PRD define a regra oficial para:
+
+- cálculo da taxa da plataforma;
+- base de cálculo da taxa;
+- tratamento de taxas adicionais criadas pela empresa;
+- aplicação do mínimo operacional de R$ 5,00;
+- aplicação do teto de R$ 25,00 por passagem;
+- divisão da taxa entre Marketplace, Sócio e Representante;
+- redirecionamento da parte do sócio quando ele estiver inativo ou sem wallet válida;
+- consistência entre venda pública e venda manual;
+- montagem do payload enviado ao Asaas;
+- snapshot financeiro da venda;
+- logs de auditoria;
+- diagnóstico administrativo.
 
 Esta regra deve ser aplicada igualmente em:
 
-- Venda pública pela vitrine
-- Checkout público de evento
-- Venda manual administrativa
-- Snapshot financeiro da venda
-- Payload enviado ao Asaas
-- Diagnóstico de vendas
-- Ledger de comissões
-- Simulações visuais administrativas
+- venda pública pela vitrine da empresa;
+- checkout público de evento;
+- venda manual administrativa;
+- simulações visuais administrativas;
+- snapshot financeiro da venda;
+- payload enviado ao Asaas;
+- retorno do Asaas;
+- diagnóstico de vendas;
+- ledger de comissões;
+- relatórios financeiros futuros.
 
 A regra principal é:
 
 **Primeiro calcula-se a taxa total oficial da plataforma. Depois essa taxa é dividida entre os recebedores elegíveis.**
 
-A divisão interna nunca pode alterar o valor total da taxa.
+A divisão interna nunca pode alterar o valor total da taxa da plataforma.
 
 ---
 
-## 2. Conceitos
+## 2. Regra de ouro
 
-### Taxa total da plataforma
+A taxa da plataforma deve ser única, previsível e igual em todos os fluxos de venda.
 
-É o valor total da taxa calculada sobre a passagem, conforme a regra oficial de faixas e teto.
+Não pode existir:
+
+- uma regra para venda pública e outra para venda manual;
+- uma regra para simulação visual e outra para backend;
+- uma regra para snapshot e outra para payload Asaas;
+- uma regra para empresas com representante e outra que altere o total da taxa;
+- cálculo paralelo dentro de componentes visuais;
+- helper antigo sendo usado em um fluxo e helper novo em outro.
+
+Se houver divergência entre venda pública, venda manual, snapshot, payload Asaas ou diagnóstico, isso deve ser tratado como bug ou como decisão de produto pendente.
+
+---
+
+## 3. Conceitos principais
+
+## 3.1 Taxa total da plataforma
+
+É o valor total da taxa calculada sobre a venda/passagem conforme a regra oficial deste PRD.
+
+A taxa total da plataforma é calculada antes da divisão entre Marketplace, Sócio e Representante.
 
 Exemplo:
 
-- Passagem: R$ 77,00
-- Faixa: até R$ 100,00
-- Percentual oficial: 6%
-- Taxa total da plataforma: R$ 4,62
+- passagem: R$ 70,00;
+- faixa: até R$ 100,00;
+- percentual oficial: 6%;
+- taxa total da plataforma: R$ 4,20.
 
-Esse valor de R$ 4,62 é a base para divisão entre Marketplace, Sócio e Representante.
+Esse valor de R$ 4,20 é a base que será posteriormente dividida entre os recebedores elegíveis.
 
 ---
 
-### Marketplace
+## 3.2 Marketplace
 
 A Marketplace SmartBus BR é sempre um recebedor válido da taxa da plataforma.
 
@@ -49,85 +84,390 @@ Wallet oficial da Marketplace:
 
 ```text
 54b2bcad-4015-4824-b0af-fb330c86e6bd
-````
+```
 
 A Marketplace pode receber:
 
-* sua parte normal;
-* a parte do sócio, quando o sócio estiver inativo ou sem wallet válida;
-* a parte do representante, se houver regra futura documentada para isso.
+- sua parte normal da taxa;
+- a parte do sócio, quando o sócio estiver inativo ou sem wallet válida;
+- a parte do representante, caso exista regra futura documentada para isso.
+
+A Marketplace nunca deve receber menos do que sua parte mínima prevista para o cenário aplicável, salvo exceção formal documentada.
 
 ---
 
-### Sócio
+## 3.3 Sócio
 
 O sócio só pode receber split efetivo no Asaas se estiver:
 
-* ativo;
-* elegível;
-* com wallet válida para o ambiente da venda;
-* corretamente configurado no sistema.
+- ativo;
+- elegível;
+- com wallet válida para o ambiente da venda;
+- corretamente configurado no sistema;
+- habilitado para participar do split.
 
-Se o sócio estiver inativo, sem wallet ou com wallet inválida, a parte dele deve ser redirecionada para a Marketplace.
+Se o sócio estiver inativo, sem wallet ou com wallet inválida:
+
+- a wallet do sócio não deve ser enviada ao Asaas;
+- a venda não deve ser bloqueada por esse motivo;
+- a parte que seria do sócio deve ser redirecionada para a Marketplace;
+- o diagnóstico deve indicar claramente que o sócio não foi recebedor efetivo.
 
 A ausência ou inelegibilidade do sócio não pode bloquear a venda.
 
 ---
 
-### Representante
+## 3.4 Representante
 
-O representante só participa quando houver representante elegível vinculado à empresa/venda.
+O representante participa apenas quando houver representante elegível vinculado à empresa/venda.
 
 O representante deve receber sua parte quando estiver:
 
-* vinculado à empresa/venda;
-* ativo;
-* elegível;
-* com wallet válida para o ambiente da venda;
-* apto a receber split conforme regra operacional.
+- vinculado à empresa/venda;
+- ativo;
+- elegível;
+- com wallet válida para o ambiente da venda;
+- apto a receber split conforme regra operacional.
 
-A ausência ou inelegibilidade do sócio não pode retirar a parte do representante.
+A ausência ou inelegibilidade do sócio não pode retirar a parte do representante elegível.
+
+Regra crítica:
+
+**Se houver representante elegível e o sócio estiver inativo, a Marketplace absorve a parte do sócio, mas o representante continua recebendo sua parte normalmente.**
 
 ---
 
-## 3. Regra oficial de divisão
+## 4. Regra oficial de taxa da plataforma
 
-## Cenário 1 — Sem representante e com sócio ativo
+A taxa da plataforma deve ser calculada por passagem/item vendido, conforme o valor financeiro do item.
 
-Quando não houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em 2 partes iguais:
+Tabela oficial:
 
-* Marketplace: 50%
-* Sócio: 50%
+| Valor financeiro da passagem/item | Percentual da taxa |
+|---|---:|
+| Até R$ 100,00 | 6% |
+| Acima de R$ 100,00 até R$ 300,00 | 5% |
+| Acima de R$ 300,00 até R$ 600,00 | 4% |
+| Acima de R$ 600,00 | 3% |
 
-### Exemplo com taxa de R$ 4,62
+Além da regra percentual, existem dois limites operacionais:
 
-* Marketplace: R$ 2,31
-* Sócio: R$ 2,31
-* Representante: R$ 0,00
+| Regra | Valor |
+|---|---:|
+| Mínimo operacional da taxa total | R$ 5,00 |
+| Teto máximo da taxa | R$ 25,00 por passagem/item vendido |
+
+---
+
+## 5. Base de cálculo da taxa
+
+A taxa da plataforma deve ser calculada sobre o valor financeiro da passagem/item vendido.
+
+Esse valor deve refletir aquilo que está sendo efetivamente vendido como produto principal da empresa.
+
+Exemplos de valor financeiro que podem ser base da taxa:
+
+- passagem normal;
+- passagem adulto;
+- passagem infantil;
+- passagem com hotel;
+- passagem sem hotel;
+- pacote diferenciado;
+- serviço vinculado que componha o produto vendido;
+- item de venda com valor próprio.
+
+A taxa da plataforma não deve ser calculada automaticamente sobre todo o valor bruto da cobrança se parte desse valor representar taxa adicional criada pela empresa.
+
+---
+
+## 6. Taxas adicionais da empresa
+
+Taxa adicional da empresa é um valor configurado pela empresa no evento ou venda para cobrir custos próprios ou repassar valores ao comprador final.
+
+Exemplos:
+
+- taxa operacional;
+- taxa de conveniência;
+- repasse da taxa da plataforma ao cliente;
+- custo administrativo;
+- taxa criada pela empresa;
+- valor extra definido pelo organizador.
+
+Essa taxa adicional pode:
+
+- aumentar o valor final pago pelo comprador;
+- entrar no total enviado ao Asaas;
+- ser exibida no checkout;
+- ser usada pela empresa para cobrir seus próprios custos.
+
+Mas a taxa adicional não deve, por padrão:
+
+- alterar a base da taxa da plataforma;
+- aumentar automaticamente a comissão da Marketplace;
+- alterar a divisão entre Marketplace, Sócio e Representante;
+- alterar a faixa percentual aplicada;
+- gerar cálculo diferente entre venda pública e venda manual.
+
+---
+
+## 7. Exemplo real de taxa adicional
+
+Venda observada:
+
+- valor base da passagem: R$ 70,00;
+- taxa adicional configurada pela empresa: R$ 7,00;
+- total pago pelo cliente: R$ 77,00.
+
+Regra da taxa:
+
+- faixa da passagem: até R$ 100,00;
+- percentual oficial: 6%.
+
+Cálculo correto da taxa da plataforma:
+
+```text
+R$ 70,00 × 6% = R$ 4,20
+```
+
+O Asaas recebe uma cobrança total de R$ 77,00.
+
+Se o split for enviado como percentual sobre o total da cobrança, o sistema pode converter o valor absoluto da taxa em percentual operacional:
+
+```text
+R$ 4,20 / R$ 77,00 × 100 = 5,4545%
+```
+
+Arredondado:
+
+```text
+5,45% ou 5,46%
+```
+
+Esse percentual operacional não representa uma nova regra comercial.
+
+Ele representa apenas a conversão técnica necessária para que o Asaas retenha aproximadamente R$ 4,20 dentro de uma cobrança total de R$ 77,00.
+
+---
+
+## 8. Tipos de passagem, pacotes e serviços
+
+O sistema pode permitir que um mesmo evento tenha diferentes tipos de passagem ou pacotes.
+
+Exemplos:
+
+- adulto;
+- infantil;
+- passagem simples;
+- passagem com hotel;
+- passagem sem hotel;
+- pacote promocional;
+- serviço adicional vinculado;
+- serviço avulso;
+- benefício ou desconto por perfil de passageiro.
+
+A taxa da plataforma deve ser calculada item a item ou passageiro a passageiro, usando o valor financeiro real escolhido pelo comprador.
+
+Não pode acontecer de:
+
+- usar o preço base do evento quando o comprador escolheu outro tipo de passagem;
+- aplicar preço de adulto em passagem infantil;
+- ignorar pacote com hotel quando ele faz parte do item vendido;
+- ignorar serviço que compõe o produto financeiro da venda;
+- calcular taxa pela média da venda;
+- calcular taxa apenas pelo primeiro item e replicar para todos;
+- aplicar teto uma única vez sobre a venda inteira quando o correto for por passagem/item;
+- calcular diferente na venda pública e na venda manual.
+
+---
+
+## 9. Múltiplas passagens na mesma venda
+
+Quando houver múltiplas passagens na mesma venda, a taxa deve ser calculada por item/passageiro.
+
+Exemplo:
+
+```text
+Passageiro 1: adulto R$ 100,00 → 6% = R$ 6,00
+Passageiro 2: infantil R$ 50,00 → 6% = R$ 3,00
+
+Taxa total antes do mínimo/teto: R$ 9,00
+```
+
+Depois de calcular a taxa por item, o sistema deve somar os valores e aplicar as regras de mínimo, teto e divisão entre recebedores.
+
+---
+
+## 10. Valor mínimo operacional de R$ 5,00
+
+Existe um valor mínimo operacional de R$ 5,00 para viabilizar a cobrança/split no Asaas.
+
+Quando a taxa da plataforma calculada pela regra percentual ficar abaixo de R$ 5,00, o sistema deve elevar a taxa total para R$ 5,00.
+
+Exemplo:
+
+```text
+Passagem: R$ 30,00
+Taxa percentual: 6%
+Cálculo: R$ 30,00 × 6% = R$ 1,80
+
+Como R$ 1,80 é menor que R$ 5,00:
+Taxa final da plataforma = R$ 5,00
+```
+
+Essa regra deve valer igualmente para:
+
+- venda pública;
+- checkout da vitrine;
+- venda manual administrativa;
+- snapshot financeiro;
+- payload enviado ao Asaas;
+- diagnóstico administrativo;
+- simulações visuais.
+
+Não pode existir mínimo de R$ 5,00 apenas na venda manual se a venda pública também depende da mesma regra operacional.
+
+---
+
+## 11. O mínimo é aplicado antes da divisão
+
+O mínimo de R$ 5,00 deve ser aplicado sobre a taxa total da plataforma antes da divisão entre Marketplace, Sócio e Representante.
+
+Exemplo sem representante e com sócio ativo:
+
+```text
+Taxa calculada: R$ 1,80
+Taxa mínima aplicada: R$ 5,00
+
+Marketplace: R$ 2,50
+Sócio: R$ 2,50
+Representante: R$ 0,00
+```
+
+Exemplo com representante elegível e sócio ativo:
+
+```text
+Taxa calculada: R$ 1,80
+Taxa mínima aplicada: R$ 5,00
+
+Marketplace: R$ 1,67
+Sócio: R$ 1,67
+Representante: R$ 1,66
+```
+
+Diferenças de centavos devem ser tratadas de forma determinística, sem ultrapassar a taxa total.
+
+---
+
+## 12. Teto máximo de R$ 25,00
+
+O teto máximo da taxa da plataforma é de R$ 25,00 por passagem/item vendido.
+
+Quando a taxa calculada ultrapassar R$ 25,00 por passagem/item, o sistema deve limitar a taxa a R$ 25,00.
+
+Exemplo:
+
+```text
+Passagem: R$ 1.000,00
+Faixa: acima de R$ 600,00
+Percentual: 3%
+Cálculo: R$ 1.000,00 × 3% = R$ 30,00
+
+Teto aplicado: R$ 25,00
+Taxa final: R$ 25,00
+```
+
+O teto deve ser aplicado por passagem/item, não uma única vez sobre a venda inteira.
+
+Exemplo:
+
+```text
+2 passagens de R$ 1.000,00
+
+Taxa por passagem com teto: R$ 25,00
+Taxa total da venda: R$ 50,00
+```
+
+---
+
+## 13. Ordem oficial do cálculo
+
+A ordem correta do cálculo deve ser:
+
+1. Identificar os itens/passageiros vendidos.
+2. Identificar o valor financeiro de cada item/passageiro.
+3. Separar taxas adicionais da empresa, quando existirem.
+4. Calcular a taxa percentual conforme a faixa de cada item.
+5. Aplicar o teto de R$ 25,00 por item, quando necessário.
+6. Somar a taxa de todos os itens/passageiros.
+7. Aplicar o mínimo operacional de R$ 5,00 sobre a taxa total da plataforma, quando necessário.
+8. Dividir a taxa total entre Marketplace, Sócio e Representante conforme a regra oficial.
+9. Redirecionar partes inelegíveis, como sócio sem wallet, conforme a regra oficial.
+10. Gerar snapshot financeiro.
+11. Montar payload do Asaas.
+12. Registrar logs de cálculo e split.
+13. Exibir diagnóstico separando cálculo interno, payload e retorno do Asaas.
+
+---
+
+## 14. Regra oficial de divisão da taxa
+
+Após calcular a taxa total da plataforma, o sistema deve dividir essa taxa entre os recebedores elegíveis.
+
+A divisão depende de dois fatores:
+
+1. existência de representante elegível;
+2. elegibilidade do sócio.
+
+Tabela oficial:
+
+| Cenário | Marketplace | Sócio | Representante |
+|---|---:|---:|---:|
+| Sem representante + sócio ativo | 1/2 | 1/2 | 0 |
+| Sem representante + sócio inativo | 1 | 0 | 0 |
+| Com representante + sócio ativo | 1/3 | 1/3 | 1/3 |
+| Com representante + sócio inativo | 2/3 | 0 | 1/3 |
+
+Essa tabela é a referência oficial para implementação.
+
+---
+
+## 15. Cenário 1 — Sem representante e com sócio ativo
+
+Quando não houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em duas partes iguais:
+
+- Marketplace: 50%;
+- Sócio: 50%;
+- Representante: 0%.
+
+Exemplo com taxa de R$ 4,62:
+
+- Marketplace: R$ 2,31;
+- Sócio: R$ 2,31;
+- Representante: R$ 0,00.
 
 Total distribuído:
 
-* R$ 4,62
+- R$ 4,62.
 
 ---
 
-## Cenário 2 — Sem representante e com sócio inativo ou sem wallet válida
+## 16. Cenário 2 — Sem representante e com sócio inativo ou sem wallet válida
 
 Quando não houver representante elegível e o sócio estiver inativo, sem wallet ou com wallet inválida, a taxa total da plataforma deve ser direcionada integralmente para a Marketplace.
 
-* Marketplace: 100%
-* Sócio: 0%
-* Representante: 0%
+- Marketplace: 100%;
+- Sócio: 0%;
+- Representante: 0%.
 
-### Exemplo com taxa de R$ 4,62
+Exemplo com taxa de R$ 4,62:
 
-* Marketplace: R$ 4,62
-* Sócio: R$ 0,00
-* Representante: R$ 0,00
+- Marketplace: R$ 4,62;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
 
 Total distribuído:
 
-* R$ 4,62
+- R$ 4,62.
 
 Regra importante:
 
@@ -135,27 +475,27 @@ Regra importante:
 
 ---
 
-## Cenário 3 — Com representante elegível e com sócio ativo
+## 17. Cenário 3 — Com representante elegível e com sócio ativo
 
-Quando houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em 3 partes iguais:
+Quando houver representante elegível e o sócio estiver ativo com wallet válida, a taxa total da plataforma deve ser dividida em três partes iguais:
 
-* Marketplace: 1/3
-* Sócio: 1/3
-* Representante: 1/3
+- Marketplace: 1/3;
+- Sócio: 1/3;
+- Representante: 1/3.
 
-### Exemplo com taxa de R$ 4,62
+Exemplo com taxa de R$ 4,62:
 
-* Marketplace: R$ 1,54
-* Sócio: R$ 1,54
-* Representante: R$ 1,54
+- Marketplace: R$ 1,54;
+- Sócio: R$ 1,54;
+- Representante: R$ 1,54.
 
 Total distribuído:
 
-* R$ 4,62
+- R$ 4,62.
 
 ---
 
-## Cenário 4 — Com representante elegível e com sócio inativo ou sem wallet válida
+## 18. Cenário 4 — Com representante elegível e com sócio inativo ou sem wallet válida
 
 Quando houver representante elegível, mas o sócio estiver inativo, sem wallet ou com wallet inválida, a parte do sócio deve ser redirecionada para a Marketplace.
 
@@ -163,221 +503,262 @@ O representante continua recebendo normalmente a parte dele.
 
 A divisão fica:
 
-* Marketplace: 2/3
-* Sócio: 0%
-* Representante: 1/3
+- Marketplace: 2/3;
+- Sócio: 0%;
+- Representante: 1/3.
 
-### Exemplo com taxa de R$ 4,62
+Exemplo com taxa de R$ 4,62:
 
-* Marketplace: R$ 3,08
-* Sócio: R$ 0,00
-* Representante: R$ 1,54
+- Marketplace: R$ 3,08;
+- Sócio: R$ 0,00;
+- Representante: R$ 1,54.
 
 Total distribuído:
 
-* R$ 4,62
+- R$ 4,62.
 
-Regra importante:
+Regra crítica:
 
 **A inelegibilidade do sócio não pode prejudicar a comissão do representante elegível.**
 
 ---
 
-## 4. Exemplos por percentual da taxa
+## 19. Exemplos por percentual da taxa
 
-## Taxa total de 6%
-
-### Sem representante e com sócio ativo
-
-* Marketplace: 3%
-* Sócio: 3%
-* Representante: 0%
-
-### Sem representante e com sócio inativo
-
-* Marketplace: 6%
-* Sócio: 0%
-* Representante: 0%
-
-### Com representante e com sócio ativo
-
-* Marketplace: 2%
-* Sócio: 2%
-* Representante: 2%
-
-### Com representante e com sócio inativo
-
-* Marketplace: 4%
-* Sócio: 0%
-* Representante: 2%
-
----
-
-## Taxa total de 5%
+## 19.1 Taxa total de 6%
 
 ### Sem representante e com sócio ativo
 
-* Marketplace: 2,5%
-* Sócio: 2,5%
-* Representante: 0%
+- Marketplace: 3%;
+- Sócio: 3%;
+- Representante: 0%.
 
 ### Sem representante e com sócio inativo
 
-* Marketplace: 5%
-* Sócio: 0%
-* Representante: 0%
+- Marketplace: 6%;
+- Sócio: 0%;
+- Representante: 0%.
 
 ### Com representante e com sócio ativo
 
-* Marketplace: 1,6667%
-* Sócio: 1,6667%
-* Representante: 1,6667%
+- Marketplace: 2%;
+- Sócio: 2%;
+- Representante: 2%.
 
 ### Com representante e com sócio inativo
 
-* Marketplace: 3,3334%
-* Sócio: 0%
-* Representante: 1,6667%
+- Marketplace: 4%;
+- Sócio: 0%;
+- Representante: 2%.
 
 ---
 
-## Taxa total de 4%
+## 19.2 Taxa total de 5%
 
 ### Sem representante e com sócio ativo
 
-* Marketplace: 2%
-* Sócio: 2%
-* Representante: 0%
+- Marketplace: 2,5%;
+- Sócio: 2,5%;
+- Representante: 0%.
 
 ### Sem representante e com sócio inativo
 
-* Marketplace: 4%
-* Sócio: 0%
-* Representante: 0%
+- Marketplace: 5%;
+- Sócio: 0%;
+- Representante: 0%.
 
 ### Com representante e com sócio ativo
 
-* Marketplace: 1,3333%
-* Sócio: 1,3333%
-* Representante: 1,3333%
+- Marketplace: 1,6667%;
+- Sócio: 1,6667%;
+- Representante: 1,6667%.
 
 ### Com representante e com sócio inativo
 
-* Marketplace: 2,6667%
-* Sócio: 0%
-* Representante: 1,3333%
+- Marketplace: 3,3334%;
+- Sócio: 0%;
+- Representante: 1,6667%.
 
 ---
 
-## Taxa total de 3%
+## 19.3 Taxa total de 4%
 
 ### Sem representante e com sócio ativo
 
-* Marketplace: 1,5%
-* Sócio: 1,5%
-* Representante: 0%
+- Marketplace: 2%;
+- Sócio: 2%;
+- Representante: 0%.
 
 ### Sem representante e com sócio inativo
 
-* Marketplace: 3%
-* Sócio: 0%
-* Representante: 0%
+- Marketplace: 4%;
+- Sócio: 0%;
+- Representante: 0%.
 
 ### Com representante e com sócio ativo
 
-* Marketplace: 1%
-* Sócio: 1%
-* Representante: 1%
+- Marketplace: 1,3333%;
+- Sócio: 1,3333%;
+- Representante: 1,3333%.
 
 ### Com representante e com sócio inativo
 
-* Marketplace: 2%
-* Sócio: 0%
-* Representante: 1%
+- Marketplace: 2,6667%;
+- Sócio: 0%;
+- Representante: 1,3333%.
 
 ---
 
-## 5. Exemplo com teto de R$ 25,00
+## 19.4 Taxa total de 3%
 
-Quando a taxa total atingir o teto de R$ 25,00 por passagem, a divisão deve ser feita sobre R$ 25,00.
+### Sem representante e com sócio ativo
 
-## Sem representante e com sócio ativo
+- Marketplace: 1,5%;
+- Sócio: 1,5%;
+- Representante: 0%.
 
-* Marketplace: R$ 12,50
-* Sócio: R$ 12,50
-* Representante: R$ 0,00
+### Sem representante e com sócio inativo
 
-## Sem representante e com sócio inativo
+- Marketplace: 3%;
+- Sócio: 0%;
+- Representante: 0%.
 
-* Marketplace: R$ 25,00
-* Sócio: R$ 0,00
-* Representante: R$ 0,00
+### Com representante e com sócio ativo
 
-## Com representante e com sócio ativo
+- Marketplace: 1%;
+- Sócio: 1%;
+- Representante: 1%.
 
-* Marketplace: R$ 8,33
-* Sócio: R$ 8,33
-* Representante: R$ 8,33
+### Com representante e com sócio inativo
+
+- Marketplace: 2%;
+- Sócio: 0%;
+- Representante: 1%.
+
+---
+
+## 20. Exemplos com teto de R$ 25,00
+
+Quando a taxa total atingir o teto de R$ 25,00 por passagem/item, a divisão deve ser feita sobre R$ 25,00.
+
+## 20.1 Sem representante e com sócio ativo
+
+- Marketplace: R$ 12,50;
+- Sócio: R$ 12,50;
+- Representante: R$ 0,00.
+
+## 20.2 Sem representante e com sócio inativo
+
+- Marketplace: R$ 25,00;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
+
+## 20.3 Com representante e com sócio ativo
+
+- Marketplace: R$ 8,33;
+- Sócio: R$ 8,33;
+- Representante: R$ 8,33.
 
 Diferenças de centavos devem ser ajustadas de forma determinística sem ultrapassar R$ 25,00.
 
-## Com representante e com sócio inativo
+## 20.4 Com representante e com sócio inativo
 
-* Marketplace: R$ 16,67
-* Sócio: R$ 0,00
-* Representante: R$ 8,33
+- Marketplace: R$ 16,67;
+- Sócio: R$ 0,00;
+- Representante: R$ 8,33.
 
 Diferenças de centavos devem ser ajustadas de forma determinística sem ultrapassar R$ 25,00.
 
 ---
 
-## 6. Regra de elegibilidade
+## 21. Exemplos com mínimo de R$ 5,00
+
+Quando a taxa calculada ficar abaixo de R$ 5,00, a taxa final da plataforma deve ser elevada para R$ 5,00 antes da divisão.
+
+## 21.1 Sem representante e com sócio ativo
+
+- Taxa calculada: R$ 1,80;
+- Taxa mínima aplicada: R$ 5,00;
+- Marketplace: R$ 2,50;
+- Sócio: R$ 2,50;
+- Representante: R$ 0,00.
+
+## 21.2 Sem representante e com sócio inativo
+
+- Taxa calculada: R$ 1,80;
+- Taxa mínima aplicada: R$ 5,00;
+- Marketplace: R$ 5,00;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
+
+## 21.3 Com representante e com sócio ativo
+
+- Taxa calculada: R$ 1,80;
+- Taxa mínima aplicada: R$ 5,00;
+- Marketplace: R$ 1,67;
+- Sócio: R$ 1,67;
+- Representante: R$ 1,66.
+
+## 21.4 Com representante e com sócio inativo
+
+- Taxa calculada: R$ 1,80;
+- Taxa mínima aplicada: R$ 5,00;
+- Marketplace: R$ 3,34;
+- Sócio: R$ 0,00;
+- Representante: R$ 1,66.
+
+A inelegibilidade do sócio não pode retirar a comissão do representante elegível.
+
+---
+
+## 22. Regra de elegibilidade
 
 Antes de montar o split efetivo para o Asaas, o sistema deve validar a elegibilidade de cada recebedor.
 
-## Marketplace
+## 22.1 Marketplace
 
 A Marketplace é sempre elegível, desde que a wallet oficial esteja configurada corretamente no ambiente.
 
-## Sócio
+## 22.2 Sócio
 
 O sócio é elegível somente se:
 
-* estiver ativo;
-* tiver wallet válida;
-* a wallet corresponder ao ambiente da venda;
-* estiver habilitado para participar do split.
+- estiver ativo;
+- tiver wallet válida;
+- a wallet corresponder ao ambiente da venda;
+- estiver habilitado para participar do split.
 
 Se qualquer validação falhar:
 
-* não enviar wallet do sócio ao Asaas;
-* redirecionar a parte do sócio para a Marketplace;
-* registrar log claro do redirecionamento.
+- não enviar wallet do sócio ao Asaas;
+- redirecionar a parte do sócio para a Marketplace;
+- registrar log claro do redirecionamento;
+- manter a venda funcional.
 
-## Representante
+## 22.3 Representante
 
 O representante é elegível somente se:
 
-* existir vínculo com a empresa/venda;
-* estiver ativo;
-* tiver wallet válida;
-* a wallet corresponder ao ambiente da venda;
-* estiver habilitado para participar do split.
+- existir vínculo com a empresa/venda;
+- estiver ativo;
+- tiver wallet válida;
+- a wallet corresponder ao ambiente da venda;
+- estiver habilitado para participar do split.
 
 Se o representante não existir:
 
-* usar regra de divisão sem representante.
+- usar regra de divisão sem representante.
 
 Se o representante existir, mas estiver inelegível:
 
-* não enviar wallet inválida ao Asaas;
-* não bloquear a venda automaticamente, salvo regra futura explícita;
-* registrar log claro;
-* tratar a parte dele conforme regra operacional vigente.
+- não enviar wallet inválida ao Asaas;
+- não bloquear a venda automaticamente, salvo regra futura explícita;
+- registrar log claro;
+- tratar a parte dele conforme regra operacional vigente.
 
 ---
 
-## 7. Regra de redirecionamento da parte do sócio
+## 23. Regra de redirecionamento da parte do sócio
 
 Esta regra é obrigatória:
 
@@ -385,68 +766,102 @@ Esta regra é obrigatória:
 
 Essa regra vale tanto para vendas com representante quanto para vendas sem representante.
 
-## Sem representante
+## 23.1 Sem representante
 
-* Marketplace recebe a parte normal da Marketplace + a parte do sócio.
-* Resultado: Marketplace 100%.
+A Marketplace recebe:
 
-## Com representante
+- a parte normal da Marketplace;
+- a parte que seria do sócio.
 
-* Marketplace recebe a parte normal da Marketplace + a parte do sócio.
-* Representante mantém a parte dele.
-* Resultado: Marketplace 2/3 e Representante 1/3.
+Resultado:
+
+- Marketplace: 100%;
+- Sócio: 0%;
+- Representante: 0%.
+
+## 23.2 Com representante elegível
+
+A Marketplace recebe:
+
+- a parte normal da Marketplace;
+- a parte que seria do sócio.
+
+O representante mantém a parte dele.
+
+Resultado:
+
+- Marketplace: 2/3;
+- Sócio: 0%;
+- Representante: 1/3.
 
 ---
 
-## 8. O que não pode acontecer
+## 24. O que não pode acontecer
 
 O sistema não pode:
 
-* reduzir a taxa total porque o sócio está inativo;
-* reduzir a comissão do representante porque o sócio está inativo;
-* enviar wallet inválida do sócio ao Asaas;
-* bloquear a venda apenas porque o sócio está sem wallet, se a regra permite redirecionamento;
-* deixar valor de taxa sem destino;
-* criar cálculo diferente entre venda manual e venda pública;
-* mostrar no diagnóstico que o sócio recebeu split efetivo quando a wallet dele não foi enviada ao Asaas.
+- reduzir a taxa total porque o sócio está inativo;
+- reduzir a comissão do representante porque o sócio está inativo;
+- enviar wallet inválida do sócio ao Asaas;
+- enviar wallet inválida do representante ao Asaas;
+- bloquear a venda apenas porque o sócio está sem wallet, se a regra permite redirecionamento;
+- deixar valor de taxa sem destino;
+- criar cálculo diferente entre venda manual e venda pública;
+- aplicar mínimo de R$ 5,00 em apenas um fluxo;
+- aplicar teto de R$ 25,00 apenas visualmente;
+- calcular taxa sobre valor bruto quando parte do bruto for taxa adicional da empresa;
+- mostrar no diagnóstico que o sócio recebeu split efetivo quando a wallet dele não foi enviada ao Asaas;
+- mostrar no diagnóstico que o representante recebeu split efetivo quando a wallet dele não foi enviada ao Asaas.
 
 ---
 
-## 9. Snapshot financeiro
+## 25. Venda pública e venda manual
 
-O snapshot financeiro da venda deve registrar:
+A venda pública e a venda manual devem usar a mesma regra de taxa.
 
-* taxa total da plataforma;
-* existência ou ausência de representante;
-* elegibilidade do representante;
-* elegibilidade do sócio;
-* parte original prevista da Marketplace;
-* parte original prevista do sócio;
-* parte original prevista do representante;
-* valores redirecionados;
-* motivo do redirecionamento;
-* composição final enviada ao Asaas.
+É aceitável que a forma operacional de cobrança seja diferente, desde que a regra financeira seja igual.
 
-Exemplo de snapshot em venda com representante e sócio inativo:
+Exemplo:
 
-* Taxa total: R$ 4,62
-* Marketplace original: R$ 1,54
-* Sócio original: R$ 1,54
-* Representante original: R$ 1,54
-* Sócio elegível: não
-* Motivo: sócio sem wallet válida
-* Valor redirecionado para Marketplace: R$ 1,54
-* Marketplace final: R$ 3,08
-* Representante final: R$ 1,54
-* Sócio final: R$ 0,00
+- venda pública: taxa retida via split na cobrança principal;
+- venda manual: taxa cobrada em checkout separado, se essa for a arquitetura atual.
+
+Mas o valor calculado da taxa deve ser o mesmo para o mesmo cenário.
+
+Não pode acontecer de:
+
+- venda manual aplicar mínimo de R$ 5,00 e venda pública não aplicar;
+- venda pública usar base de cálculo diferente da venda manual;
+- venda manual ignorar tipos de passagem;
+- venda pública ignorar taxa mínima;
+- simulação visual exibir valor diferente do backend;
+- snapshot salvar valor diferente do payload sem justificativa clara.
 
 ---
 
-## 10. Payload Asaas
+## 26. Percentual enviado ao Asaas
+
+Quando o sistema converter um valor absoluto de taxa para `percentualValue` do Asaas, o diagnóstico deve explicar essa conversão.
+
+Exemplo:
+
+```text
+Taxa absoluta calculada: R$ 4,20
+Valor total da cobrança Asaas: R$ 77,00
+Percentual operacional enviado ao Asaas: 5,46%
+```
+
+Esse percentual operacional não deve ser confundido com a faixa comercial da taxa.
+
+A faixa comercial pode ser 6%, mesmo que o percentual enviado ao Asaas apareça como 5,46%, quando a cobrança total incluir taxas adicionais que não compõem a base da taxa da plataforma.
+
+---
+
+## 27. Payload Asaas
 
 O payload enviado ao Asaas deve conter apenas recebedores efetivamente elegíveis.
 
-## Exemplo — Sem representante e com sócio inativo
+## 27.1 Exemplo — Sem representante e com sócio inativo
 
 Apenas Marketplace:
 
@@ -461,7 +876,7 @@ Apenas Marketplace:
 }
 ```
 
-## Exemplo — Com representante e com sócio inativo
+## 27.2 Exemplo — Com representante e com sócio inativo
 
 Marketplace + Representante:
 
@@ -484,43 +899,114 @@ Não deve existir item de split para sócio quando ele estiver inativo ou sem wa
 
 ---
 
-## 11. Logs obrigatórios
+## 28. Snapshot financeiro
 
-Quando houver redirecionamento da parte do sócio, o sistema deve registrar log claro.
+O snapshot financeiro da venda deve registrar informações suficientes para auditoria.
 
-## Exemplo sem representante
+O snapshot deve conter, sempre que possível:
+
+- valor total pago pelo comprador;
+- valor financeiro da passagem/item;
+- valor das taxas adicionais da empresa;
+- percentual comercial aplicado;
+- taxa calculada antes do mínimo;
+- aplicação do mínimo de R$ 5,00, quando ocorrer;
+- aplicação do teto de R$ 25,00, quando ocorrer;
+- taxa total final da plataforma;
+- existência ou ausência de representante;
+- elegibilidade do representante;
+- elegibilidade do sócio;
+- parte original prevista da Marketplace;
+- parte original prevista do sócio;
+- parte original prevista do representante;
+- valores redirecionados;
+- motivo do redirecionamento;
+- composição final enviada ao Asaas;
+- ambiente da venda;
+- momento de captura do snapshot.
+
+Exemplo de snapshot em venda com representante e sócio inativo:
+
+- taxa total: R$ 4,62;
+- Marketplace original: R$ 1,54;
+- sócio original: R$ 1,54;
+- representante original: R$ 1,54;
+- sócio elegível: não;
+- motivo: sócio sem wallet válida;
+- valor redirecionado para Marketplace: R$ 1,54;
+- Marketplace final: R$ 3,08;
+- representante final: R$ 1,54;
+- sócio final: R$ 0,00.
+
+---
+
+## 29. Logs obrigatórios
+
+O sistema deve registrar logs suficientes para auditar:
+
+- valor base da passagem;
+- valor de taxa adicional;
+- valor total pago pelo cliente;
+- percentual comercial aplicado;
+- taxa calculada antes do mínimo;
+- aplicação do mínimo de R$ 5,00, quando ocorrer;
+- aplicação do teto de R$ 25,00, quando ocorrer;
+- taxa final da plataforma;
+- divisão entre Marketplace, Sócio e Representante;
+- redirecionamentos por wallet inativa ou inelegível;
+- percentual operacional enviado ao Asaas;
+- payload enviado;
+- retorno do Asaas.
+
+## 29.1 Log quando sócio inativo sem representante
 
 ```text
 Sócio sem wallet ativa ou inelegível. Parte do sócio redirecionada para Marketplace. Marketplace receberá 100% da taxa da plataforma.
 ```
 
-## Exemplo com representante
+## 29.2 Log quando sócio inativo com representante elegível
 
 ```text
 Sócio sem wallet ativa ou inelegível. Parte do sócio redirecionada para Marketplace. Representante elegível mantém sua comissão. Marketplace receberá 2/3 da taxa e representante receberá 1/3.
 ```
 
+## 29.3 Log quando percentual Asaas for conversão operacional
+
+```text
+Percentual enviado ao Asaas representa conversão técnica da taxa absoluta sobre o valor total da cobrança. Percentual comercial da faixa permanece conforme regra oficial.
+```
+
 ---
 
-## 12. Diagnóstico administrativo
+## 30. Diagnóstico administrativo
 
-A tela `/admin/diagnostico-vendas` deve separar:
+A tela `/admin/diagnostico-vendas` deve separar claramente:
 
-1. Taxa total calculada
-2. Composição interna prevista
-3. Recebedores elegíveis
-4. Redirecionamentos aplicados
-5. Split efetivamente enviado ao Asaas
-6. Retorno efetivo do Asaas
+1. taxa total calculada;
+2. valor base usado no cálculo;
+3. taxas adicionais da empresa;
+4. composição interna prevista;
+5. recebedores elegíveis;
+6. redirecionamentos aplicados;
+7. split efetivamente enviado ao Asaas;
+8. retorno efetivo do Asaas;
+9. snapshot interno;
+10. ledger de representante;
+11. logs técnicos.
 
 A tela não deve indicar que o sócio recebeu split efetivo se:
 
-* a wallet do sócio não apareceu no payload enviado;
-* a wallet do sócio não apareceu no retorno do Asaas.
+- a wallet do sócio não apareceu no payload enviado;
+- a wallet do sócio não apareceu no retorno do Asaas.
+
+A tela não deve indicar que o representante recebeu split efetivo se:
+
+- a wallet do representante não apareceu no payload enviado;
+- a wallet do representante não apareceu no retorno do Asaas.
 
 Quando a parte do sócio for redirecionada, a tela deve mostrar mensagem clara.
 
-## Exemplo com representante e sócio inativo
+Exemplo com representante e sócio inativo:
 
 ```text
 Sócio inelegível para split efetivo. A parte do sócio foi redirecionada para a Marketplace. O representante permanece elegível e mantém sua comissão.
@@ -528,82 +1014,270 @@ Sócio inelegível para split efetivo. A parte do sócio foi redirecionada para 
 
 ---
 
-## 13. Casos obrigatórios de teste
+## 31. Casos obrigatórios de teste
+
+## 31.1 Faixas da taxa
+
+Validar:
+
+1. passagem de R$ 77,00;
+2. passagem de R$ 100,00;
+3. passagem de R$ 101,00;
+4. passagem de R$ 300,00;
+5. passagem de R$ 301,00;
+6. passagem de R$ 600,00;
+7. passagem de R$ 601,00;
+8. passagem de R$ 1.000,00.
+
+## 31.2 Mínimo e teto
+
+Validar:
+
+1. taxa calculada abaixo de R$ 5,00;
+2. taxa exatamente igual a R$ 5,00;
+3. taxa acima de R$ 5,00;
+4. taxa abaixo de R$ 25,00;
+5. taxa exatamente igual a R$ 25,00;
+6. taxa acima de R$ 25,00.
+
+## 31.3 Taxas adicionais
+
+Validar:
+
+1. passagem de R$ 70,00 sem taxa adicional;
+2. passagem de R$ 70,00 com taxa adicional de R$ 7,00;
+3. passagem de R$ 70,00 com taxa adicional percentual;
+4. taxa adicional compondo o total pago;
+5. taxa adicional não alterando a base da taxa da plataforma.
+
+## 31.4 Tipos de passagem e serviços
+
+Validar:
+
+1. passagem normal;
+2. adulto;
+3. infantil;
+4. passagem simples;
+5. passagem com hotel;
+6. passagem sem hotel;
+7. serviço adicional vinculado;
+8. múltiplos passageiros com preços diferentes;
+9. múltiplos serviços;
+10. desconto ou benefício por tipo de passageiro.
+
+## 31.5 Divisão do split
+
+Validar:
+
+1. sem representante + sócio ativo;
+2. sem representante + sócio inativo;
+3. com representante + sócio ativo;
+4. com representante + sócio inativo;
+5. representante sem wallet;
+6. sócio sem wallet;
+7. sócio e representante sem wallet;
+8. sandbox;
+9. produção.
+
+## 31.6 Venda manual versus venda pública
+
+Para o mesmo cenário, comparar:
+
+- valor base;
+- taxa adicional;
+- taxa calculada;
+- mínimo;
+- teto;
+- divisão;
+- snapshot;
+- payload;
+- diagnóstico.
+
+---
+
+## 32. Casos de referência
 
 ## Caso 1 — Sem representante, sócio ativo
 
-* Taxa total: R$ 4,62
-* Marketplace: R$ 2,31
-* Sócio: R$ 2,31
-* Representante: R$ 0,00
+- Taxa total: R$ 4,62;
+- Marketplace: R$ 2,31;
+- Sócio: R$ 2,31;
+- Representante: R$ 0,00.
 
 ## Caso 2 — Sem representante, sócio inativo
 
-* Taxa total: R$ 4,62
-* Marketplace: R$ 4,62
-* Sócio: R$ 0,00
-* Representante: R$ 0,00
+- Taxa total: R$ 4,62;
+- Marketplace: R$ 4,62;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
 
 ## Caso 3 — Com representante, sócio ativo
 
-* Taxa total: R$ 4,62
-* Marketplace: R$ 1,54
-* Sócio: R$ 1,54
-* Representante: R$ 1,54
+- Taxa total: R$ 4,62;
+- Marketplace: R$ 1,54;
+- Sócio: R$ 1,54;
+- Representante: R$ 1,54.
 
 ## Caso 4 — Com representante, sócio inativo
 
-* Taxa total: R$ 4,62
-* Marketplace: R$ 3,08
-* Sócio: R$ 0,00
-* Representante: R$ 1,54
+- Taxa total: R$ 4,62;
+- Marketplace: R$ 3,08;
+- Sócio: R$ 0,00;
+- Representante: R$ 1,54.
 
 ## Caso 5 — Com representante, sócio inativo, teto de R$ 25,00
 
-* Taxa total: R$ 25,00
-* Marketplace: R$ 16,67
-* Sócio: R$ 0,00
-* Representante: R$ 8,33
+- Taxa total: R$ 25,00;
+- Marketplace: R$ 16,67;
+- Sócio: R$ 0,00;
+- Representante: R$ 8,33.
 
 ## Caso 6 — Sem representante, sócio inativo, teto de R$ 25,00
 
-* Taxa total: R$ 25,00
-* Marketplace: R$ 25,00
-* Sócio: R$ 0,00
-* Representante: R$ 0,00
+- Taxa total: R$ 25,00;
+- Marketplace: R$ 25,00;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
+
+## Caso 7 — Sem representante, sócio inativo, mínimo de R$ 5,00
+
+- Taxa calculada: menor que R$ 5,00;
+- Taxa final: R$ 5,00;
+- Marketplace: R$ 5,00;
+- Sócio: R$ 0,00;
+- Representante: R$ 0,00.
+
+## Caso 8 — Com representante, sócio inativo, mínimo de R$ 5,00
+
+- Taxa calculada: menor que R$ 5,00;
+- Taxa final: R$ 5,00;
+- Marketplace: R$ 3,34;
+- Sócio: R$ 0,00;
+- Representante: R$ 1,66.
+
+## Caso 9 — Passagem de R$ 70,00 com taxa adicional de R$ 7,00
+
+- Valor base: R$ 70,00;
+- Taxa adicional: R$ 7,00;
+- Total pago: R$ 77,00;
+- Percentual comercial: 6%;
+- Taxa da plataforma: R$ 4,20;
+- Percentual operacional sobre o total Asaas: aproximadamente 5,46%.
 
 ---
 
-## 14. Critérios de aceite
+## 33. Critérios de aceite
 
 A regra estará correta quando:
 
-* a taxa total for calculada antes da divisão;
-* a divisão não alterar a taxa total;
-* venda manual e venda pública usarem a mesma regra;
-* a ausência de representante mudar a divisão para 2 partes;
-* a presença de representante elegível mudar a divisão para 3 partes;
-* sócio inativo redirecionar sua parte para Marketplace;
-* representante elegível não perder sua parte por causa do sócio inativo;
-* wallet inválida nunca for enviada ao Asaas;
-* o diagnóstico mostrar apenas recebedores efetivos no split Asaas;
-* snapshot e payload forem conciliáveis;
-* logs explicarem qualquer redirecionamento.
+- a taxa total for calculada antes da divisão;
+- a divisão não alterar a taxa total;
+- venda manual e venda pública usarem a mesma regra;
+- a ausência de representante mudar a divisão para duas partes;
+- a presença de representante elegível mudar a divisão para três partes;
+- sócio inativo redirecionar sua parte para Marketplace;
+- representante elegível não perder sua parte por causa do sócio inativo;
+- wallet inválida nunca for enviada ao Asaas;
+- taxa adicional da empresa não alterar indevidamente a base da taxa da plataforma;
+- taxa calculada abaixo de R$ 5,00 for elevada para R$ 5,00;
+- taxa acima do teto for limitada a R$ 25,00 por passagem/item;
+- tipos de passagem diferentes forem calculados corretamente;
+- serviços/pacotes forem considerados quando fizerem parte do valor financeiro do item vendido;
+- venda pública e venda manual gerarem o mesmo valor de taxa para o mesmo cenário;
+- o diagnóstico mostrar apenas recebedores efetivos no split Asaas;
+- snapshot e payload forem conciliáveis;
+- logs explicarem qualquer redirecionamento;
+- percentual enviado ao Asaas for explicado quando for apenas conversão operacional.
 
 ---
 
-## 15. Regra final
+## 34. O que este PRD não cobre
 
-A regra final de divisão é:
+Este PRD não define:
 
-| Cenário                           | Marketplace | Sócio | Representante |
-| --------------------------------- | ----------: | ----: | ------------: |
-| Sem representante + sócio ativo   |         1/2 |   1/2 |             0 |
-| Sem representante + sócio inativo |           1 |     0 |             0 |
-| Com representante + sócio ativo   |         1/3 |   1/3 |           1/3 |
-| Com representante + sócio inativo |         2/3 |     0 |           1/3 |
+- política fiscal ou tributária da empresa;
+- conciliação bancária externa fora do sistema;
+- regras de chargeback;
+- regras de reembolso;
+- contrato comercial individual com cada empresa;
+- liquidação manual de comissões fora do Asaas;
+- estratégia contábil de repasse para sócio ou representante;
+- regras comerciais futuras de novos recebedores.
 
-Essa tabela é a referência oficial para implementação.
+---
 
+## 35. Restrições para implementação
+
+Ao implementar ou corrigir essa regra:
+
+- não criar arquitetura nova sem necessidade;
+- não duplicar helper de cálculo;
+- não criar fórmula dentro de componente visual;
+- não alterar webhook sem necessidade;
+- não alterar confirmação de pagamento sem necessidade;
+- não alterar fluxo de venda sem diagnóstico;
+- não criar migration sem justificativa;
+- não alterar regra de taxa sem atualizar este PRD;
+- não deixar venda administrativa e venda pública divergirem;
+- não misturar snapshot interno com split efetivo Asaas;
+- não assumir que o percentual enviado ao Asaas é sempre igual ao percentual comercial.
+
+---
+
+## 36. Entregável recomendado para auditoria técnica
+
+Antes de qualquer correção de código, gerar uma análise em:
+
+```text
+docs/Analises/analise-02-taxas-split-prd01-venda-publica-manual.md
 ```
 
+A análise deve conter:
+
+1. resumo executivo;
+2. arquivos investigados;
+3. leitura deste PRD;
+4. mapa do fluxo de cálculo da venda pública;
+5. mapa do fluxo de cálculo da venda manual;
+6. mapa do cálculo para tipos de passagem;
+7. mapa do cálculo para serviços/adicionais/hotel;
+8. comparação entre venda pública e venda manual;
+9. comparação entre regra atual e este PRD;
+10. explicação do caso real de R$ 77,00;
+11. validação da regra de divisão;
+12. validação do mínimo de R$ 5,00;
+13. validação do teto de R$ 25,00;
+14. validação do uso de taxa adicional;
+15. validação do uso de `platform_fee_percent`;
+16. riscos encontrados;
+17. proposta de correção mínima;
+18. checklist de testes manuais;
+19. checklist de testes automatizados recomendados.
+
+---
+
+## 37. Regra final
+
+A regra final do SmartBus BR é:
+
+1. calcular a taxa oficial sobre o valor financeiro da passagem/item;
+2. separar taxa adicional da empresa, quando existir;
+3. aplicar percentual por faixa;
+4. aplicar teto de R$ 25,00 por passagem/item;
+5. aplicar mínimo operacional de R$ 5,00 sobre a taxa total;
+6. dividir a taxa entre Marketplace, Sócio e Representante;
+7. redirecionar a parte do sócio para Marketplace quando o sócio estiver inativo ou sem wallet válida;
+8. manter a parte do representante quando ele estiver elegível;
+9. enviar ao Asaas apenas recebedores elegíveis;
+10. registrar snapshot, logs e diagnóstico de forma auditável.
+
+Tabela oficial de divisão:
+
+| Cenário | Marketplace | Sócio | Representante |
+|---|---:|---:|---:|
+| Sem representante + sócio ativo | 1/2 | 1/2 | 0 |
+| Sem representante + sócio inativo | 1 | 0 | 0 |
+| Com representante + sócio ativo | 1/3 | 1/3 | 1/3 |
+| Com representante + sócio inativo | 2/3 | 0 | 1/3 |
+
+Esta tabela é a referência oficial para implementação.
