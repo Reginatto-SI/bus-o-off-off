@@ -928,18 +928,38 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     setSaving(true);
 
     try {
-      // Revalidate seats
-      const { data: currentTickets } = await supabase
-        .from('tickets')
-        .select('seat_id')
-        .eq('trip_id', selectedTripId);
-      const currentOccupied = new Set((currentTickets ?? []).map((t: any) => t.seat_id).filter(Boolean));
-      const conflicting = selectedSeats.filter((id) => currentOccupied.has(id));
+      // Revalidate seats: tickets já vendidos + locks ativos do checkout público.
+      // Evita corrida quando admin selecionou um assento que acabou de ser
+      // reservado por um cliente público nesse exato instante.
+      const nowIsoCheck = new Date().toISOString();
+      const [currentTicketsRes, currentLocksRes] = await Promise.all([
+        supabase
+          .from('tickets')
+          .select('seat_id')
+          .eq('trip_id', selectedTripId),
+        supabase
+          .from('seat_locks')
+          .select('seat_id')
+          .eq('trip_id', selectedTripId)
+          .gt('expires_at', nowIsoCheck),
+      ]);
+      const currentOccupied = new Set(
+        (currentTicketsRes.data ?? []).map((t: any) => t.seat_id).filter(Boolean),
+      );
+      const currentLocked = new Set(
+        (currentLocksRes.data ?? []).map((l: any) => l.seat_id).filter(Boolean),
+      );
+      const conflicting = selectedSeats.filter(
+        (id) => currentOccupied.has(id) || currentLocked.has(id),
+      );
       if (conflicting.length > 0) {
         const labels = conflicting.map((id) => seats.find((s) => s.id === id)?.label).join(', ');
-        toast.error(`Assentos já ocupados: ${labels}. Selecione outros.`);
+        toast.error(
+          `Esta(s) poltrona(s) acabou(aram) de ser reservada(s) ou vendida(s): ${labels}. Selecione outras disponíveis.`,
+        );
         setOccupiedSeatIds(Array.from(currentOccupied) as string[]);
-        setSelectedSeats((prev) => prev.filter((id) => !currentOccupied.has(id)));
+        setBlockedSeatIds((prev) => Array.from(new Set([...prev, ...Array.from(currentLocked) as string[]])));
+        setSelectedSeats((prev) => prev.filter((id) => !currentOccupied.has(id) && !currentLocked.has(id)));
         setStep(2);
         setSaving(false);
         return;
