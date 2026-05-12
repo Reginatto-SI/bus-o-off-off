@@ -546,7 +546,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     }
     const fetchSeatsAndOccupied = async () => {
       setLoadingSeats(true);
-      const [seatsRes, ticketsRes] = await Promise.all([
+      const nowIso = new Date().toISOString();
+      const [seatsRes, ticketsRes, locksRes] = await Promise.all([
         supabase
           .from('seats')
           .select('*')
@@ -560,6 +561,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           .from('tickets')
           .select('seat_id, sale_id')
           .eq('trip_id', selectedTripId),
+        // Locks ativos do checkout público também precisam bloquear venda manual,
+        // evitando colisão entre admin e cliente final no mesmo assento.
+        supabase
+          .from('seat_locks')
+          .select('seat_id')
+          .eq('trip_id', selectedTripId)
+          .gt('expires_at', nowIso),
       ]);
 
       // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
@@ -594,6 +602,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         if (!t.seat_id) return;
         if (blockSaleIds.has(t.sale_id)) blocked.push(t.seat_id);
         else occupied.push(t.seat_id);
+      });
+
+      // Locks ativos (reservas temporárias do checkout público) entram como "blocked"
+      // para que o admin veja o assento como indisponível e não dispute a poltrona.
+      const lockedSeatIds = (locksRes.data ?? [])
+        .map((l: any) => l.seat_id as string)
+        .filter(Boolean);
+      lockedSeatIds.forEach((sid) => {
+        if (!blocked.includes(sid) && !occupied.includes(sid)) blocked.push(sid);
       });
 
       setOccupiedSeatIds(occupied);
