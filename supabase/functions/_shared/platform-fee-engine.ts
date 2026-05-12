@@ -35,6 +35,7 @@ const TIERS: PassengerFeeTier[] = [
 ];
 
 export const PASSENGER_FEE_CAP_BRL = 25;
+export const PLATFORM_FEE_MINIMUM_TOTAL_BRL = 5;
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -81,9 +82,14 @@ export function computeProgressiveFeeForPassengers(
   const totalUncappedFee = roundCurrency(
     passengerBreakdown.reduce((sum, item) => sum + item.uncappedFee, 0),
   );
-  const totalFee = roundCurrency(
+  const totalCappedFee = roundCurrency(
     passengerBreakdown.reduce((sum, item) => sum + item.cappedFee, 0),
   );
+  // PRD 01: o piso operacional é aplicado após somar as taxas por item
+  // com teto individual, e antes da divisão entre recebedores.
+  const totalFee = totalCappedFee > 0 && totalCappedFee < PLATFORM_FEE_MINIMUM_TOTAL_BRL
+    ? PLATFORM_FEE_MINIMUM_TOTAL_BRL
+    : totalCappedFee;
 
   return {
     passengerBreakdown,
