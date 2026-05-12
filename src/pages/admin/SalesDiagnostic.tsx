@@ -111,7 +111,7 @@ interface SaleIntegrationLog {
   payment_id: string | null;
   external_reference: string | null;
   http_status: number | null;
-  processing_status: 'received' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized' | 'warning' | 'rejected' | 'duplicate';
+  processing_status: 'received' | 'requested' | 'ignored' | 'success' | 'partial_failure' | 'failed' | 'unauthorized' | 'warning' | 'rejected' | 'duplicate';
   result_category?: string | null;
   incident_code?: string | null;
   warning_code?: string | null;
@@ -123,6 +123,20 @@ interface SaleIntegrationLog {
   environment_host_detected: string | null;
   created_at: string;
   duration_ms?: number | null;
+}
+
+interface RepresentativeCommissionLedgerEntry {
+  id: string;
+  company_id: string;
+  representative_id: string;
+  sale_id: string;
+  payment_environment: string;
+  base_amount: number;
+  commission_percent: number;
+  commission_amount: number;
+  status: string;
+  blocked_reason: string | null;
+  created_at: string;
 }
 
 interface WebhookDedupEntry {
@@ -187,6 +201,48 @@ interface TechnicalDiagnosticDivergenceFilters {
 }
 
 const EMPTY_UUID_FILTER = '00000000-0000-0000-0000-000000000000';
+
+const SMARTBUS_MARKETPLACE_WALLET_ID = '54b2bcad-4015-4824-b0af-fb330c86e6bd';
+const SPLIT_LOG_TERMS_PATTERN = /split|wallet|representative|marketplace|s[oó]cio|socio|commission|ledger|recipient/i;
+
+type SplitAnalysisStatus = 'ok' | 'attention' | 'critical' | 'no_data';
+type SplitRecipientType = 'Marketplace' | 'Empresa' | 'Sócio' | 'Representante' | 'Outro / Não identificado';
+
+type SplitRecipientDiagnostic = {
+  id: string;
+  recipientType: SplitRecipientType;
+  recipientLabel: string;
+  walletId: string | null;
+  amount: number | null;
+  percent: number | null;
+  origin: 'Payload enviado ao Asaas' | 'Snapshot da venda' | 'Ledger' | 'Log técnico' | 'Retorno do gateway';
+  status: 'Enviado ao Asaas' | 'Identificado no payload' | 'Não encontrado' | 'Divergente' | 'Sem dados suficientes';
+  note?: string;
+};
+
+type SplitPayloadEvidence = {
+  logId: string;
+  createdAt: string;
+  processingStatus: SaleIntegrationLog['processing_status'];
+  split: unknown[];
+  rawPayload: Record<string, unknown>;
+};
+
+type SplitDiagnosticSummary = {
+  totalSaleAmount: number;
+  totalIdentifiedSplitAmount: number | null;
+  companyAmount: number | null;
+  marketplaceAmount: number | null;
+  otherRecipientsAmount: number | null;
+  status: SplitAnalysisStatus;
+  statusLabel: string;
+  statusClassName: string;
+  recipients: SplitRecipientDiagnostic[];
+  splitPayloadEvidence: SplitPayloadEvidence | null;
+  relatedLogs: SaleIntegrationLog[];
+  hasAnySplitData: boolean;
+  notes: string[];
+};
 const EXACT_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function buildCreatedAtBoundary(dateInput: string, endOfDay: boolean): string {
@@ -239,6 +295,290 @@ function formatIncidentStatusLabel(status: TechnicalDivergence['incidentStatus']
 function formatOptionalDiagnosticValue(value?: string | number | null): string {
   if (value === null || value === undefined || value === '') return 'não disponível';
   return String(value);
+}
+
+
+function asDiagnosticRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readSplitArrayFromPayload(payload: Record<string, unknown> | null): unknown[] {
+  if (!payload) return [];
+  const directSplit = payload.split;
+  if (Array.isArray(directSplit)) return directSplit;
+
+  const payment = asDiagnosticRecord(payload.payment);
+  if (Array.isArray(payment?.split)) return payment.split;
+
+  const data = asDiagnosticRecord(payload.data);
+  if (Array.isArray(data?.split)) return data.split;
+
+  return [];
+}
+
+function findSplitPayloadEvidence(logs: SaleIntegrationLog[]): SplitPayloadEvidence | null {
+  const candidates = logs
+    .filter((log) => log.provider === 'asaas')
+    .map((log) => {
+      const rawPayload = asDiagnosticRecord(log.payload_json);
+      const split = readSplitArrayFromPayload(rawPayload);
+      return rawPayload && split.length > 0
+        ? { log, rawPayload, split }
+        : null;
+    })
+    .filter((item): item is { log: SaleIntegrationLog; rawPayload: Record<string, unknown>; split: unknown[] } => !!item);
+
+  const createPaymentCandidate = candidates.find(({ log }) => (
+    log.direction === 'outgoing_request' && log.event_type === 'create_payment'
+  ));
+  const selected = createPaymentCandidate ?? candidates[0];
+
+  if (!selected) return null;
+
+  return {
+    logId: selected.log.id,
+    createdAt: selected.log.created_at,
+    processingStatus: selected.log.processing_status,
+    split: selected.split,
+    rawPayload: {
+      sale_integration_log_id: selected.log.id,
+      created_at: selected.log.created_at,
+      event_type: selected.log.event_type,
+      processing_status: selected.log.processing_status,
+      split: selected.split,
+    },
+  };
+}
+
+function isSplitRelatedLog(log: SaleIntegrationLog): boolean {
+  return SPLIT_LOG_TERMS_PATTERN.test(JSON.stringify({
+    direction: log.direction,
+    event_type: log.event_type,
+    incident_code: log.incident_code,
+    warning_code: log.warning_code,
+    message: log.message,
+    payload_json: log.payload_json,
+    response_json: log.response_json,
+  }));
+}
+
+function identifySplitRecipientByWallet(walletId: string | null, companyWalletId?: string | null): { type: SplitRecipientType; label: string } {
+  // A wallet fixa abaixo identifica visualmente a carteira da marketplace SmartBus BR nesta tela restrita.
+  if (walletId && walletId === SMARTBUS_MARKETPLACE_WALLET_ID) {
+    return { type: 'Marketplace', label: 'Marketplace SmartBus BR' };
+  }
+
+  if (walletId && companyWalletId && walletId === companyWalletId) {
+    return { type: 'Empresa', label: 'Empresa / Viação' };
+  }
+
+  return { type: 'Outro / Não identificado', label: 'Outro / Não identificado' };
+}
+
+function formatSplitAnalysisStatusLabel(status: SplitAnalysisStatus): string {
+  if (status === 'ok') return 'OK';
+  if (status === 'attention') return 'Atenção';
+  if (status === 'critical') return 'Crítico';
+  return 'Sem dados';
+}
+
+function formatSplitAnalysisStatusClassName(status: SplitAnalysisStatus): string {
+  if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (status === 'attention') return 'border-amber-200 bg-amber-50 text-amber-900';
+  if (status === 'critical') return 'border-red-200 bg-red-50 text-red-900';
+  return 'border-border bg-muted/50 text-muted-foreground';
+}
+
+function getSplitPercentFromRecipient(recipient: Record<string, unknown>): number | null {
+  return toOptionalNumber(recipient.percentualValue)
+    ?? toOptionalNumber(recipient.percentageValue)
+    ?? toOptionalNumber(recipient.percent)
+    ?? toOptionalNumber(recipient.percentage);
+}
+
+function getSplitAmountFromRecipient(recipient: Record<string, unknown>): number | null {
+  return toOptionalNumber(recipient.fixedValue)
+    ?? toOptionalNumber(recipient.value)
+    ?? toOptionalNumber(recipient.amount);
+}
+
+function buildSplitDiagnosticSummary(params: {
+  sale: DiagnosticSale;
+  companyWalletId?: string | null;
+  integrationLogs: SaleIntegrationLog[];
+  representativeLedger: RepresentativeCommissionLedgerEntry[];
+}): SplitDiagnosticSummary {
+  const totalSaleAmount = params.sale.gross_amount ?? params.sale.quantity * params.sale.unit_price;
+  const splitPayloadEvidence = findSplitPayloadEvidence(params.integrationLogs);
+  const relatedLogs = params.integrationLogs.filter(isSplitRelatedLog);
+  const recipients: SplitRecipientDiagnostic[] = [];
+  const notes: string[] = [];
+
+  // Esta aba é apenas diagnóstica: ela lê payloads/snapshots/logs já persistidos e não altera fluxo financeiro.
+  splitPayloadEvidence?.split.forEach((rawRecipient, index) => {
+    const recipient = asDiagnosticRecord(rawRecipient);
+    if (!recipient) return;
+
+    const walletId = typeof recipient.walletId === 'string' ? recipient.walletId : null;
+    const identified = identifySplitRecipientByWallet(walletId, params.companyWalletId);
+    recipients.push({
+      id: `payload-${index}`,
+      recipientType: identified.type,
+      recipientLabel: identified.label,
+      walletId,
+      amount: getSplitAmountFromRecipient(recipient),
+      percent: getSplitPercentFromRecipient(recipient),
+      origin: 'Payload enviado ao Asaas',
+      status: splitPayloadEvidence.processingStatus === 'requested' || splitPayloadEvidence.processingStatus === 'success'
+        ? 'Enviado ao Asaas'
+        : 'Identificado no payload',
+      note: walletId ? undefined : 'Wallet não encontrada no item de split do payload.',
+    });
+  });
+
+  if (params.sale.split_snapshot_captured_at) {
+    if (params.sale.split_snapshot_platform_net_amount != null) {
+      recipients.push({
+        id: 'snapshot-marketplace',
+        recipientType: 'Marketplace',
+        recipientLabel: 'Marketplace SmartBus BR',
+        walletId: SMARTBUS_MARKETPLACE_WALLET_ID,
+        amount: params.sale.split_snapshot_platform_net_amount,
+        percent: null,
+        origin: 'Snapshot da venda',
+        status: 'Sem dados suficientes',
+        note: `Snapshot congelado em ${format(parseISO(params.sale.split_snapshot_captured_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}.`,
+      });
+    }
+
+    if (params.sale.split_snapshot_socio_fee_amount != null && params.sale.split_snapshot_socio_fee_amount > 0) {
+      recipients.push({
+        id: 'snapshot-socio',
+        recipientType: 'Sócio',
+        recipientLabel: 'Sócio financeiro',
+        walletId: null,
+        amount: params.sale.split_snapshot_socio_fee_amount,
+        percent: params.sale.split_snapshot_socio_split_percent ?? null,
+        origin: 'Snapshot da venda',
+        status: 'Sem dados suficientes',
+        note: 'Snapshot financeiro não guarda a wallet do sócio; confira payload/logs para a carteira efetiva.',
+      });
+    }
+  }
+
+  params.representativeLedger.forEach((ledger) => {
+    recipients.push({
+      id: `ledger-${ledger.id}`,
+      recipientType: 'Representante',
+      recipientLabel: 'Representante',
+      walletId: null,
+      amount: ledger.commission_amount,
+      percent: ledger.commission_percent,
+      origin: 'Ledger',
+      status: 'Sem dados suficientes',
+      note: ledger.blocked_reason ? `Ledger ${ledger.status}: ${ledger.blocked_reason}` : `Ledger ${ledger.status}`,
+    });
+  });
+
+  const payloadRecipients = recipients.filter((recipient) => recipient.origin === 'Payload enviado ao Asaas');
+  const payloadAmount = payloadRecipients.reduce((sum, recipient) => sum + (recipient.amount ?? 0), 0);
+  const payloadHasAmounts = payloadRecipients.some((recipient) => recipient.amount !== null);
+  const snapshotTotal = params.sale.split_snapshot_platform_fee_total ?? params.sale.platform_fee_total ?? null;
+  const ledgerAmount = params.representativeLedger.reduce((sum, ledger) => sum + Number(ledger.commission_amount ?? 0), 0);
+  const totalIdentifiedSplitAmount = payloadHasAmounts
+    ? payloadAmount
+    : snapshotTotal ?? (ledgerAmount > 0 ? ledgerAmount : null);
+
+  const companyPayloadRecipients = payloadRecipients.filter((recipient) => recipient.recipientType === 'Empresa');
+  const companyPayloadHasAmount = companyPayloadRecipients.some((recipient) => recipient.amount !== null);
+  const companyPayloadAmount = companyPayloadRecipients.reduce((sum, recipient) => sum + (recipient.amount ?? 0), 0);
+
+  const marketplacePayloadAmount = payloadRecipients
+    .filter((recipient) => recipient.recipientType === 'Marketplace')
+    .reduce((sum, recipient) => sum + (recipient.amount ?? 0), 0);
+  const marketplaceAmount = marketplacePayloadAmount > 0
+    ? marketplacePayloadAmount
+    : params.sale.split_snapshot_platform_net_amount ?? null;
+
+  const otherPayloadAmount = payloadRecipients
+    .filter((recipient) => recipient.recipientType !== 'Marketplace' && recipient.recipientType !== 'Empresa')
+    .reduce((sum, recipient) => sum + (recipient.amount ?? 0), 0);
+  const snapshotAndLedgerOtherAmount = (params.sale.split_snapshot_socio_fee_amount ?? 0) + ledgerAmount;
+  const otherRecipientsAmount = otherPayloadAmount > 0
+    ? otherPayloadAmount
+    : (snapshotAndLedgerOtherAmount > 0 ? snapshotAndLedgerOtherAmount : null);
+
+  const nonCompanyPayloadAmount = payloadRecipients
+    .filter((recipient) => recipient.recipientType !== 'Empresa')
+    .reduce((sum, recipient) => sum + (recipient.amount ?? 0), 0);
+  // Diagnóstico visual: se a empresa veio explicitamente no payload, exibimos esse valor persistido;
+  // caso contrário, mostramos apenas o saldo da venda após splits secundários já identificados.
+  const companyAmount = companyPayloadHasAmount
+    ? companyPayloadAmount
+    : companyPayloadRecipients.length > 0
+      ? null
+      : totalIdentifiedSplitAmount !== null
+        ? Math.max(totalSaleAmount - (payloadHasAmounts ? nonCompanyPayloadAmount : totalIdentifiedSplitAmount), 0)
+        : null;
+
+  const hasAnySplitData = Boolean(splitPayloadEvidence) || recipients.length > 0 || relatedLogs.length > 0;
+  const hasUnidentifiedPayloadRecipient = payloadRecipients.some((recipient) => recipient.recipientType === 'Outro / Não identificado');
+  const hasIncompleteRecipient = recipients.some((recipient) => !recipient.walletId || (recipient.amount === null && recipient.percent === null));
+  const expectedGatewaySplit = computeGateway(params.sale).toLowerCase() === 'asaas' && params.sale.status !== 'cancelado';
+
+  let status: SplitAnalysisStatus = 'no_data';
+  if (!hasAnySplitData) {
+    status = params.sale.asaas_payment_id || expectedGatewaySplit ? 'critical' : 'no_data';
+    if (status === 'critical') notes.push('Split esperado para cobrança Asaas, mas nenhuma evidência persistida foi localizada.');
+  } else if (!splitPayloadEvidence && expectedGatewaySplit) {
+    status = 'critical';
+    notes.push('Há evidências financeiras/logs, mas não foi encontrado payload de split enviado ao Asaas.');
+  } else {
+    const snapshotVsPayloadDivergence = Boolean(
+      splitPayloadEvidence
+      && payloadHasAmounts
+      && snapshotTotal !== null
+      && Math.abs(payloadAmount - snapshotTotal) > 0.05
+    );
+
+    if (snapshotVsPayloadDivergence) {
+      status = 'critical';
+      notes.push('Total do payload de split diverge do snapshot/taxa financeira persistida na venda.');
+    } else if (hasUnidentifiedPayloadRecipient || hasIncompleteRecipient || !snapshotTotal) {
+      status = 'attention';
+      notes.push('Split encontrado, mas há informação parcial ou recebedor não identificado.');
+    } else {
+      status = 'ok';
+      notes.push('Split encontrado e valores persistidos parecem coerentes.');
+    }
+  }
+
+  return {
+    totalSaleAmount,
+    totalIdentifiedSplitAmount,
+    companyAmount,
+    marketplaceAmount,
+    otherRecipientsAmount,
+    status,
+    statusLabel: formatSplitAnalysisStatusLabel(status),
+    statusClassName: formatSplitAnalysisStatusClassName(status),
+    recipients,
+    splitPayloadEvidence,
+    relatedLogs,
+    hasAnySplitData,
+    notes,
+  };
 }
 
 function mapIntegrationLogToOperationalStage(
@@ -1175,6 +1515,7 @@ export default function SalesDiagnostic() {
   const [detailSale, setDetailSale] = useState<DiagnosticSale | null>(null);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailIntegrationLogs, setDetailIntegrationLogs] = useState<SaleIntegrationLog[]>([]);
+  const [detailRepresentativeLedger, setDetailRepresentativeLedger] = useState<RepresentativeCommissionLedgerEntry[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [technicalDiagnosticOpen, setTechnicalDiagnosticOpen] = useState(false);
   const [technicalDiagnosticLoading, setTechnicalDiagnosticLoading] = useState(false);
@@ -2314,9 +2655,10 @@ export default function SalesDiagnostic() {
     setDetailLoading(true);
     setDetailLogs([]);
     setDetailIntegrationLogs([]);
+    setDetailRepresentativeLedger([]);
     setDetailCompany(null);
 
-    const [logsRes, integrationLogsRes, companyRes] = await Promise.all([
+    const [logsRes, integrationLogsRes, companyRes, representativeLedgerRes] = await Promise.all([
       supabase
         .from('sale_logs')
         .select('*')
@@ -2338,10 +2680,18 @@ export default function SalesDiagnostic() {
         .select('name, asaas_account_email_production, asaas_wallet_id_production, asaas_account_id_production, asaas_account_email_sandbox, asaas_wallet_id_sandbox, asaas_account_id_sandbox')
         .eq('id', sale.company_id)
         .single(),
+      supabase
+        .from('representative_commissions')
+        .select('id, company_id, representative_id, sale_id, payment_environment, base_amount, commission_percent, commission_amount, status, blocked_reason, created_at')
+        .eq('sale_id', sale.id)
+        .eq('company_id', sale.company_id)
+        .eq('payment_environment', sale.payment_environment)
+        .order('created_at', { ascending: false }),
     ]);
 
     setDetailLogs((logsRes.data ?? []) as SaleLog[]);
     setDetailIntegrationLogs((integrationLogsRes.data ?? []) as SaleIntegrationLog[]);
+    setDetailRepresentativeLedger((representativeLedgerRes.data ?? []) as RepresentativeCommissionLedgerEntry[]);
     setDetailCompany((companyRes.data ?? null) as typeof detailCompany);
     setDetailLoading(false);
   }, []);
@@ -2432,6 +2782,17 @@ export default function SalesDiagnostic() {
     return safe;
   }, [detailSale]);
 
+  const splitDiagnosticSummary = useMemo(() => {
+    if (!detailSale) return null;
+
+    return buildSplitDiagnosticSummary({
+      sale: detailSale,
+      companyWalletId: detailCompanyOperationalAsaas?.walletId ?? null,
+      integrationLogs: detailIntegrationLogs,
+      representativeLedger: detailRepresentativeLedger,
+    });
+  }, [detailCompanyOperationalAsaas?.walletId, detailIntegrationLogs, detailRepresentativeLedger, detailSale]);
+
   const buildTechnicalDiagnosticPayload = useCallback(() => {
     if (!detailSale) return null;
 
@@ -2448,9 +2809,13 @@ export default function SalesDiagnostic() {
       integration_logs: detailIntegrationLogs.length > 0
         ? { items: detailIntegrationLogs }
         : { items: [], note: 'Nenhum log técnico encontrado para esta venda.' },
+      representative_ledger: detailRepresentativeLedger.length > 0
+        ? { items: detailRepresentativeLedger }
+        : { items: [], note: 'Nenhum ledger de comissão de representante encontrado para esta venda.' },
+      split_diagnostic: splitDiagnosticSummary ?? null,
       company_operational_asaas: detailCompanyOperationalAsaas ?? null,
     };
-  }, [detailCompanyOperationalAsaas, detailIntegrationLogs, detailLogs, detailSale, runtimePaymentEnvironment, safeDetailSalePayload]);
+  }, [detailCompanyOperationalAsaas, detailIntegrationLogs, detailLogs, detailRepresentativeLedger, detailSale, runtimePaymentEnvironment, safeDetailSalePayload, splitDiagnosticSummary]);
 
   const handleCopyToClipboard = useCallback(async (
     label: string,
@@ -3263,7 +3628,7 @@ export default function SalesDiagnostic() {
               </div>
             ) : (
               <Tabs defaultValue="resumo" className="flex-1 overflow-hidden flex flex-col">
-                <TabsList className="w-full justify-start flex-shrink-0">
+                <TabsList className="w-full justify-start flex-shrink-0 overflow-x-auto">
                   <TabsTrigger value="resumo">Resumo</TabsTrigger>
                   <TabsTrigger value="ambiente">Ambiente atual</TabsTrigger>
                   <TabsTrigger value="divergencias">Divergências</TabsTrigger>
@@ -3712,11 +4077,12 @@ export default function SalesDiagnostic() {
 
             {detailSale && (
               <Tabs defaultValue="resumo" className="flex-1 overflow-hidden flex flex-col">
-                <TabsList className="w-full justify-start flex-shrink-0">
+                <TabsList className="w-full justify-start flex-shrink-0 overflow-x-auto">
                   <TabsTrigger value="resumo">Resumo</TabsTrigger>
                   <TabsTrigger value="fluxo">Fluxo da Venda</TabsTrigger>
                   <TabsTrigger value="gateway">Gateway</TabsTrigger>
                   <TabsTrigger value="webhook">Webhook</TabsTrigger>
+                  <TabsTrigger value="splits">Splits de Pagamento</TabsTrigger>
                   <TabsTrigger value="payloads">Payloads</TabsTrigger>
                 </TabsList>
 
@@ -4025,6 +4391,164 @@ export default function SalesDiagnostic() {
                         </div>
                       );
                     })()}
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Tab 5 — Splits de Pagamento */}
+                <TabsContent value="splits" className="flex-1 overflow-auto">
+                  <ScrollArea className="h-full pr-4">
+                    <div className="space-y-4 pb-4">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Splits de Pagamento
+                      </h3>
+
+                      {detailLoading || !splitDiagnosticSummary ? (
+                        <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando dados financeiros persistidos...
+                        </div>
+                      ) : (
+                        <>
+                          <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                            <p>
+                              Aba diagnóstica: usa payloads, snapshots, ledger e logs já persistidos para auditoria do split; não recalcula nem altera regras de pagamento.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                            <div className="rounded-md border border-border p-3">
+                              <span className="text-muted-foreground text-xs">Valor total da venda</span>
+                              <p className="font-semibold">{formatCurrencyBRL(splitDiagnosticSummary.totalSaleAmount)}</p>
+                            </div>
+                            <div className="rounded-md border border-border p-3">
+                              <span className="text-muted-foreground text-xs">Total identificado em splits</span>
+                              <p className="font-semibold">
+                                {splitDiagnosticSummary.totalIdentifiedSplitAmount !== null
+                                  ? formatCurrencyBRL(splitDiagnosticSummary.totalIdentifiedSplitAmount)
+                                  : 'não encontrado'}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-border p-3">
+                              <span className="text-muted-foreground text-xs">Valor destinado à empresa</span>
+                              <p className="font-semibold">
+                                {splitDiagnosticSummary.companyAmount !== null
+                                  ? formatCurrencyBRL(splitDiagnosticSummary.companyAmount)
+                                  : 'não encontrado'}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-border p-3">
+                              <span className="text-muted-foreground text-xs">Valor destinado à marketplace</span>
+                              <p className="font-semibold">
+                                {splitDiagnosticSummary.marketplaceAmount !== null
+                                  ? formatCurrencyBRL(splitDiagnosticSummary.marketplaceAmount)
+                                  : 'não encontrado'}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-border p-3">
+                              <span className="text-muted-foreground text-xs">Outros recebedores</span>
+                              <p className="font-semibold">
+                                {splitDiagnosticSummary.otherRecipientsAmount !== null
+                                  ? formatCurrencyBRL(splitDiagnosticSummary.otherRecipientsAmount)
+                                  : 'não encontrado'}
+                              </p>
+                            </div>
+                            <div className={`rounded-md border p-3 ${splitDiagnosticSummary.statusClassName}`}>
+                              <span className="text-xs opacity-80">Status da análise</span>
+                              <p className="font-semibold">{splitDiagnosticSummary.statusLabel}</p>
+                            </div>
+                          </div>
+
+                          {splitDiagnosticSummary.notes.length > 0 && (
+                            <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+                              {splitDiagnosticSummary.notes.map((note) => <p key={note}>{note}</p>)}
+                            </div>
+                          )}
+
+                          {!splitDiagnosticSummary.hasAnySplitData && (
+                            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-3">
+                              <p>Não foram encontrados dados de split para esta venda. Verifique se a cobrança foi criada no Asaas e se o payload de criação foi registrado nos logs técnicos.</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div><span className="font-medium">ID da venda</span><p className="font-mono break-all">{detailSale.id}</p></div>
+                                <div><span className="font-medium">Empresa</span><p>{detailCompany?.name ?? detailSale.company_name ?? '-'}</p></div>
+                                <div><span className="font-medium">Ambiente</span><p>{formatPaymentEnvironmentLabel(detailSale.payment_environment)}</p></div>
+                                <div><span className="font-medium">Gateway</span><p>{getGatewayDisplayLabel(computeGateway(detailSale))}</p></div>
+                                <div><span className="font-medium">asaas_payment_id</span><p className="font-mono break-all">{detailSale.asaas_payment_id ?? 'não encontrado'}</p></div>
+                                <div><span className="font-medium">Status da venda</span><p>{getSaleStatusLabel(detailSale.status)}</p></div>
+                                <div><span className="font-medium">Status do pagamento</span><p>{computePaymentStatus(detailSale).label}</p></div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold text-foreground">Recebedores identificados</h4>
+                            {splitDiagnosticSummary.recipients.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">Nenhum recebedor de split encontrado nos dados persistidos desta venda.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {splitDiagnosticSummary.recipients.map((recipient) => (
+                                  <div key={recipient.id} className="rounded-md border border-border p-3 text-sm">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant={recipient.recipientType === 'Marketplace' ? 'default' : 'outline'} className="text-xs">
+                                        {recipient.recipientLabel}
+                                      </Badge>
+                                      <Badge variant="secondary" className="text-xs">{recipient.origin}</Badge>
+                                      <span className="text-xs text-muted-foreground">{recipient.status}</span>
+                                    </div>
+                                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                                      <div>
+                                        <span className="text-muted-foreground">Tipo do recebedor</span>
+                                        <p className="font-medium">{recipient.recipientType}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted-foreground">Wallet ID</span>
+                                        <p className="font-mono break-all">{recipient.walletId ?? 'não encontrado'}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted-foreground">Valor</span>
+                                        <p>{recipient.amount !== null ? formatCurrencyBRL(recipient.amount) : 'não encontrado'}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-muted-foreground">Percentual</span>
+                                        <p>{recipient.percent !== null ? `${recipient.percent.toFixed(2)}%` : 'não encontrado'}</p>
+                                      </div>
+                                    </div>
+                                    {recipient.note && <p className="mt-2 text-xs text-muted-foreground">{recipient.note}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <Accordion type="multiple" className="w-full">
+                            <AccordionItem value="split-payload">
+                              <AccordionTrigger className="text-sm">Payload de split enviado ao Asaas</AccordionTrigger>
+                              <AccordionContent>
+                                {splitDiagnosticSummary.splitPayloadEvidence ? (
+                                  <pre className="rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
+                                    {JSON.stringify(splitDiagnosticSummary.splitPayloadEvidence.rawPayload, null, 2)}
+                                  </pre>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">Não foi encontrado payload de split associado a esta venda.</p>
+                                )}
+                              </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem value="split-logs">
+                              <AccordionTrigger className="text-sm">Logs relacionados ao split ({splitDiagnosticSummary.relatedLogs.length})</AccordionTrigger>
+                              <AccordionContent>
+                                {splitDiagnosticSummary.relatedLogs.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">Nenhum log relacionado a split, wallet, marketplace, sócio, representante, comissão, ledger ou recipient foi encontrado.</p>
+                                ) : (
+                                  <pre className="rounded-md border border-border bg-muted/50 p-3 text-xs font-mono overflow-auto max-h-64">
+                                    {JSON.stringify(splitDiagnosticSummary.relatedLogs, null, 2)}
+                                  </pre>
+                                )}
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        </>
+                      )}
+                    </div>
                   </ScrollArea>
                 </TabsContent>
 
