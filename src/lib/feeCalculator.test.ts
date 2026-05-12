@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateFees,
   calculatePlatformFee,
+  calculatePlatformFeeTotal,
   resolvePlatformFeePercentByTicketPrice,
 } from './feeCalculator';
 
@@ -39,6 +40,39 @@ describe('feeCalculator progressive platform fee engine (PRD 07)', () => {
   it('aplica teto de R$ 25 para passagem de R$ 1.000', () => {
     expect(resolvePlatformFeePercentByTicketPrice(1000)).toBe(3);
     expect(calculatePlatformFee(1000)).toBe(25);
+  });
+
+  it('aplica piso total de R$ 5 para uma passagem de R$ 30', () => {
+    expect(calculatePlatformFee(30)).toBe(1.8);
+    expect(calculatePlatformFeeTotal([30])).toBe(5);
+  });
+
+  it('aplica piso uma única vez para duas passagens de R$ 30', () => {
+    expect(calculatePlatformFeeTotal([30, 30])).toBe(5);
+    expect(calculatePlatformFeeTotal([30, 30])).not.toBe(10);
+  });
+
+  it('não aplica piso quando a soma de três passagens de R$ 30 supera R$ 5', () => {
+    expect(calculatePlatformFeeTotal([30, 30, 30])).toBe(5.4);
+  });
+
+  it('mantém taxa de R$ 6 para passagem de R$ 100', () => {
+    expect(calculatePlatformFeeTotal([100])).toBe(6);
+  });
+
+  it('mantém teto de R$ 25 por item antes do piso total', () => {
+    expect(calculatePlatformFeeTotal([1000])).toBe(25);
+  });
+
+  it('não inclui taxa adicional da empresa na base da taxa da plataforma', () => {
+    const platformFee = calculatePlatformFeeTotal([100]);
+    const additionalCompanyFee = calculateFees(100, [
+      { name: 'Taxa adicional da empresa', fee_type: 'fixed', value: 6, is_active: true },
+    ]).totalFees;
+
+    expect(platformFee).toBe(6);
+    expect(additionalCompanyFee).toBe(6);
+    expect(platformFee).not.toBe(calculatePlatformFeeTotal([106]));
   });
 
   it('calcula taxa no checkout quando repasse ao cliente está ativo', () => {

@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Event, Trip, BoardingLocation, Seat } from "@/types/database";
-import { calculateFees, type EventFeeInput } from "@/lib/feeCalculator";
+import { calculateFees, calculatePlatformFeeTotal, type EventFeeInput } from "@/lib/feeCalculator";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { EventSummaryCard } from "@/components/public/EventSummaryCard";
 import { SeatMap } from "@/components/public/SeatMap";
@@ -276,14 +276,14 @@ export default function Checkout() {
     Number.isFinite(companyPlatformFeePercent) && companyPlatformFeePercent > 0;
 
   // Helper: get price for a seat based on category pricing
-  const getSeatPrice = (seatId: string): number => {
+  const getSeatPrice = useCallback((seatId: string): number => {
     if (!event) return 0;
     if (!event.use_category_pricing) return event.unit_price ?? 0;
     const seat = seats.find((s) => s.id === seatId);
     if (!seat) return event.unit_price ?? 0;
     const catPrice = categoryPrices.find((cp) => cp.category === seat.category);
     return catPrice?.price ?? event.unit_price ?? 0;
-  };
+  }, [event, seats, categoryPrices]);
 
   const usesCategoryPricing = Boolean(event?.use_category_pricing);
   const checkoutEvent = event as CheckoutEvent | null;
@@ -363,17 +363,24 @@ export default function Checkout() {
         )
       : 0;
 
-    const avgUnitPrice = selectedCount > 0
-      ? seatsSubtotalAfterBenefits / selectedCount
-      : (event.unit_price ?? 0);
+    const unitPricesForFees = hasResolvedBenefitSnapshot
+      ? passengerBenefitSnapshots.map((snapshot) => snapshot?.final_price ?? 0)
+      : hasPassengerTicketTypesSelected
+        ? passengers.map((passenger, index) => {
+            const typePrice = Number(passenger.ticket_type_price ?? 0);
+            return typePrice > 0 ? typePrice : getSeatPrice(selectedSeats[index]);
+          })
+        : selectedSeats.map((seatId) => getSeatPrice(seatId));
 
-    const breakdown = calculateFees(avgUnitPrice, eventFees, {
-      // Empresa piloto/isenta não recebe linha de taxa progressiva no checkout.
-      // O backend replica a mesma trava antes de montar o split Asaas.
-      passToCustomer: event.pass_platform_fee_to_customer && hasConfiguredPlatformFee,
-    });
-
-    const totalFees = roundCurrency(breakdown.totalFees * selectedCount);
+    const eventFeesTotal = roundCurrency(
+      unitPricesForFees.reduce((sum, unitPrice) => sum + calculateFees(unitPrice, eventFees).totalFees, 0),
+    );
+    // PRD 01: a taxa da plataforma repassada ao cliente usa a mesma ordem do backend:
+    // teto por item, soma da venda e piso total de R$ 5,00 apenas depois da soma.
+    const platformFeeTotal = event.pass_platform_fee_to_customer && hasConfiguredPlatformFee
+      ? calculatePlatformFeeTotal(unitPricesForFees)
+      : 0;
+    const totalFees = roundCurrency(eventFeesTotal + platformFeeTotal);
     const grandTotal = roundCurrency(seatsSubtotalAfterBenefits + totalFees);
     const benefitSnapshots = hasResolvedBenefitSnapshot
       ? passengerBenefitSnapshots.filter(
@@ -414,13 +421,14 @@ export default function Checkout() {
       subtotalAfterBenefits: roundCurrency(seatsSubtotalAfterBenefits),
       totalFees,
       grandTotal,
-      hasFeeLines: breakdown.fees.length > 0,
+      hasFeeLines: totalFees > 0,
       hasBenefitsApplied: roundCurrency(totalBenefitDiscount) > 0,
       benefitDescription,
     };
   }, [
     event,
     selectedSeats,
+    getSeatPrice,
     passengers,
     usesCategoryPricing,
     eventFees,
@@ -1034,12 +1042,14 @@ export default function Checkout() {
     // múltiplos passageiros em faixas distintas (ex.: 700 + 520) a média gera divergência
     // arredondada e quebra a validação de integridade financeira no create-asaas-payment.
     const passToCustomer = event.pass_platform_fee_to_customer && hasConfiguredPlatformFee;
-    const totalFees = roundCurrency(
-      effectiveSnapshots.reduce((sum, snapshot) => {
-        const breakdown = calculateFees(snapshot.final_price, eventFees, { passToCustomer });
-        return sum + breakdown.totalFees;
-      }, 0),
+    const passengerUnitPrices = effectiveSnapshots.map((snapshot) => snapshot.final_price);
+    const eventFeesTotal = roundCurrency(
+      passengerUnitPrices.reduce((sum, unitPrice) => sum + calculateFees(unitPrice, eventFees).totalFees, 0),
     );
+    // Mesma ordem do motor oficial: taxa/teto por passageiro, soma e piso total de R$ 5,00.
+    // Taxas adicionais do evento seguem fora da base da taxa da plataforma.
+    const platformFeeTotal = passToCustomer ? calculatePlatformFeeTotal(passengerUnitPrices) : 0;
+    const totalFees = roundCurrency(eventFeesTotal + platformFeeTotal);
     const grossAmount = roundCurrency(subtotalAfterBenefits + totalFees);
 
     return {
