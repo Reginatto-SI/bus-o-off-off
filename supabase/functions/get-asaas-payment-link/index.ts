@@ -238,6 +238,25 @@ serve(async (req) => {
       }
     }
 
+    const resolvedBillingType = String(resolvedPayment?.billingType ?? "").toUpperCase();
+    if (resolvedBillingType && resolvedBillingType !== "PIX" && resolvedBillingType !== "CREDIT_CARD") {
+      // Não devolvemos links de cobranças legadas em BOLETO/UNDEFINED para o cliente final.
+      logPaymentTrace("warn", "get-asaas-payment-link", "reopen_blocked_disallowed_billing_type", {
+        ...saleContext,
+        asaas_payment_id: resolvedPaymentId,
+        billingType: resolvedBillingType,
+        reopen_strategy: reopenStrategy,
+      });
+
+      return jsonResponse({
+        url: null,
+        reason: "disallowed_billing_type",
+        billingType: resolvedBillingType,
+        asaasPaymentId: resolvedPaymentId,
+        reopenStrategy,
+      }, 200);
+    }
+
     const invoiceUrl = typeof resolvedPayment?.invoiceUrl === "string" ? resolvedPayment.invoiceUrl : null;
     if (!invoiceUrl) {
       logPaymentTrace("warning", "get-asaas-payment-link", "reopen_url_missing_on_payment_payload", {

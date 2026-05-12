@@ -73,6 +73,7 @@ import {
 
 // ── Types ──
 type SaleTab = 'manual' | 'reserva' | 'bloqueio';
+type ManualReceiptMethod = 'pix' | 'dinheiro' | 'cartao' | 'outro';
 
 // Fallback conservador: se a empresa ainda não tiver política explícita salva, mantemos 72h
 // para não quebrar compatibilidade com reservas administrativas existentes.
@@ -247,7 +248,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // Step 3: Passengers
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
   const [passengerBenefitSnapshots, setPassengerBenefitSnapshots] = useState<Array<PassengerBenefitSnapshot | null>>([]);
-  const [paymentMethod, setPaymentMethod] = useState('pix');
+  const [paymentMethod, setPaymentMethod] = useState<ManualReceiptMethod>('pix');
   const [observation, setObservation] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
   const [blockReason, setBlockReason] = useState('manutencao');
@@ -1137,7 +1138,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       if (isManual) {
         // Mantemos a action legada por compatibilidade com histórico/auditoria.
         logAction = 'manual_paid_created';
-        const methodLabels: Record<string, string> = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão', outro: 'Outro' };
+        const methodLabels: Record<ManualReceiptMethod, string> = { pix: 'Pix', dinheiro: 'Dinheiro', cartao: 'Cartão externo/maquininha', outro: 'Outro' };
         // Comentário operacional: o prazo fica explícito no log para o suporte entender
         // que a reserva manual possui validade própria e não usa o TTL do checkout público.
         logDescription = `Venda manual criada como reservada (${methodLabels[paymentMethod] ?? paymentMethod}) com validade até ${new Date(manualReservationExpiresAt!).toLocaleString('pt-BR')}${observation ? `. Obs: ${observation}` : ''}`;
@@ -1662,12 +1663,12 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-2">
                             <Label>Forma de recebimento *</Label>
-                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                            <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as ManualReceiptMethod)}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="pix">Pix</SelectItem>
                                 <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                                <SelectItem value="cartao">Cartão</SelectItem>
+                                <SelectItem value="cartao">Cartão externo/maquininha</SelectItem>
                                 <SelectItem value="outro">Outro</SelectItem>
                               </SelectContent>
                             </Select>

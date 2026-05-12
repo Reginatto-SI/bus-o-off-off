@@ -328,6 +328,18 @@ serve(async (req) => {
       });
     }
 
+    if (existingOutcome?.type === "blocked_disallowed_billing_type") {
+      return new Response(JSON.stringify({
+        error: "Esta cobrança antiga possui uma forma de pagamento não permitida. Cancele a cobrança anterior e gere uma nova cobrança em Pix ou Cartão de crédito.",
+        error_code: "disallowed_billing_type",
+        payment_id: existingOutcome.paymentId,
+        billing_type: existingOutcome.billingType,
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (existingOutcome?.type === "blocked_terminal_or_invalid") {
       return new Response(JSON.stringify({
         error: "Existe uma cobrança vinculada em status terminal. Para gerar uma nova cobrança, é necessária ação administrativa explícita.",
@@ -424,7 +436,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         customer: customerId,
-        billingType: "UNDEFINED",
+        // Boleto não é permitido no SmartBus: a taxa administrativa também sai restrita a Pix.
+        billingType: "PIX",
         value: feeAmount,
         dueDate: dueDate.toISOString().split("T")[0],
         description: `Taxa da Plataforma — Venda Manual "${eventName}" (${sale.quantity} passagem(ns))`,
@@ -500,6 +513,7 @@ async function resolveExistingPlatformFeePayment(params: {
   | { type: "already_paid"; paymentId: string; asaasStatus: string; invoiceUrl: string | null }
   | { type: "reused_pending"; paymentId: string; asaasStatus: string; invoiceUrl: string | null }
   | { type: "blocked_unverifiable"; paymentId: string | null }
+  | { type: "blocked_disallowed_billing_type"; paymentId: string; billingType: string | null }
   | { type: "blocked_terminal_or_invalid"; paymentId: string | null; asaasStatus: string | null }
   | null
 > {
@@ -630,6 +644,28 @@ async function resolveExistingPlatformFeePayment(params: {
 
   if (!existingPayment?.id) {
     return null;
+  }
+
+  const existingBillingType = String(existingPayment.billingType ?? "").toUpperCase();
+  if (existingBillingType && existingBillingType !== "PIX" && existingBillingType !== "CREDIT_CARD") {
+    // Cobranças antigas da taxa em BOLETO/UNDEFINED não devem ser reabertas pelo SmartBus.
+    await logSaleOperationalEvent({
+      supabaseAdmin,
+      saleId: sale.id,
+      companyId: sale.company_id,
+      action: "platform_fee_checkout_blocked_disallowed_billing_type",
+      source: "create-platform-fee-checkout",
+      result: "rejected",
+      paymentEnvironment: paymentContext.environment,
+      errorCode: "disallowed_billing_type",
+      detail: `payment_id=${existingPayment.id}|billing_type=${existingBillingType}`,
+    });
+
+    return {
+      type: "blocked_disallowed_billing_type",
+      paymentId: existingPayment.id,
+      billingType: existingBillingType,
+    };
   }
 
   const asaasStatus = normalizeAsaasStatus(existingPayment.status);
