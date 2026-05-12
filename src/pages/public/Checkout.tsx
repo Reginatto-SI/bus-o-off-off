@@ -686,6 +686,43 @@ export default function Checkout() {
     };
   }, [id, tripId, locationId, navigate, fetchOccupiedSeats]);
 
+  // Realtime + refresh on focus: garante que o mapa público reflita compras/locks
+  // de outros usuários sem exigir reload manual. Atende ao cenário em que o cliente
+  // volta para o checkout após pagar e a poltrona ainda parecia "livre".
+  useEffect(() => {
+    if (!tripId) return;
+
+    const refresh = () => {
+      fetchOccupiedSeats(tripId, () => true);
+    };
+
+    const channel = supabase
+      .channel(`seat-availability-${tripId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tickets', filter: `trip_id=eq.${tripId}` },
+        refresh,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'seat_locks', filter: `trip_id=eq.${tripId}` },
+        refresh,
+      )
+      .subscribe();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', refresh);
+
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [tripId, fetchOccupiedSeats]);
+
   const handleRetrySeatStatus = async () => {
     if (!tripId) return;
     await fetchOccupiedSeats(tripId, () => true);
