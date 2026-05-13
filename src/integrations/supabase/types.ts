@@ -3374,6 +3374,13 @@ export type Database = {
         Args: { trip_uuid: string }
         Returns: number
       }
+      get_trip_seat_occupancy: {
+        Args: { _trip_id: string }
+        Returns: {
+          is_blocked: boolean
+          seat_id: string
+        }[]
+      }
       get_user_active_company: { Args: { _user_id: string }; Returns: string }
       get_user_seller_id: { Args: { _user_id: string }; Returns: string }
       has_role: {

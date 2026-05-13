@@ -1,68 +1,80 @@
-## Diagnóstico
+## Causa raiz
 
-Investiguei o fluxo de disponibilidade de assentos em `src/pages/public/Checkout.tsx`, `src/components/admin/NewSaleModal.tsx` e a finalização de pagamento em `supabase/functions/_shared/payment-finalization.ts`.
+A tabela `public.tickets` não possui policy RLS de SELECT para usuários anônimos. O checkout público (`src/pages/public/Checkout.tsx`) lê `tickets` diretamente para descobrir assentos ocupados — RLS bloqueia silenciosamente e devolve `[]`, fazendo todas as poltronas aparecerem disponíveis mesmo quando há vendas pagas.
 
-A regra de fundo está correta:
-- Pagamento confirmado (webhook/verify) cria `tickets` para a venda.
-- Checkout público considera `tickets` + `seat_locks` ativos por `trip_id`.
-- Bloqueios operacionais (`sales.status = 'bloqueado'`) são separados visualmente.
+Confirmado no evento de exemplo (Pedro Leopoldo Rodeio Show / BUSAO OFF OFF): existem tickets pagos na trip de ida apontando corretamente para `seat_id` válidos do veículo atual; o problema é puramente de leitura pública.
 
-Porém existem três lacunas reais que reproduzem a queixa do usuário ("comprei e a poltrona não aparece marcada / outra pessoa pode comprar"):
+`seat_locks` e `sales(status='bloqueado')` já têm acesso público, então locks temporários e bloqueios admin já funcionam — só vendas pagas estavam invisíveis.
 
-1. **Sem refresh automático no mapa público.** `fetchOccupiedSeats` só roda no mount e na revalidação do submit. Não há realtime nem polling. Quem fica na aba aberta nunca vê outras compras chegando, e quem volta pela vitrine pode bater em cache de navegação. Isso cria a sensação de "minha poltrona não está marcada".
+## Solução (mudança mínima)
 
-2. **Venda manual em `/admin/vendas` ignora `seat_locks`.** Em `NewSaleModal.tsx` (linhas 549-563) só lê `tickets`. Um admin consegue selecionar um assento que está reservado por um checkout público em andamento (lock válido, ainda sem ticket). Quando o cliente público confirma o pagamento, há colisão: dois caminhos tentam ocupar o mesmo assento.
+Não vou abrir a tabela `tickets` inteira ao público (PII: nome, CPF, telefone). Em vez disso, criar uma RPC `SECURITY DEFINER` que retorna apenas o que o mapa de assentos precisa, e trocar a chamada do checkout para usá-la.
 
-3. **Não há proteção transacional contra dupla venda do mesmo assento.** A `tickets` provavelmente não tem índice único por `(trip_id, seat_id)` excluindo bloqueios/cancelados, então a corrida só é evitada pela concorrência otimista do `seat_locks` (que tem unique constraint). Se a colisão acontecer entre admin (sem lock) e checkout público (com lock), a tabela aceita os dois.
+### 1. Migration SQL
 
-Diferença entre "reservado" e "vendido" hoje: reservado = `seat_lock` ativo (pré-pagamento). Vendido = `tickets` gerado após `pago`. A UI pública trata os dois como "ocupado" (cinza/usuário), sem diferenciação visual — está dentro do escopo aceitável, mas pode ser melhorado.
+Criar função:
 
-## Mudanças propostas (mínimas e seguras)
-
-### 1. Realtime + refresh on focus no checkout público
-Arquivo: `src/pages/public/Checkout.tsx`
-- Adicionar canal Supabase Realtime em `tickets` e `seat_locks` filtrado por `trip_id`, chamando `fetchOccupiedSeats(tripId, () => true)` em qualquer INSERT/UPDATE/DELETE.
-- Adicionar listener `visibilitychange` / `focus` para re-buscar quando a aba volta ao foco (cobre o caso "voltei pela vitrine após pagar").
-- Habilitar realtime via migração: `ALTER PUBLICATION supabase_realtime ADD TABLE public.tickets, public.seat_locks;` (verificar primeiro se já está incluído, para não duplicar).
-
-### 2. Venda manual considera `seat_locks` ativos
-Arquivo: `src/components/admin/NewSaleModal.tsx` (bloco 547-605)
-- Adicionar busca paralela em `seat_locks` ativos por `trip_id` (`expires_at > now()`), filtrando por `company_id`, e marcar esses assentos como `blockedSeatIds` (visual âmbar "Reservado") para evitar venda manual sobre um lock público em andamento.
-- Aplicar a mesma checagem na revalidação imediatamente antes de gravar tickets do admin (linhas ~915-1063), abortando com mensagem clara se algum assento ficou indisponível durante o preenchimento.
-
-### 3. Proteção transacional contra dupla venda
-Migração: criar índice único parcial em `tickets`:
 ```sql
-create unique index if not exists tickets_trip_seat_unique
-  on public.tickets (trip_id, seat_id)
-  where seat_id is not null;
+create or replace function public.get_trip_seat_occupancy(_trip_id uuid)
+returns table (seat_id uuid, is_blocked boolean)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select t.seat_id,
+         coalesce(s.status = 'bloqueado', false) as is_blocked
+  from public.tickets t
+  left join public.sales s on s.id = t.sale_id
+  where t.trip_id = _trip_id
+    and t.seat_id is not null
+    and exists (
+      select 1 from public.trips tr
+      join public.events e on e.id = tr.event_id
+      where tr.id = _trip_id and e.status = 'a_venda'
+    );
+$$;
+
+grant execute on function public.get_trip_seat_occupancy(uuid) to anon, authenticated;
 ```
-Isso garante: mesmo se admin e checkout público corrigirem para o mesmo assento ao mesmo tempo, o segundo INSERT falha. O frontend já faz rollback em erro, então a falha é tratada como "assento acabou de ser ocupado" com toast claro.
 
-Se a base já tiver duplicidades históricas, a migração tenta criar `CONCURRENTLY` falha; nesse caso aplicar limpeza prévia (não esperado em base saudável).
+A função só expõe `seat_id` + flag de bloqueio, e só para trips de eventos `a_venda`. Sem PII, sem `sale_id`, sem dados de passageiro.
 
-### 4. Mensagens claras (já parcialmente existem)
-- No 23505 do `seat_locks` ou do índice novo de tickets (no checkout público e no admin), mostrar: "Esta poltrona acabou de ser reservada ou vendida. Escolha outra poltrona disponível." e re-disparar `fetchOccupiedSeats`.
-- Quando lock expira: mensagem "Sua reserva expirou. Selecione a poltrona novamente para continuar." (já há toast equivalente — apenas padronizar texto se diferente).
+### 2. Frontend
 
-### 5. Pequena melhoria visual (opcional, sem refactor)
-`src/components/public/SeatButton.tsx` já distingue `occupied` (ícone usuário) e `blocked` (ícone Ban âmbar). Ajustar `SeatMap.tsx` para mapear `seat_locks` (sem ticket) → estado `blocked` (âmbar = "Reservado"), e tickets pagos → `occupied` (cinza = "Ocupado"). Reaproveita componentes existentes; só muda como o array é montado em `fetchOccupiedSeats`. Atualizar `SeatLegend` se necessário.
+**`src/pages/public/Checkout.tsx`** — em `fetchOccupiedSeats` (linhas ~440-510) e na revalidação pré-compra (linhas ~739-746), substituir a query direta de `tickets` + a query de `sales` bloqueadas por uma única chamada:
 
-## Verificações
+```ts
+const { data: occupancy } = await supabase.rpc('get_trip_seat_occupancy', { _trip_id: tripUuid });
+// occupancy: [{ seat_id, is_blocked }]
+```
 
-- Testes unitários existentes em `feeCalculator.test.ts`, `checkoutFinancialIntegrity.test.ts` continuam passando (não tocados).
-- Cenários manuais 1-5 listados pelo usuário (compra confirmada, duas abas, admin × público, lock expirado, cancelamento).
-- Confirmar via `supabase--read_query` que a publicação realtime tem `tickets` e `seat_locks` antes de adicionar à migração (evita erro idempotente).
+Derivar `blockedSeatIds` (is_blocked = true) e `occupiedSeatIds` (is_blocked = false). Manter a query paralela de `seat_locks` (já funciona). Manter o realtime de `tickets` (a subscription já recebe eventos via REPLICA IDENTITY FULL, e ao receber faz refetch via RPC).
 
-## Arquivos impactados
+### 3. Admin não precisa mudar
 
-- `src/pages/public/Checkout.tsx` — realtime + focus refresh, mensagens.
-- `src/components/admin/NewSaleModal.tsx` — incluir seat_locks na consulta + revalidação.
-- `src/components/public/SeatMap.tsx` (opcional) — diferenciar reservado vs ocupado.
-- `supabase/migrations/*.sql` — índice único parcial em tickets + ALTER PUBLICATION (se faltar).
+`NewSaleModal.tsx` roda autenticado como admin → já tem acesso direto a `tickets` via policy `Admins can manage tickets`. Mantém a leitura atual.
+
+## Por que não simplesmente abrir RLS de tickets
+
+Tickets contêm `passenger_name`, `passenger_cpf`, `passenger_phone`, `qr_code_token`. Expor tudo para anon seria vazamento sério de PII e dos tokens de validação dos QR codes. RPC com colunas restritas é a forma mínima e segura.
+
+## Validação
+
+1. Reabrir o checkout do evento da BUSAO OFF OFF → assentos 13 e 14 da ida devem aparecer ocupados.
+2. Tentar selecionar 13/14 → bloqueado.
+3. Venda manual no admin do mesmo evento → continua enxergando os mesmos assentos ocupados (sem regressão).
+4. Concorrência: lock temporário criado em uma aba aparece em outra (já funcionava, não regredir).
+5. Multi-tenant: a RPC só filtra por `trip_id`, e trips pertencem a uma única empresa via `event_id` — sem vazamento entre empresas.
 
 ## Riscos
 
-- Realtime aumenta consumo de canais; mitigação: 1 canal por trip, com cleanup no unmount.
-- Índice único pode rejeitar inserts em bases com duplicidades históricas — verificar antes via query.
-- Admin sentindo "assento sumiu" porque entrou em lock público; mitigado pela mensagem clara e refresh.
+- Nenhum risco financeiro/Asaas/split tocado.
+- Função `SECURITY DEFINER` com `search_path = public` setado, sem dynamic SQL → seguro.
+- Realtime continua funcionando como hoje (já implementado na rodada anterior).
+
+## Entregável
+
+- 1 migration SQL (criação da RPC + grant)
+- Edição em `src/pages/public/Checkout.tsx` (2 trechos: `fetchOccupiedSeats` e revalidação pré-submit)
+- Sem mudança no admin, sem mudança em pagamentos, sem refatoração
