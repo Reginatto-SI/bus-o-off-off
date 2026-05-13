@@ -1,4 +1,4 @@
 // Arquivo gerado automaticamente por scripts/generate-version.mjs
 // Mantém frontend e /version.json sincronizados no mesmo build.
-export const APP_VERSION = "20260512.183124";
-export const APP_BUILD_TIME = "2026-05-12T18:31:24.823Z";
+export const APP_VERSION = "20260513.144713";
+export const APP_BUILD_TIME = "2026-05-13T14:47:13.405Z";
