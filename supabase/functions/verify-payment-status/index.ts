@@ -32,7 +32,7 @@ function normalizeAsaasConfirmationTimestamp(value: unknown): string | null {
   return null;
 }
 
-function resolveAsaasConfirmedAtFromPayment(paymentData: any): string {
+function resolveAsaasConfirmedAtFromPayment(paymentData: Record<string, unknown>): string {
   const candidates = [
     paymentData?.clientPaymentDate,
     paymentData?.confirmedDate,
@@ -97,7 +97,7 @@ serve(async (req) => {
 
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_captured_at, platform_fee_payment_id, platform_fee_status, sale_origin")
+      .select("id, status, asaas_payment_id, asaas_payment_status, company_id, unit_price, quantity, gross_amount, payment_confirmed_at, platform_fee_paid_at, payment_environment, representative_id, split_snapshot_platform_fee_total, split_snapshot_socio_fee_amount, split_snapshot_platform_net_amount, split_snapshot_source, split_snapshot_captured_at, platform_fee_payment_id, platform_fee_status, sale_origin")
       .eq("id", saleIdFromRequest)
       .single();
 
@@ -332,7 +332,7 @@ serve(async (req) => {
         }, 409);
       }
 
-      let platformFeePaymentData: any;
+      let platformFeePaymentData: Record<string, unknown>;
       try {
         const response = await fetch(`${paymentContext.baseUrl}/payments/${sale.platform_fee_payment_id}`, {
           headers: { "access_token": apiKeyToUse },
@@ -396,6 +396,45 @@ serve(async (req) => {
             responseJson: { error: "manual_platform_fee_convergence_failed", paymentStatus: sale.status },
           });
           return jsonResponse({ error: "manual_platform_fee_convergence_failed", paymentStatus: sale.status }, 500);
+        }
+
+        const canUseManualSplitSnapshotForCommission =
+          sale.split_snapshot_source === "create-platform-fee-checkout" &&
+          Boolean(sale.split_snapshot_captured_at);
+
+        const { data: commissionRows, error: commissionError } = canUseManualSplitSnapshotForCommission
+          ? await supabaseAdmin.rpc("upsert_representative_commission_for_sale", {
+            p_sale_id: sale.id,
+            p_source: "verify-payment-status:manual_platform_fee",
+          })
+          : { data: [{ action: "skipped_missing_manual_split_snapshot", status: null }], error: null };
+
+        if (commissionError) {
+          await logSaleOperationalEvent({
+            supabaseAdmin,
+            saleId: sale.id,
+            companyId: sale.company_id,
+            action: "manual_platform_fee_representative_commission_failed",
+            source: "verify-payment-status",
+            result: "error",
+            paymentEnvironment: paymentContext.environment,
+            errorCode: "representative_commission_upsert_failed",
+            detail: commissionError.message,
+          });
+        } else {
+          const commissionRow = Array.isArray(commissionRows) ? commissionRows[0] : null;
+          await logSaleOperationalEvent({
+            supabaseAdmin,
+            saleId: sale.id,
+            companyId: sale.company_id,
+            action: "manual_platform_fee_representative_commission_processed",
+            source: "verify-payment-status",
+            result: "success",
+            paymentEnvironment: paymentContext.environment,
+            detail: commissionRow
+              ? `action=${commissionRow.action};status=${commissionRow.status ?? "n/a"}`
+              : "action=none",
+          });
         }
 
         await logSaleOperationalEvent({
@@ -643,7 +682,7 @@ serve(async (req) => {
       }, 409);
     }
 
-    let paymentData: any;
+    let paymentData: Record<string, unknown>;
     try {
       const res = await fetch(`${paymentContext.baseUrl}/payments/${sale.asaas_payment_id}`, {
         headers: { "access_token": apiKeyToUse },

@@ -7,11 +7,12 @@ import {
 import type { PaymentEnvironment } from "./runtime-env.ts";
 
 // deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseAdminClient = any;
 
 type ResolveSplitRecipientsParams = {
   supabaseAdmin: SupabaseAdminClient;
-  source: "create-asaas-payment" | "verify-payment-status" | "asaas-webhook" | "reconcile-sale-payment";
+  source: "create-asaas-payment" | "create-platform-fee-checkout" | "verify-payment-status" | "asaas-webhook" | "reconcile-sale-payment";
   saleId: string;
   companyId: string;
   paymentEnvironment: PaymentEnvironment;
