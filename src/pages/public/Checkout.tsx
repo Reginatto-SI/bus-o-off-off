@@ -443,12 +443,10 @@ export default function Checkout() {
       setSeatStatusError(null);
 
       try {
-        // Fetch tickets AND active seat_locks for this trip
-        const [ticketsRes, locksRes] = await Promise.all([
-          supabase
-            .from("tickets")
-            .select("seat_id, sale_id")
-            .eq("trip_id", tripUuid),
+        // Public-safe occupancy via SECURITY DEFINER RPC (no PII exposed)
+        // + active seat_locks (already public-readable for events 'a_venda')
+        const [occRes, locksRes] = await Promise.all([
+          supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripUuid }),
           supabase
             .from("seat_locks")
             .select("seat_id")
@@ -456,41 +454,22 @@ export default function Checkout() {
             .gt("expires_at", new Date().toISOString()),
         ]);
 
-        if (ticketsRes.error) throw ticketsRes.error;
+        if (occRes.error) throw occRes.error;
 
         if (!isActive()) return;
 
-        const ticketRows = (ticketsRes.data ?? []) as {
+        const occRows = (occRes.data ?? []) as {
           seat_id: string | null;
-          sale_id: string | null;
+          is_blocked: boolean | null;
         }[];
-        const saleIds = ticketRows
-          .map((t) => t.sale_id)
-          .filter(Boolean) as string[];
 
-        // Identify admin blocks (BLOQUEIO sales)
-        let blockedSales = new Set<string>();
-        if (saleIds.length > 0) {
-          const { data: blockedSalesData } = await supabase
-            .from("sales")
-            .select("id")
-            .in("id", saleIds)
-            .eq("status", "bloqueado");
-          blockedSales = new Set(
-            (blockedSalesData ?? []).map((s: { id: string }) => s.id),
-          );
-        }
+        const blockedSeats = occRows
+          .filter((r) => r.seat_id && r.is_blocked)
+          .map((r) => r.seat_id as string);
 
-        const blockedSeats = ticketRows
-          .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
-          .map((t) => t.seat_id as string);
-
-        // Occupied = tickets (non-blocked) + active seat_locks
-        const occupiedFromTickets = ticketRows
-          .filter(
-            (t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)),
-          )
-          .map((t) => t.seat_id as string);
+        const occupiedFromTickets = occRows
+          .filter((r) => r.seat_id && !r.is_blocked)
+          .map((r) => r.seat_id as string);
 
         const occupiedFromLocks = (locksRes.data ?? []).map(
           (l: SeatLockRow) => l.seat_id as string,
@@ -740,8 +719,8 @@ export default function Checkout() {
   const revalidateSeats = async (): Promise<boolean> => {
     if (!tripId) return false;
 
-    const [ticketsRes, locksRes] = await Promise.all([
-      supabase.from("tickets").select("seat_id, sale_id").eq("trip_id", tripId),
+    const [occRes, locksRes] = await Promise.all([
+      supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripId }),
       supabase
         .from("seat_locks")
         .select("seat_id")
@@ -749,38 +728,23 @@ export default function Checkout() {
         .gt("expires_at", new Date().toISOString()),
     ]);
 
-    if (ticketsRes.error) {
+    if (occRes.error) {
       toast.error("Erro ao verificar disponibilidade. Tente novamente.");
       return false;
     }
 
-    const ticketRows = (ticketsRes.data ?? []) as {
+    const occRows = (occRes.data ?? []) as {
       seat_id: string | null;
-      sale_id: string | null;
+      is_blocked: boolean | null;
     }[];
-    const saleIds = ticketRows
-      .map((t) => t.sale_id)
-      .filter(Boolean) as string[];
 
-    let blockedSales = new Set<string>();
-    if (saleIds.length > 0) {
-      const { data: blockedSalesData } = await supabase
-        .from("sales")
-        .select("id")
-        .in("id", saleIds)
-        .eq("status", "bloqueado");
-      blockedSales = new Set(
-        (blockedSalesData ?? []).map((s: { id: string }) => s.id),
-      );
-    }
+    const currentBlocked = occRows
+      .filter((r) => r.seat_id && r.is_blocked)
+      .map((r) => r.seat_id as string);
 
-    const currentBlocked = ticketRows
-      .filter((t) => t.seat_id && t.sale_id && blockedSales.has(t.sale_id))
-      .map((t) => t.seat_id as string);
-
-    const occupiedFromTickets = ticketRows
-      .filter((t) => t.seat_id && (!t.sale_id || !blockedSales.has(t.sale_id)))
-      .map((t) => t.seat_id as string);
+    const occupiedFromTickets = occRows
+      .filter((r) => r.seat_id && !r.is_blocked)
+      .map((r) => r.seat_id as string);
 
     const occupiedFromLocks = (locksRes.data ?? []).map(
       (l: SeatLockRow) => l.seat_id as string,
