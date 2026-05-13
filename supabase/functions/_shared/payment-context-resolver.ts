@@ -304,7 +304,7 @@ export function resolvePaymentContext(params: {
   const webhookTokenCandidates = envWebhookToken ? [envWebhookToken] : [];
 
   const splitPolicy: PaymentContextSplitPolicy = isPlatformFeeFlow
-    ? { enabled: false, type: "none" }
+    ? { enabled: true, type: "platform_and_socio" }
     : { enabled: true, type: "platform_and_socio" };
 
   return {
@@ -323,9 +323,9 @@ export function resolvePaymentContext(params: {
         ? "platform_fee_flow_forces_platform_owner"
         : "main_sale_flow_uses_company_owner_in_all_envs",
       credentialDecision: `${params.mode}_mode_${apiKeySource}`,
-      splitDecision: splitPolicy.enabled
-        ? "split_enabled_for_main_sale_flow_in_all_envs"
-        : "split_disabled_for_platform_fee_flow",
+      splitDecision: isPlatformFeeFlow
+        ? "split_enabled_for_manual_platform_fee_flow"
+        : "split_enabled_for_main_sale_flow_in_all_envs",
     },
     platformWalletSecretName: getAsaasWalletSecretName(environment),
     companyApiKeyByEnvironment: companyEnvConfig.apiKey,
