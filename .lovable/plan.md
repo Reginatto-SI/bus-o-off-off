@@ -1,80 +1,75 @@
-## Causa raiz
+## Causa raiz (não é cache)
 
-A tabela `public.tickets` não possui policy RLS de SELECT para usuários anônimos. O checkout público (`src/pages/public/Checkout.tsx`) lê `tickets` diretamente para descobrir assentos ocupados — RLS bloqueia silenciosamente e devolve `[]`, fazendo todas as poltronas aparecerem disponíveis mesmo quando há vendas pagas.
+A correção anterior consertou só **um lado** do problema. Existem **duas funções** que calculam ocupação de assentos no checkout público — corrigi a primeira, mas a segunda continua quebrada para usuários anônimos.
 
-Confirmado no evento de exemplo (Pedro Leopoldo Rodeio Show / BUSAO OFF OFF): existem tickets pagos na trip de ida apontando corretamente para `seat_id` válidos do veículo atual; o problema é puramente de leitura pública.
+### O que está acontecendo
 
-`seat_locks` e `sales(status='bloqueado')` já têm acesso público, então locks temporários e bloqueios admin já funcionam — só vendas pagas estavam invisíveis.
+A função `public.get_trip_available_capacity(trip_uuid)` é a que alimenta:
 
-## Solução (mudança mínima)
+- O número de "vagas disponíveis" mostrado na listagem de viagens (`PublicEventDetail.tsx`, linha 131)
+- A validação de capacidade total no checkout (`Checkout.tsx`, linhas 1116 e 1144)
 
-Não vou abrir a tabela `tickets` inteira ao público (PII: nome, CPF, telefone). Em vez disso, criar uma RPC `SECURITY DEFINER` que retorna apenas o que o mapa de assentos precisa, e trocar a chamada do checkout para usá-la.
-
-### 1. Migration SQL
-
-Criar função:
+Olhando o corpo dela no banco:
 
 ```sql
-create or replace function public.get_trip_seat_occupancy(_trip_id uuid)
-returns table (seat_id uuid, is_blocked boolean)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select t.seat_id,
-         coalesce(s.status = 'bloqueado', false) as is_blocked
-  from public.tickets t
-  left join public.sales s on s.id = t.sale_id
-  where t.trip_id = _trip_id
-    and t.seat_id is not null
-    and exists (
-      select 1 from public.trips tr
-      join public.events e on e.id = tr.event_id
-      where tr.id = _trip_id and e.status = 'a_venda'
-    );
-$$;
-
-grant execute on function public.get_trip_seat_occupancy(uuid) to anon, authenticated;
+SELECT t.capacity - COUNT(tickets WHERE trip_id = ...)
+FROM trips
 ```
 
-A função só expõe `seat_id` + flag de bloqueio, e só para trips de eventos `a_venda`. Sem PII, sem `sale_id`, sem dados de passageiro.
+Ela é `SECURITY INVOKER` (executa com a permissão de quem chama) e lê `public.tickets` direto. Como `tickets` **não tem policy de SELECT para `anon`**, o `COUNT(*)` retorna **0** para qualquer usuário não logado → a viagem aparece com **capacidade total livre**.
 
-### 2. Frontend
+### Por que desktop "funciona" e mobile não
 
-**`src/pages/public/Checkout.tsx`** — em `fetchOccupiedSeats` (linhas ~440-510) e na revalidação pré-compra (linhas ~739-746), substituir a query direta de `tickets` + a query de `sales` bloqueadas por uma única chamada:
+Não é mobile vs desktop — é **logado vs deslogado**:
 
-```ts
-const { data: occupancy } = await supabase.rpc('get_trip_seat_occupancy', { _trip_id: tripUuid });
-// occupancy: [{ seat_id, is_blocked }]
+- Quando você abre a vitrine no editor/Lovable, normalmente está logado como admin/developer → RLS deixa contar os `tickets` → vagas corretas.
+- Quando você ou seus colegas abrem do celular (sem login), cai no caso anônimo → `COUNT = 0` → tudo livre.
+- Aba anônima no desktop também reproduziria o bug, se testar com cuidado.
+
+A correção da RPC `get_trip_seat_occupancy` (pintar poltronas) já está OK. O que falta é o **contador de vagas** e a **validação de capacidade**, que ainda dependem da função antiga.
+
+## Plano de correção
+
+### 1. Migration — tornar `get_trip_available_capacity` segura para anônimos
+
+Recriar a função como `SECURITY DEFINER` com `search_path = public`, mantendo:
+
+- Mesma assinatura (`trip_uuid uuid → integer`)
+- Mesma lógica (`capacity - count(tickets)`)
+- `GRANT EXECUTE ... TO anon, authenticated`
+- Restringir leitura a viagens cujo evento esteja em `status = 'a_venda'` (mesma proteção que apliquei na RPC de ocupação), para não vazar contagens de eventos privados
+
+Sem mudar nome, sem criar função paralela, sem tocar no frontend.
+
+### 2. Validação no banco
+
+Após a migration, rodar:
+
+```sql
+select public.get_trip_available_capacity('4adf0037-f595-4943-ac24-1099e054e521');
 ```
 
-Derivar `blockedSeatIds` (is_blocked = true) e `occupiedSeatIds` (is_blocked = false). Manter a query paralela de `seat_locks` (já funciona). Manter o realtime de `tickets` (a subscription já recebe eventos via REPLICA IDENTITY FULL, e ao receber faz refetch via RPC).
+como `anon` e conferir que retorna `capacity - 2` (e não `capacity`).
 
-### 3. Admin não precisa mudar
+### 3. Validação visual
 
-`NewSaleModal.tsx` roda autenticado como admin → já tem acesso direto a `tickets` via policy `Admins can manage tickets`. Mantém a leitura atual.
+- Abrir o evento BUSAO OFF OFF em **aba anônima no celular**.
+- Confirmar que:
+  - a viagem com vendas mostra menos vagas disponíveis no card de seleção
+  - o seat map continua pintando 13 e 14 como ocupados
+  - tentar selecionar quantidade maior que a disponível é bloqueado
+- Repetir em outro evento qualquer com vendas pagas, para garantir.
 
-## Por que não simplesmente abrir RLS de tickets
+### 4. Sem alteração no frontend
 
-Tickets contêm `passenger_name`, `passenger_cpf`, `passenger_phone`, `qr_code_token`. Expor tudo para anon seria vazamento sério de PII e dos tokens de validação dos QR codes. RPC com colunas restritas é a forma mínima e segura.
-
-## Validação
-
-1. Reabrir o checkout do evento da BUSAO OFF OFF → assentos 13 e 14 da ida devem aparecer ocupados.
-2. Tentar selecionar 13/14 → bloqueado.
-3. Venda manual no admin do mesmo evento → continua enxergando os mesmos assentos ocupados (sem regressão).
-4. Concorrência: lock temporário criado em uma aba aparece em outra (já funcionava, não regredir).
-5. Multi-tenant: a RPC só filtra por `trip_id`, e trips pertencem a uma única empresa via `event_id` — sem vazamento entre empresas.
+Nenhum componente, hook ou tipagem muda. A função continua sendo chamada do mesmo jeito em `PublicEventDetail.tsx` e `Checkout.tsx`.
 
 ## Riscos
 
-- Nenhum risco financeiro/Asaas/split tocado.
-- Função `SECURITY DEFINER` com `search_path = public` setado, sem dynamic SQL → seguro.
-- Realtime continua funcionando como hoje (já implementado na rodada anterior).
+- **Baixíssimo**: a função já existia e era usada nesses mesmos pontos. Só estamos garantindo que ela retorne o valor correto para anônimos.
+- Não toca em RLS direta de `tickets`, não muda nenhum fluxo de venda, não impacta multi-tenant (a função é por `trip_id`, e `trip` já carrega `company_id` implícito via evento).
+- Não cria fluxo paralelo — mesma função, mesma assinatura.
 
-## Entregável
+## Próximo passo após aprovar
 
-- 1 migration SQL (criação da RPC + grant)
-- Edição em `src/pages/public/Checkout.tsx` (2 trechos: `fetchOccupiedSeats` e revalidação pré-submit)
-- Sem mudança no admin, sem mudança em pagamentos, sem refatoração
+Crio a migration única e peço a sua aprovação para rodar. Depois disso o problema do mobile deve sumir sem nenhum ajuste de cache.
