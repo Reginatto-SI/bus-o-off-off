@@ -1,9 +1,12 @@
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Company } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Check, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check, RotateCcw, AlertTriangle, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const COLOR_PALETTE = [
@@ -25,15 +28,42 @@ const DEFAULTS = {
   ticket: '#F97316',
 };
 
+type BrandColors = {
+  primary: string;
+  accent: string;
+  ticket: string;
+};
+
 interface BrandIdentityTabProps {
   company: Company | null;
-  colors: {
-    primary: string;
-    accent: string;
-    ticket: string;
-  };
-  onColorsChange: (colors: { primary: string; accent: string; ticket: string }) => void;
+  colors: BrandColors;
+  onColorsChange: (colors: BrandColors) => void;
 }
+
+const HEX_COLOR_REGEX = /^#[0-9A-F]{6}$/i;
+const PALETTE_HEX_VALUES = COLOR_PALETTE.map((color) => color.hex.toUpperCase());
+
+const normalizeHexColor = (value?: string | null) => {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return '';
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  return withHash.toUpperCase();
+};
+
+const isValidHexColor = (value: string) => HEX_COLOR_REGEX.test(normalizeHexColor(value));
+const isPaletteColor = (value: string) => PALETTE_HEX_VALUES.includes(normalizeHexColor(value));
+
+const isLowContrastColor = (value: string) => {
+  const normalized = normalizeHexColor(value);
+  if (!HEX_COLOR_REGEX.test(normalized)) return false;
+
+  const red = parseInt(normalized.slice(1, 3), 16);
+  const green = parseInt(normalized.slice(3, 5), 16);
+  const blue = parseInt(normalized.slice(5, 7), 16);
+  // Comentário: luminância simples é suficiente para aviso não bloqueante de cores muito claras.
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  return luminance > 0.78;
+};
 
 function ColorSwatch({
   hex,
@@ -61,8 +91,8 @@ function ColorSwatch({
         )}
         style={{
           backgroundColor: hex,
-          ...(selected ? { ringColor: hex } : {}),
-        }}
+          ...(selected ? { '--tw-ring-color': hex } : {}),
+        } as CSSProperties}
       >
         {selected && <Check className="h-4 w-4 text-white drop-shadow-sm" />}
       </div>
@@ -76,11 +106,151 @@ function ColorSwatch({
   );
 }
 
+function CustomColorPicker({
+  label,
+  color,
+  selected,
+  onApply,
+}: {
+  label: string;
+  color: string;
+  selected: boolean;
+  onApply: (hex: string) => void;
+}) {
+  const normalizedColor = normalizeHexColor(color) || DEFAULTS.primary;
+  const [open, setOpen] = useState(false);
+  const [draftColor, setDraftColor] = useState(normalizedColor);
+  const normalizedDraft = normalizeHexColor(draftColor);
+  const isDraftValid = isValidHexColor(draftColor);
+  const previewColor = isDraftValid ? normalizedDraft : normalizedColor;
+  const contrastWarning = isDraftValid && isLowContrastColor(normalizedDraft);
+
+  useEffect(() => {
+    if (!open) {
+      setDraftColor(normalizedColor);
+    }
+  }, [normalizedColor, open]);
+
+  const handleApply = () => {
+    if (!isDraftValid) return;
+    onApply(normalizedDraft);
+    setOpen(false);
+  };
+
+  const handleCancel = () => {
+    setDraftColor(normalizedColor);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex flex-col items-center gap-1.5 group"
+          aria-label={`Selecionar cor personalizada para ${label}`}
+        >
+          <div
+            className={cn(
+              'h-8 w-8 rounded-full border-2 transition-all flex items-center justify-center',
+              selected
+                ? 'ring-2 ring-offset-2 ring-offset-background border-transparent'
+                : 'border-dashed border-border hover:scale-110'
+            )}
+            style={{
+              backgroundColor: selected ? previewColor : 'hsl(var(--muted))',
+              ...(selected ? { '--tw-ring-color': previewColor } : {}),
+            } as CSSProperties}
+          >
+            {selected ? (
+              <Check className="h-4 w-4 text-white drop-shadow-sm" />
+            ) : (
+              <Palette className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+          <span className={cn(
+            'text-[10px] leading-tight text-center max-w-[72px]',
+            selected ? 'font-semibold text-foreground' : 'text-muted-foreground'
+          )}>
+            Personalizada
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72" align="start">
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-medium">Cor personalizada</h4>
+            <p className="text-xs text-muted-foreground">
+              Escolha uma cor visualmente ou informe o código hexadecimal.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+            <div
+              className="h-12 w-12 rounded-md border shadow-sm"
+              style={{ backgroundColor: previewColor }}
+            />
+            <div className="min-w-0 space-y-1">
+              <p className="text-xs text-muted-foreground">Prévia</p>
+              <p className="font-mono text-sm font-medium">{previewColor}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[3rem_1fr] gap-3 items-end">
+            <div className="space-y-2">
+              <Label htmlFor={`${label}-custom-color-input`} className="text-xs">Cor</Label>
+              <Input
+                id={`${label}-custom-color-input`}
+                type="color"
+                value={previewColor}
+                onChange={(event) => setDraftColor(normalizeHexColor(event.target.value))}
+                className="h-10 w-12 cursor-pointer p-1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${label}-custom-hex-input`} className="text-xs">Hexadecimal</Label>
+              <Input
+                id={`${label}-custom-hex-input`}
+                value={draftColor}
+                onChange={(event) => setDraftColor(event.target.value)}
+                onBlur={() => setDraftColor((current) => normalizeHexColor(current))}
+                placeholder="#F97316"
+                className="font-mono"
+                maxLength={7}
+              />
+            </div>
+          </div>
+
+          {!isDraftValid && (
+            <p className="text-xs text-destructive">Informe uma cor hexadecimal válida no formato #RRGGBB.</p>
+          )}
+
+          {contrastWarning && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Essa cor pode ter pouco contraste em botões e textos. Recomendamos escolher uma cor mais forte.</span>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={handleCancel}>
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" onClick={handleApply} disabled={!isDraftValid}>
+              Aplicar
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdentityTabProps) {
   // Comentário: a aba é 100% controlada pelo formulário pai para evitar loops visuais de sincronização.
-  const primaryColor = colors.primary || company?.primary_color || DEFAULTS.primary;
-  const accentColor = colors.accent || company?.accent_color || DEFAULTS.accent;
-  const ticketColor = colors.ticket || company?.ticket_color || DEFAULTS.ticket;
+  const primaryColor = normalizeHexColor(colors.primary || company?.primary_color || DEFAULTS.primary);
+  const accentColor = normalizeHexColor(colors.accent || company?.accent_color || DEFAULTS.accent);
+  const ticketColor = normalizeHexColor(colors.ticket || company?.ticket_color || DEFAULTS.ticket);
 
   const sameWarning = primaryColor === accentColor;
 
@@ -92,11 +262,12 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
     });
   };
 
-  const updateColors = (next: Partial<{ primary: string; accent: string; ticket: string }>) => {
+  const updateColors = (next: Partial<BrandColors>) => {
+    // Comentário: os campos existentes já persistem HEX por empresa; normalizamos só o formato salvo na UI.
     onColorsChange({
-      primary: next.primary ?? primaryColor,
-      accent: next.accent ?? accentColor,
-      ticket: next.ticket ?? ticketColor,
+      primary: normalizeHexColor(next.primary ?? primaryColor),
+      accent: normalizeHexColor(next.accent ?? accentColor),
+      ticket: normalizeHexColor(next.ticket ?? ticketColor),
     });
   };
 
@@ -129,6 +300,12 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                     onClick={() => updateColors({ primary: color.hex })}
                   />
                 ))}
+                <CustomColorPicker
+                  label="primary"
+                  color={primaryColor}
+                  selected={!isPaletteColor(primaryColor)}
+                  onApply={(hex) => updateColors({ primary: hex })}
+                />
               </div>
             </div>
 
@@ -147,6 +324,12 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                     onClick={() => updateColors({ accent: color.hex })}
                   />
                 ))}
+                <CustomColorPicker
+                  label="accent"
+                  color={accentColor}
+                  selected={!isPaletteColor(accentColor)}
+                  onApply={(hex) => updateColors({ accent: hex })}
+                />
               </div>
             </div>
 
@@ -183,6 +366,12 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
                   onClick={() => updateColors({ ticket: color.hex })}
                 />
               ))}
+              <CustomColorPicker
+                label="ticket"
+                color={ticketColor}
+                selected={!isPaletteColor(ticketColor)}
+                onApply={(hex) => updateColors({ ticket: hex })}
+              />
             </div>
           </div>
         </div>
