@@ -548,7 +548,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     const fetchSeatsAndOccupied = async () => {
       setLoadingSeats(true);
       const nowIso = new Date().toISOString();
-      const [seatsRes, ticketsRes, locksRes] = await Promise.all([
+      const [seatsRes, occRes, locksRes] = await Promise.all([
         supabase
           .from('seats')
           .select('*')
@@ -558,16 +558,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           .order('floor')
           .order('row_number')
           .order('column_number'),
-        supabase
-          .from('tickets')
-          .select('seat_id, sale_id')
-          .eq('trip_id', selectedTripId),
+        // Fonte única de ocupação compartilhada com checkout público.
+        // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
+        supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
         // Locks ativos do checkout público também precisam bloquear venda manual,
         // evitando colisão entre admin e cliente final no mesmo assento.
         supabase
           .from('seat_locks')
           .select('seat_id')
           .eq('trip_id', selectedTripId)
+          .eq('company_id', activeCompanyId!)
           .gt('expires_at', nowIso),
       ]);
 
@@ -577,33 +577,17 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       );
       setSeats(validSeats as Seat[]);
 
-      const ticketsData = ticketsRes.data ?? [];
+      if (occRes.error) throw occRes.error;
 
-      // Separar bloqueios operacionais de ocupação real (regra espelhada do checkout público).
-      const saleIds = [...new Set(ticketsData.map((t: any) => t.sale_id).filter(Boolean))];
-      let blockSaleIds = new Set<string>();
+      const occRows = (occRes.data ?? []) as { seat_id: string | null; is_blocked: boolean | null }[];
 
-      if (saleIds.length > 0) {
-        const { data: salesData } = await supabase
-          .from('sales')
-          .select('id, status')
-          .in('id', saleIds);
+      const blocked: string[] = occRows
+        .filter((row) => row.seat_id && row.is_blocked)
+        .map((row) => row.seat_id as string);
 
-        // Bloqueio operacional: status = 'bloqueado' e não cancelado
-        blockSaleIds = new Set(
-          (salesData ?? [])
-            .filter((s: any) => s.status === 'bloqueado')
-            .map((s: any) => s.id)
-        );
-      }
-
-      const blocked: string[] = [];
-      const occupied: string[] = [];
-      ticketsData.forEach((t: any) => {
-        if (!t.seat_id) return;
-        if (blockSaleIds.has(t.sale_id)) blocked.push(t.seat_id);
-        else occupied.push(t.seat_id);
-      });
+      const occupied: string[] = occRows
+        .filter((row) => row.seat_id && !row.is_blocked)
+        .map((row) => row.seat_id as string);
 
       // Locks ativos (reservas temporárias do checkout público) entram como "blocked"
       // para que o admin veja o assento como indisponível e não dispute a poltrona.
@@ -933,19 +917,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // Evita corrida quando admin selecionou um assento que acabou de ser
       // reservado por um cliente público nesse exato instante.
       const nowIsoCheck = new Date().toISOString();
-      const [currentTicketsRes, currentLocksRes] = await Promise.all([
-        supabase
-          .from('tickets')
-          .select('seat_id')
-          .eq('trip_id', selectedTripId),
+      const [currentOccRes, currentLocksRes] = await Promise.all([
+        supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
         supabase
           .from('seat_locks')
           .select('seat_id')
           .eq('trip_id', selectedTripId)
+          .eq('company_id', activeCompanyId)
           .gt('expires_at', nowIsoCheck),
       ]);
+      if (currentOccRes.error) throw currentOccRes.error;
       const currentOccupied = new Set(
-        (currentTicketsRes.data ?? []).map((t: any) => t.seat_id).filter(Boolean),
+        ((currentOccRes.data ?? []) as any[]).map((t: any) => t.seat_id).filter(Boolean),
       );
       const currentLocked = new Set(
         (currentLocksRes.data ?? []).map((l: any) => l.seat_id).filter(Boolean),
