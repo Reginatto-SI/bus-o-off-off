@@ -564,19 +564,18 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
             .order('column_number'),
           // Fonte única de ocupação compartilhada com checkout público.
           // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
-          supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
+          getTripSeatOccupancyRpc({ tripId: selectedTripId, context: 'manual_sale' }),
         ]);
 
         if (seatsRes.error) throw seatsRes.error;
-        if (occRes.error) throw occRes.error;
-
+        
         // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
         const validSeats = (seatsRes.data ?? []).filter(
           (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
         );
         setSeats(validSeats as Seat[]);
 
-        const occRows = (occRes.data ?? []) as { seat_id: string | null; is_blocked: boolean | null }[];
+        const occRows = occRes.rows;
 
         const blocked: string[] = occRows
           .filter((row) => row.seat_id && row.is_blocked)
@@ -590,7 +589,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         setBlockedSeatIds(blocked);
         setSelectedSeats([]);
       } catch (error) {
-        console.error('Erro ao carregar ocupação de assentos na venda manual:', error);
+        console.error('Erro ao carregar ocupação de assentos na venda manual', {
+          tripId: selectedTripId,
+          message: (error as any)?.message,
+          code: (error as any)?.code,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+        });
         setOccupiedSeatIds([]);
         setBlockedSeatIds([]);
         setSelectedSeats([]);
@@ -912,10 +917,9 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       // Revalidate seats via fonte única (RPC): tickets + sale_passengers + seat_locks ativos.
       // Evita corrida quando admin selecionou um assento que acabou de ser
       // reservado por um cliente público nesse exato instante.
-      const currentOccRes = await supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId });
-      if (currentOccRes.error) throw currentOccRes.error;
+      const currentOccRes = await getTripSeatOccupancyRpc({ tripId: selectedTripId, context: 'manual_sale' });
       const currentOccupied = new Set(
-        ((currentOccRes.data ?? []) as any[]).map((t: any) => t.seat_id).filter(Boolean),
+        (currentOccRes.rows ?? []).map((t: any) => t.seat_id).filter(Boolean),
       );
       const conflicting = selectedSeats.filter(
         (id) => currentOccupied.has(id),

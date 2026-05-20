@@ -441,13 +441,11 @@ export default function Checkout() {
       try {
         // Public-safe occupancy via SECURITY DEFINER RPC (no PII exposed)
         // + active seat_locks (already public-readable for events 'a_venda')
-        const occRes = await supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripUuid });
-
-        if (occRes.error) throw occRes.error;
+        const occRes = await getTripSeatOccupancyRpc({ tripId: tripUuid, context: 'public_checkout' });
 
         if (!isActive()) return;
 
-        const occRows = (occRes.data ?? []) as {
+        const occRows = (occRes.rows ?? []) as {
           seat_id: string | null;
           is_blocked: boolean | null;
         }[];
@@ -700,14 +698,15 @@ export default function Checkout() {
   const revalidateSeats = async (): Promise<boolean> => {
     if (!tripId) return false;
 
-    const occRes = await supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripId });
-
-    if (occRes.error) {
+    let occRes;
+    try {
+      occRes = await getTripSeatOccupancyRpc({ tripId: tripId, context: 'public_checkout' });
+    } catch (_error) {
       toast.error("Erro ao verificar disponibilidade. Tente novamente.");
       return false;
     }
 
-    const occRows = (occRes.data ?? []) as {
+    const occRows = (occRes.rows ?? []) as {
       seat_id: string | null;
       is_blocked: boolean | null;
     }[];
@@ -724,12 +723,14 @@ export default function Checkout() {
     setOccupiedSeatIds(currentOccupied);
 
     // Check which selected seats are now occupied
+    const unavailableSeatIds = new Set([...currentOccupied, ...currentBlocked]);
+
     const conflicting = selectedSeats.filter((seatId) =>
-      currentOccupied.includes(seatId),
+      unavailableSeatIds.has(seatId),
     );
     if (conflicting.length > 0) {
       const remaining = selectedSeats.filter(
-        (seatId) => !currentOccupied.includes(seatId),
+        (seatId) => !unavailableSeatIds.has(seatId),
       );
       setSelectedSeats(remaining);
       toast.error(
