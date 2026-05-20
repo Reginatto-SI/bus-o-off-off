@@ -2490,6 +2490,15 @@ export default function Events() {
     setEventToClose(null);
   };
 
+  const handleCopyEventId = async (eventId: string) => {
+    try {
+      await navigator.clipboard.writeText(eventId);
+      toast.success('ID do evento copiado.');
+    } catch {
+      toast.error('Não foi possível copiar o ID do evento.');
+    }
+  };
+
   const getEventActions = (event: EventWithTrips): ActionItem[] => {
     const actions: ActionItem[] = [];
 
@@ -2513,6 +2522,12 @@ export default function Events() {
       onClick: () => {
         window.location.href = `/admin/eventos/${event.id}`;
       },
+    });
+
+    actions.push({
+      label: 'Copiar ID do evento',
+      icon: Copy,
+      onClick: () => handleCopyEventId(event.id),
     });
 
     // Quick status transitions
