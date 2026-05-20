@@ -117,10 +117,6 @@ interface EventCategoryPriceRow {
   price: number | string | null;
 }
 
-interface SeatLockRow {
-  seat_id: string;
-}
-
 interface CheckoutErrorWithContext {
   context?: {
     json?: () => Promise<unknown>;
@@ -445,14 +441,7 @@ export default function Checkout() {
       try {
         // Public-safe occupancy via SECURITY DEFINER RPC (no PII exposed)
         // + active seat_locks (already public-readable for events 'a_venda')
-        const [occRes, locksRes] = await Promise.all([
-          supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripUuid }),
-          supabase
-            .from("seat_locks")
-            .select("seat_id")
-            .eq("trip_id", tripUuid)
-            .gt("expires_at", new Date().toISOString()),
-        ]);
+        const occRes = await supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripUuid });
 
         if (occRes.error) throw occRes.error;
 
@@ -467,20 +456,12 @@ export default function Checkout() {
           .filter((r) => r.seat_id && r.is_blocked)
           .map((r) => r.seat_id as string);
 
-        const occupiedFromTickets = occRows
+        const occupiedSeats = occRows
           .filter((r) => r.seat_id && !r.is_blocked)
           .map((r) => r.seat_id as string);
 
-        const occupiedFromLocks = (locksRes.data ?? []).map(
-          (l: SeatLockRow) => l.seat_id as string,
-        );
-
-        const allOccupied = [
-          ...new Set([...occupiedFromTickets, ...occupiedFromLocks]),
-        ];
-
         setBlockedSeatIds(blockedSeats);
-        setOccupiedSeatIds(allOccupied);
+        setOccupiedSeatIds(occupiedSeats);
       } catch (error) {
         console.error("Erro ao carregar status dos assentos:", error);
         if (!isActive()) return;
@@ -719,14 +700,7 @@ export default function Checkout() {
   const revalidateSeats = async (): Promise<boolean> => {
     if (!tripId) return false;
 
-    const [occRes, locksRes] = await Promise.all([
-      supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripId }),
-      supabase
-        .from("seat_locks")
-        .select("seat_id")
-        .eq("trip_id", tripId)
-        .gt("expires_at", new Date().toISOString()),
-    ]);
+    const occRes = await supabase.rpc("get_trip_seat_occupancy", { _trip_id: tripId });
 
     if (occRes.error) {
       toast.error("Erro ao verificar disponibilidade. Tente novamente.");
@@ -742,17 +716,9 @@ export default function Checkout() {
       .filter((r) => r.seat_id && r.is_blocked)
       .map((r) => r.seat_id as string);
 
-    const occupiedFromTickets = occRows
+    const currentOccupied = occRows
       .filter((r) => r.seat_id && !r.is_blocked)
       .map((r) => r.seat_id as string);
-
-    const occupiedFromLocks = (locksRes.data ?? []).map(
-      (l: SeatLockRow) => l.seat_id as string,
-    );
-
-    const currentOccupied = [
-      ...new Set([...occupiedFromTickets, ...occupiedFromLocks]),
-    ];
 
     setBlockedSeatIds(currentBlocked);
     setOccupiedSeatIds(currentOccupied);

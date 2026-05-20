@@ -547,8 +547,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     }
     const fetchSeatsAndOccupied = async () => {
       setLoadingSeats(true);
-      const nowIso = new Date().toISOString();
-      const [seatsRes, occRes, locksRes] = await Promise.all([
+      const [seatsRes, occRes] = await Promise.all([
         supabase
           .from('seats')
           .select('*')
@@ -561,14 +560,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         // Fonte única de ocupação compartilhada com checkout público.
         // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
         supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
-        // Locks ativos do checkout público também precisam bloquear venda manual,
-        // evitando colisão entre admin e cliente final no mesmo assento.
-        supabase
-          .from('seat_locks')
-          .select('seat_id')
-          .eq('trip_id', selectedTripId)
-          .eq('company_id', activeCompanyId!)
-          .gt('expires_at', nowIso),
       ]);
 
       // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
@@ -588,15 +579,6 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       const occupied: string[] = occRows
         .filter((row) => row.seat_id && !row.is_blocked)
         .map((row) => row.seat_id as string);
-
-      // Locks ativos (reservas temporárias do checkout público) entram como "blocked"
-      // para que o admin veja o assento como indisponível e não dispute a poltrona.
-      const lockedSeatIds = (locksRes.data ?? [])
-        .map((l: any) => l.seat_id as string)
-        .filter(Boolean);
-      lockedSeatIds.forEach((sid) => {
-        if (!blocked.includes(sid) && !occupied.includes(sid)) blocked.push(sid);
-      });
 
       setOccupiedSeatIds(occupied);
       setBlockedSeatIds(blocked);
@@ -913,28 +895,16 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
     setSaving(true);
 
     try {
-      // Revalidate seats: tickets já vendidos + locks ativos do checkout público.
+      // Revalidate seats via fonte única (RPC): tickets + sale_passengers + seat_locks ativos.
       // Evita corrida quando admin selecionou um assento que acabou de ser
       // reservado por um cliente público nesse exato instante.
-      const nowIsoCheck = new Date().toISOString();
-      const [currentOccRes, currentLocksRes] = await Promise.all([
-        supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
-        supabase
-          .from('seat_locks')
-          .select('seat_id')
-          .eq('trip_id', selectedTripId)
-          .eq('company_id', activeCompanyId)
-          .gt('expires_at', nowIsoCheck),
-      ]);
+      const currentOccRes = await supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId });
       if (currentOccRes.error) throw currentOccRes.error;
       const currentOccupied = new Set(
         ((currentOccRes.data ?? []) as any[]).map((t: any) => t.seat_id).filter(Boolean),
       );
-      const currentLocked = new Set(
-        (currentLocksRes.data ?? []).map((l: any) => l.seat_id).filter(Boolean),
-      );
       const conflicting = selectedSeats.filter(
-        (id) => currentOccupied.has(id) || currentLocked.has(id),
+        (id) => currentOccupied.has(id),
       );
       if (conflicting.length > 0) {
         const labels = conflicting.map((id) => seats.find((s) => s.id === id)?.label).join(', ');
@@ -942,8 +912,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           `Esta(s) poltrona(s) acabou(aram) de ser reservada(s) ou vendida(s): ${labels}. Selecione outras disponíveis.`,
         );
         setOccupiedSeatIds(Array.from(currentOccupied) as string[]);
-        setBlockedSeatIds((prev) => Array.from(new Set([...prev, ...Array.from(currentLocked) as string[]])));
-        setSelectedSeats((prev) => prev.filter((id) => !currentOccupied.has(id) && !currentLocked.has(id)));
+        setSelectedSeats((prev) => prev.filter((id) => !currentOccupied.has(id)));
         setStep(2);
         setSaving(false);
         return;
