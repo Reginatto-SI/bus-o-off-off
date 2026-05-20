@@ -245,6 +245,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [seatOccupancyError, setSeatOccupancyError] = useState<string | null>(null);
+  // Guarda explícita de sucesso: só permite avançar se a ocupação foi carregada sem erro.
+  const [seatOccupancyLoaded, setSeatOccupancyLoaded] = useState(false);
   const [seatReloadToken, setSeatReloadToken] = useState(0);
 
   // Step 3: Passengers
@@ -546,11 +548,13 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setBlockedSeatIds([]);
       setSelectedSeats([]);
       setSeatOccupancyError(null);
+      setSeatOccupancyLoaded(false);
       return;
     }
     const fetchSeatsAndOccupied = async () => {
       setLoadingSeats(true);
       setSeatOccupancyError(null);
+      setSeatOccupancyLoaded(false);
       try {
         const [seatsRes, occRes] = await Promise.all([
           supabase
@@ -588,17 +592,22 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         setOccupiedSeatIds(occupied);
         setBlockedSeatIds(blocked);
         setSelectedSeats([]);
+        setSeatOccupancyLoaded(true);
       } catch (error) {
         console.error('Erro ao carregar ocupação de assentos na venda manual', {
           tripId: selectedTripId,
+          vehicleId: selectedVehicle?.id,
+          activeCompanyId,
           message: (error as any)?.message,
           code: (error as any)?.code,
           details: (error as any)?.details,
           hint: (error as any)?.hint,
+          error,
         });
         setOccupiedSeatIds([]);
         setBlockedSeatIds([]);
         setSelectedSeats([]);
+        setSeatOccupancyLoaded(false);
         setSeatOccupancyError('Não foi possível carregar a ocupação das poltronas. Tente novamente. Se persistir, acione o suporte.');
       } finally {
         setLoadingSeats(false);
@@ -652,7 +661,27 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // ── Validation ──
   const canGoStep2 = selectedEventId && selectedTripId && selectedBoardingId && (!mandatoryReturnPolicy || !!selectedReturnTripId);
-  const canGoStep3 = !loadingSeats && !seatOccupancyError && selectedSeats.length > 0;
+  const canGoStep3 = !loadingSeats
+    && !seatOccupancyError
+    && !!selectedTripId
+    && !!selectedVehicle
+    && seatOccupancyLoaded
+    && selectedSeats.length > 0;
+
+  // Validação interna: protege o avanço mesmo em caso de clique programático/estado visual inconsistente.
+  const handleGoToPaymentStep = () => {
+    if (!canGoStep3) {
+      toast({
+        title: 'Não é possível avançar',
+        description: 'Não é possível avançar enquanto a ocupação das poltronas não for carregada com segurança.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    initPassengers();
+    setStep((s) => s + 1);
+  };
 
   const canConfirm = useMemo(() => {
     if (saving) return false;
@@ -2029,10 +2058,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
               {step < 3 && (
                 <Button
-                  onClick={() => {
-                    if (step === 2) initPassengers();
-                    setStep((s) => s + 1);
-                  }}
+                  onClick={step === 2 ? handleGoToPaymentStep : () => setStep((s) => s + 1)}
                   disabled={step === 1 ? !canGoStep2 : !canGoStep3}
                 >
                   {step === 1 ? 'Escolher assentos' : 'Ir para pagamento'} <ChevronRight className="h-4 w-4 ml-1" />

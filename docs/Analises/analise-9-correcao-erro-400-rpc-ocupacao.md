@@ -86,3 +86,13 @@ Trips de referência:
 ## 19) Migration e assinatura RPC
 - Não houve nova migration.
 - Assinatura oficial `_trip_id` foi mantida sem alteração.
+
+## 20) Diagnóstico complementar (venda manual) e bloqueio do botão de pagamento
+1. **Erro real capturado da RPC (no frontend):** o helper já loga `message`, `code`, `details` e `hint` no evento `[seat-occupancy] rpc_call_failed`. O `catch` da venda manual foi ajustado para também exibir os mesmos campos e o objeto bruto de erro, evitando saída genérica como `Object`.
+2. **Payload enviado para RPC:** `{ _trip_id: selectedTripId }` (sem fallback de parâmetro).
+3. **tripId enviado:** `selectedTripId` da viagem selecionada no modal; o log agora imprime esse valor explicitamente junto de `vehicleId` e `activeCompanyId`.
+4. **Causa confirmada (escopo de código):** perda de contexto no log do `catch` local e guarda de avanço incompleta no botão “Ir para pagamento” (faltava exigir sucesso explícito da carga de ocupação).
+5. **Correção aplicada:** adicionado estado `seatOccupancyLoaded` para marcar sucesso real da ocupação; bloqueio de avanço atualizado com fail-closed completo; `onClick` do avanço passou a validar internamente e mostrar mensagem clara quando a ocupação não foi carregada com segurança.
+6. **Validação do botão “Ir para pagamento”:** agora só avança quando **todas** as condições estiverem válidas (`!loadingSeats`, sem `seatOccupancyError`, `selectedTripId`, `selectedVehicle`, `selectedSeats.length > 0`, `seatOccupancyLoaded === true`).
+7. **Validação sobre `user_roles 406`:** não há evidência no código desta correção de que o erro 406 altere o payload da RPC de ocupação; ele pode impactar contexto de empresa (`activeCompanyId`) e por isso esse campo foi incluído no log detalhado para correlação em ambiente real.
+8. **Conclusão objetiva:** o frontend permanece fail-closed, com diagnóstico observável e bloqueio visual/lógico do avanço. Se a RPC continuar falhando com `_trip_id` correto, a pendência residual é de ambiente (função ativa/permissão/RLS/migration aplicada no banco alvo).
