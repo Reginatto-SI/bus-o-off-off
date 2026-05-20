@@ -244,6 +244,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   const [blockedSeatIds, setBlockedSeatIds] = useState<string[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [loadingSeats, setLoadingSeats] = useState(false);
+  const [seatOccupancyError, setSeatOccupancyError] = useState<string | null>(null);
+  const [seatReloadToken, setSeatReloadToken] = useState(0);
 
   // Step 3: Passengers
   const [passengers, setPassengers] = useState<PassengerData[]>([]);
@@ -543,50 +545,62 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setOccupiedSeatIds([]);
       setBlockedSeatIds([]);
       setSelectedSeats([]);
+      setSeatOccupancyError(null);
       return;
     }
     const fetchSeatsAndOccupied = async () => {
       setLoadingSeats(true);
-      const [seatsRes, occRes] = await Promise.all([
-        supabase
-          .from('seats')
-          .select('*')
-          .eq('vehicle_id', selectedVehicle.id)
-          .eq('company_id', activeCompanyId!)
-          // Ordenação idêntica ao checkout público para render simétrico.
-          .order('floor')
-          .order('row_number')
-          .order('column_number'),
-        // Fonte única de ocupação compartilhada com checkout público.
-        // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
-        supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
-      ]);
+      setSeatOccupancyError(null);
+      try {
+        const [seatsRes, occRes] = await Promise.all([
+          supabase
+            .from('seats')
+            .select('*')
+            .eq('vehicle_id', selectedVehicle.id)
+            .eq('company_id', activeCompanyId!)
+            // Ordenação idêntica ao checkout público para render simétrico.
+            .order('floor')
+            .order('row_number')
+            .order('column_number'),
+          // Fonte única de ocupação compartilhada com checkout público.
+          // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
+          supabase.rpc('get_trip_seat_occupancy', { _trip_id: selectedTripId }),
+        ]);
 
-      // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
-      const validSeats = (seatsRes.data ?? []).filter(
-        (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
-      );
-      setSeats(validSeats as Seat[]);
+        if (seatsRes.error) throw seatsRes.error;
+        if (occRes.error) throw occRes.error;
 
-      if (occRes.error) throw occRes.error;
+        // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
+        const validSeats = (seatsRes.data ?? []).filter(
+          (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
+        );
+        setSeats(validSeats as Seat[]);
 
-      const occRows = (occRes.data ?? []) as { seat_id: string | null; is_blocked: boolean | null }[];
+        const occRows = (occRes.data ?? []) as { seat_id: string | null; is_blocked: boolean | null }[];
 
-      const blocked: string[] = occRows
-        .filter((row) => row.seat_id && row.is_blocked)
-        .map((row) => row.seat_id as string);
+        const blocked: string[] = occRows
+          .filter((row) => row.seat_id && row.is_blocked)
+          .map((row) => row.seat_id as string);
 
-      const occupied: string[] = occRows
-        .filter((row) => row.seat_id && !row.is_blocked)
-        .map((row) => row.seat_id as string);
+        const occupied: string[] = occRows
+          .filter((row) => row.seat_id && !row.is_blocked)
+          .map((row) => row.seat_id as string);
 
-      setOccupiedSeatIds(occupied);
-      setBlockedSeatIds(blocked);
-      setSelectedSeats([]);
-      setLoadingSeats(false);
+        setOccupiedSeatIds(occupied);
+        setBlockedSeatIds(blocked);
+        setSelectedSeats([]);
+      } catch (error) {
+        console.error('Erro ao carregar ocupação de assentos na venda manual:', error);
+        setOccupiedSeatIds([]);
+        setBlockedSeatIds([]);
+        setSelectedSeats([]);
+        setSeatOccupancyError('Não foi possível carregar a ocupação das poltronas. Tente novamente. Se persistir, acione o suporte.');
+      } finally {
+        setLoadingSeats(false);
+      }
     };
     fetchSeatsAndOccupied();
-  }, [selectedTripId, selectedVehicle?.id]);
+  }, [selectedTripId, selectedVehicle?.id, activeCompanyId, seatReloadToken]);
 
   // ── Initialize passengers when moving to step 3 ──
   const initPassengers = () => {
@@ -633,7 +647,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
 
   // ── Validation ──
   const canGoStep2 = selectedEventId && selectedTripId && selectedBoardingId && (!mandatoryReturnPolicy || !!selectedReturnTripId);
-  const canGoStep3 = selectedSeats.length > 0;
+  const canGoStep3 = !loadingSeats && !seatOccupancyError && selectedSeats.length > 0;
 
   const canConfirm = useMemo(() => {
     if (saving) return false;
@@ -1578,6 +1592,17 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                     {loadingSeats ? (
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : seatOccupancyError ? (
+                      <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                        <p className="font-medium text-destructive">{seatOccupancyError}</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setSeatReloadToken((token) => token + 1)}
+                        >
+                          Tentar novamente
+                        </Button>
                       </div>
                     ) : seats.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
