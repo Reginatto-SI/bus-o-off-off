@@ -555,31 +555,58 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
       setLoadingSeats(true);
       setSeatOccupancyError(null);
       setSeatOccupancyLoaded(false);
-      try {
-        const [seatsRes, occRes] = await Promise.all([
-          supabase
-            .from('seats')
-            .select('*')
-            .eq('vehicle_id', selectedVehicle.id)
-            .eq('company_id', activeCompanyId!)
-            // Ordenação idêntica ao checkout público para render simétrico.
-            .order('floor')
-            .order('row_number')
-            .order('column_number'),
-          // Fonte única de ocupação compartilhada com checkout público.
-          // Inclui tickets + fallback de sale_passengers para vendas sem ticket materializado.
-          getTripSeatOccupancyRpc({ tripId: selectedTripId, context: 'manual_sale' }),
-        ]);
 
-        if (seatsRes.error) throw seatsRes.error;
-        
+      console.info('[manual-sale-seats] loading_start', {
+        selectedTripId,
+        selectedVehicleId: selectedVehicle?.id,
+        activeCompanyId,
+      });
+
+      try {
+        const seatsRes = await supabase
+          .from('seats')
+          .select('*')
+          .eq('vehicle_id', selectedVehicle.id)
+          .eq('company_id', activeCompanyId!)
+          // Ordenação idêntica ao checkout público para render simétrico.
+          .order('floor')
+          .order('row_number')
+          .order('column_number');
+
+        if (seatsRes.error) {
+          console.error('[manual-sale-seats] seats_query_error', {
+            selectedTripId,
+            selectedVehicleId: selectedVehicle?.id,
+            activeCompanyId,
+            message: seatsRes.error?.message,
+            code: (seatsRes.error as any)?.code,
+            details: (seatsRes.error as any)?.details,
+            hint: (seatsRes.error as any)?.hint,
+            raw: JSON.stringify(seatsRes.error, Object.getOwnPropertyNames(seatsRes.error)),
+          });
+          throw seatsRes.error;
+        }
+
+        console.info('[manual-sale-seats] seats_loaded', {
+          count: seatsRes.data?.length ?? 0,
+        });
+
         // Filtro defensivo: oculta labels técnicos (_legacy_, _tmp_) como no checkout público.
         const validSeats = (seatsRes.data ?? []).filter(
           (s: any) => !s.label.startsWith('_legacy_') && !s.label.startsWith('_tmp_')
         );
         setSeats(validSeats as Seat[]);
 
+        console.info('[manual-sale-seats] occupancy_rpc_start', {
+          tripId: selectedTripId,
+        });
+
+        const occRes = await getTripSeatOccupancyRpc({ tripId: selectedTripId, context: 'manual_sale' });
         const occRows = occRes.rows;
+
+        console.info('[manual-sale-seats] occupancy_rpc_success', {
+          rows: occRows.length,
+        });
 
         const blocked: string[] = occRows
           .filter((row) => row.seat_id && row.is_blocked)
@@ -594,7 +621,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
         setSelectedSeats([]);
         setSeatOccupancyLoaded(true);
       } catch (error) {
-        console.error('Erro ao carregar ocupação de assentos na venda manual', {
+        console.error('[manual-sale-seats] occupancy_rpc_error', {
           tripId: selectedTripId,
           vehicleId: selectedVehicle?.id,
           activeCompanyId,
@@ -602,7 +629,7 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           code: (error as any)?.code,
           details: (error as any)?.details,
           hint: (error as any)?.hint,
-          error,
+          raw: JSON.stringify(error ?? {}, Object.getOwnPropertyNames((error ?? {}) as object)),
         });
         setOccupiedSeatIds([]);
         setBlockedSeatIds([]);

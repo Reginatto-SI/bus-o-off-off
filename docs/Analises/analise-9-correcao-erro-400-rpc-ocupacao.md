@@ -96,3 +96,15 @@ Trips de referência:
 6. **Validação do botão “Ir para pagamento”:** agora só avança quando **todas** as condições estiverem válidas (`!loadingSeats`, sem `seatOccupancyError`, `selectedTripId`, `selectedVehicle`, `selectedSeats.length > 0`, `seatOccupancyLoaded === true`).
 7. **Validação sobre `user_roles 406`:** não há evidência no código desta correção de que o erro 406 altere o payload da RPC de ocupação; ele pode impactar contexto de empresa (`activeCompanyId`) e por isso esse campo foi incluído no log detalhado para correlação em ambiente real.
 8. **Conclusão objetiva:** o frontend permanece fail-closed, com diagnóstico observável e bloqueio visual/lógico do avanço. Se a RPC continuar falhando com `_trip_id` correto, a pendência residual é de ambiente (função ativa/permissão/RLS/migration aplicada no banco alvo).
+
+## 21) Diagnóstico do log ausente na venda manual (2026-05-20)
+- **Caminho real executado em `/admin/vendas?novaVenda=1&aba=manual`:** `Sales.tsx` renderiza `NewSaleModal`, e o carregamento de assentos/ocupação ocorre no `useEffect` do `NewSaleModal`.
+- **Uso do helper confirmado:** a ocupação é buscada por `getTripSeatOccupancyRpc({ tripId, context: 'manual_sale' })`.
+- **Por que o log detalhado “sumia”:** o `catch` local da venda manual estava agrupando `seats` + RPC em `Promise.all`; quando qualquer chamada falhava, o log era genérico (`... Object`) e sem separar claramente em qual etapa ocorreu.
+- **Ajuste aplicado para diagnóstico confiável:** remoção do `Promise.all` nesse trecho específico, com logs sequenciais:
+  - `loading_start`
+  - `seats_loaded` ou `seats_query_error`
+  - `occupancy_rpc_start`
+  - `occupancy_rpc_success` ou `occupancy_rpc_error` (com `message`, `code`, `details`, `hint` e `raw` serializável)
+- **Fail-closed preservado:** em qualquer erro, `seatOccupancyError` é definido, `seatOccupancyLoaded` permanece `false`, assentos selecionados são limpos e o avanço fica bloqueado.
+- **Próxima ação necessária em preview:** publicar este commit e validar o console da etapa Assentos para capturar o erro real categorizado (query `seats` x RPC), antes de alterar qualquer regra SQL da função.
