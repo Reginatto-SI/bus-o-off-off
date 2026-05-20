@@ -237,6 +237,8 @@ export async function generateBoardingManifest({
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
+  const footerSafeArea = 10;
+  const contentBottomY = pageHeight - footerSafeArea;
   const primaryColor = hexToRgb(getCompanyPrimaryColor(company));
 
   let logoBase64: string | null = null;
@@ -347,7 +349,7 @@ export async function generateBoardingManifest({
       );
     };
 
-    if (index > 0 && currentY > pageHeight - 80) {
+    if (index > 0 && currentY > contentBottomY - 70) {
       doc.addPage();
       currentY = margin;
     }
@@ -359,7 +361,7 @@ export async function generateBoardingManifest({
       startY: currentY + 9,
       head: [['E', 'D', 'R', 'Poltrona', 'Passageiro', 'CPF', 'Telefone']],
       body: tableRows,
-      margin: { left: margin, right: margin, top: margin },
+      margin: { left: margin, right: margin, top: margin, bottom: footerSafeArea },
       showHead: 'everyPage',
       styles: {
         fontSize: 9,
@@ -402,10 +404,13 @@ export async function generateBoardingManifest({
     });
 
     const tableState = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
+    // Comentário de suporte: usa o finalY real da última página da tabela para evitar sobreposição com blocos seguintes.
     currentY = (tableState?.finalY ?? currentY) + 8;
   });
 
-  if (currentY > pageHeight - 68) {
+  const summaryBlockHeight = 68;
+  // Comentário de suporte: o resumo só pode iniciar quando há altura suficiente até a área segura acima do rodapé.
+  if (currentY + summaryBlockHeight > contentBottomY) {
     doc.addPage();
     currentY = margin;
   }
