@@ -1,75 +1,76 @@
-## Causa raiz (não é cache)
+# Correção definitiva — mapa de assentos vs. ocupação real
 
-A correção anterior consertou só **um lado** do problema. Existem **duas funções** que calculam ocupação de assentos no checkout público — corrigi a primeira, mas a segunda continua quebrada para usuários anônimos.
+## Causa raiz identificada (com evidência no banco)
 
-### O que está acontecendo
+Eu reproduzi a divergência consultando diretamente o banco de produção em eventos reais (PEDRO LEOPOLDO RODEIO SHOW – Dias 12 e 13, BUSÃO OFF OFF):
 
-A função `public.get_trip_available_capacity(trip_uuid)` é a que alimenta:
+- Cada evento publicado tem **2 trips** (`ida` + `volta`) que compartilham o **mesmo `vehicle_id`** (e portanto a mesma tabela `seats`).
+- Por regra de negócio, os `tickets` da `volta` são criados com `seat_id = NULL` (volta sem assento específico, somente `seat_label = 'VOLTA-N'`).
+- A RPC `get_trip_seat_occupancy(_trip_id)` filtra `tickets.trip_id = _trip_id`. Logo:
+  - Para o trip de **IDA**: retorna corretamente 24/46/etc. assentos ocupados.
+  - Para o trip de **VOLTA** (mesmo veículo físico): retorna **0** porque os tickets da volta não têm `seat_id`.
 
-- O número de "vagas disponíveis" mostrado na listagem de viagens (`PublicEventDetail.tsx`, linha 131)
-- A validação de capacidade total no checkout (`Checkout.tsx`, linhas 1116 e 1144)
+Resultado: sempre que a tela de seleção (checkout público ou venda manual no admin) é aberta com o **trip_id da volta** — ou com qualquer trip auxiliar que compartilhe o veículo — a RPC devolve "0 ocupados" e o componente `SeatMap` pinta as 46 poltronas como livres, mesmo quando o totalizador correto mostra 24 vendidas.
 
-Olhando o corpo dela no banco:
+Exemplo verificado (Pedro Leopoldo Dia 13, veículo `4f30ff18…`):
 
-```sql
-SELECT t.capacity - COUNT(tickets WHERE trip_id = ...)
-FROM trips
+```text
+trip ida   → 46 tickets com seat_id  → RPC = 46 ocupados → mapa correto
+trip volta → 46 tickets seat_id NULL → RPC =  0 ocupados → mapa “tudo livre”  ← BUG
 ```
 
-Ela é `SECURITY INVOKER` (executa com a permissão de quem chama) e lê `public.tickets` direto. Como `tickets` **não tem policy de SELECT para `anon`**, o `COUNT(*)` retorna **0** para qualquer usuário não logado → a viagem aparece com **capacidade total livre**.
+Outros itens auditados e descartados como causa:
+- Permissão `EXECUTE` da RPC para `anon` e `authenticated`: **OK**.
+- RLS de `seats` para anônimo em eventos `a_venda`: **OK** (46 linhas retornadas).
+- Estado/cache do frontend, transformação de `seat_id` (UUID string): **OK** — o `getSeatState` do `SeatMap` faz `occupiedSeatIds.includes(seat.id)` e ambos são UUID string vindos do Postgres.
+- `get_trip_available_capacity` (correção anterior): segue correto para a IDA; para a VOLTA, mesmo problema conceitual, mas hoje os cards somam por `sales.quantity` e não dependem dele.
 
-### Por que desktop "funciona" e mobile não
+A divergência entre "totais corretos" e "mapa errado" se explica porque os totais agregam `sales.quantity` (não dependem de `tickets.seat_id`), enquanto o mapa depende da RPC que olha `tickets.seat_id` por trip.
 
-Não é mobile vs desktop — é **logado vs deslogado**:
+## Correção mínima proposta
 
-- Quando você abre a vitrine no editor/Lovable, normalmente está logado como admin/developer → RLS deixa contar os `tickets` → vagas corretas.
-- Quando você ou seus colegas abrem do celular (sem login), cai no caso anônimo → `COUNT = 0` → tudo livre.
-- Aba anônima no desktop também reproduziria o bug, se testar com cuidado.
+Manter a mesma arquitetura (uma única RPC central, sem fluxos paralelos, sem mexer em frontend nem em pagamento/split). Apenas estender a RPC `get_trip_seat_occupancy` para refletir a ocupação **do veículo físico** no contexto do evento, e não apenas do `trip_id`:
 
-A correção da RPC `get_trip_seat_occupancy` (pintar poltronas) já está OK. O que falta é o **contador de vagas** e a **validação de capacidade**, que ainda dependem da função antiga.
+1. **Migration única — atualizar `get_trip_seat_occupancy(_trip_id uuid)`**:
+   - Resolver `(event_id, vehicle_id, company_id)` a partir do `_trip_id`.
+   - Considerar ocupação a partir de `tickets` e `sale_passengers` **de qualquer trip do mesmo `event_id` que use o mesmo `vehicle_id`** (cobre IDA, VOLTA e trips auxiliares no mesmo ônibus).
+   - Manter: filtro `seat_id IS NOT NULL`, exclusão de vendas `cancelado`, status operacionais já cobertos (`pendente_pagamento`, `reservado`, `pago`, `bloqueado`), isolamento por `company_id`, `SECURITY DEFINER`, `search_path = public`, `GRANT EXECUTE TO anon, authenticated`.
+   - Mantém assinatura `RETURNS TABLE(seat_id uuid, is_blocked boolean)` — zero impacto em frontend.
 
-## Plano de correção
+2. **Sem mudanças no frontend.** `Checkout.tsx`, `NewSaleModal.tsx`, `SeatMap.tsx` e `SeatButton.tsx` continuam exatamente como estão. A correção é cirúrgica no SQL.
 
-### 1. Migration — tornar `get_trip_available_capacity` segura para anônimos
+3. **Comentário inline na migration** explicando que a ocupação representa o veículo físico (compartilhado entre trips ida/volta do mesmo evento), evitando regressão futura.
 
-Recriar a função como `SECURITY DEFINER` com `search_path = public`, mantendo:
+## Por que isso é seguro
 
-- Mesma assinatura (`trip_uuid uuid → integer`)
-- Mesma lógica (`capacity - count(tickets)`)
-- `GRANT EXECUTE ... TO anon, authenticated`
-- Restringir leitura a viagens cujo evento esteja em `status = 'a_venda'` (mesma proteção que apliquei na RPC de ocupação), para não vazar contagens de eventos privados
+- Não cria fluxo paralelo nem nova RPC.
+- Não altera regras de pagamento, taxa, split ou Asaas.
+- Não muda padrão visual nem componentes.
+- `UNIQUE(trip_id, seat_id)` em `tickets` e `seat_locks` continua bloqueando dupla venda no backend (proteção transacional preservada).
+- Como tickets de VOLTA têm `seat_id = NULL`, eles não entram na união — não há risco de "contaminar" duas vezes a mesma poltrona.
+- Ida e volta nunca misturam veículos diferentes: o filtro é `same event_id AND same vehicle_id`.
 
-Sem mudar nome, sem criar função paralela, sem tocar no frontend.
+## Plano de validação (após aplicar migration)
 
-### 2. Validação no banco
+Antes de declarar resolvido, vou validar em SQL e em tela:
 
-Após a migration, rodar:
+1. SQL direto contra eventos reais:
+   - `get_trip_seat_occupancy(<trip_volta_pedro_leopoldo_dia_13>)` deve passar de 0 → 46.
+   - `get_trip_seat_occupancy(<trip_ida_pedro_leopoldo_dia_13>)` deve continuar 46.
+   - Mesmo teste no BUSÃO OFF OFF (`0349249a…`) e em outro evento com IDA+VOLTA.
+2. Visualmente, em aba anônima e em mobile:
+   - Abrir o evento, escolher a viagem da volta → poltronas vendidas aparecem ocupadas.
+   - Abrir a IDA → mesmas 24/46 poltronas continuam ocupadas (não regrediu).
+   - Tentar selecionar uma poltrona ocupada → bloqueado.
+3. Admin / venda manual:
+   - `/admin/vendas` → "Nova venda" no mesmo evento → mapa reflete ocupação real em qualquer trip.
+   - Bloqueio manual (`status = bloqueado`) continua pintando como bloqueado (ícone amarelo).
+4. Concorrência:
+   - Duas abas selecionando o mesmo assento → segunda aba recebe conflito (`UNIQUE`) e precisa reescolher.
+5. Documentar em `docs/Analises/analise-ocupacao-assentos-venda-duplicada.md` o motivo da segunda iteração (escopo "trip" → "veículo do evento").
 
-```sql
-select public.get_trip_available_capacity('4adf0037-f595-4943-ac24-1099e054e521');
-```
+## Riscos e mitigação
 
-como `anon` e conferir que retorna `capacity - 2` (e não `capacity`).
-
-### 3. Validação visual
-
-- Abrir o evento BUSAO OFF OFF em **aba anônima no celular**.
-- Confirmar que:
-  - a viagem com vendas mostra menos vagas disponíveis no card de seleção
-  - o seat map continua pintando 13 e 14 como ocupados
-  - tentar selecionar quantidade maior que a disponível é bloqueado
-- Repetir em outro evento qualquer com vendas pagas, para garantir.
-
-### 4. Sem alteração no frontend
-
-Nenhum componente, hook ou tipagem muda. A função continua sendo chamada do mesmo jeito em `PublicEventDetail.tsx` e `Checkout.tsx`.
-
-## Riscos
-
-- **Baixíssimo**: a função já existia e era usada nesses mesmos pontos. Só estamos garantindo que ela retorne o valor correto para anônimos.
-- Não toca em RLS direta de `tickets`, não muda nenhum fluxo de venda, não impacta multi-tenant (a função é por `trip_id`, e `trip` já carrega `company_id` implícito via evento).
-- Não cria fluxo paralelo — mesma função, mesma assinatura.
-
-## Próximo passo após aprovar
-
-Crio a migration única e peço a sua aprovação para rodar. Depois disso o problema do mobile deve sumir sem nenhum ajuste de cache.
+- **Risco**: se um mesmo veículo for usado em dois eventos diferentes no mesmo dia, não há cruzamento — o filtro por `event_id` garante isolamento.
+- **Risco**: se existir trip auxiliar (ex.: traslado) com `seat_id` próprio no mesmo veículo, a ocupação passa a aparecer também no mapa da IDA. Isso é o comportamento correto, já que o veículo é o mesmo. Não foram encontrados casos legados conflitantes.
+- **Mitigação geral**: a migration é reversível — basta restaurar a versão anterior da função se algo inesperado aparecer.
