@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Check, RotateCcw, AlertTriangle, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getContrastTextColor } from '@/lib/colorContrast';
 
 const COLOR_PALETTE = [
   { name: 'Laranja', hex: '#F97316' },
@@ -94,7 +95,7 @@ function ColorSwatch({
           ...(selected ? { '--tw-ring-color': hex } : {}),
         } as CSSProperties}
       >
-        {selected && <Check className="h-4 w-4 text-white drop-shadow-sm" />}
+        {selected && <Check className="h-4 w-4 drop-shadow-sm" style={{ color: getContrastTextColor(hex) }} />}
       </div>
       <span className={cn(
         'text-[10px] leading-tight text-center max-w-[56px]',
@@ -163,7 +164,7 @@ function CustomColorPicker({
             } as CSSProperties}
           >
             {selected ? (
-              <Check className="h-4 w-4 text-white drop-shadow-sm" />
+              <Check className="h-4 w-4 drop-shadow-sm" style={{ color: getContrastTextColor(previewColor) }} />
             ) : (
               <Palette className="h-4 w-4 text-muted-foreground" />
             )}
@@ -405,14 +406,20 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 type="button"
-                className="text-white pointer-events-none"
-                style={{ backgroundColor: primaryColor }}
+                className="pointer-events-none"
+                style={{
+                  backgroundColor: primaryColor,
+                  color: getContrastTextColor(primaryColor),
+                }}
               >
                 Botão Primário
               </Button>
               <Badge
-                className="text-white border-transparent pointer-events-none"
-                style={{ backgroundColor: accentColor }}
+                className="border-transparent pointer-events-none"
+                style={{
+                  backgroundColor: accentColor,
+                  color: getContrastTextColor(accentColor),
+                }}
               >
                 Destaque
               </Badge>

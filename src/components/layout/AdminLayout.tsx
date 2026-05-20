@@ -11,14 +11,15 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFoo
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { getContrastTextColor } from '@/lib/colorContrast';
 
 /** Converte cor hex para string HSL (apenas valores, sem "hsl()") */
 function hexToHsl(hex: string): string | null {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return null;
-  let r = parseInt(result[1], 16) / 255;
-  let g = parseInt(result[2], 16) / 255;
-  let b = parseInt(result[3], 16) / 255;
+  const r = parseInt(result[1], 16) / 255;
+  const g = parseInt(result[2], 16) / 255;
+  const b = parseInt(result[3], 16) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   let h = 0, s = 0;
   const l = (max + min) / 2;
@@ -37,6 +38,7 @@ function hexToHsl(hex: string): string | null {
 // Valores padrão do tema (do index.css)
 const DEFAULT_PRIMARY_HSL = '25 95% 53%';
 const DEFAULT_RING_HSL = '25 95% 53%';
+const DEFAULT_PRIMARY_FOREGROUND_HSL = '0 0% 100%';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -57,9 +59,18 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     if (primaryHsl) {
       root.style.setProperty('--primary', primaryHsl);
       root.style.setProperty('--ring', primaryHsl);
+      root.style.setProperty('--sidebar-primary', primaryHsl);
+
+      // Comentário de manutenção: garante legibilidade automática quando a empresa escolhe cores muito claras no /admin/empresa.
+      const contrastText = getContrastTextColor(primaryHex);
+      root.style.setProperty('--primary-foreground', contrastText === '#111827' ? '222 47% 11%' : '0 0% 100%');
+      root.style.setProperty('--sidebar-primary-foreground', contrastText === '#111827' ? '222 47% 11%' : '0 0% 100%');
     } else {
       root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
       root.style.setProperty('--ring', DEFAULT_RING_HSL);
+      root.style.setProperty('--sidebar-primary', DEFAULT_PRIMARY_HSL);
+      root.style.setProperty('--primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
+      root.style.setProperty('--sidebar-primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
     }
   }, [activeCompany?.primary_color]);
 
@@ -70,6 +81,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       const root = document.documentElement;
       root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
       root.style.setProperty('--ring', DEFAULT_RING_HSL);
+      root.style.setProperty('--sidebar-primary', DEFAULT_PRIMARY_HSL);
+      root.style.setProperty('--primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
+      root.style.setProperty('--sidebar-primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
     };
   }, [applyCompanyColors]);
 
