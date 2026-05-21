@@ -1,76 +1,77 @@
-# Correção definitiva — mapa de assentos vs. ocupação real
+# Correção definitiva — RPC `get_trip_seat_occupancy` está quebrada no banco
 
-## Causa raiz identificada (com evidência no banco)
+## Causa raiz (com evidência reproduzida agora)
 
-Eu reproduzi a divergência consultando diretamente o banco de produção em eventos reais (PEDRO LEOPOLDO RODEIO SHOW – Dias 12 e 13, BUSÃO OFF OFF):
-
-- Cada evento publicado tem **2 trips** (`ida` + `volta`) que compartilham o **mesmo `vehicle_id`** (e portanto a mesma tabela `seats`).
-- Por regra de negócio, os `tickets` da `volta` são criados com `seat_id = NULL` (volta sem assento específico, somente `seat_label = 'VOLTA-N'`).
-- A RPC `get_trip_seat_occupancy(_trip_id)` filtra `tickets.trip_id = _trip_id`. Logo:
-  - Para o trip de **IDA**: retorna corretamente 24/46/etc. assentos ocupados.
-  - Para o trip de **VOLTA** (mesmo veículo físico): retorna **0** porque os tickets da volta não têm `seat_id`.
-
-Resultado: sempre que a tela de seleção (checkout público ou venda manual no admin) é aberta com o **trip_id da volta** — ou com qualquer trip auxiliar que compartilhe o veículo — a RPC devolve "0 ocupados" e o componente `SeatMap` pinta as 46 poltronas como livres, mesmo quando o totalizador correto mostra 24 vendidas.
-
-Exemplo verificado (Pedro Leopoldo Dia 13, veículo `4f30ff18…`):
+A RPC oficial de ocupação **está falhando para qualquer chamada** desde a migration `20260520120000_fix_seat_occupancy_by_trip_segment.sql`. Reproduzido via `psql`:
 
 ```text
-trip ida   → 46 tickets com seat_id  → RPC = 46 ocupados → mapa correto
-trip volta → 46 tickets seat_id NULL → RPC =  0 ocupados → mapa “tudo livre”  ← BUG
+ERROR: invalid escape string
+HINT:  Escape string must be empty or one character.
+CONTEXT: SQL function "get_trip_seat_occupancy" during startup
 ```
 
-Outros itens auditados e descartados como causa:
-- Permissão `EXECUTE` da RPC para `anon` e `authenticated`: **OK**.
-- RLS de `seats` para anônimo em eventos `a_venda`: **OK** (46 linhas retornadas).
-- Estado/cache do frontend, transformação de `seat_id` (UUID string): **OK** — o `getSeatState` do `SeatMap` faz `occupiedSeatIds.includes(seat.id)` e ambos são UUID string vindos do Postgres.
-- `get_trip_available_capacity` (correção anterior): segue correto para a IDA; para a VOLTA, mesmo problema conceitual, mas hoje os cards somam por `sales.quantity` e não dependem dele.
+Olhei a definição instalada com `pg_get_functiondef` e o problema está nas quatro cláusulas:
 
-A divergência entre "totais corretos" e "mapa errado" se explica porque os totais agregam `sales.quantity` (não dependem de `tickets.seat_id`), enquanto o mapa depende da RPC que olha `tickets.seat_id` por trip.
+```sql
+and not seat_by_label.label like '\_legacy\_%' escape '\\'
+and not seat_by_label.label like '\_tmp\_%'    escape '\\'
+```
 
-## Correção mínima proposta
+Com `standard_conforming_strings = on` (padrão atual), `'\\'` é a string de **2 caracteres** `\\`. O operador `ESCAPE` exige **exatamente 1 caractere** → a função aborta no startup, antes de retornar qualquer linha.
 
-Manter a mesma arquitetura (uma única RPC central, sem fluxos paralelos, sem mexer em frontend nem em pagamento/split). Apenas estender a RPC `get_trip_seat_occupancy` para refletir a ocupação **do veículo físico** no contexto do evento, e não apenas do `trip_id`:
+### Consequência operacional (bate 1:1 com o que o usuário descreve)
 
-1. **Migration única — atualizar `get_trip_seat_occupancy(_trip_id uuid)`**:
-   - Resolver `(event_id, vehicle_id, company_id)` a partir do `_trip_id`.
-   - Considerar ocupação a partir de `tickets` e `sale_passengers` **de qualquer trip do mesmo `event_id` que use o mesmo `vehicle_id`** (cobre IDA, VOLTA e trips auxiliares no mesmo ônibus).
-   - Manter: filtro `seat_id IS NOT NULL`, exclusão de vendas `cancelado`, status operacionais já cobertos (`pendente_pagamento`, `reservado`, `pago`, `bloqueado`), isolamento por `company_id`, `SECURITY DEFINER`, `search_path = public`, `GRANT EXECUTE TO anon, authenticated`.
-   - Mantém assinatura `RETURNS TABLE(seat_id uuid, is_blocked boolean)` — zero impacto em frontend.
+- Checkout público abre o mapa → RPC falha → array vazio → todas as poltronas pintadas como disponíveis.
+- Admin "Nova venda" abre o mapa → mesma RPC → mesmo array vazio → "22 passagens, tudo livre".
+- Empresa piloto / sem taxa: mesmo bug (não tem nada a ver com Asaas/taxa).
+- Risco real de **dupla venda** porque o front pinta livre, e o usuário consegue selecionar. A segunda barreira (triggers `assert_physical_seat_available_for_*`) continua funcionando, então no momento do INSERT do ticket o banco bloqueia — mas isso só aparece como erro genérico, não previne a tentativa.
 
-2. **Sem mudanças no frontend.** `Checkout.tsx`, `NewSaleModal.tsx`, `SeatMap.tsx` e `SeatButton.tsx` continuam exatamente como estão. A correção é cirúrgica no SQL.
+Ou seja: a regra do PRD (`per trip_id`, seções 8 e 5) está **correta** no SQL atual. O que está errado é uma cláusula `ESCAPE` mal escrita que derruba a função inteira.
 
-3. **Comentário inline na migration** explicando que a ocupação representa o veículo físico (compartilhado entre trips ida/volta do mesmo evento), evitando regressão futura.
+## Correção mínima
 
-## Por que isso é seguro
+Uma única migration recriando `public.get_trip_seat_occupancy` com a mesma lógica de hoje (per-trip, com fallback por `seat_label`, ticket + sale_passenger + seat_lock), trocando apenas o caractere de escape para algo seguro:
 
-- Não cria fluxo paralelo nem nova RPC.
-- Não altera regras de pagamento, taxa, split ou Asaas.
-- Não muda padrão visual nem componentes.
-- `UNIQUE(trip_id, seat_id)` em `tickets` e `seat_locks` continua bloqueando dupla venda no backend (proteção transacional preservada).
-- Como tickets de VOLTA têm `seat_id = NULL`, eles não entram na união — não há risco de "contaminar" duas vezes a mesma poltrona.
-- Ida e volta nunca misturam veículos diferentes: o filtro é `same event_id AND same vehicle_id`.
+```sql
+and seat_by_label.label not like '#_legacy#_%' escape '#'
+and seat_by_label.label not like '#_tmp#_%'    escape '#'
+```
 
-## Plano de validação (após aplicar migration)
+Por que `#`:
+- não conflita com nenhum label de assento real (rótulos são numéricos/“VOLTA-N”);
+- é 1 caractere, satisfaz a regra do `ESCAPE`;
+- mantém a intenção original (excluir labels técnicos `_legacy_*` e `_tmp_*`).
 
-Antes de declarar resolvido, vou validar em SQL e em tela:
+Mantenho intacto:
+- escopo per-trip (PRD seção 8);
+- união tickets + sale_passengers + seat_locks ativos (PRD seções 4 e 6);
+- filtro `sales.status <> 'cancelado'` (PRD seção 11);
+- `SECURITY DEFINER`, `search_path = public`, `GRANT EXECUTE TO anon, authenticated` (PRD seção 12);
+- triggers `assert_physical_seat_available_for_ticket` / `_for_lock` que já protegem contra dupla venda — não mexo neles, continuam ativos.
 
-1. SQL direto contra eventos reais:
-   - `get_trip_seat_occupancy(<trip_volta_pedro_leopoldo_dia_13>)` deve passar de 0 → 46.
-   - `get_trip_seat_occupancy(<trip_ida_pedro_leopoldo_dia_13>)` deve continuar 46.
-   - Mesmo teste no BUSÃO OFF OFF (`0349249a…`) e em outro evento com IDA+VOLTA.
-2. Visualmente, em aba anônima e em mobile:
-   - Abrir o evento, escolher a viagem da volta → poltronas vendidas aparecem ocupadas.
-   - Abrir a IDA → mesmas 24/46 poltronas continuam ocupadas (não regrediu).
-   - Tentar selecionar uma poltrona ocupada → bloqueado.
-3. Admin / venda manual:
-   - `/admin/vendas` → "Nova venda" no mesmo evento → mapa reflete ocupação real em qualquer trip.
-   - Bloqueio manual (`status = bloqueado`) continua pintando como bloqueado (ícone amarelo).
-4. Concorrência:
-   - Duas abas selecionando o mesmo assento → segunda aba recebe conflito (`UNIQUE`) e precisa reescolher.
-5. Documentar em `docs/Analises/analise-ocupacao-assentos-venda-duplicada.md` o motivo da segunda iteração (escopo "trip" → "veículo do evento").
+## O que NÃO vou alterar
 
-## Riscos e mitigação
+- Asaas, webhook, verify, split, comissão, taxa da plataforma.
+- Frontend (`Checkout.tsx`, `NewSaleModal.tsx`, `SeatMap.tsx`, `SeatButton.tsx`, `tripSeatOccupancyRpc.ts`).
+- Fluxo de venda manual, criação de tickets, ou regra de ida/volta.
+- Não crio fluxo paralelo, não toco em arquitetura.
 
-- **Risco**: se um mesmo veículo for usado em dois eventos diferentes no mesmo dia, não há cruzamento — o filtro por `event_id` garante isolamento.
-- **Risco**: se existir trip auxiliar (ex.: traslado) com `seat_id` próprio no mesmo veículo, a ocupação passa a aparecer também no mapa da IDA. Isso é o comportamento correto, já que o veículo é o mesmo. Não foram encontrados casos legados conflitantes.
-- **Mitigação geral**: a migration é reversível — basta restaurar a versão anterior da função se algo inesperado aparecer.
+## Plano de validação (vou executar via `psql` após aplicar)
+
+1. `select count(*) from get_trip_seat_occupancy('<trip_ida_7FEST>')` deve retornar valor coerente com tickets reais da IDA (esperado >0 nos eventos do 7 FEST, que tem 808 vendas pagas).
+2. Mesmo teste no BUSÃO OFF OFF (570 vendas pagas).
+3. Idem para um trip de **VOLTA** com tickets — deve refletir vendas da volta corretamente (per-trip).
+4. Conferir que um trip vazio retorna 0 linhas sem erro.
+5. Checkout anônimo no preview → mapa carrega sem erro de rede em `rpc/get_trip_seat_occupancy` e poltronas vendidas aparecem ocupadas.
+6. `/admin/vendas` → "Nova venda" no mesmo evento → mesmas poltronas aparecem ocupadas.
+7. Conferir que tentativa de inserir ticket em assento já vendido continua bloqueada pelo trigger (proteção transacional contra dupla venda — PRD seção 10).
+
+## Riscos
+
+- Risco principal é regressão de leitura. Mitigado porque o conteúdo SQL é idêntico ao que já foi revisado em `20260520120000`, alterando apenas 2 caracteres de escape inválidos. A função volta a executar.
+- Sem impacto em escrita, em fluxo de pagamento, em RLS, em outras funções.
+
+## Pós-correção
+
+- Atualizar `docs/Analises/analise-3-ocupacao-poltronas-evento.md` com o achado real (cláusula `ESCAPE` inválida) para não regredir.
+- Marcar os critérios de aceite executados do PRD `prd-ocupacao-poltronas-reserva-bloqueio.md` seção 13.
