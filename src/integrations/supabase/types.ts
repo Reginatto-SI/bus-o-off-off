@@ -3454,6 +3454,15 @@ export type Database = {
           status: Database["public"]["Enums"]["sale_status"]
         }[]
       }
+      resolve_trip_physical_seat_id: {
+        Args: {
+          _company_id: string
+          _seat_id: string
+          _seat_label: string
+          _trip_id: string
+        }
+        Returns: string
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
