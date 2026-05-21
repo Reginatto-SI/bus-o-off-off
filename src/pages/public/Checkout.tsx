@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrencyBRL } from "@/lib/currency";
+import { getTripSeatOccupancyRpc } from "@/lib/tripSeatOccupancyRpc";
 import { formatPhoneBR } from "@/lib/phone";
 import { useRuntimePaymentEnvironment } from "@/hooks/use-runtime-payment-environment";
 import {

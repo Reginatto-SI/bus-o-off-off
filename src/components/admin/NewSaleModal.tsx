@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { getTripSeatOccupancyRpc } from '@/lib/tripSeatOccupancyRpc';
 import { calculateFees, calculatePlatformFee, type EventFeeInput } from '@/lib/feeCalculator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Seat, Event, Trip, Vehicle, Driver, TicketRecord, Seller } from '@/types/database';
@@ -698,10 +699,8 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   // Validação interna: protege o avanço mesmo em caso de clique programático/estado visual inconsistente.
   const handleGoToPaymentStep = () => {
     if (!canGoStep3) {
-      toast({
-        title: 'Não é possível avançar',
+      toast.error('Não é possível avançar', {
         description: 'Não é possível avançar enquanto a ocupação das poltronas não for carregada com segurança.',
-        variant: 'destructive',
       });
       return;
     }
