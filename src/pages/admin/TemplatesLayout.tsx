@@ -330,18 +330,47 @@ export default function TemplatesLayout() {
         return false;
       }
 
+      // Comentário: em edição em lote de células novas, exigimos número inicial explícito
+      // para gerar sequência previsível e evitar duplicidade implícita.
+      const isBatchWithoutSeed = targetCoords.length > 1 && !draft.seat_number.trim();
+      if (isBatchWithoutSeed) {
+        const hasNewCellWithoutSeat = targetCoords.some((coord) => {
+          const existing = getItemByCoord(coord);
+          return !existing?.seat_number;
+        });
+        if (hasNewCellWithoutSeat) {
+          toast.error('Informe o número inicial para gerar assentos sequenciais no lote selecionado');
+          return false;
+        }
+      }
+
       const numbersToApply = targetCoords.map((coord, index) => {
         if (draft.seat_number.trim()) {
-          return targetCoords.length > 1 ? String(Number.parseInt(draft.seat_number, 10) + index) : draft.seat_number.trim();
+          const baseNumber = Number.parseInt(draft.seat_number, 10);
+          if (Number.isNaN(baseNumber)) return '';
+          return targetCoords.length > 1 ? String(baseNumber + index) : draft.seat_number.trim();
         }
         const existing = getItemByCoord(coord);
-        return existing?.seat_number ?? getDefaultSeatNumber(coord.floor);
+        return existing?.seat_number ?? '';
       });
 
       const hasInvalidNumber = numbersToApply.some((number) => !number);
       if (hasInvalidNumber) {
         toast.error('Informe número de assento válido');
         return false;
+      }
+
+      // Comentário: evita duplicidade gerada no próprio lote de pintura (antes de comparar com itens já existentes).
+      const seenByFloor = new Set<string>();
+      for (let idx = 0; idx < targetCoords.length; idx += 1) {
+        const coord = targetCoords[idx];
+        const candidateNumber = numbersToApply[idx];
+        const batchKey = `${coord.floor}-${candidateNumber}`;
+        if (seenByFloor.has(batchKey)) {
+          toast.error(`Número de assento duplicado no pavimento ${coord.floor}: ${candidateNumber}`);
+          return false;
+        }
+        seenByFloor.add(batchKey);
       }
 
       for (let idx = 0; idx < targetCoords.length; idx += 1) {
