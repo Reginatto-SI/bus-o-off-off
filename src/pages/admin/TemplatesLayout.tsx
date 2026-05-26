@@ -848,6 +848,49 @@ export default function TemplatesLayout() {
       }
     }
 
+    // Fase 1 — neutralizar seat_number de itens existentes que terão número alterado.
+    // O índice único `idx_template_layout_items_unique_seat_number` é (template_layout_id, seat_number)
+    // WHERE seat_number IS NOT NULL e é avaliado linha a linha durante o upsert em lote, podendo gerar
+    // 23505 transitório quando dois assentos trocam numeração no mesmo template (ex.: swap 5↔6,
+    // renumeração em lote sobrepondo números antigos). Setando NULL antes liberamos o índice parcial
+    // para que a Fase 2 (upsert com valores finais) sempre encontre o espaço livre.
+    const seatNumberChangedIds = (existingItems ?? [])
+      .filter((existing) => {
+        if (!existing.seat_number) return false;
+        const incoming = sanitizedItems.find(
+          (item) =>
+            item.floor_number === existing.floor_number &&
+            item.row_number === existing.row_number &&
+            item.column_number === existing.column_number,
+        );
+        if (!incoming) return false;
+        return incoming.seat_number !== existing.seat_number;
+      })
+      .map((existing) => existing.id);
+
+    if (seatNumberChangedIds.length > 0) {
+      const { error: clearSeatNumberError } = await supabase
+        .from('template_layout_items')
+        .update({ seat_number: null })
+        .in('id', seatNumberChangedIds);
+
+      if (clearSeatNumberError) {
+        logTemplateErrorInDev('save-template-items-clear-seat-number', clearSeatNumberError, {
+          templateId,
+          count: seatNumberChangedIds.length,
+        });
+        toast.error(
+          buildOperationalSaveErrorMessage(
+            'preparação de renumeração de assentos do layout',
+            clearSeatNumberError,
+            'Falha ao salvar layout',
+          ),
+        );
+        setSaving(false);
+        return;
+      }
+    }
+
     if (sanitizedItems.length > 0) {
       const { data: upsertedItems, error: itemsUpsertError } = await supabase
         .from('template_layout_items')
