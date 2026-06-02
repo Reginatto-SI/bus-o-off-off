@@ -800,7 +800,7 @@ export default function LandingPage() {
               <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                       Comece agora
                     </p>
                     <p className="text-sm text-white/70 sm:text-base">
@@ -816,7 +816,7 @@ export default function LandingPage() {
                       Criar evento e começar a vender
                       <ArrowRight className="h-5 w-5" />
                     </Link>
-                    <p className="text-sm text-white/60">
+                    <p className="text-sm text-white/80">
                       Leva menos de 2 minutos. Sem complicação.
                     </p>
                   </div>
