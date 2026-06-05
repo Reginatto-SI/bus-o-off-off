@@ -55,10 +55,11 @@ export function getEventOperationalEnd(event: EventLike, boardings: BoardingLike
       return latest;
     }, null);
 
-  if (lastBoardingAt) return lastBoardingAt;
+  if (lastBoardingAt) return endOfDayPlusGrace(lastBoardingAt);
 
-  // Fallback seguro: eventos sem embarques continuam usando a data principal para não desaparecerem indevidamente.
-  return parseOperationalDateTime(event.date, null);
+  // Fallback seguro: eventos sem embarques continuam usando a data principal + folga de retorno.
+  const fallback = parseOperationalDateTime(event.date, null);
+  return fallback ? endOfDayPlusGrace(fallback) : null;
 }
 
 export function buildEventOperationalEndMap<TEvent extends EventLike, TBoarding extends BoardingLike>(
