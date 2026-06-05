@@ -1,48 +1,38 @@
-## Causa raiz real
+## Diagnóstico
 
-O índice único `idx_template_layout_items_unique_seat_number` é `(template_layout_id, seat_number) WHERE seat_number IS NOT NULL` — **escopo do template inteiro**, não por pavimento.
+A regra atual em `src/lib/eventOperationalWindow.ts` esconde o evento exatamente quando o **último embarque** acaba (ex.: embarque de ida às 08:00 some às 08:01, mesmo no dia do evento). Como muitos eventos têm ida e volta sem o retorno cadastrado, eventos do dia (ou de dias anteriores ainda em viagem) desaparecem indevidamente nos lugares que usam essa regra:
 
-O frontend valida corretamente o **estado final** (sem duplicidade), mas o `handleSave` faz um único `upsert` em lote dos itens. Quando o usuário renumera/move/troca assentos dentro do mesmo template (ex.: trocar assento 5 ↔ 6, deslocar numeração, renumerar em lote sobrepondo números antigos), o Postgres avalia o índice único linha a linha durante o batch e detecta **duplicidade transitória** entre o valor antigo (ainda presente em outra linha) e o novo valor da linha atual.
+- `/admin/relatorios/lista-embarque` (dropdown sem o evento de hoje)
+- `/validador` (tela do QR / motorista) — não mostra mais o evento ativo
+- `/eventos`, `/empresa/:nick`, `/admin/eventos`, `NewSaleModal`, `ServiceSales` (mesmo efeito colateral)
 
-Resultado: erro `23505 idx_template_layout_items_unique_seat_number` mesmo com payload válido. A mensagem "número de assento duplicado" é real do banco — não é bug de validação no frontend.
+## Correção
 
-Isso explica por que ajustes anteriores em `validateItems`/`validateDraft` não resolveram: a validação local já estava correta; o problema é a ordem de persistência.
+Ajuste **mínimo e centralizado** em `src/lib/eventOperationalWindow.ts`, sem mexer no resto:
 
-Também explica por que aparece em "criar novo template" às vezes: se houve qualquer save parcial anterior (template criado, primeiro upsert falhou), os itens antigos persistem e o save seguinte cai no mesmo caso de conflito transitório.
+1. Normalizar o fim operacional para o **fim do dia (23:59:59)** do último embarque (ou de `events.date` no fallback). Isso já garante que um evento de hoje continue visível durante todo o dia, independente do horário de partida.
+2. Adicionar uma **folga de retorno** padrão de **2 dias corridos** após esse fim de dia. Cobre o cenário descrito pelo usuário: hoje é 05/06 e um evento de 05/06 com volta no dia seguinte continua aparecendo no dia 06 e 07.
+3. Atualizar `eventOperationalWindow.test.ts` para refletir o novo comportamento (fim-de-dia + folga).
 
-## Correção (mínima, só no `handleSave`)
+Esse ajuste corrige automaticamente:
+- o dropdown de `/admin/relatorios/lista-embarque` (eventos de hoje voltam a aparecer; toggle "Mostrar eventos antigos" continua para histórico mais antigo);
+- a tela `/validador` (QR/motorista), que volta a listar o evento em andamento;
+- todas as demais telas que já consomem a regra (comportamento ganha coerência única).
 
-Persistência em duas fases dentro de `src/pages/admin/TemplatesLayout.tsx`:
+## Fora do escopo
 
-1. Após o `delete` dos itens removidos, identificar quais itens existentes terão `seat_number` alterado (comparando `existingItemsByCoord` com `sanitizedItems`).
-2. Fase 1 — `UPDATE template_layout_items SET seat_number = NULL WHERE id IN (...)` para esses itens. Como o índice único é parcial (`WHERE seat_number IS NOT NULL`), o NULL libera todos os números em conflito potencial.
-3. Fase 2 — manter o `upsert` atual com os valores finais. Sem conflito transitório possível.
-4. Se a fase 1 falhar, abortar com mensagem operacional clara antes de tocar no upsert.
+- Não criar configuração por empresa nem nova arquitetura.
+- Não mexer em layout, RLS, status do evento ou lifecycle.
+- Não duplicar lógica em telas individuais — manter regra única no util compartilhado.
 
-Nenhuma mudança em:
-- schema/índices do banco
-- validação local (`validateItems`, `validateDraft`)
-- ocupação real, vendas, checkout, Asaas, webhook, tickets, seat_locks
-- regras de acesso à tela (helper `canAccessTemplatesLayoutByUserId` + RLS existente são preservados)
+## Detalhes técnicos
 
-## Refinos pequenos no mesmo arquivo
+Arquivo: `src/lib/eventOperationalWindow.ts`
+- Adicionar constante `OPERATIONAL_GRACE_DAYS = 2`.
+- Em `getEventOperationalEnd`, após calcular o último instante, normalizar para fim do dia local e somar `OPERATIONAL_GRACE_DAYS` dias.
+- Manter o fallback (sem embarques → `events.date`) sob a mesma regra (fim do dia + folga).
 
-- Garantir que a mensagem ao usuário diferencie claramente os dois tipos de duplicidade real (já existe em `buildFriendlyTemplateError`, mantida).
-- Adicionar comentário no bloco da fase 1 explicando o motivo (estado intermediário do upsert vs índice único de `seat_number`).
+Arquivo: `src/lib/eventOperationalWindow.test.ts`
+- Atualizar as 3 assertions para o novo `end-of-day + 2d`.
 
-## Validação manual pós-correção
-
-1. Criar template novo, assentos 1–10 sequenciais → salva.
-2. Editar template existente, **trocar números** de dois assentos → salva sem 23505.
-3. Editar template, **renumerar lote** sobrepondo números antigos no mesmo template → salva.
-4. Editar template, **remover** assentos e salvar → sem registros órfãos.
-5. Editar template, **adicionar** novos assentos → salva.
-6. Forçar duplicidade real de `seat_number` no mesmo template via UI → bloqueado em `validateItems` antes de chamar o banco.
-7. Forçar duplicidade de posição no grid → bloqueado em `validateItems`.
-8. Criar segundo template com os mesmos números → permitido (escopo do índice é por template).
-9. Acesso: admin autorizado e usuário de exceção (`f1ba5ea7-...`) abrem e salvam; usuário comum continua bloqueado.
-10. Conferir que checkout público e venda manual continuam pintando assentos vendidos/bloqueados/disponíveis (sem mudança no fluxo de ocupação).
-
-## Arquivos a alterar
-
-- `src/pages/admin/TemplatesLayout.tsx` — apenas o bloco `handleSave` entre o `delete` de removidos e o `upsert` final.
+Nenhuma outra alteração de tela é necessária.
