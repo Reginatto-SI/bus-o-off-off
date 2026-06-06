@@ -53,4 +53,31 @@ describe('eventOperationalWindow', () => {
 
     expect(visibleEvents.map((event) => event.id)).toEqual(['trip']);
   });
+
+  it('compara a janela operacional pelo calendário do Brasil, não por UTC', () => {
+    const events = [{ id: 'brazil-today', date: '2026-06-06' }];
+    const operationalEndMap = buildEventOperationalEndMap(events, []);
+
+    const visibleEvents = filterOperationallyVisibleEvents(
+      events,
+      operationalEndMap,
+      new Date('2026-06-09T01:30:00.000Z'), // 08/06 à noite no Brasil, ainda dentro de D+2.
+    );
+
+    expect(visibleEvents.map((event) => event.id)).toEqual(['brazil-today']);
+  });
+
+  it('remove evento quando a janela D-2 já acabou no calendário do Brasil', () => {
+    const events = [{ id: 'old', date: '2026-06-06' }];
+    const operationalEndMap = buildEventOperationalEndMap(events, []);
+
+    const visibleEvents = filterOperationallyVisibleEvents(
+      events,
+      operationalEndMap,
+      new Date('2026-06-09T03:01:00.000Z'), // 09/06 no Brasil: evento de 06/06 já passou de D+2.
+    );
+
+    expect(visibleEvents).toEqual([]);
+  });
+
 });

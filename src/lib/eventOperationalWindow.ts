@@ -1,5 +1,5 @@
 import type { Event, EventBoardingLocation } from '@/types/database';
-import { parseDateOnlyAsLocal } from '@/lib/date';
+import { formatDateOnly, getCalendarDateInTimeZone, parseDateOnlyAsLocal } from '@/lib/date';
 
 type EventLike = Pick<Event, 'id' | 'date'>;
 type BoardingLike = Pick<EventBoardingLocation, 'event_id' | 'departure_date' | 'departure_time'>;
@@ -76,7 +76,13 @@ export function isOperationallyVisible(
 ): boolean {
   const operationalEnd = operationalEndMap.get(eventId);
   if (!operationalEnd) return true;
-  return operationalEnd.getTime() >= now.getTime();
+
+  // Janela operacional do motorista: inclui D-2 para evitar que eventos do dia
+  // desapareçam por diferença de timezone e para permitir operação pós-evento.
+  const currentOperationalDate = getCalendarDateInTimeZone(now);
+  const operationalEndDate = formatDateOnly(operationalEnd);
+
+  return operationalEndDate >= currentOperationalDate;
 }
 
 export function filterOperationallyVisibleEvents<TEvent extends EventLike>(

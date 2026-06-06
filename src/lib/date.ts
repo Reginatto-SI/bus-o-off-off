@@ -3,6 +3,44 @@ import { ptBR } from 'date-fns/locale';
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+export const BRAZIL_OPERATIONAL_TIME_ZONE = 'America/Sao_Paulo';
+
+/**
+ * Data-calendário em timezone explícito, usada quando a regra de negócio é por dia operacional.
+ */
+export function getCalendarDateInTimeZone(
+  value: Date = new Date(),
+  timeZone = BRAZIL_OPERATIONAL_TIME_ZONE,
+): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  if (!year || !month || !day) {
+    return formatDateOnly(value);
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Serializa um Date já normalizado como YYYY-MM-DD sem converter para UTC.
+ */
+export function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Parse local para campos DATE (YYYY-MM-DD), sem UTC.
  * Evita o bug de "-1 dia" causado por parse automático com timezone.
