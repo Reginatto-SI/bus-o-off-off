@@ -203,6 +203,29 @@ function maskPhoneForLog(value: string): string | null {
   return `***${digits.slice(-4)}`;
 }
 
+function getMissingPassengerFields(passenger: PassengerData): string[] {
+  const missing: string[] = [];
+  const cpfDigits = passenger.cpf.replace(/\D/g, "");
+
+  if (!passenger.name.trim() || passenger.name.trim().length < 3) {
+    missing.push("passenger_name");
+  }
+
+  if (cpfDigits.length !== 11 || !isValidCpf(cpfDigits)) {
+    missing.push("passenger_cpf");
+  }
+
+  if (!passenger.ticket_type_name?.trim()) {
+    missing.push("ticket_type_name");
+  }
+
+  if (!Number.isFinite(Number(passenger.ticket_type_price))) {
+    missing.push("ticket_type_price");
+  }
+
+  return missing;
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -765,15 +788,21 @@ export default function Checkout() {
       price: Number(event?.unit_price ?? 0),
       is_active: true,
     };
-    setPassengers(selectedSeats.map(() => ({
-      name: "",
-      cpf: "",
-      phone: "",
-      ticket_type_id: defaultType.id,
-      ticket_type_name: defaultType.name,
-      ticket_type_price: defaultType.price,
-    })));
-    setPassengerBenefitSnapshots(selectedSeats.map(() => null));
+    // Comentário de preservação mobile: ao voltar para a etapa de assentos e continuar novamente,
+    // mantemos os dados já digitados por índice/assento em vez de recriar tudo vazio.
+    setPassengers((previousPassengers) =>
+      selectedSeats.map((_, index) => previousPassengers[index] ?? {
+        name: "",
+        cpf: "",
+        phone: "",
+        ticket_type_id: defaultType.id,
+        ticket_type_name: defaultType.name,
+        ticket_type_price: defaultType.price,
+      }),
+    );
+    setPassengerBenefitSnapshots((previousSnapshots) =>
+      selectedSeats.map((_, index) => previousSnapshots[index] ?? null),
+    );
     setErrors({});
     setPayerIndex(0);
     setOpenPassengerIdx(0);
@@ -825,6 +854,12 @@ export default function Checkout() {
   const validatePassengers = (): boolean => {
     const newErrors: Record<string, string> = {};
     const cpfs = new Set<string>();
+    const expectedPassengers = selectedSeats.length;
+
+    if (passengers.length !== expectedPassengers || expectedPassengers !== quantity) {
+      newErrors.checkout =
+        "A quantidade de passageiros não confere com os assentos selecionados";
+    }
 
     passengers.forEach((p, i) => {
       if (!p.name.trim() || p.name.trim().length < 3) {
@@ -847,6 +882,30 @@ export default function Checkout() {
     if (!payerCpf || !isValidCpf(payerCpf)) {
       newErrors[`${payerIndex}_cpf`] =
         "O responsável pelo pagamento precisa ter CPF válido";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      console.warn("[checkout] passenger_validation_failed", {
+        stage: "validate_passengers_before_insert",
+        flow_origin: "public_checkout",
+        environment: import.meta.env.MODE,
+        paymentEnvironment: runtimePaymentEnvironment ?? null,
+        companyId: event?.company_id ?? null,
+        eventId: event?.id ?? null,
+        expectedPassengers,
+        selectedSeatsCount: selectedSeats.length,
+        submittedPassengers: passengers.length,
+        payerIndex,
+        invalidPassengers: passengers.map((passenger, index) => ({
+          index,
+          seatId: selectedSeats[index] ?? null,
+          missingFields: getMissingPassengerFields(passenger),
+          cpfMasked: maskCpfForLog(passenger.cpf),
+          phoneProvided: passenger.phone.replace(/\D/g, "").length > 0,
+          ticketTypeOrigin: resolveTicketTypeOriginForLog(passenger.ticket_type_id),
+        })).filter((row) => row.missingFields.length > 0),
+        errorKeys: Object.keys(newErrors),
+      });
     }
 
     setErrors(newErrors);
@@ -1217,38 +1276,7 @@ export default function Checkout() {
       });
     }
 
-    // === Step 1: Create temporary seat locks (15 min expiry) ===
-    const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    const seatLockInserts = selectedSeats.map((seatId) => ({
-      trip_id: tripId!,
-      seat_id: seatId,
-      company_id: event.company_id,
-      expires_at: lockExpiresAt,
-    }));
-
-    const { error: lockError } = await supabase
-      .from("seat_locks")
-      .insert(seatLockInserts);
-
-    if (lockError) {
-      console.error("Seat lock error:", lockError);
-      if (lockError.code === "23505") {
-        toast.error(
-          "Um ou mais assentos já estão sendo reservados por outro comprador. Escolha outros.",
-        );
-        await fetchOccupiedSeats(tripId!, () => true);
-      } else {
-        toast.error(
-          "Erro ao reservar assentos temporariamente. Tente novamente.",
-        );
-      }
-      preOpenedPaymentTab?.close();
-      setSubmitting(false);
-      setPaymentCheckoutStatus("idle");
-      return;
-    }
-
-    // === Step 2: Create sale with pendente_pagamento status ===
+    // === Step 1: Create sale with pendente_pagamento status ===
     const { data: sale, error: saleError } = await supabase
       .from("sales")
       .insert({
@@ -1276,13 +1304,23 @@ export default function Checkout() {
       .single();
 
     if (saleError || !sale) {
-      console.error("Sale error:", saleError);
-      // Rollback seat locks
-      await supabase
-        .from("seat_locks")
-        .delete()
-        .in("seat_id", selectedSeats)
-        .eq("trip_id", tripId!);
+      console.error("[checkout] sale_insert_failed", {
+        stage: "insert_sale_before_seat_locks",
+        flow_origin: "public_checkout",
+        paymentEnvironment: runtimePaymentEnvironment ?? null,
+        paymentMethod,
+        eventId: event.id,
+        companyId: event.company_id,
+        expectedPassengers: quantity,
+        submittedPassengers: passengers.length,
+        selectedSeatsCount: selectedSeats.length,
+        error: saleError ? {
+          code: saleError.code,
+          message: saleError.message,
+          details: saleError.details,
+          hint: saleError.hint,
+        } : null,
+      });
       const isRlsError =
         saleError?.code === "42501" ||
         saleError?.message?.includes("row-level security");
@@ -1296,12 +1334,56 @@ export default function Checkout() {
       return;
     }
 
-    // Update seat locks with sale_id
-    await supabase
+    // === Step 2: Create temporary seat locks (15 min expiry) already linked to the sale ===
+    const lockExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const seatLockInserts = selectedSeats.map((seatId) => ({
+      trip_id: tripId!,
+      seat_id: seatId,
+      sale_id: sale.id,
+      company_id: event.company_id,
+      expires_at: lockExpiresAt,
+    }));
+
+    const { error: lockError } = await supabase
       .from("seat_locks")
-      .update({ sale_id: sale.id })
-      .in("seat_id", selectedSeats)
-      .eq("trip_id", tripId!);
+      .insert(seatLockInserts);
+
+    if (lockError) {
+      console.error("[checkout] seat_locks_insert_failed", {
+        stage: "insert_seat_locks_after_sale",
+        flow_origin: "public_checkout",
+        paymentEnvironment: runtimePaymentEnvironment ?? null,
+        paymentMethod,
+        saleId: sale.id,
+        eventId: event.id,
+        companyId: event.company_id,
+        expectedPassengers: quantity,
+        submittedPassengers: passengers.length,
+        selectedSeatsCount: selectedSeats.length,
+        seatIds: selectedSeats,
+        error: {
+          code: lockError.code,
+          message: lockError.message,
+          details: lockError.details,
+          hint: lockError.hint,
+        },
+      });
+      await supabase.from("sales").delete().eq("id", sale.id);
+      if (lockError.code === "23505") {
+        toast.error(
+          "Um ou mais assentos já estão sendo reservados por outro comprador. Escolha outros.",
+        );
+        await fetchOccupiedSeats(tripId!, () => true);
+      } else {
+        toast.error(
+          "Erro ao reservar assentos temporariamente. Tente novamente.",
+        );
+      }
+      preOpenedPaymentTab?.close();
+      setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
+      return;
+    }
 
     // === Step 3: Create sale_passengers (staging for webhook ticket generation) ===
     const passengerInserts = selectedSeats.map((seatId, i) => ({
@@ -1368,6 +1450,46 @@ export default function Checkout() {
           pricing_rule_version: BENEFIT_PRICING_RULE_VERSION,
         });
       });
+    }
+
+    const invalidPassengerPayload = passengerInserts
+      .map((row, index) => ({
+        index,
+        missingFields: [
+          !row.sale_id ? "sale_id" : null,
+          !row.trip_id ? "trip_id" : null,
+          !row.company_id ? "company_id" : null,
+          !row.seat_label ? "seat_label" : null,
+          !row.passenger_name ? "passenger_name" : null,
+          !row.passenger_cpf || row.passenger_cpf.length !== 11 ? "passenger_cpf" : null,
+          !Number.isFinite(Number(row.original_price)) ? "original_price" : null,
+          !Number.isFinite(Number(row.final_price)) ? "final_price" : null,
+        ].filter((field): field is string => Boolean(field)),
+      }))
+      .filter((row) => row.missingFields.length > 0);
+
+    if (invalidPassengerPayload.length > 0) {
+      console.error("[checkout] sale_passengers_payload_invalid", {
+        stage: "validate_sale_passengers_payload_before_insert",
+        flow_origin: "public_checkout",
+        paymentEnvironment: runtimePaymentEnvironment ?? null,
+        paymentMethod,
+        saleId: sale.id,
+        eventId: event.id,
+        companyId: event.company_id,
+        expectedPassengers: quantity,
+        submittedPassengers: passengerInserts.length,
+        outboundTripPassengers: selectedSeats.length,
+        returnTripPassengers: shouldCreateReturn && returnTripId ? passengers.length : 0,
+        invalidPassengerPayload,
+      });
+      await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
+      await supabase.from("sales").delete().eq("id", sale.id);
+      toast.error("Erro ao registrar dados dos passageiros. Revise os dados e tente novamente.");
+      preOpenedPaymentTab?.close();
+      setSubmitting(false);
+      setPaymentCheckoutStatus("idle");
+      return;
     }
 
     const { error: passengersError } = await supabase
@@ -1928,6 +2050,8 @@ export default function Checkout() {
                             updatePassenger(idx, "cpf", e.target.value)
                           }
                           placeholder="000.000.000-00"
+                          inputMode="numeric"
+                          autoComplete="off"
                           maxLength={14}
                         />
                         {errors[`${idx}_cpf`] && (
@@ -1948,6 +2072,8 @@ export default function Checkout() {
                             updatePassenger(idx, "phone", e.target.value)
                           }
                           placeholder="(00) 00000-0000"
+                          inputMode="tel"
+                          autoComplete="tel"
                           maxLength={15}
                         />
                       </div>
