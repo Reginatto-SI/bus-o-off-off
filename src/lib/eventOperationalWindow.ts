@@ -6,6 +6,23 @@ type BoardingLike = Pick<EventBoardingLocation, 'event_id' | 'departure_date' | 
 
 const TIME_ONLY_REGEX = /^\d{2}:\d{2}(:\d{2})?$/;
 
+// Folga operacional após o último embarque (em dias corridos).
+// Cobre eventos ida-e-volta sem retorno cadastrado: o evento continua visível
+// durante toda a viagem mesmo se o operador não cadastrou o embarque de volta.
+const OPERATIONAL_GRACE_DAYS = 2;
+
+function endOfDayPlusGrace(base: Date): Date {
+  return new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate() + OPERATIONAL_GRACE_DAYS,
+    23,
+    59,
+    59,
+    999,
+  );
+}
+
 function parseOperationalDateTime(date: string | null | undefined, time: string | null | undefined): Date | null {
   if (!date) return null;
 
@@ -13,7 +30,6 @@ function parseOperationalDateTime(date: string | null | undefined, time: string 
   if (!baseDate) return null;
 
   if (!time || !TIME_ONLY_REGEX.test(time)) {
-    // Comentário de suporte: quando o embarque não possui hora cadastrada, tratamos o evento como válido até o fim do dia local.
     return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 23, 59, 59, 999);
   }
 
@@ -39,10 +55,11 @@ export function getEventOperationalEnd(event: EventLike, boardings: BoardingLike
       return latest;
     }, null);
 
-  if (lastBoardingAt) return lastBoardingAt;
+  if (lastBoardingAt) return endOfDayPlusGrace(lastBoardingAt);
 
-  // Fallback seguro: eventos sem embarques continuam usando a data principal para não desaparecerem indevidamente.
-  return parseOperationalDateTime(event.date, null);
+  // Fallback seguro: eventos sem embarques continuam usando a data principal + folga de retorno.
+  const fallback = parseOperationalDateTime(event.date, null);
+  return fallback ? endOfDayPlusGrace(fallback) : null;
 }
 
 export function buildEventOperationalEndMap<TEvent extends EventLike, TBoarding extends BoardingLike>(
