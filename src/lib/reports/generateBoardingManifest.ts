@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import type { HookData, Table } from 'jspdf-autotable';
 import { supabase } from '@/integrations/supabase/client';
 import { Company } from '@/types/database';
 import {
@@ -237,8 +238,15 @@ export async function generateBoardingManifest({
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
-  const footerSafeArea = 10;
+  const footerSafeArea = 12;
   const contentBottomY = pageHeight - footerSafeArea;
+  const groupTitleToTableOffset = 13;
+  const continuationTableTopY = margin + groupTitleToTableOffset;
+  const minimumPassengerRowHeight = 6.4;
+  const estimatedTableHeaderHeight = 8;
+  const tableCellHorizontalPadding = 4;
+  const estimatedTableLineHeight = 4;
+  const groupStartExtraSafeArea = 4;
   const primaryColor = hexToRgb(getCompanyPrimaryColor(company));
 
   let logoBase64: string | null = null;
@@ -319,6 +327,41 @@ export async function generateBoardingManifest({
 
   let currentY = drawDocumentHeader();
 
+  const addFlowPage = () => {
+    doc.addPage();
+    currentY = margin;
+  };
+
+  const ensureSpaceForBlock = (requiredHeight: number) => {
+    if (currentY + requiredHeight > contentBottomY) {
+      addFlowPage();
+    }
+  };
+
+  const estimateWrappedLineCount = (value: string, cellWidth: number) => {
+    const printableWidth = Math.max(cellWidth - tableCellHorizontalPadding, 1);
+    const lines = doc.splitTextToSize(value || '-', printableWidth);
+    return Array.isArray(lines) ? Math.max(lines.length, 1) : 1;
+  };
+
+  const estimatePassengerRowHeight = (passenger: ManifestRow | undefined) => {
+    if (!passenger) return minimumPassengerRowHeight;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    const maxWrappedLines = Math.max(
+      estimateWrappedLineCount(passenger.seat_label, 18),
+      estimateWrappedLineCount(passenger.passenger_name, 60),
+      estimateWrappedLineCount(formatCpfMaskedForPrint(passenger.passenger_cpf), 34),
+      estimateWrappedLineCount(formatPhoneForPrint(passenger.passenger_phone), 44),
+    );
+
+    // A primeira linha pode crescer quando nome/telefone quebram; reservar essa altura evita
+    // iniciar um ponto no rodapé deixando apenas título/cabeçalho sem passageiro visível.
+    return Math.max(minimumPassengerRowHeight, maxWrappedLines * estimatedTableLineHeight + 4);
+  };
+
   groups.forEach((group, index) => {
     const tableRows = group.passengers.map((passenger) => [
       '',
@@ -349,19 +392,28 @@ export async function generateBoardingManifest({
       );
     };
 
-    if (index > 0 && currentY > contentBottomY - 70) {
-      doc.addPage();
-      currentY = margin;
+    if (index > 0) {
+      currentY += 2;
     }
+
+    const groupStartSafeHeight =
+      groupTitleToTableOffset +
+      estimatedTableHeaderHeight +
+      estimatePassengerRowHeight(group.passengers[0]) +
+      groupStartExtraSafeArea;
+
+    // Antes de iniciar um ponto, reserva altura para o bloco do ponto, cabeçalho e a primeira linha real estimada.
+    // Isso evita que um novo ponto seja desenhado no rodapé sobre a última linha do ponto anterior.
+    ensureSpaceForBlock(groupStartSafeHeight);
 
     // Primeira página do grupo usa a posição corrente do fluxo.
     drawGroupTitle(currentY);
 
     autoTable(doc, {
-      startY: currentY + 9,
+      startY: currentY + groupTitleToTableOffset,
       head: [['E', 'D', 'R', 'Poltrona', 'Passageiro', 'CPF', 'Telefone']],
       body: tableRows,
-      margin: { left: margin, right: margin, top: margin, bottom: footerSafeArea },
+      margin: { left: margin, right: margin, top: continuationTableTopY, bottom: footerSafeArea },
       showHead: 'everyPage',
       styles: {
         fontSize: 9,
@@ -388,11 +440,11 @@ export async function generateBoardingManifest({
         5: { cellWidth: 34, halign: 'left' },
         6: { cellWidth: 44, halign: 'left' },
       },
-      didDrawPage: (hookData) => {
-        // Sempre redesenha o cabeçalho do grupo quando a tabela quebra de página.
+      willDrawPage: (hookData: HookData) => {
+        // Em páginas de continuação, a margem superior da tabela já reserva espaço para este bloco.
+        // Desenhar aqui mantém título do ponto e cabeçalho da tabela separados, sem depender de coordenadas sobrepostas.
         if (hookData.pageNumber > 1) {
           drawGroupTitle(margin);
-          hookData.cursor.y = margin + 9;
         }
       },
       willDrawCell: (hookData) => {
@@ -403,17 +455,17 @@ export async function generateBoardingManifest({
       },
     });
 
-    const tableState = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
-    // Comentário de suporte: usa o finalY real da última página da tabela para evitar sobreposição com blocos seguintes.
+    const tableState = (doc as jsPDF & { lastAutoTable?: Table }).lastAutoTable;
+    // O autoTable pode atravessar várias páginas; antes do próximo bloco, garantimos que o jsPDF
+    // esteja na última página física e usamos o finalY real calculado pela biblioteca.
+    doc.setPage(doc.getNumberOfPages());
     currentY = (tableState?.finalY ?? currentY) + 8;
   });
 
-  const summaryBlockHeight = 68;
+  const summaryBlockHeight = 70;
   // Comentário de suporte: o resumo só pode iniciar quando há altura suficiente até a área segura acima do rodapé.
-  if (currentY + summaryBlockHeight > contentBottomY) {
-    doc.addPage();
-    currentY = margin;
-  }
+  // Como a tabela usa finalY real do autoTable, esta validação impede que o bloco final invada passageiros.
+  ensureSpaceForBlock(summaryBlockHeight);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
