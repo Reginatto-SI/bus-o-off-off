@@ -1,0 +1,727 @@
+# PRD — Termos de Serviço, Políticas da Empresa e Aceite no Checkout
+
+## 1. Objetivo
+
+Criar uma funcionalidade no SmartBus BR para permitir que cada empresa cadastre, versione e utilize seus próprios Termos de Serviço, Políticas de Cancelamento, Regras de Embarque e demais condições comerciais/operacionais relacionadas à venda de passagens e eventos.
+
+O objetivo principal é garantir que o comprador tenha acesso claro às regras da empresa responsável pelo evento antes de concluir o pagamento, e que o sistema registre de forma auditável qual versão dos termos foi aceita no momento da compra.
+
+Esta funcionalidade deve preservar a simplicidade do checkout, melhorar a segurança operacional das empresas e manter histórico confiável para vendas antigas.
+
+---
+
+## 2. Contexto
+
+Algumas empresas que utilizam o SmartBus BR desejam disponibilizar seus contratos, termos de serviço, regras de cancelamento e políticas internas para que o comprador precise ler e aceitar antes de concluir a compra da passagem.
+
+Hoje, o fluxo de venda pública permite que o usuário escolha o evento, selecione assentos, informe passageiros e siga para o pagamento.
+
+A nova regra deve inserir uma etapa de aceite dos termos antes do redirecionamento ou criação final do pagamento, sem prejudicar a conversão e sem criar um fluxo confuso para o usuário.
+
+---
+
+## 3. Regra de ouro
+
+Cada venda deve guardar exatamente qual versão dos termos foi aceita pelo comprador no momento da compra.
+
+Termos alterados no futuro não podem substituir, sobrescrever ou alterar retroativamente os termos aceitos em vendas antigas.
+
+---
+
+## 4. Princípios obrigatórios
+
+A funcionalidade deve seguir estes princípios:
+
+* Cada empresa gerencia seus próprios termos.
+* Os termos devem respeitar isolamento por empresa.
+* O aceite deve estar vinculado à venda.
+* O aceite deve registrar a versão aceita.
+* O histórico de versões deve ser preservado.
+* O checkout deve continuar simples e claro.
+* O sistema não deve criar fluxo paralelo de venda.
+* O termo vigente da empresa deve ser fácil de identificar.
+* Alterações em termos devem gerar nova versão, não sobrescrever silenciosamente a versão antiga.
+* Vendas antigas devem continuar apontando para o termo aceito na época da compra.
+
+---
+
+## 5. Escopo da funcionalidade
+
+Esta funcionalidade cobre:
+
+* Cadastro de termos por empresa.
+* Versionamento dos termos.
+* Definição de termo vigente.
+* Vínculo de termo ao evento.
+* Exibição dos termos no checkout público.
+* Aceite obrigatório antes do pagamento.
+* Registro do aceite na venda.
+* Consulta posterior dos termos aceitos.
+* Histórico de versões anteriores.
+* Exibição dos termos aceitos na confirmação/ticket, quando aplicável.
+
+---
+
+## 6. O que este PRD não cobre
+
+Este PRD não define:
+
+* Redação jurídica padrão dos contratos.
+* Política comercial de cancelamento de cada empresa.
+* Política fiscal, tributária ou contábil.
+* Regra de reembolso automatizado.
+* Assinatura digital formal.
+* Validação jurídica externa dos documentos.
+* Integração com cartório, certificado digital ou assinatura eletrônica.
+* Alteração da regra de pagamento Asaas.
+* Alteração da regra de confirmação por webhook.
+* Alteração da regra de split financeiro.
+
+---
+
+## 7. Estrutura conceitual recomendada
+
+A funcionalidade deve ser dividida em dois níveis principais:
+
+### 7.1 Termos da Empresa
+
+A empresa deve possuir uma área administrativa própria para cadastrar e gerenciar seus termos.
+
+Exemplos de termos/políticas:
+
+* Termos de Serviço.
+* Política de Cancelamento.
+* Política de Reembolso.
+* Regras de Embarque.
+* Regras para menores de idade.
+* Regras de bagagem.
+* Regras específicas de excursões, caravanas ou bate e volta.
+* Observações importantes do passeio.
+
+Essa área deve permitir que a empresa mantenha um termo padrão reutilizável em vários eventos.
+
+### 7.2 Termos vinculados ao Evento
+
+Na criação ou edição do evento, o sistema deve permitir revisar qual termo será aplicado àquele evento.
+
+Por padrão, o evento pode usar o termo vigente da empresa.
+
+Quando necessário, a empresa pode escolher uma versão específica do termo para aquele evento.
+
+O evento não deve ser obrigado a armazenar o texto completo dos termos diretamente no cadastro principal do evento, para evitar poluição visual e duplicação desnecessária.
+
+---
+
+## 8. Tela administrativa de termos
+
+Deve existir uma área administrativa para a empresa gerenciar seus termos.
+
+Sugestão de localização:
+
+* `/admin/empresa/termos`
+
+ou dentro de:
+
+* `/admin/empresa`, em uma aba/seção chamada `Termos e Políticas`.
+
+Essa tela deve permitir:
+
+* Criar novo termo.
+* Editar rascunho.
+* Publicar uma versão.
+* Marcar uma versão como vigente.
+* Visualizar histórico de versões.
+* Inativar termo que não deve mais ser usado em novos eventos.
+* Visualizar quais eventos usam determinado termo.
+* Visualizar quais vendas aceitaram determinada versão.
+
+---
+
+## 9. Tipos de conteúdo aceitos
+
+A empresa deve conseguir cadastrar textos claros e organizados.
+
+Campos sugeridos em nível de produto:
+
+* Título do termo.
+* Tipo do termo.
+* Conteúdo completo.
+* Status.
+* Versão.
+* Data de publicação.
+* Data de vigência.
+* Responsável pela última alteração.
+* Observação interna opcional.
+
+Tipos de termo sugeridos:
+
+* Termos Gerais de Serviço.
+* Política de Cancelamento.
+* Política de Reembolso.
+* Regras de Embarque.
+* Regras do Evento.
+* Termo personalizado.
+
+---
+
+## 10. Status dos termos
+
+Os termos podem possuir estados simples:
+
+### Rascunho
+
+Termo ainda em edição, não disponível para uso em vendas públicas.
+
+### Vigente
+
+Termo ativo e disponível para ser usado em novos eventos e novas vendas.
+
+### Substituído
+
+Termo que já foi vigente, mas foi substituído por uma nova versão.
+
+### Inativo
+
+Termo que não deve ser usado em novos eventos, mas cujo histórico deve permanecer acessível.
+
+---
+
+## 11. Regra de versionamento
+
+Sempre que um termo publicado for alterado de forma relevante, o sistema deve criar uma nova versão.
+
+Não deve ocorrer edição silenciosa de uma versão já publicada e aceita por compradores.
+
+Exemplo:
+
+* Termos Gerais — versão 1.
+* Termos Gerais — versão 2.
+* Termos Gerais — versão 3.
+
+Quando a versão 2 se torna vigente, a versão 1 passa a ficar como substituída, mas continua acessível para auditoria e para vendas antigas.
+
+---
+
+## 12. Regra para vendas antigas
+
+Vendas antigas devem permanecer vinculadas à versão aceita no momento da compra.
+
+Exemplo:
+
+* Cliente A comprou em 10/06/2026 e aceitou a versão 1.
+* Empresa alterou os termos em 15/06/2026 e publicou a versão 2.
+* Cliente A continua vinculado à versão 1.
+* Novos compradores passam a aceitar a versão 2.
+
+O sistema nunca deve atualizar automaticamente vendas antigas para a nova versão do termo.
+
+---
+
+## 13. Vínculo com o evento
+
+Na criação ou edição do evento, o sistema deve ter uma etapa, aba ou seção chamada:
+
+* `Termos`
+* `Políticas`
+* `Termos e Políticas`
+* `Regras do Evento`
+
+Essa área deve mostrar:
+
+* Termo atualmente vinculado ao evento.
+* Versão do termo.
+* Data de vigência.
+* Status do termo.
+* Prévia do conteúdo.
+* Indicação se o aceite será obrigatório no checkout.
+
+O padrão recomendado é:
+
+* Evento usa automaticamente o termo vigente da empresa.
+* A empresa pode escolher uma versão específica, se necessário.
+* Ao publicar ou vender o evento, o sistema deve saber exatamente qual versão será exigida no checkout.
+
+---
+
+## 14. Evento sem termo cadastrado
+
+Caso a empresa ainda não tenha termo cadastrado, o sistema deve tratar o cenário de forma clara.
+
+Possíveis comportamentos esperados:
+
+* Permitir evento sem termo, se o aceite não for obrigatório.
+* Alertar o administrador de que o evento não possui termos configurados.
+* Permitir configurar termos antes de publicar o evento.
+* Não bloquear desnecessariamente a criação do evento, salvo se houver regra futura tornando os termos obrigatórios.
+
+A decisão final de bloquear ou não a publicação deve ser validada na análise de viabilidade.
+
+---
+
+## 15. Checkout público
+
+O aceite dos termos deve acontecer antes do pagamento.
+
+Fluxo recomendado:
+
+1. Cliente escolhe o evento.
+2. Cliente escolhe veículo/embarque/assentos, conforme fluxo atual.
+3. Cliente informa dados dos passageiros.
+4. Cliente revisa o resumo da compra.
+5. Sistema exibe os termos e políticas da empresa responsável pelo evento.
+6. Cliente confirma que leu e aceita os termos.
+7. Sistema libera o botão de continuar para pagamento.
+8. Cliente segue para pagamento.
+9. Venda registra o aceite dos termos.
+
+---
+
+## 16. Modal ou etapa de termos no checkout
+
+A exibição dos termos pode ocorrer por modal, drawer ou etapa visual dentro do checkout.
+
+Recomendação de UX:
+
+* Mostrar título claro.
+* Mostrar nome da empresa responsável.
+* Mostrar evento relacionado.
+* Mostrar versão do termo.
+* Mostrar resumo dos pontos principais, se existir.
+* Permitir leitura do texto completo.
+* Exigir confirmação explícita com checkbox.
+* Usar botão claro: `Aceitar e ir para pagamento`.
+
+Texto sugerido para o checkbox:
+
+> Li e aceito os Termos de Serviço, Política de Cancelamento e Regras de Embarque da empresa responsável por este evento.
+
+Texto sugerido para o botão:
+
+> Aceitar e ir para pagamento
+
+---
+
+## 17. Rolagem até o final
+
+O sistema pode exigir que o usuário role até o final do conteúdo antes de liberar o aceite, mas isso não deve ser a única prova de concordância.
+
+A prova principal deve ser:
+
+* checkbox explícito;
+* registro da versão aceita;
+* vínculo com a venda;
+* data/hora do aceite;
+* snapshot ou referência imutável do conteúdo aceito.
+
+A rolagem até o final pode ser usada apenas como reforço de UX.
+
+---
+
+## 18. Registro do aceite
+
+Ao aceitar os termos, o sistema deve registrar informações suficientes para auditoria.
+
+O registro do aceite deve conter, quando possível:
+
+* ID da venda.
+* ID da empresa.
+* ID do evento.
+* ID da versão dos termos.
+* Título do termo.
+* Número da versão.
+* Data/hora do aceite.
+* Identificação do comprador, quando disponível.
+* Dados técnicos possíveis, como IP e user agent.
+* Texto aceito ou snapshot imutável da versão.
+* Confirmação explícita de aceite.
+
+A venda deve ficar vinculada ao termo aceito, mesmo que a empresa altere o termo posteriormente.
+
+---
+
+## 19. Snapshot do termo aceito
+
+O sistema deve garantir que seja possível consultar exatamente o conteúdo aceito pelo comprador.
+
+Isso pode ser feito por:
+
+* snapshot do texto completo aceito na venda;
+* ou referência a uma versão imutável do termo;
+* ou combinação dos dois.
+
+A análise técnica deve definir a melhor abordagem conforme a estrutura atual do banco e do sistema.
+
+O ponto obrigatório é:
+
+* o conteúdo aceito na venda não pode ser perdido;
+* a venda antiga não pode apontar para um termo que foi alterado depois.
+
+---
+
+## 20. Confirmação da compra e ticket
+
+Após a compra, a confirmação e/ou ticket podem exibir uma referência aos termos aceitos.
+
+Exemplo:
+
+> Termos aceitos: Termos Gerais de Transporte — versão 2 — aceito em 12/06/2026 às 14:32.
+
+Também pode existir uma ação:
+
+> Ver termos aceitos nesta compra
+
+Essa ação deve abrir a versão aceita na compra, não a versão atual da empresa.
+
+---
+
+## 21. Área administrativa de vendas
+
+Na tela administrativa de detalhes ou diagnóstico da venda, deve ser possível identificar:
+
+* se houve aceite de termos;
+* qual termo foi aceito;
+* qual versão foi aceita;
+* data/hora do aceite;
+* empresa responsável;
+* evento relacionado;
+* status do registro de aceite.
+
+Isso é importante para atendimento, auditoria e resolução de disputas.
+
+---
+
+## 22. Impacto no pagamento
+
+O aceite dos termos deve ocorrer antes do pagamento.
+
+A criação, redirecionamento ou continuidade da cobrança Asaas só deve seguir depois do aceite, quando o evento exigir termos.
+
+Essa funcionalidade não deve alterar a regra de confirmação de pagamento.
+
+Pagamento continua seguindo o fluxo já existente:
+
+* venda nasce como pendente/reservada;
+* cobrança é criada;
+* confirmação vem preferencialmente por webhook;
+* verify atua como fallback;
+* venda só vira paga após confirmação válida.
+
+---
+
+## 23. Impacto em vendas manuais
+
+A análise de viabilidade deve avaliar se a venda manual administrativa também deve exigir ou registrar aceite de termos.
+
+Cenários possíveis:
+
+### Venda manual feita em nome do cliente
+
+O sistema pode permitir que o administrador registre que o cliente aceitou os termos fora do fluxo público.
+
+### Venda manual interna
+
+O sistema pode registrar aceite administrativo ou marcar como venda sem aceite público, conforme regra operacional.
+
+A decisão final deve ser validada, pois venda pública e venda manual podem ter comportamentos operacionais diferentes, desde que isso fique explícito e auditável.
+
+---
+
+## 24. Multiempresa
+
+Toda a funcionalidade deve respeitar o isolamento por empresa.
+
+Regras obrigatórias:
+
+* Uma empresa não pode visualizar termos de outra empresa.
+* Um evento só pode usar termos da própria empresa.
+* Uma venda só pode aceitar termos da empresa responsável pelo evento.
+* O histórico de aceite deve estar vinculado à empresa correta.
+* Consultas administrativas devem respeitar permissões e escopo do usuário.
+
+---
+
+## 25. Permissões
+
+A análise de viabilidade deve identificar quais perfis podem:
+
+* criar termos;
+* editar rascunhos;
+* publicar nova versão;
+* marcar termo como vigente;
+* inativar termo;
+* visualizar histórico;
+* consultar aceite em vendas.
+
+Recomendação inicial:
+
+* Apenas administradores da empresa ou perfis autorizados devem publicar ou alterar termos vigentes.
+* Usuários comuns não devem alterar termos.
+* Suporte/desenvolvimento pode visualizar para diagnóstico, conforme regra de permissão existente.
+
+---
+
+## 26. Auditoria
+
+Alterações em termos devem gerar trilha de auditoria, quando possível.
+
+A auditoria deve permitir identificar:
+
+* quem criou o termo;
+* quem publicou a versão;
+* quando a versão foi publicada;
+* quando foi substituída;
+* quais eventos usaram a versão;
+* quais vendas aceitaram a versão.
+
+---
+
+## 27. UX administrativa
+
+A tela de termos deve ser simples e objetiva.
+
+Recomendações:
+
+* Listar termos em cards ou tabela simples.
+* Mostrar status visual: Rascunho, Vigente, Substituído, Inativo.
+* Ter ação clara para visualizar histórico.
+* Ter botão claro para criar nova versão.
+* Evitar misturar termos longos dentro do fluxo principal de criação do evento.
+* Na criação do evento, mostrar apenas o vínculo e uma prévia do termo.
+
+---
+
+## 28. UX pública
+
+O comprador deve entender claramente o que está aceitando.
+
+Recomendações:
+
+* Linguagem simples.
+* Texto legível.
+* Evitar caixa pequena demais.
+* Destacar empresa responsável pelo evento.
+* Destacar política de cancelamento, se houver.
+* Botão de aceite claro.
+* Não usar mensagens genéricas.
+* Não permitir continuar para pagamento sem aceite quando o evento exigir termos.
+
+---
+
+## 29. Mensagens sugeridas
+
+### Evento com termos obrigatórios
+
+> Antes de continuar para o pagamento, leia e aceite os termos da empresa responsável por este evento.
+
+### Checkbox
+
+> Li e aceito os Termos de Serviço, Política de Cancelamento e Regras de Embarque da empresa responsável por este evento.
+
+### Botão
+
+> Aceitar e ir para pagamento
+
+### Erro sem aceite
+
+> Para continuar, é necessário aceitar os termos deste evento.
+
+### Confirmação pós-compra
+
+> Termos aceitos: [nome do termo] — versão [número] — aceito em [data/hora].
+
+---
+
+## 30. Cenários de falha
+
+### 30.1 Evento exige termo, mas termo não foi encontrado
+
+Comportamento esperado:
+
+* Bloquear avanço para pagamento.
+* Exibir mensagem clara.
+* Registrar erro técnico/operacional.
+* Orientar o usuário a tentar novamente ou contatar a empresa.
+
+### 30.2 Termo foi inativado depois que o evento foi publicado
+
+Comportamento esperado:
+
+* Vendas antigas continuam válidas.
+* Novas vendas devem usar a regra definida para o evento.
+* Se o evento apontar para termo inválido, o administrador deve ser alertado.
+
+### 30.3 Empresa alterou termo após venda
+
+Comportamento esperado:
+
+* Venda antiga mantém versão aceita.
+* Nova versão vale apenas para novas vendas/eventos, conforme configuração.
+
+### 30.4 Aceite registrado, mas pagamento falhou
+
+Comportamento esperado:
+
+* Venda pode continuar pendente.
+* O aceite pode permanecer vinculado à tentativa de venda.
+* Sistema deve manter rastreabilidade, sem considerar venda paga sem confirmação.
+
+### 30.5 Pagamento confirmado, mas aceite ausente
+
+Comportamento esperado:
+
+* Cenário deve ser tratado como inconsistência crítica se o evento exigia aceite.
+* Deve aparecer no diagnóstico administrativo.
+* Deve ser escalado para análise técnica.
+
+---
+
+## 31. Critérios de aceite
+
+A funcionalidade estará correta quando:
+
+* cada empresa puder cadastrar seus próprios termos;
+* termos publicados forem versionados;
+* versões antigas permanecerem acessíveis;
+* alteração de termo publicado criar nova versão;
+* evento puder usar termo vigente da empresa;
+* evento puder indicar qual versão de termo será exigida;
+* checkout público exigir aceite antes do pagamento quando aplicável;
+* usuário não conseguir seguir para pagamento sem aceite obrigatório;
+* venda registrar qual versão foi aceita;
+* venda antiga continuar apontando para versão antiga mesmo após alteração do termo;
+* confirmação/ticket conseguir exibir referência ao termo aceito;
+* admin conseguir consultar aceite em detalhes/diagnóstico da venda;
+* dados forem isolados por empresa;
+* fluxo Asaas não for alterado indevidamente;
+* venda só continuar sendo tratada como paga após confirmação válida de pagamento;
+* logs/diagnóstico permitirem investigar falha de aceite.
+
+---
+
+## 32. Pontos para análise de viabilidade pelo Codex
+
+Antes de implementar, o Codex deve analisar:
+
+1. Como o sistema modela empresas atualmente.
+2. Como o sistema modela eventos atualmente.
+3. Como o checkout público cria venda e passageiros.
+4. Em que momento exato o pagamento Asaas é criado.
+5. Onde o aceite deve ser inserido sem quebrar o fluxo atual.
+6. Se já existe alguma estrutura de documentos, termos ou configurações por empresa.
+7. Se já existe auditoria ou logs reutilizáveis.
+8. Se será necessário criar novas tabelas.
+9. Como garantir versionamento imutável.
+10. Como vincular termo ao evento.
+11. Como vincular aceite à venda.
+12. Como exibir termo aceito na confirmação/ticket.
+13. Como tratar venda manual.
+14. Como respeitar permissões e isolamento por empresa.
+15. Como evitar regressão no checkout mobile e desktop.
+16. Como testar o fluxo completo antes do pagamento.
+17. Como garantir que o fluxo Asaas continue funcionando sem alteração indevida.
+
+---
+
+## 33. Restrições para implementação
+
+Ao implementar, não deve:
+
+* criar fluxo paralelo de checkout;
+* alterar a confirmação de pagamento sem necessidade;
+* alterar webhook Asaas sem necessidade;
+* alterar split financeiro sem necessidade;
+* sobrescrever termos antigos;
+* atualizar termo aceito em venda antiga;
+* misturar termos entre empresas;
+* exigir login do comprador apenas por causa dos termos;
+* criar tela complexa demais no checkout;
+* colocar contrato completo como campo principal obrigatório dentro da etapa geral do evento;
+* duplicar lógica de venda;
+* criar comportamento diferente sem justificativa entre desktop e mobile;
+* quebrar venda pública existente.
+
+---
+
+## 34. Recomendações de implantação
+
+A implantação deve ser incremental.
+
+Ordem recomendada:
+
+1. Análise de viabilidade técnica.
+2. Definição da estrutura mínima de termos e versões.
+3. Criação da área administrativa de termos da empresa.
+4. Vínculo de termo ao evento.
+5. Exibição e aceite no checkout.
+6. Registro do aceite na venda.
+7. Exibição do aceite na confirmação/ticket.
+8. Diagnóstico administrativo.
+9. Testes de regressão no checkout.
+10. Testes com evento sem termo, com termo vigente e com termo alterado.
+
+---
+
+## 35. Testes obrigatórios
+
+Validar pelo menos estes cenários:
+
+### Empresa e termos
+
+* Empresa cria termo em rascunho.
+* Empresa publica termo.
+* Empresa marca termo como vigente.
+* Empresa cria nova versão.
+* Versão antiga permanece acessível.
+* Empresa não visualiza termo de outra empresa.
+
+### Evento
+
+* Evento usa termo vigente.
+* Evento usa versão específica.
+* Evento sem termo não quebra fluxo, conforme regra definida.
+* Evento publicado mantém vínculo correto.
+
+### Checkout
+
+* Checkout mostra termo antes do pagamento.
+* Botão de pagamento fica bloqueado sem aceite.
+* Checkbox libera avanço.
+* Aceite é registrado na venda.
+* Pagamento segue fluxo normal após aceite.
+
+### Venda antiga
+
+* Cliente compra aceitando versão 1.
+* Empresa publica versão 2.
+* Venda antiga continua mostrando versão 1.
+* Nova venda passa a aceitar versão 2, quando aplicável.
+
+### Diagnóstico
+
+* Admin visualiza termo aceito na venda.
+* Admin identifica versão aceita.
+* Inconsistência de pagamento confirmado sem aceite aparece para análise.
+
+### Multiempresa
+
+* Empresa A não acessa termos da Empresa B.
+* Evento da Empresa A não usa termo da Empresa B.
+* Venda da Empresa A registra aceite da Empresa A.
+
+---
+
+## 36. Resultado esperado
+
+Ao final da implementação, o SmartBus BR deve permitir que empresas publiquem seus termos e políticas de forma organizada, versionada e auditável.
+
+O comprador deve aceitar os termos antes de seguir para pagamento, e cada venda deve preservar a versão aceita no momento da compra.
+
+A funcionalidade deve aumentar segurança operacional e confiança das empresas sem prejudicar a simplicidade do checkout público.
+
+---
+
+## 37. Regra final
+
+A regra final é:
+
+> A empresa cadastra seus termos, o evento define qual versão será aplicada, o comprador aceita antes do pagamento, e a venda guarda para sempre a versão aceita no momento da compra.
