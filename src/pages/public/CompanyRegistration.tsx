@@ -86,6 +86,12 @@ const isValidCnpj = (value: string) => {
 };
 
 export default function CompanyRegistration() {
+  usePageMeta({
+    title: "Cadastrar empresa grátis | Smartbus BR",
+    description:
+      "Crie sua conta no Smartbus BR e comece a vender passagens online em minutos. Sem mensalidade, com pagamento integrado.",
+    path: "/cadastro",
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
