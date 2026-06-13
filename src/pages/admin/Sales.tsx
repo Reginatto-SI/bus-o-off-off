@@ -85,6 +85,7 @@ import {
   ArrowUpDown,
   CreditCard,
   AlertCircle,
+  FileCheck,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -122,6 +123,45 @@ function formatSeatLabels(labels: string[]): { display: string; full: string } {
   return { display: `${sorted.slice(0, 3).join(', ')} +${sorted.length - 3}`, full: sorted.join(', ') };
 }
 
+
+function maskSensitiveCpf(value?: string | null): string {
+  const d = (value ?? '').replace(/\D/g, '').slice(0, 11);
+  if (d.length !== 11) return value ? 'CPF informado' : '-';
+  return `***.***.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function maskSensitivePhone(value?: string | null): string {
+  const d = (value ?? '').replace(/\D/g, '');
+  if (d.length < 4) return value ? 'Telefone informado' : '-';
+  const lastFour = d.slice(-4);
+  return d.length >= 11 ? `(**) *****-${lastFour}` : `(**) ****-${lastFour}`;
+}
+
+function formatTermTypeLabel(value?: string | null): string {
+  if (!value) return '-';
+  // Mantém compatibilidade com os tipos históricos gravados no snapshot dos termos.
+  const labels: Record<string, string> = {
+    terms_of_service: 'Termos de Serviço',
+    privacy_policy: 'Política de Privacidade',
+    company_policy: 'Política da Empresa',
+    cancellation_policy: 'Política de Cancelamento',
+    termos_servico: 'Termos de Serviço',
+    politica_cancelamento: 'Política de Cancelamento',
+    politica_reembolso: 'Política de Reembolso',
+    regras_embarque: 'Regras de Embarque',
+    regras_evento: 'Regras do Evento',
+    personalizado: 'Personalizado',
+    other: 'Outro',
+  };
+  return labels[value] ?? value.replace(/_/g, ' ');
+}
+
+function formatExplicitAcceptance(value?: boolean | null): string {
+  if (value === true) return 'Sim';
+  if (value === false) return 'Não';
+  return '-';
+}
+
 function formatEventDisplayName(event?: { name?: string | null; date?: string | null } | null): string {
   const eventName = event?.name ?? '';
   const eventDate = event?.date ? formatDateOnlyBR(event.date) : '';
@@ -137,6 +177,26 @@ interface SalesFilters {
   sellerId: string;
   dateFrom: string;
   dateTo: string;
+}
+
+
+interface SaleTermAcceptance {
+  id: string;
+  sale_id: string;
+  event_id: string;
+  company_id: string;
+  term_title_snapshot: string;
+  term_type_snapshot: string;
+  version_number: number;
+  content_hash: string | null;
+  accepted_text_snapshot: string;
+  summary_snapshot: string | null;
+  accepted_at: string;
+  accepted_by_name: string | null;
+  accepted_by_cpf: string | null;
+  accepted_by_phone: string | null;
+  acceptance_origin: string | null;
+  explicit_acceptance: boolean | null;
 }
 
 interface SalesEventFilterOption {
@@ -408,6 +468,9 @@ export default function Sales() {
   const [detailTickets, setDetailTickets] = useState<TicketRecord[]>([]);
   const [detailLogs, setDetailLogs] = useState<SaleLog[]>([]);
   const [detailBoardingDepartureTime, setDetailBoardingDepartureTime] = useState<string | null>(null);
+  const [detailTermAcceptances, setDetailTermAcceptances] = useState<SaleTermAcceptance[]>([]);
+  const [detailTermAcceptancesError, setDetailTermAcceptancesError] = useState<string | null>(null);
+  const [selectedTermAcceptance, setSelectedTermAcceptance] = useState<SaleTermAcceptance | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const detailStandaloneServiceName = useMemo(() => getStandaloneServiceNameFromLogs(detailLogs), [detailLogs]);
 
@@ -1072,7 +1135,21 @@ export default function Sales() {
     setDetailTickets([]);
     setDetailLogs([]);
     setDetailBoardingDepartureTime(null);
-    const [ticketsRes, logsRes, boardingRes] = await Promise.all([
+    setDetailTermAcceptances([]);
+    setDetailTermAcceptancesError(null);
+    setSelectedTermAcceptance(null);
+
+    const saleCompanyId = (sale as any).company_id ?? activeCompanyId;
+    const termAcceptancesQuery = saleCompanyId
+      ? (supabase as any)
+        .from('sale_term_acceptances')
+        .select('id, sale_id, event_id, company_id, term_title_snapshot, term_type_snapshot, version_number, content_hash, accepted_text_snapshot, summary_snapshot, accepted_at, accepted_by_name, accepted_by_cpf, accepted_by_phone, acceptance_origin, explicit_acceptance')
+        .eq('sale_id', sale.id)
+        .eq('company_id', saleCompanyId)
+        .order('accepted_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null });
+
+    const [ticketsRes, logsRes, boardingRes, acceptancesRes] = await Promise.all([
       supabase.from('tickets').select('*').eq('sale_id', sale.id).order('seat_label'),
       supabase.from('sale_logs').select('*').eq('sale_id', sale.id).order('created_at', { ascending: false }),
       supabase
@@ -1082,10 +1159,17 @@ export default function Sales() {
         .eq('trip_id', sale.trip_id)
         .eq('boarding_location_id', sale.boarding_location_id)
         .maybeSingle(),
+      termAcceptancesQuery,
     ]);
     setDetailTickets((ticketsRes.data ?? []) as TicketRecord[]);
     setDetailLogs((logsRes.data ?? []) as SaleLog[]);
     setDetailBoardingDepartureTime(boardingRes.data?.departure_time ?? null);
+    if (acceptancesRes.error) {
+      setDetailTermAcceptances([]);
+      setDetailTermAcceptancesError('Não foi possível carregar os aceites desta venda. Verifique seu acesso à empresa ativa.');
+    } else {
+      setDetailTermAcceptances((acceptancesRes.data ?? []) as SaleTermAcceptance[]);
+    }
     setDetailLoading(false);
   };
 
@@ -2243,6 +2327,9 @@ export default function Sales() {
             setDetailTickets([]);
             setDetailLogs([]);
             setDetailBoardingDepartureTime(null);
+            setDetailTermAcceptances([]);
+            setDetailTermAcceptancesError(null);
+            setSelectedTermAcceptance(null);
           }
         }}>
           <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
@@ -2260,6 +2347,12 @@ export default function Sales() {
                     <TabsTrigger value="passageiros" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
                       <Users className="h-4 w-4" />
                       Passageiros
+                    </TabsTrigger>
+                  )}
+                  {detailSale.status !== 'bloqueado' && (
+                    <TabsTrigger value="aceites-termos" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
+                      <FileCheck className="h-4 w-4" />
+                      Aceites dos Termos
                     </TabsTrigger>
                   )}
                   <TabsTrigger value="historico" className="inline-flex items-center gap-2 border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground">
@@ -2549,6 +2642,70 @@ export default function Sales() {
                         </TabsContent>
                       )}
 
+
+                      {/* Tab: Aceites dos Termos */}
+                      {detailSale.status !== 'bloqueado' && (
+                        <TabsContent value="aceites-termos" className="mt-0 space-y-4">
+                          <Alert>
+                            <FileCheck className="h-4 w-4" />
+                            <AlertDescription>
+                              Consulte os termos e políticas aceitos no momento da compra. Estes dados representam o snapshot aceito no momento da compra e não podem ser alterados.
+                            </AlertDescription>
+                          </Alert>
+
+                          {detailTermAcceptancesError ? (
+                            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                              {detailTermAcceptancesError}
+                            </div>
+                          ) : detailTermAcceptances.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-8 text-center">
+                              Nenhum aceite de termos registrado para esta venda.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {detailTermAcceptances.map((acceptance) => (
+                                <div key={acceptance.id} className="rounded-md border p-3 space-y-3">
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                      <p className="text-sm font-semibold">{acceptance.term_title_snapshot}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {formatTermTypeLabel(acceptance.term_type_snapshot)} • versão {acceptance.version_number}
+                                      </p>
+                                    </div>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => setSelectedTermAcceptance(acceptance)}>
+                                      Ver conteúdo aceito
+                                    </Button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <InfoRow label="Aceito em" value={format(new Date(acceptance.accepted_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} />
+                                    <InfoRow label="Aceitante" value={acceptance.accepted_by_name ?? '-'} />
+                                    <InfoRow label="CPF" value={maskSensitiveCpf(acceptance.accepted_by_cpf)} />
+                                    <InfoRow label="Telefone" value={maskSensitivePhone(acceptance.accepted_by_phone)} />
+                                    <InfoRow label="Origem" value={acceptance.acceptance_origin ?? '-'} />
+                                    <InfoRow label="Aceite explícito" value={formatExplicitAcceptance(acceptance.explicit_acceptance)} />
+                                  </div>
+
+                                  {acceptance.content_hash && (
+                                    <div className="space-y-1">
+                                      <p className="text-sm text-muted-foreground">Hash do conteúdo</p>
+                                      <code className="block rounded bg-muted px-2 py-1 text-xs break-all">{acceptance.content_hash}</code>
+                                    </div>
+                                  )}
+
+                                  {acceptance.summary_snapshot && (
+                                    <div className="space-y-1">
+                                      <p className="text-sm text-muted-foreground">Resumo aceito</p>
+                                      <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-2 text-sm">{acceptance.summary_snapshot}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </TabsContent>
+                      )}
+
                       {/* Tab: Histórico */}
                       <TabsContent value="historico" className="mt-0">
                         {detailLogs.length === 0 ? (
@@ -2574,6 +2731,35 @@ export default function Sales() {
                   )}
                 </ScrollArea>
               </Tabs>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!selectedTermAcceptance} onOpenChange={(open) => { if (!open) setSelectedTermAcceptance(null); }}>
+          <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
+            <DialogHeader className="admin-modal__header px-6 py-4">
+              <DialogTitle>{selectedTermAcceptance?.term_title_snapshot ?? 'Conteúdo aceito'}</DialogTitle>
+            </DialogHeader>
+            {selectedTermAcceptance && (
+              <>
+                <div className="border-b px-6 py-3 text-sm text-muted-foreground">
+                  Versão {selectedTermAcceptance.version_number} • aceito em {format(new Date(selectedTermAcceptance.accepted_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                </div>
+                <ScrollArea className="flex-1 px-6 py-4">
+                  {selectedTermAcceptance.content_hash && (
+                    <div className="mb-4 space-y-1">
+                      <p className="text-sm text-muted-foreground">Hash do conteúdo</p>
+                      <code className="block rounded bg-muted px-2 py-1 text-xs break-all">{selectedTermAcceptance.content_hash}</code>
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap rounded-md border bg-muted/20 p-4 text-sm leading-relaxed">
+                    {selectedTermAcceptance.accepted_text_snapshot}
+                  </div>
+                </ScrollArea>
+                <DialogFooter className="admin-modal__footer px-6 py-4">
+                  <Button variant="outline" onClick={() => setSelectedTermAcceptance(null)}>Fechar</Button>
+                </DialogFooter>
+              </>
             )}
           </DialogContent>
         </Dialog>
