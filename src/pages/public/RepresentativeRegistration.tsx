@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { BriefcaseBusiness, CheckCircle2, Handshake, Loader2, Megaphone } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,12 @@ interface RegisterRepresentativeResponse {
 }
 
 export default function RepresentativeRegistration() {
+  usePageMeta({
+    title: "Seja representante Smartbus BR",
+    description:
+      "Cadastre-se como representante comercial Smartbus BR e ganhe comissão indicando empresas que vendem passagens pela plataforma.",
+    path: "/seja-representante",
+  });
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);

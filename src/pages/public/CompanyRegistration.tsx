@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import {
   BadgeCheck,
   Bus,
@@ -85,6 +86,12 @@ const isValidCnpj = (value: string) => {
 };
 
 export default function CompanyRegistration() {
+  usePageMeta({
+    title: "Cadastrar empresa grátis | Smartbus BR",
+    description:
+      "Crie sua conta no Smartbus BR e comece a vender passagens online em minutos. Sem mensalidade, com pagamento integrado.",
+    path: "/cadastro",
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();

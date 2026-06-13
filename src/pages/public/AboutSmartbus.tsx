@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowRight, CheckCircle2, ClipboardList, ShieldCheck, Workflow } from "lucide-react";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,12 @@ const TRUST_POINTS = [
 ];
 
 export default function AboutSmartbus() {
+  usePageMeta({
+    title: "Sobre o Smartbus BR",
+    description:
+      "Conheça o Smartbus BR: plataforma de venda de passagens e gestão de excursões. Saiba como funciona e o papel da plataforma na intermediação.",
+    path: "/sobre-smartbus-br",
+  });
   return (
     // Esta rota estava "sem header" porque era renderizada fora do layout público compartilhado.
     <PublicLayout>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -156,6 +157,12 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
 }
 
 export default function TicketLookup() {
+  usePageMeta({
+    title: "Consultar minhas passagens | Smartbus BR",
+    description:
+      "Consulte suas passagens compradas no Smartbus BR informando o CPF. Acompanhe status do pagamento e baixe seus bilhetes.",
+    path: "/consultar-passagens",
+  });
   const { toast } = useToast();
   const [cpf, setCpf] = useState('');
   const [tickets, setTickets] = useState<TicketCardData[]>([]);

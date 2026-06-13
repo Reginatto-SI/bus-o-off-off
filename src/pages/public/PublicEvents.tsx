@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -35,6 +36,12 @@ function interleaveEventCards<T>(items: T[]): T[] {
 }
 
 export default function PublicEvents() {
+  usePageMeta({
+    title: "Passagens disponíveis | Smartbus BR",
+    description:
+      "Veja todas as passagens e excursões disponíveis no Smartbus BR. Compre online com pagamento seguro e escolha do assento.",
+    path: "/eventos",
+  });
   const [events, setEvents] = useState<EventWithCompany[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -88,7 +95,7 @@ export default function PublicEvents() {
         {/* Título e Microcopy */}
         <section className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Passagens disponíveis
+            Passagens disponíveis — Smartbus BR
           </h1>
           <p className="text-muted-foreground">
             Compra segura com confirmação imediata após o pagamento
