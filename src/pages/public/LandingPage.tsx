@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
+import { usePageMeta } from "@/lib/usePageMeta";
 import logo from "@/assets/logo.png";
 import { FloatingWhatsApp } from "@/components/public/FloatingWhatsApp";
 import { Link } from "react-router-dom";
