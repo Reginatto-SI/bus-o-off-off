@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
+import { CompanyTermsTab } from '@/components/admin/CompanyTermsTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { Navigate } from 'react-router-dom';
@@ -1313,6 +1314,13 @@ export default function CompanyPage() {
                       <span className="min-w-0 truncate">Configurações</span>
                     </TabsTrigger>
                     <TabsTrigger
+                      value="termos"
+                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                    >
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Termos e Políticas</span>
+                    </TabsTrigger>
+                    <TabsTrigger
                       value="pagamentos"
                       className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
                     >
@@ -1968,6 +1976,10 @@ export default function CompanyPage() {
                         </div>
                       </div>
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="termos" className="mt-0">
+                    <CompanyTermsTab companyId={editingId} />
                   </TabsContent>
 
                   <TabsContent value="pagamentos" className="mt-0">
