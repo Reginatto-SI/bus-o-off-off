@@ -11,6 +11,10 @@ import { calculateFees, calculatePlatformFeeTotal, type EventFeeInput } from "@/
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { EventSummaryCard } from "@/components/public/EventSummaryCard";
 import { SeatMap } from "@/components/public/SeatMap";
+import {
+  EventTermsAcceptanceCard,
+  type PublicEventTerm,
+} from "@/components/public/EventTermsAcceptanceCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +120,29 @@ interface EventTicketTypeRow {
 interface EventCategoryPriceRow {
   category: string;
   price: number | string | null;
+}
+
+interface EventTermLinkRow {
+  id: string;
+  company_id: string;
+  event_id: string;
+  term_id: string;
+  term_version_id: string;
+  selection_mode: string | null;
+  acceptance_required: boolean | null;
+}
+
+interface CompanyTermVersionRow {
+  id: string;
+  company_id: string;
+  term_id: string;
+  version_number: number | string | null;
+  title: string;
+  term_type: string;
+  content: string;
+  summary: string | null;
+  status: string | null;
+  published_at: string | null;
 }
 
 interface CheckoutErrorWithContext {
@@ -270,6 +297,11 @@ export default function Checkout() {
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
   const [eventTicketTypes, setEventTicketTypes] = useState<EventTicketType[]>([]);
+  const [eventTerms, setEventTerms] = useState<PublicEventTerm[]>([]);
+  const [loadingEventTerms, setLoadingEventTerms] = useState(false);
+  const [eventTermsError, setEventTermsError] = useState(false);
+  // Comentário Fase 4A: aceite local/visual dos termos do evento; não persiste em sale_term_acceptances nesta etapa.
+  const [eventTermsAccepted, setEventTermsAccepted] = useState(false);
   const [companyPixStatus, setCompanyPixStatus] = useState<{
     productionReady: boolean;
     sandboxReady: boolean;
@@ -315,6 +347,13 @@ export default function Checkout() {
     usesCategoryPricing &&
     selectedSeats.length > 0 &&
     new Set(selectedSeats.map(getSeatPrice)).size > 1;
+  const eventTermsRequireAcceptance = eventTerms.some(
+    (term) => term.acceptanceRequired,
+  );
+  const isEventTermsPaymentBlocked =
+    loadingEventTerms ||
+    eventTermsError ||
+    (eventTermsRequireAcceptance && !eventTermsAccepted);
 
   const seatLabels = useMemo(
     () =>
@@ -330,6 +369,126 @@ export default function Checkout() {
       setPaymentMethod("credit_card");
     }
   }, [paymentMethod, runtimePaymentEnvironment, isPixReadyForCurrentEnvironment]);
+
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchEventTerms = async () => {
+      if (!event?.id || !event.company_id) {
+        setEventTerms([]);
+        setEventTermsAccepted(false);
+        setEventTermsError(false);
+        return;
+      }
+
+      setLoadingEventTerms(true);
+      setEventTermsError(false);
+      setEventTermsAccepted(false);
+
+      try {
+        const supabaseAny = supabase as any;
+        const { data: linksData, error: linksError } = await supabaseAny
+          .from("event_term_links")
+          .select(
+            "id, company_id, event_id, term_id, term_version_id, selection_mode, acceptance_required",
+          )
+          .eq("event_id", event.id)
+          .eq("company_id", event.company_id)
+          .order("created_at", { ascending: true });
+
+        if (!active) return;
+
+        if (linksError) {
+          throw linksError;
+        }
+
+        const links = (linksData ?? []) as EventTermLinkRow[];
+        if (links.length === 0) {
+          setEventTerms([]);
+          return;
+        }
+
+        const versionIds = links.map((link) => link.term_version_id);
+        const { data: versionsData, error: versionsError } = await supabaseAny
+          .from("company_term_versions")
+          .select(
+            "id, company_id, term_id, version_number, title, term_type, content, summary, status, published_at",
+          )
+          .eq("company_id", event.company_id)
+          .eq("status", "published")
+          .in("id", versionIds);
+
+        if (!active) return;
+
+        if (versionsError) {
+          throw versionsError;
+        }
+
+        const versions = ((versionsData ?? []) as CompanyTermVersionRow[]).filter(
+          (version) =>
+            version.company_id === event.company_id &&
+            version.status === "published",
+        );
+        const versionsById = new Map(
+          versions.map((version) => [version.id, version]),
+        );
+        const hydratedTerms = links.map((link) => {
+          const version = versionsById.get(link.term_version_id);
+
+          if (
+            !version ||
+            version.term_id !== link.term_id ||
+            version.company_id !== link.company_id
+          ) {
+            return null;
+          }
+
+          return {
+            linkId: link.id,
+            termId: link.term_id,
+            termVersionId: link.term_version_id,
+            acceptanceRequired: link.acceptance_required === true,
+            selectionMode: link.selection_mode ?? "specific_version",
+            title: version.title,
+            termType: version.term_type,
+            versionNumber: Number(version.version_number ?? 0),
+            summary: version.summary,
+            content: version.content,
+            publishedAt: version.published_at,
+          } satisfies PublicEventTerm;
+        });
+
+        if (hydratedTerms.some((term) => term === null)) {
+          throw new Error(
+            "Nem todas as versões publicadas vinculadas ao evento foram encontradas.",
+          );
+        }
+
+        setEventTerms(hydratedTerms as PublicEventTerm[]);
+      } catch (error) {
+        console.error("[checkout] event_terms_load_failed", {
+          eventId: event.id,
+          companyId: event.company_id,
+          error,
+        });
+        if (active) {
+          setEventTerms([]);
+          setEventTermsError(true);
+        }
+      } finally {
+        if (active) {
+          setLoadingEventTerms(false);
+        }
+      }
+    };
+
+    fetchEventTerms();
+
+    return () => {
+      active = false;
+    };
+  }, [event?.id, event?.company_id]);
 
   // Comentário de suporte: consolidamos os números do resumo em um único memo para evitar
   // divergência visual entre as etapas sem alterar as regras atuais de cálculo.
@@ -1102,6 +1261,18 @@ export default function Checkout() {
       return;
     }
     if (!event || !trip || !location) return;
+
+    if (eventTermsError || loadingEventTerms) {
+      toast.error(
+        "Não foi possível carregar os termos deste evento. Tente novamente em instantes.",
+      );
+      return;
+    }
+
+    if (eventTermsRequireAcceptance && !eventTermsAccepted) {
+      toast.error("Para continuar, é necessário aceitar os termos deste evento.");
+      return;
+    }
 
     if (!intermediationAccepted) {
       toast.error(CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE);
@@ -2200,6 +2371,14 @@ export default function Checkout() {
               </p>
             )}
 
+            <EventTermsAcceptanceCard
+              terms={eventTerms}
+              loading={loadingEventTerms}
+              error={eventTermsError}
+              accepted={eventTermsAccepted}
+              onAcceptedChange={setEventTermsAccepted}
+            />
+
             {/* Aceite explícito obrigatório: reforça transparência sobre papel da plataforma e responsabilidade operacional da organizadora. */}
             <div
               className={`rounded-lg border p-4 space-y-2 ${!intermediationAccepted ? "border-orange-500/40 bg-orange-500/5" : "bg-card"}`}
@@ -2373,7 +2552,11 @@ export default function Checkout() {
             ) : (
               <Button
                 className="h-10 px-4"
-                disabled={submitting || !intermediationAccepted}
+                disabled={
+                  submitting ||
+                  !intermediationAccepted ||
+                  isEventTermsPaymentBlocked
+                }
                 onClick={handleSubmit}
               >
                 {submitting ? (
