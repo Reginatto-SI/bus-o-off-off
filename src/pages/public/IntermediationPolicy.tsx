@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { PublicLayout } from '@/components/layout/PublicLayout';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { Button } from '@/components/ui/button';
 
 export default function IntermediationPolicy() {
