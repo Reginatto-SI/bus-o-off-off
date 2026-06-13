@@ -634,6 +634,12 @@ const FloatingWhatsAppIcon = () => (
   </span>
 );
 export default function LandingPage() {
+  usePageMeta({
+    title: "Smartbus BR | Venda passagens e organize excursões",
+    description:
+      "Plataforma para vender passagens online, organizar excursões e controlar embarque com pagamento integrado. Sem mensalidade.",
+    path: "/",
+  });
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState<LandingContactFormState>(INITIAL_CONTACT_FORM);
