@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 export function VersionIndicator() {
-  const { currentVersion, hasUpdate, refresh, isChecking, checkForUpdates } = useVersionCheck();
+  const { currentVersion, hasUpdate, isChecking, checkForUpdates } = useVersionCheck();
 
   const buildDate = (() => {
     try {
@@ -24,8 +24,7 @@ export function VersionIndicator() {
     const result = await checkForUpdates();
 
     if (result.status === "update-available") {
-      toast.success("Nova versão encontrada. Atualizando sistema...");
-      await refresh(result.latestVersion);
+      toast.success("Nova versão encontrada. Use o aviso de atualização para atualizar quando desejar.");
       return;
     }
 

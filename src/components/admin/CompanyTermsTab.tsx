@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Clock, Copy, Eye, FileText, History, Loader2, Pencil, Plus, Send, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -74,6 +74,9 @@ type CompanyTermVersion = {
 type CompanyTermWithVersions = CompanyTerm & {
   versions: CompanyTermVersion[];
 };
+
+const TERMS_UNSAVED_MESSAGE = 'Há alterações não salvas em Termos e Políticas. Deseja descartar o conteúdo digitado?';
+const getTermDraftKey = (companyId: string, termId?: string | null) => `company_terms_draft:${companyId}:${termId || 'new'}`;
 
 type TermFormState = {
   title: string;
@@ -182,6 +185,23 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
   const [historyDialog, setHistoryDialog] = useState<HistoryDialogState | null>(null);
   const [contentDialog, setContentDialog] = useState<ContentDialogState | null>(null);
   const [detailTerm, setDetailTerm] = useState<CompanyTermWithVersions | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
+  const draftHydratedRef = useRef(false);
+
+  const currentDraftKey = companyId && formMode
+    ? getTermDraftKey(companyId, formMode.type === 'edit' ? formMode.version.id : null)
+    : null;
+
+  const updateForm = (updater: (prev: TermFormState) => TermFormState) => {
+    setForm((prev) => updater(prev));
+    setIsFormDirty(true);
+  };
+
+  const closeFormSafely = () => {
+    if (isFormDirty && !window.confirm(TERMS_UNSAVED_MESSAGE)) return;
+    setFormMode(null);
+    setIsFormDirty(false);
+  };
 
   const fetchTerms = useCallback(async () => {
     if (!companyId) {
@@ -283,6 +303,8 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
 
   const openCreateDialog = () => {
     setForm(initialForm);
+    setIsFormDirty(false);
+    draftHydratedRef.current = false;
     setFormMode({ type: 'create' });
   };
 
@@ -310,8 +332,64 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       summary: version.summary ?? '',
       internal_note: version.internal_note ?? '',
     });
+    setIsFormDirty(false);
+    draftHydratedRef.current = false;
     setFormMode({ type: 'edit', term, version });
   };
+
+
+
+  useEffect(() => {
+    if (!currentDraftKey || draftHydratedRef.current) return;
+
+    draftHydratedRef.current = true;
+    const storedDraft = sessionStorage.getItem(currentDraftKey);
+    if (!storedDraft) return;
+
+    try {
+      const parsed = JSON.parse(storedDraft) as Partial<TermFormState>;
+      setForm((prev) => ({
+        ...prev,
+        title: parsed.title ?? prev.title,
+        term_type: parsed.term_type ?? prev.term_type,
+        content: parsed.content ?? prev.content,
+        summary: parsed.summary ?? prev.summary,
+        internal_note: parsed.internal_note ?? prev.internal_note,
+      }));
+      setIsFormDirty(true);
+      toast.info('Rascunho local restaurado para evitar perda de conteúdo.');
+    } catch {
+      sessionStorage.removeItem(currentDraftKey);
+    }
+  }, [currentDraftKey]);
+
+  useEffect(() => {
+    if (!currentDraftKey || !isFormDirty) return;
+
+    // Comentário de manutenção: rascunho temporário isolado por empresa e termo para suportar reload acidental.
+    sessionStorage.setItem(currentDraftKey, JSON.stringify(form));
+  }, [currentDraftKey, form, isFormDirty]);
+
+  useEffect(() => {
+    if (!isFormDirty) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const handleRefreshRequest = (event: Event) => {
+      if (!window.confirm(TERMS_UNSAVED_MESSAGE)) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('smartbus:request-refresh', handleRefreshRequest);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('smartbus:request-refresh', handleRefreshRequest);
+    };
+  }, [isFormDirty]);
 
   const validateForm = () => {
     if (!companyId) {
@@ -446,6 +524,8 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         toast.success('Rascunho atualizado com sucesso.');
       }
 
+      if (currentDraftKey) sessionStorage.removeItem(currentDraftKey);
+      setIsFormDirty(false);
       setFormMode(null);
       await fetchTerms();
     } catch (error) {
@@ -872,7 +952,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(formMode)} onOpenChange={(open) => !open && setFormMode(null)}>
+      <Dialog open={Boolean(formMode)} onOpenChange={(open) => !open && closeFormSafely()}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{formMode?.type === 'create' ? 'Novo termo' : 'Editar rascunho'}</DialogTitle>
@@ -888,7 +968,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
                 <Input
                   id="term-title"
                   value={form.title}
-                  onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
+                  onChange={(event) => updateForm((prev) => ({ ...prev, title: event.target.value }))}
                   placeholder="Ex.: Termos gerais da empresa"
                   disabled={formMode?.type === 'recover'}
                 />
@@ -913,7 +993,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
               <Textarea
                 id="term-summary"
                 value={form.summary}
-                onChange={(event) => setForm((prev) => ({ ...prev, summary: event.target.value }))}
+                onChange={(event) => updateForm((prev) => ({ ...prev, summary: event.target.value }))}
                 placeholder="Resumo curto para orientar a equipe administrativa"
                 rows={3}
               />
@@ -924,7 +1004,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
               <Textarea
                 id="term-content"
                 value={form.content}
-                onChange={(event) => setForm((prev) => ({ ...prev, content: event.target.value }))}
+                onChange={(event) => updateForm((prev) => ({ ...prev, content: event.target.value }))}
                 placeholder="Digite o conteúdo completo do termo ou política"
                 rows={12}
               />
@@ -935,7 +1015,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
               <Textarea
                 id="term-internal-note"
                 value={form.internal_note}
-                onChange={(event) => setForm((prev) => ({ ...prev, internal_note: event.target.value }))}
+                onChange={(event) => updateForm((prev) => ({ ...prev, internal_note: event.target.value }))}
                 placeholder="Observação visível apenas para administração"
                 rows={3}
               />
@@ -943,7 +1023,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setFormMode(null)} disabled={saving}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={closeFormSafely} disabled={saving}>Cancelar</Button>
             <Button type="button" onClick={handleSaveDraft} disabled={saving || !canManage}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar rascunho
