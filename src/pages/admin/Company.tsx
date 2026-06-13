@@ -23,7 +23,7 @@ import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
 import { CompanyTermsTab } from '@/components/admin/CompanyTermsTab';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
 import { isReservedPublicSlug, normalizePublicSlug } from '@/lib/publicSlug';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
@@ -111,6 +111,12 @@ const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+x
 const COMPANY_LOGO_BUCKET = 'company-logos';
 
 const COMPANY_COVER_BUCKET = 'company-covers';
+const COMPANY_TAB_VALUES = ['dados', 'endereco', 'contato', 'observacoes', 'identidade', 'redes', 'configuracoes', 'termos', 'pagamentos', 'vitrine'] as const;
+type CompanyTabValue = typeof COMPANY_TAB_VALUES[number];
+const DEFAULT_COMPANY_TAB: CompanyTabValue = 'dados';
+const getCompanyTabStorageKey = (companyId: string | null) => `admin_company_active_tab:${companyId ?? 'new'}`;
+const isCompanyTabValue = (value: string | null): value is CompanyTabValue =>
+  Boolean(value && COMPANY_TAB_VALUES.includes(value as CompanyTabValue));
 const MAX_COVER_SIZE_MB = 5;
 const MAX_COVER_SIZE_BYTES = MAX_COVER_SIZE_MB * 1024 * 1024;
 const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
@@ -202,6 +208,7 @@ const getCompanyDisplayNameForPersistence = ({
 
 export default function CompanyPage() {
   const { activeCompanyId, user, isGerente, isOperador, isDeveloper, updateActiveCompany } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { environment: runtimePaymentEnvironment, source: runtimePaymentSource } = useRuntimePaymentEnvironment();
   
   const [company, setCompany] = useState<Company | null>(null);
@@ -214,6 +221,10 @@ export default function CompanyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<CompanyTabValue>(() => {
+    const urlTab = new URLSearchParams(window.location.search).get('tab');
+    return isCompanyTabValue(urlTab) ? urlTab : DEFAULT_COMPANY_TAB;
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -278,6 +289,43 @@ export default function CompanyPage() {
   const canRenderShowcaseQr = normalizedPublicSlug.length > 0 && !isReservedSlug && slugAvailable === true;
 
   const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${normalizedPublicSlug || 'nick'}`;
+
+  useEffect(() => {
+    const storageKey = getCompanyTabStorageKey(editingId);
+    const urlTab = searchParams.get('tab');
+    const storedTab = sessionStorage.getItem(storageKey);
+    const nextTab = isCompanyTabValue(urlTab)
+      ? urlTab
+      : isCompanyTabValue(storedTab)
+        ? storedTab
+        : DEFAULT_COMPANY_TAB;
+
+    setActiveTab(nextTab);
+
+    if (!isCompanyTabValue(urlTab) && nextTab !== DEFAULT_COMPANY_TAB) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('tab', nextTab);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [editingId, searchParams, setSearchParams]);
+
+  const handleCompanyTabChange = (value: string) => {
+    if (!isCompanyTabValue(value)) return;
+
+    if (value !== activeTab) {
+      const leaveEvent = new Event('smartbus:request-refresh', { cancelable: true });
+      if (!window.dispatchEvent(leaveEvent)) return;
+    }
+
+    // Comentário de manutenção: persiste a aba por empresa para remontagens/refetch sem voltar para Dados Gerais.
+    sessionStorage.setItem(getCompanyTabStorageKey(editingId), value);
+    setActiveTab(value);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', value);
+    setSearchParams(nextParams, { replace: true });
+  };
+
 
   const handleDownloadShowcaseQrSvg = () => {
     if (!canRenderShowcaseQr) {
@@ -1262,7 +1310,7 @@ export default function CompanyPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Tabs defaultValue="dados" className="space-y-4">
+                <Tabs value={activeTab} onValueChange={handleCompanyTabChange} className="space-y-4">
                   <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2">
                     <TabsTrigger
                       value="dados"
