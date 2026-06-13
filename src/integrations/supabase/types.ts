@@ -752,6 +752,215 @@ export type Database = {
           },
         ]
       }
+      company_term_audit_logs: {
+        Row: {
+          action: string
+          company_id: string
+          created_at: string
+          description: string
+          event_id: string | null
+          id: string
+          metadata: Json | null
+          new_value: string | null
+          old_value: string | null
+          performed_by: string | null
+          sale_id: string | null
+          term_id: string | null
+          term_version_id: string | null
+        }
+        Insert: {
+          action: string
+          company_id: string
+          created_at?: string
+          description: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          sale_id?: string | null
+          term_id?: string | null
+          term_version_id?: string | null
+        }
+        Update: {
+          action?: string
+          company_id?: string
+          created_at?: string
+          description?: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json | null
+          new_value?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          sale_id?: string | null
+          term_id?: string | null
+          term_version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_term_audit_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_term_audit_logs_event_company_fk"
+            columns: ["event_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "company_term_audit_logs_sale_company_fk"
+            columns: ["sale_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "company_term_audit_logs_term_company_fk"
+            columns: ["term_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_terms"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "company_term_audit_logs_version_company_fk"
+            columns: ["term_version_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_term_versions"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
+      company_term_versions: {
+        Row: {
+          company_id: string
+          content: string
+          content_hash: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string | null
+          id: string
+          internal_note: string | null
+          published_at: string | null
+          published_by: string | null
+          status: string
+          summary: string | null
+          term_id: string
+          term_type: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+          version_number: number
+        }
+        Insert: {
+          company_id: string
+          content: string
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          internal_note?: string | null
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          summary?: string | null
+          term_id: string
+          term_type: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+          version_number: number
+        }
+        Update: {
+          company_id?: string
+          content?: string
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          internal_note?: string | null
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          summary?: string | null
+          term_id?: string
+          term_type?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_term_versions_term_fk"
+            columns: ["term_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_terms"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
+      company_terms: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          current_version_id: string | null
+          id: string
+          status: string
+          term_type: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          current_version_id?: string | null
+          id?: string
+          status?: string
+          term_type?: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          current_version_id?: string | null
+          id?: string
+          status?: string
+          term_type?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_terms_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_terms_current_version_fk"
+            columns: ["current_version_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_term_versions"
+            referencedColumns: ["id", "company_id"]
+          },
+        ]
+      }
       drivers: {
         Row: {
           birth_date: string | null
@@ -1210,6 +1419,67 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "sponsors"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_term_links: {
+        Row: {
+          acceptance_required: boolean
+          company_id: string
+          created_at: string
+          event_id: string
+          id: string
+          linked_by: string | null
+          selection_mode: string
+          term_id: string
+          term_version_id: string
+          updated_at: string
+        }
+        Insert: {
+          acceptance_required?: boolean
+          company_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          linked_by?: string | null
+          selection_mode?: string
+          term_id: string
+          term_version_id: string
+          updated_at?: string
+        }
+        Update: {
+          acceptance_required?: boolean
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          linked_by?: string | null
+          selection_mode?: string
+          term_id?: string
+          term_version_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_term_links_event_company_fk"
+            columns: ["event_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "event_term_links_term_company_fk"
+            columns: ["term_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_terms"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "event_term_links_version_term_company_fk"
+            columns: ["term_version_id", "term_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_term_versions"
+            referencedColumns: ["id", "term_id", "company_id"]
           },
         ]
       }
@@ -1956,6 +2226,103 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "services"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_term_acceptances: {
+        Row: {
+          acceptance_origin: string
+          accepted_at: string
+          accepted_by_cpf: string | null
+          accepted_by_name: string | null
+          accepted_by_phone: string | null
+          accepted_by_user_id: string | null
+          accepted_text_snapshot: string
+          company_id: string
+          content_hash: string
+          created_at: string
+          event_id: string
+          explicit_acceptance: boolean
+          id: string
+          ip_address: unknown
+          sale_id: string
+          summary_snapshot: string | null
+          term_id: string
+          term_title_snapshot: string
+          term_type_snapshot: string
+          term_version_id: string
+          user_agent: string | null
+          version_number: number
+        }
+        Insert: {
+          acceptance_origin?: string
+          accepted_at?: string
+          accepted_by_cpf?: string | null
+          accepted_by_name?: string | null
+          accepted_by_phone?: string | null
+          accepted_by_user_id?: string | null
+          accepted_text_snapshot: string
+          company_id: string
+          content_hash: string
+          created_at?: string
+          event_id: string
+          explicit_acceptance?: boolean
+          id?: string
+          ip_address?: unknown
+          sale_id: string
+          summary_snapshot?: string | null
+          term_id: string
+          term_title_snapshot: string
+          term_type_snapshot: string
+          term_version_id: string
+          user_agent?: string | null
+          version_number: number
+        }
+        Update: {
+          acceptance_origin?: string
+          accepted_at?: string
+          accepted_by_cpf?: string | null
+          accepted_by_name?: string | null
+          accepted_by_phone?: string | null
+          accepted_by_user_id?: string | null
+          accepted_text_snapshot?: string
+          company_id?: string
+          content_hash?: string
+          created_at?: string
+          event_id?: string
+          explicit_acceptance?: boolean
+          id?: string
+          ip_address?: unknown
+          sale_id?: string
+          summary_snapshot?: string | null
+          term_id?: string
+          term_title_snapshot?: string
+          term_type_snapshot?: string
+          term_version_id?: string
+          user_agent?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_term_acceptances_event_term_link_fk"
+            columns: ["event_id", "term_version_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "event_term_links"
+            referencedColumns: ["event_id", "term_version_id", "company_id"]
+          },
+          {
+            foreignKeyName: "sale_term_acceptances_sale_event_company_fk"
+            columns: ["sale_id", "event_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id", "event_id", "company_id"]
+          },
+          {
+            foreignKeyName: "sale_term_acceptances_version_term_company_fk"
+            columns: ["term_version_id", "term_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "company_term_versions"
+            referencedColumns: ["id", "term_id", "company_id"]
           },
         ]
       }
@@ -3213,6 +3580,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_company_term_with_initial_version: {
+        Args: {
+          p_company_id: string
+          p_content: string
+          p_internal_note?: string
+          p_summary?: string
+          p_term_type: string
+          p_title: string
+        }
+        Returns: {
+          term_id: string
+          version_id: string
+        }[]
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
@@ -3426,6 +3807,18 @@ export type Database = {
           message: Json
           msg_id: number
           read_ct: number
+        }[]
+      }
+      recover_company_term_initial_version: {
+        Args: {
+          p_company_id: string
+          p_content: string
+          p_internal_note?: string
+          p_summary?: string
+          p_term_id: string
+        }
+        Returns: {
+          version_id: string
         }[]
       }
       refresh_company_referral_progress: {
