@@ -91,103 +91,127 @@ export default function DriverHome() {
 
   /* ---------- Fetch all active trips ---------- */
   const fetchAllTrips = useCallback(async () => {
-    if (!user || !activeCompanyId) return;
+    if (!user || !activeCompanyId) {
+      // Sem contexto suficiente — não deixa a tela travada num skeleton infinito.
+      setLoadingTrips(false);
+      return;
+    }
     setLoadingTrips(true);
 
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('driver_id, role, operational_role')
-      .eq('user_id', user.id)
-      .eq('company_id', activeCompanyId)
-      .single();
-
-    const driverId = roleData?.driver_id;
-    // A identificação operacional é visual; as permissões continuam sendo da role técnica.
-    setOperationalRoleLabel(roleData?.operational_role === 'auxiliar_embarque' ? 'Auxiliar de Embarque' : 'Motorista');
-
-    let trips: any[] | null = null;
-
-    if (driverId) {
-      const { data } = await supabase
-        .from('trips')
-        .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
+    try {
+      const { data: roleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('driver_id, role, operational_role')
+        .eq('user_id', user.id)
         .eq('company_id', activeCompanyId)
-        .eq('events.status', 'a_venda')
-        .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
-        .order('events(date)', { ascending: true });
-      trips = data;
-    }
+        .maybeSingle();
 
-    if (!trips || trips.length === 0) {
-      const { data } = await supabase
-        .from('trips')
-        .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
-        .eq('company_id', activeCompanyId)
-        .eq('events.status', 'a_venda')
-        .order('events(date)', { ascending: true });
-      trips = data;
-    }
+      if (roleError) {
+        console.error('[DriverHome] fetchAllTrips user_roles error', {
+          code: roleError.code,
+          message: roleError.message,
+          details: roleError.details,
+          hint: roleError.hint,
+        });
+      }
 
-    const eventIds = Array.from(new Set((trips ?? []).map((trip: any) => trip.events?.id).filter(Boolean)));
-    let visibleEventIds = new Set<string>(eventIds);
+      const driverId = roleData?.driver_id;
+      // A identificação operacional é visual; as permissões continuam sendo da role técnica.
+      setOperationalRoleLabel(roleData?.operational_role === 'auxiliar_embarque' ? 'Auxiliar de Embarque' : 'Motorista');
 
-    if (eventIds.length > 0) {
-      const { data: boardings } = await supabase
-        .from('event_boarding_locations')
-        .select('event_id, departure_date, departure_time')
-        .in('event_id', eventIds)
-        .eq('company_id', activeCompanyId)
-        .not('departure_date', 'is', null);
+      let trips: any[] | null = null;
 
-      const operationalEndMap = buildEventOperationalEndMap(
-        (trips ?? []).map((trip: any) => ({ id: trip.events.id, date: trip.events.date })),
-        (boardings ?? []).map((boarding: any) => ({
-          event_id: boarding.event_id,
-          departure_date: boarding.departure_date,
-          departure_time: boarding.departure_time,
-        })),
-      );
+      if (driverId) {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
+          .eq('company_id', activeCompanyId)
+          .eq('events.status', 'a_venda')
+          .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
+          .order('events(date)', { ascending: true });
+        if (error) console.error('[DriverHome] fetchAllTrips trips(driver) error', error);
+        trips = data;
+      }
 
-      visibleEventIds = new Set(
-        eventIds.filter((eventId) => isOperationallyVisible(eventId, operationalEndMap))
-      );
-    }
+      if (!trips || trips.length === 0) {
+        const { data, error } = await supabase
+          .from('trips')
+          .select('id, event_id, trip_type, events!inner(id, name, date, status, transport_policy), vehicles!inner(plate)')
+          .eq('company_id', activeCompanyId)
+          .eq('events.status', 'a_venda')
+          .order('events(date)', { ascending: true });
+        if (error) console.error('[DriverHome] fetchAllTrips trips(company) error', error);
+        trips = data;
+      }
 
-    const mapped: TripInfo[] = (trips ?? [])
-      .filter((trip: any) => visibleEventIds.has(trip.events.id))
-      .map((trip: any) => ({
-        tripId: trip.id,
-        eventId: trip.events.id,
-        eventName: trip.events.name,
-        eventDate: trip.events.date,
-        vehiclePlate: trip.vehicles.plate,
-        transportPolicy: trip.events.transport_policy ?? 'ida_obrigatoria_volta_opcional',
-        tripType: trip.trip_type === 'volta' ? 'volta' : 'ida',
-      }));
+      const eventIds = Array.from(new Set((trips ?? []).map((trip: any) => trip.events?.id).filter(Boolean)));
+      let visibleEventIds = new Set<string>(eventIds);
 
-    setAllTrips(mapped);
+      if (eventIds.length > 0) {
+        const { data: boardings, error: boardingsError } = await supabase
+          .from('event_boarding_locations')
+          .select('event_id, departure_date, departure_time')
+          .in('event_id', eventIds)
+          .eq('company_id', activeCompanyId)
+          .not('departure_date', 'is', null);
 
-    const persisted = getPersistedTripId(user.id, activeCompanyId);
-    const persistedStillValid = persisted && mapped.some(t => t.tripId === persisted);
+        if (boardingsError) console.error('[DriverHome] fetchAllTrips boardings error', boardingsError);
 
-    if (persistedStillValid) {
-      setSelectedTripId(persisted);
-      setPreferredTripByPhase((prev) => ({ ...prev, ida: persisted }));
-    } else if (mapped.length > 0) {
-      const firstId = mapped[0].tripId;
-      setSelectedTripId(firstId);
-      setPreferredTripByPhase((prev) => ({ ...prev, ida: firstId }));
-      setPersistedTripId(user.id, activeCompanyId, firstId);
-    } else {
+        const operationalEndMap = buildEventOperationalEndMap(
+          (trips ?? []).map((trip: any) => ({ id: trip.events.id, date: trip.events.date })),
+          (boardings ?? []).map((boarding: any) => ({
+            event_id: boarding.event_id,
+            departure_date: boarding.departure_date,
+            departure_time: boarding.departure_time,
+          })),
+        );
+
+        visibleEventIds = new Set(
+          eventIds.filter((eventId) => isOperationallyVisible(eventId, operationalEndMap))
+        );
+      }
+
+      const mapped: TripInfo[] = (trips ?? [])
+        .filter((trip: any) => visibleEventIds.has(trip.events.id))
+        .map((trip: any) => ({
+          tripId: trip.id,
+          eventId: trip.events.id,
+          eventName: trip.events.name,
+          eventDate: trip.events.date,
+          vehiclePlate: trip.vehicles.plate,
+          transportPolicy: trip.events.transport_policy ?? 'ida_obrigatoria_volta_opcional',
+          tripType: trip.trip_type === 'volta' ? 'volta' : 'ida',
+        }));
+
+      setAllTrips(mapped);
+
+      const persisted = getPersistedTripId(user.id, activeCompanyId);
+      const persistedStillValid = persisted && mapped.some(t => t.tripId === persisted);
+
+      if (persistedStillValid) {
+        setSelectedTripId(persisted);
+        setPreferredTripByPhase((prev) => ({ ...prev, ida: persisted }));
+      } else if (mapped.length > 0) {
+        const firstId = mapped[0].tripId;
+        setSelectedTripId(firstId);
+        setPreferredTripByPhase((prev) => ({ ...prev, ida: firstId }));
+        setPersistedTripId(user.id, activeCompanyId, firstId);
+      } else {
+        setSelectedTripId(null);
+      }
+
+      // Restore persisted phase
+      const savedPhase = getPersistedPhase(user.id, activeCompanyId);
+      setActivePhase(savedPhase);
+    } catch (err) {
+      console.error('[DriverHome] fetchAllTrips falhou inesperadamente', err);
+      setAllTrips([]);
       setSelectedTripId(null);
+    } finally {
+      setLoadingTrips(false);
     }
-
-    // Restore persisted phase
-    const savedPhase = getPersistedPhase(user.id, activeCompanyId);
-    setActivePhase(savedPhase);
-
-    setLoadingTrips(false);
   }, [user, activeCompanyId]);
+
 
   /* ---------- Fetch KPIs for selected trip ---------- */
   const fetchKpis = useCallback(async (tripId: string) => {
@@ -329,6 +353,19 @@ export default function DriverHome() {
   };
 
   /* ---------- Guards ---------- */
+  // Resiliência: se o role demorar a resolver, mostramos um aviso acionável
+  // ao invés de deixar a tela travada num spinner em branco.
+  const [roleTimedOut, setRoleTimedOut] = useState(false);
+  useEffect(() => {
+    if (loading || userRole) {
+      setRoleTimedOut(false);
+      return;
+    }
+    if (!user) return;
+    const t = window.setTimeout(() => setRoleTimedOut(true), 3000);
+    return () => window.clearTimeout(t);
+  }, [loading, userRole, user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -338,13 +375,32 @@ export default function DriverHome() {
   }
   if (!user) return <Navigate to="/login" replace />;
   if (!userRole) {
+    if (!roleTimedOut) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <p className="text-base font-semibold">Não foi possível identificar seu perfil nesta empresa.</p>
+            <p className="text-sm text-muted-foreground">
+              Verifique com o administrador se seu acesso operacional está vinculado à empresa correta. Você pode tentar recarregar a tela ou sair e entrar novamente.
+            </p>
+            <div className="flex gap-2 justify-center pt-2">
+              <Button variant="outline" onClick={() => window.location.reload()}>Tentar novamente</Button>
+              <Button variant="ghost" onClick={signOut}>Sair</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
   if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
+
 
   const firstName = (profile?.name || user.user_metadata?.name || 'Motorista').split(' ')[0];
   const progressPercent = kpis.total > 0 ? Math.round((kpis.done / kpis.total) * 100) : 0;
