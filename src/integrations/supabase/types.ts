@@ -3818,6 +3818,7 @@ export type Database = {
           p_term_id: string
         }
         Returns: {
+          term_id: string
           version_id: string
         }[]
       }

@@ -159,6 +159,14 @@ const getFriendlyErrorMessage = (error: unknown, fallback: string) => {
     return 'Este termo não está elegível para recuperação. Atualize a página e verifique se ele ainda é um rascunho sem versões.';
   }
 
+  if (normalized.includes('term already has an initial version')) {
+    return 'Este termo já foi recuperado por outra tentativa. Atualize a página para ver a versão criada.';
+  }
+
+  if (normalized.includes('recover_company_term_initial_version') || normalized.includes('function') || normalized.includes('digest')) {
+    return 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.';
+  }
+
   if (normalized.includes('current version must be published')) {
     return 'Não é possível marcar um rascunho como vigente. Publique a versão antes.';
   }
@@ -534,7 +542,10 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         error,
         context: { action: formMode?.type ?? 'unknown', companyId, userId: user?.id },
       });
-      toast.error(getFriendlyErrorMessage(error, 'Não foi possível salvar o termo.'));
+      const fallback = formMode?.type === 'recover'
+        ? 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.'
+        : 'Não foi possível salvar o termo.';
+      toast.error(getFriendlyErrorMessage(error, fallback));
     } finally {
       setSaving(false);
     }
