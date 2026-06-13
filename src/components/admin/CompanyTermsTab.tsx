@@ -155,20 +155,20 @@ const getFriendlyErrorMessage = (error: unknown, fallback: string) => {
     return 'Esta versão já foi publicada e não pode ser editada. Crie uma nova versão para alterar o conteúdo.';
   }
 
+  if (normalized.includes('term already has an initial version')) {
+    return 'Este termo já foi recuperado em outra tentativa. Atualize a página para ver a versão criada.';
+  }
+
   if (normalized.includes('term is not eligible for draft recovery')) {
     return 'Este termo não está elegível para recuperação. Atualize a página e verifique se ele ainda é um rascunho sem versões.';
   }
 
-  if (normalized.includes('term already has an initial version')) {
-    return 'Este termo já foi recuperado por outra tentativa. Atualize a página para ver a versão criada.';
+  if (normalized.includes('term content is required') || normalized.includes('content_not_blank')) {
+    return 'Informe o conteúdo do termo antes de salvar.';
   }
 
-  if (normalized.includes('recover_company_term_initial_version') || normalized.includes('function') || normalized.includes('digest')) {
-    return 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.';
-  }
-
-  if (normalized.includes('current version must be published')) {
-    return 'Não é possível marcar um rascunho como vigente. Publique a versão antes.';
+  if (normalized.includes('current version must be published') || normalized.includes('current_version_required')) {
+    return 'Não é possível marcar como vigente uma versão que ainda não foi publicada.';
   }
 
   if (normalized.includes('row-level security') || normalized.includes('permission denied')) {
