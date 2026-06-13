@@ -41,6 +41,10 @@ begin
 end;
 $$;
 
+-- A versão anterior desta RPC retornava apenas version_id; PostgreSQL não permite alterar
+-- o tipo de retorno via CREATE OR REPLACE, então removemos a assinatura exata antes de recriar.
+drop function if exists public.recover_company_term_initial_version(uuid, uuid, text, text, text);
+
 create or replace function public.recover_company_term_initial_version(
   p_company_id uuid,
   p_term_id uuid,
