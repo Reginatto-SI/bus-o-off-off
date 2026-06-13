@@ -140,6 +140,7 @@ interface CompanyTermVersionRow {
   title: string;
   term_type: string;
   content: string;
+  content_hash: string | null;
   summary: string | null;
   status: string | null;
   published_at: string | null;
@@ -387,6 +388,7 @@ export default function Checkout() {
       setEventTermsAccepted(false);
 
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tabelas de termos ainda não constam no tipo gerado do Supabase.
         const supabaseAny = supabase as any;
         const { data: linksData, error: linksError } = await supabaseAny
           .from("event_term_links")
@@ -413,7 +415,7 @@ export default function Checkout() {
         const { data: versionsData, error: versionsError } = await supabaseAny
           .from("company_term_versions")
           .select(
-            "id, company_id, term_id, version_number, title, term_type, content, summary, status, published_at",
+            "id, company_id, term_id, version_number, title, term_type, content, content_hash, summary, status, published_at",
           )
           .eq("company_id", event.company_id)
           .eq("status", "published")
@@ -455,6 +457,7 @@ export default function Checkout() {
             versionNumber: Number(version.version_number ?? 0),
             summary: version.summary,
             content: version.content,
+            contentHash: version.content_hash,
             publishedAt: version.published_at,
           } satisfies PublicEventTerm;
         });
@@ -1357,6 +1360,31 @@ export default function Checkout() {
     }
 
     const payer = passengers[payerIndex];
+    const termsAcceptancePayer =
+      payer ?? passengers.find((passenger) => passenger.name.trim());
+    const termsAcceptancePayload = eventTerms.length > 0
+      ? {
+          accepted: eventTermsAccepted || !eventTermsRequireAcceptance,
+          accepted_term_version_ids: eventTerms.map(
+            (term) => term.termVersionId,
+          ),
+          accepted_terms: eventTerms.map((term) => ({
+            term_id: term.termId,
+            term_version_id: term.termVersionId,
+            title: term.title,
+            term_type: term.termType,
+            version_number: term.versionNumber,
+            content_hash: term.contentHash,
+            content_snapshot: term.content,
+            summary_snapshot: term.summary,
+          })),
+          accepted_by_name: termsAcceptancePayer?.name.trim() || null,
+          accepted_by_cpf:
+            termsAcceptancePayer?.cpf.replace(/\D/g, "") || null,
+          accepted_by_phone:
+            termsAcceptancePayer?.phone.replace(/\D/g, "") || null,
+        }
+      : null;
 
     // Captura e valida o vínculo de vendedor vindo de `?ref=` no fluxo público.
     // Correção: usamos RPC SECURITY DEFINER para não depender de SELECT direto em `sellers`,
@@ -1712,6 +1740,7 @@ export default function Checkout() {
             sale_id: sale.id,
             payment_method: paymentMethod,
             payment_environment: runtimePaymentEnvironment,
+            terms_acceptance: termsAcceptancePayload,
           },
         });
 
@@ -1757,8 +1786,8 @@ export default function Checkout() {
         }
       }
 
-      const errorCode = errorBody?.error_code;
-      const errorMessage = errorBody?.error;
+      const errorCode = errorBody?.error_code ?? errorBody?.error;
+      const errorMessage = errorBody?.message ?? errorBody?.error;
 
       if (errorCode === "no_asaas_account") {
         // Company has no Asaas — fallback to reservation (keep as pendente)
@@ -1767,6 +1796,32 @@ export default function Checkout() {
         setSubmitting(false);
         setPaymentCheckoutStatus("idle");
         navigate(`/confirmacao/${sale.id}`);
+        return;
+      }
+
+      if (
+        errorCode === "terms_acceptance_required" ||
+        errorCode === "terms_acceptance_persist_failed" ||
+        errorCode === "terms_acceptance_validate_failed"
+      ) {
+        console.error("[checkout] terms_acceptance_payment_blocked", {
+          stage: "terms_acceptance_insert",
+          saleId: sale.id,
+          eventId: event.id,
+          companyId: event.company_id,
+          termVersionIds: eventTerms.map((term) => term.termVersionId),
+          errorCode,
+          errorMessage,
+        });
+        await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
+        await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+        await supabase.from("sales").delete().eq("id", sale.id);
+        toast.error(
+          "Não foi possível registrar o aceite dos termos deste evento. Tente novamente.",
+        );
+        preOpenedPaymentTab?.close();
+        setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
         return;
       }
 

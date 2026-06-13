@@ -25,6 +25,7 @@ export interface PublicEventTerm {
   versionNumber: number;
   summary: string | null;
   content: string;
+  contentHash: string | null;
   publishedAt: string | null;
 }
 
