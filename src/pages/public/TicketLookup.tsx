@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateFees, type EventFeeInput } from '@/lib/feeCalculator';
 import { PublicLayout } from '@/components/layout/PublicLayout';
