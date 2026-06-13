@@ -192,6 +192,12 @@ const TRUST_ELEMENTS = [
 ];
 
 export default function SystemForExcursionsPage() {
+  usePageMeta({
+    title: "Sistema para excursões | Smartbus BR",
+    description:
+      "Sistema completo para excursões: venda de passagens online, controle de passageiros, pagamento integrado e embarque organizado.",
+    path: "/sistema-para-excursoes",
+  });
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Substituição do header: reuso do mesmo componente da landing principal para manter visual e comportamento idênticos. */}
