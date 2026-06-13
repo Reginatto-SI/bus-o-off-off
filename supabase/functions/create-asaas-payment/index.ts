@@ -1535,6 +1535,33 @@ serve(async (req) => {
         searchData = null;
       }
 
+      // 401/403 => chave Asaas da empresa inválida/revogada. Não adianta retry.
+      if (searchRes && (searchRes.status === 401 || searchRes.status === 403)) {
+        await insertIntegrationLog(
+          "failed",
+          `Chave Asaas da empresa rejeitada pelo gateway (HTTP ${searchRes.status})`,
+          { externalReference: sale.id, payment_environment: paymentEnv },
+          { http_status: searchRes.status, http_status_text: searchRes.statusText },
+          null,
+          "COMPANY_ASAAS_UNAUTHORIZED",
+        );
+        logPaymentTrace("error", "create-asaas-payment", "company_asaas_unauthorized", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          http_status: searchRes.status,
+          payment_environment: paymentEnv,
+          stage: "customer_search",
+        });
+        return jsonResponse(
+          {
+            error:
+              "A integração Asaas desta empresa está com a chave de API inválida ou revogada. Reconecte o Asaas em Configurações da Empresa > Asaas.",
+            error_code: "company_asaas_unauthorized",
+          },
+          502,
+        );
+      }
+
       // Se obteve body parseável (mesmo que erro HTTP 4xx/5xx), não faz retry — segue fluxo existente.
       if (searchData !== null) break;
 
@@ -1652,6 +1679,32 @@ serve(async (req) => {
         );
       }
       if (!createCustomerRes.ok) {
+        // 401/403 => chave Asaas da empresa inválida/revogada.
+        if (createCustomerRes.status === 401 || createCustomerRes.status === 403) {
+          await insertIntegrationLog(
+            "failed",
+            `Chave Asaas da empresa rejeitada pelo gateway na criação de cliente (HTTP ${createCustomerRes.status})`,
+            { externalReference: sale.id, payment_environment: paymentEnv },
+            { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText },
+            null,
+            "COMPANY_ASAAS_UNAUTHORIZED",
+          );
+          logPaymentTrace("error", "create-asaas-payment", "company_asaas_unauthorized", {
+            sale_id: sale.id,
+            company_id: sale.company_id,
+            http_status: createCustomerRes.status,
+            payment_environment: paymentEnv,
+            stage: "customer_create",
+          });
+          return jsonResponse(
+            {
+              error:
+                "A integração Asaas desta empresa está com a chave de API inválida ou revogada. Reconecte o Asaas em Configurações da Empresa > Asaas.",
+              error_code: "company_asaas_unauthorized",
+            },
+            502,
+          );
+        }
         const customerErrorDesc = customerData?.errors?.[0]?.description ?? null;
 
         await insertIntegrationLog(
