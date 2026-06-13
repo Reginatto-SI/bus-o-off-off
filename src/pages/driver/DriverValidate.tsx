@@ -795,13 +795,32 @@ export default function DriverValidate() {
   }
   if (!user) return <Navigate to="/login" replace />;
   if (!userRole) {
+    if (!roleTimedOut) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <p className="text-base font-semibold">Não foi possível identificar seu perfil nesta empresa.</p>
+            <p className="text-sm text-muted-foreground">
+              Verifique com o administrador se seu acesso operacional está vinculado à empresa correta. Você pode voltar para a tela inicial do validador ou sair e entrar novamente.
+            </p>
+            <div className="flex gap-2 justify-center pt-2">
+              <Button variant="outline" onClick={() => navigate('/validador')}>Voltar</Button>
+              <Button variant="ghost" onClick={() => supabase.auth.signOut()}>Sair</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
   if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
+
 
   return (
     <div className="min-h-screen bg-background px-4 py-4">
