@@ -786,6 +786,15 @@ export default function DriverValidate() {
   }, [overlay, driverPrefs, resetOverlay]);
 
   // --- Auth guards ---
+  // Resiliência: evita spinner infinito quando o role não resolve.
+  const [roleTimedOut, setRoleTimedOut] = useState(false);
+  useEffect(() => {
+    if (loading || userRole) { setRoleTimedOut(false); return; }
+    if (!user) return;
+    const t = window.setTimeout(() => setRoleTimedOut(true), 3000);
+    return () => window.clearTimeout(t);
+  }, [loading, userRole, user]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -793,6 +802,7 @@ export default function DriverValidate() {
       </div>
     );
   }
+
   if (!user) return <Navigate to="/login" replace />;
   if (!userRole) {
     if (!roleTimedOut) {
