@@ -95,7 +95,7 @@ export default function PublicEvents() {
         {/* Título e Microcopy */}
         <section className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Passagens disponíveis
+            Passagens disponíveis — Smartbus BR
           </h1>
           <p className="text-muted-foreground">
             Compra segura com confirmação imediata após o pagamento
