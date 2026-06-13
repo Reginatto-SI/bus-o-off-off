@@ -1679,6 +1679,32 @@ serve(async (req) => {
         );
       }
       if (!createCustomerRes.ok) {
+        // 401/403 => chave Asaas da empresa inválida/revogada.
+        if (createCustomerRes.status === 401 || createCustomerRes.status === 403) {
+          await insertIntegrationLog(
+            "failed",
+            `Chave Asaas da empresa rejeitada pelo gateway na criação de cliente (HTTP ${createCustomerRes.status})`,
+            { externalReference: sale.id, payment_environment: paymentEnv },
+            { http_status: createCustomerRes.status, http_status_text: createCustomerRes.statusText },
+            null,
+            "COMPANY_ASAAS_UNAUTHORIZED",
+          );
+          logPaymentTrace("error", "create-asaas-payment", "company_asaas_unauthorized", {
+            sale_id: sale.id,
+            company_id: sale.company_id,
+            http_status: createCustomerRes.status,
+            payment_environment: paymentEnv,
+            stage: "customer_create",
+          });
+          return jsonResponse(
+            {
+              error:
+                "A integração Asaas desta empresa está com a chave de API inválida ou revogada. Reconecte o Asaas em Configurações da Empresa > Asaas.",
+              error_code: "company_asaas_unauthorized",
+            },
+            502,
+          );
+        }
         const customerErrorDesc = customerData?.errors?.[0]?.description ?? null;
 
         await insertIntegrationLog(
