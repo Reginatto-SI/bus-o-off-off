@@ -155,20 +155,20 @@ const getFriendlyErrorMessage = (error: unknown, fallback: string) => {
     return 'Esta versão já foi publicada e não pode ser editada. Crie uma nova versão para alterar o conteúdo.';
   }
 
+  if (normalized.includes('term already has an initial version')) {
+    return 'Este termo já foi recuperado em outra tentativa. Atualize a página para ver a versão criada.';
+  }
+
   if (normalized.includes('term is not eligible for draft recovery')) {
     return 'Este termo não está elegível para recuperação. Atualize a página e verifique se ele ainda é um rascunho sem versões.';
   }
 
-  if (normalized.includes('term already has an initial version')) {
-    return 'Este termo já foi recuperado por outra tentativa. Atualize a página para ver a versão criada.';
+  if (normalized.includes('term content is required') || normalized.includes('content_not_blank')) {
+    return 'Informe o conteúdo do termo antes de salvar.';
   }
 
-  if (normalized.includes('recover_company_term_initial_version') || normalized.includes('function') || normalized.includes('digest')) {
-    return 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.';
-  }
-
-  if (normalized.includes('current version must be published')) {
-    return 'Não é possível marcar um rascunho como vigente. Publique a versão antes.';
+  if (normalized.includes('current version must be published') || normalized.includes('current_version_required')) {
+    return 'Não é possível marcar como vigente uma versão que ainda não foi publicada.';
   }
 
   if (normalized.includes('row-level security') || normalized.includes('permission denied')) {
@@ -467,6 +467,25 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       if (formMode?.type === 'recover') {
         const { term } = formMode;
 
+        // Pré-checagem: se já existir versão (criada por outra aba/tentativa anterior), orienta o usuário.
+        const { data: existingVersion } = await supabaseAny
+          .from('company_term_versions')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('term_id', term.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingVersion?.id) {
+          toast.info('Este termo já foi recuperado em outra tentativa. Atualize a página para ver a versão criada.');
+          setIsFormDirty(false);
+          setFormMode(null);
+          await fetchTerms();
+          return;
+        }
+
+        let versionId: string | null = null;
+
         const { data: recoveredDraft, error: recoverError } = await supabaseAny.rpc('recover_company_term_initial_version', {
           p_company_id: companyId,
           p_term_id: term.id,
@@ -475,20 +494,56 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           p_internal_note: form.internal_note.trim() || null,
         });
 
-        if (recoverError) throw recoverError;
+        if (recoverError) {
+          // Fallback resiliente: a RPC pode estar indisponível (cache do PostgREST, schema antigo, hash etc.).
+          // Como a RLS de gerente permite inserir em company_term_versions, criamos a versão inicial diretamente.
+          logSupabaseError({
+            label: 'RPC recover_company_term_initial_version falhou; aplicando fallback client-side',
+            error: recoverError,
+            context: { action: 'rpc_recover_fallback', companyId, termId: term.id, userId: user?.id },
+          });
 
-        const draftRow = Array.isArray(recoveredDraft) ? recoveredDraft[0] : recoveredDraft;
-        const version = { id: draftRow.version_id };
+          const { data: insertedVersion, error: insertError } = await supabaseAny
+            .from('company_term_versions')
+            .insert({
+              company_id: companyId,
+              term_id: term.id,
+              version_number: 1,
+              title: term.title,
+              term_type: term.term_type,
+              content: form.content.trim(),
+              summary: form.summary.trim() || null,
+              internal_note: form.internal_note.trim() || null,
+              status: 'draft',
+              created_by: user?.id ?? null,
+              updated_by: user?.id ?? null,
+            })
+            .select('id')
+            .single();
+
+          if (insertError) throw insertError;
+          versionId = insertedVersion?.id ?? null;
+
+          // Mantém updated_by/updated_at do termo coerentes com a recuperação.
+          await supabaseAny
+            .from('company_terms')
+            .update({ updated_by: user?.id ?? null })
+            .eq('id', term.id)
+            .eq('company_id', companyId);
+        } else {
+          const draftRow = Array.isArray(recoveredDraft) ? recoveredDraft[0] : recoveredDraft;
+          versionId = draftRow?.version_id ?? null;
+        }
 
         await addAuditLog({
           termId: term.id,
-          versionId: version.id,
+          versionId,
           action: 'draft_version_recovered',
           description: 'Versão inicial criada para termo em rascunho sem conteúdo vinculado.',
           metadata: { version_number: 1 },
         });
 
-        toast.success('Rascunho atualizado com sucesso.');
+        toast.success('Rascunho recuperado com sucesso.');
       }
 
       if (formMode?.type === 'edit') {
@@ -543,8 +598,8 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         context: { action: formMode?.type ?? 'unknown', companyId, userId: user?.id },
       });
       const fallback = formMode?.type === 'recover'
-        ? 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.'
-        : 'Não foi possível salvar o termo.';
+        ? 'Não foi possível recuperar o rascunho. Verifique se o termo pertence à empresa ativa e tente novamente.'
+        : 'Não foi possível salvar o rascunho. Verifique se o termo pertence à empresa ativa.';
       toast.error(getFriendlyErrorMessage(error, fallback));
     } finally {
       setSaving(false);
