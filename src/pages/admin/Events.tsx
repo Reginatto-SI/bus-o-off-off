@@ -106,6 +106,7 @@ import { CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { EventServicesTab } from '@/components/admin/EventServicesTab';
+import { EventTermsTab } from '@/components/admin/EventTermsTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
@@ -296,6 +297,7 @@ export default function Events() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [eventToArchiveAction, setEventToArchiveAction] = useState<EventWithTrips | null>(null);
   const [activeTab, setActiveTab] = useState('geral');
+  const [eventTermLinksCount, setEventTermLinksCount] = useState(0);
 
   // Post-create dialog
   const [isCreateWizardMode, setIsCreateWizardMode] = useState(false);
@@ -727,6 +729,13 @@ export default function Events() {
       return null;
     }
 
+    if (tabValue === 'termos') {
+      if (!effectiveEventId) {
+        return 'Salve o evento na aba Geral para liberar Termos e Políticas.';
+      }
+      return null;
+    }
+
     if (tabValue === 'servicos') {
       if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Serviços.';
@@ -773,31 +782,34 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'servicos', 'patrocinadores', 'publicacao'] as const;
-  const WIZARD_TAB_LABELS: Record<string, string> = {
+  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'termos', 'servicos', 'patrocinadores', 'publicacao'] as const;
+  type EventWizardTab = typeof WIZARD_TABS_ORDER[number];
+  const isEventWizardTab = (tab: string): tab is EventWizardTab => WIZARD_TABS_ORDER.includes(tab as EventWizardTab);
+  const WIZARD_TAB_LABELS: Record<EventWizardTab, string> = {
     geral: 'Geral',
     viagens: 'Frotas',
     embarques: 'Embarques',
     passagens: 'Passagens',
+    termos: 'Termos e Políticas',
     servicos: 'Serviços',
     patrocinadores: 'Patrocinadores',
     publicacao: 'Publicação',
   };
 
   const getNextWizardTab = (currentTab: string): string | null => {
-    const currentIndex = WIZARD_TABS_ORDER.indexOf(currentTab as any);
+    const currentIndex = isEventWizardTab(currentTab) ? WIZARD_TABS_ORDER.indexOf(currentTab) : -1;
     if (currentIndex < 0 || currentIndex === WIZARD_TABS_ORDER.length - 1) return null;
     return WIZARD_TABS_ORDER[currentIndex + 1];
   };
 
   const getPreviousWizardTab = (currentTab: string): string | null => {
-    const currentIndex = WIZARD_TABS_ORDER.indexOf(currentTab as any);
+    const currentIndex = isEventWizardTab(currentTab) ? WIZARD_TABS_ORDER.indexOf(currentTab) : -1;
     if (currentIndex <= 0) return null;
     return WIZARD_TABS_ORDER[currentIndex - 1];
   };
 
   const getStepNumber = (tab: string): number => {
-    const idx = WIZARD_TABS_ORDER.indexOf(tab as any);
+    const idx = isEventWizardTab(tab) ? WIZARD_TABS_ORDER.indexOf(tab) : -1;
     return idx >= 0 ? idx + 1 : 1;
   };
 
@@ -806,6 +818,8 @@ export default function Events() {
     if (tab === 'viagens') return hasAtLeastOneFleet;
     if (tab === 'embarques') return hasValidBoarding;
     if (tab === 'passagens') return hasTicketsRequirements;
+    // Fase 3: termos são opcionais; exibimos concluído apenas quando há vínculo salvo.
+    if (tab === 'termos') return eventTermLinksCount > 0;
     if (tab === 'publicacao') return publishChecklist.valid;
     return false;
   };
@@ -2329,6 +2343,7 @@ export default function Events() {
     setPublishErrorInCelebration(null);
     setEventTrips([]);
     setEventBoardingLocations([]);
+    setEventTermLinksCount(0);
     setActiveTab('geral');
     setUploadingImage(false);
     setForm({
@@ -3098,6 +3113,7 @@ export default function Events() {
                     { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
                     { value: 'embarques', label: 'Embarques', icon: MapPin, count: editingId ? eventBoardingLocations.length : null },
                     { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
+                    { value: 'termos', label: 'Termos e Políticas', icon: ShieldCheck, count: editingId ? eventTermLinksCount : null, optional: true },
                     { value: 'servicos', label: 'Serviços', icon: Sparkles, count: null },
                     { value: 'patrocinadores', label: 'Patrocinadores', icon: Star, count: null },
                     { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
@@ -3128,6 +3144,9 @@ export default function Events() {
                         <span className="min-w-0 truncate">{tab.label}</span>
                         {tab.count !== null && (
                           <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{tab.count}</span>
+                        )}
+                        {tab.optional && tab.count === 0 && (
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Opcional</span>
                         )}
                       </TabsTrigger>
                     );
@@ -4565,6 +4584,22 @@ export default function Events() {
                           </div>
                         </div>
                       </Card>
+                    )}
+                  </TabsContent>
+
+                  {/* Tab Termos e Políticas */}
+                  <TabsContent value="termos" className="mt-0">
+                    {editingId ? (
+                      <EventTermsTab
+                        eventId={editingId}
+                        companyId={activeCompanyId}
+                        isReadOnly={isReadOnly}
+                        onLinksCountChange={setEventTermLinksCount}
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-8 text-center">
+                        Salve o evento primeiro para vincular termos e políticas.
+                      </p>
                     )}
                   </TabsContent>
 
