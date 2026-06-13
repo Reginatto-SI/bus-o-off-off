@@ -1,0 +1,521 @@
+# PRD 02 — Ledger Interno de Comissões da Plataforma
+
+## 1. Objetivo
+
+Criar uma regra oficial para o registro interno das comissões geradas por vendas pagas no SmartBus BR.
+
+O ledger interno de comissões será a base confiável para:
+
+* tela de Comissões e Repasses;
+* relatórios internos;
+* relatórios de representantes;
+* controle de repasses manuais;
+* identificação de comissões pagas via split automático;
+* rastreabilidade por venda, empresa, evento, gateway e recebedor;
+* auditoria financeira da plataforma.
+
+O objetivo principal é garantir que toda comissão gerada por uma venda paga fique registrada de forma clara, auditável e independente do gateway utilizado.
+
+---
+
+## 2. Contexto
+
+O SmartBus BR trabalha com diferentes possibilidades de pagamento.
+
+Atualmente, o Asaas possui split automático e pode liquidar diretamente os valores da Marketplace, do sócio e do representante, quando todos estão elegíveis.
+
+Com a entrada de novos gateways, como Mercado Pago e futuros provedores, nem sempre todos os envolvidos receberão automaticamente.
+
+Por isso, o sistema precisa ter um ledger interno que registre:
+
+* o valor gerado para cada recebedor;
+* se esse valor foi pago automaticamente via split;
+* se esse valor depende de repasse manual;
+* se houve baixa parcial;
+* se ainda existe saldo pendente;
+* qual venda originou a comissão.
+
+---
+
+## 3. Regra de ouro
+
+Toda venda paga deve gerar registros internos de comissão para os recebedores aplicáveis.
+
+O ledger deve ser a fonte interna de consulta para comissões, repasses e relatórios.
+
+A tela administrativa não deve recalcular comissão diretamente.
+
+---
+
+## 4. Quando gerar lançamento no ledger
+
+O lançamento de comissão deve ser gerado somente quando a venda estiver paga.
+
+Entram no ledger:
+
+* vendas com pagamento confirmado;
+* vendas com status pago;
+* vendas com vínculo claro com empresa;
+* vendas com valor financeiro válido;
+* vendas com regra de comissão aplicável.
+
+Não entram no ledger:
+
+* vendas pendentes;
+* vendas reservadas;
+* vendas canceladas;
+* vendas sem confirmação de pagamento;
+* vendas sem vínculo financeiro válido.
+
+---
+
+## 5. Recebedores do ledger
+
+O ledger deve suportar os seguintes recebedores:
+
+### 5.1 Marketplace
+
+A Marketplace é recebedora interna da taxa da plataforma.
+
+A parte da Marketplace deve ser registrada para auditoria e conferência interna.
+
+Normalmente, não depende de baixa manual, pois a Marketplace recebe sua parte diretamente pelo gateway ou pela estrutura financeira principal da venda.
+
+### 5.2 Sócio
+
+No MVP, haverá apenas um sócio global da SmartBus.
+
+A parte do sócio deve ser registrada no ledger sempre que a regra oficial da taxa indicar participação do sócio.
+
+A liquidação da comissão do sócio pode ser:
+
+* automática via split;
+* manual por Pix, transferência ou outro meio externo.
+
+### 5.3 Representante
+
+O representante recebe comissão sobre vendas pagas realizadas por empresas cadastradas por meio do seu link de indicação.
+
+O vínculo principal do representante é com a empresa indicada.
+
+Quando uma empresa indicada vender passagens, passeios, eventos ou viagens, a comissão do representante deve ser registrada no ledger, conforme regra oficial vigente.
+
+---
+
+## 6. Vínculos obrigatórios do lançamento
+
+Cada lançamento do ledger deve possuir vínculo suficiente para auditoria.
+
+Campos conceituais obrigatórios:
+
+* venda;
+* empresa;
+* evento, quando aplicável;
+* gateway de pagamento;
+* ambiente de pagamento;
+* recebedor;
+* tipo de recebedor;
+* valor da venda;
+* valor da taxa da plataforma;
+* valor da comissão do recebedor;
+* status da comissão;
+* forma de liquidação;
+* origem do cálculo;
+* data de confirmação do pagamento;
+* data de criação do lançamento.
+
+---
+
+## 7. Tipos de recebedor
+
+Tipos mínimos:
+
+```text
+marketplace
+socio
+representante
+```
+
+Tipos futuros podem ser adicionados somente se houver PRD específico.
+
+---
+
+## 8. Formas de liquidação
+
+O ledger deve diferenciar como a comissão foi ou será liquidada.
+
+### 8.1 Split automático
+
+Usado quando o gateway paga automaticamente o recebedor.
+
+Exemplo:
+
+* Asaas paga o sócio via split;
+* Asaas paga o representante via split.
+
+Nesse caso, o lançamento deve indicar que foi liquidado via gateway.
+
+Não deve permitir baixa manual.
+
+### 8.2 Repasse manual
+
+Usado quando o gateway não liquida automaticamente o recebedor.
+
+Exemplo:
+
+* Mercado Pago gera comissão da Marketplace, mas sócio e representante precisam ser pagos manualmente pela SmartBus.
+
+Nesse caso, o lançamento deve ficar pendente até o Developer registrar baixa manual.
+
+### 8.3 Não aplicável
+
+Usado quando o recebedor não participa daquele cenário.
+
+Exemplo:
+
+* venda sem representante elegível.
+
+### 8.4 Bloqueado
+
+Usado quando existe comissão prevista, mas algum dado impede liquidação ou conferência.
+
+Exemplos:
+
+* representante sem dados mínimos;
+* vínculo inconsistente;
+* recebedor inelegível;
+* falta de informação do gateway;
+* inconsistência entre venda, snapshot e comissão.
+
+---
+
+## 9. Status do lançamento
+
+O ledger deve usar status simples no MVP.
+
+### 9.1 Pago via split
+
+A comissão foi liquidada automaticamente pelo gateway.
+
+Não permite baixa manual.
+
+### 9.2 Pendente manual
+
+A comissão foi gerada, mas depende de repasse manual.
+
+Permite baixa manual.
+
+### 9.3 Parcial manual
+
+Parte da comissão foi paga manualmente, mas ainda existe saldo em aberto.
+
+Permite nova baixa manual.
+
+### 9.4 Pago manual
+
+A comissão foi quitada manualmente.
+
+Não deve aparecer como pendente.
+
+### 9.5 Bloqueado
+
+A comissão não pode ser liquidada ou confirmada até correção da inconsistência.
+
+Não deve permitir baixa manual até regularização.
+
+---
+
+## 10. Regra por gateway
+
+### 10.1 Asaas
+
+Quando o Asaas liquidar comissão via split:
+
+* gerar lançamento no ledger;
+* marcar como Pago via split;
+* registrar gateway Asaas;
+* registrar forma de liquidação como Split automático;
+* não permitir baixa manual.
+
+O ledger deve documentar o pagamento feito pelo Asaas, não criar nova obrigação manual.
+
+### 10.2 Mercado Pago
+
+No cenário inicial do Mercado Pago:
+
+* Marketplace recebe conforme configuração do gateway;
+* sócio pode depender de repasse manual;
+* representante pode depender de repasse manual.
+
+O ledger deve registrar:
+
+* parte da Marketplace para auditoria;
+* parte do sócio como Pendente manual, quando aplicável;
+* parte do representante como Pendente manual, quando aplicável.
+
+### 10.3 Futuros gateways
+
+Cada gateway deve informar, direta ou indiretamente, se a comissão do recebedor foi:
+
+* paga via split automático;
+* recebida pela Marketplace e pendente de repasse;
+* não aplicável;
+* bloqueada por inconsistência.
+
+O ledger não deve depender de regra fixa exclusiva do Asaas.
+
+---
+
+## 11. Relação com a regra oficial da taxa
+
+O ledger não define uma nova regra de cálculo da taxa.
+
+Ele apenas registra o resultado da regra oficial vigente.
+
+A ordem correta é:
+
+1. venda é confirmada como paga;
+2. sistema aplica a regra oficial da taxa da plataforma;
+3. sistema divide a taxa entre Marketplace, sócio e representante;
+4. sistema identifica como cada parte será liquidada;
+5. sistema grava ou atualiza os lançamentos no ledger.
+
+---
+
+## 12. Idempotência
+
+O ledger deve ser idempotente.
+
+A mesma venda paga não pode gerar comissão duplicada para o mesmo recebedor.
+
+Regra esperada:
+
+```text
+Uma venda + um recebedor + um tipo de recebedor = um lançamento principal de comissão.
+```
+
+Se o webhook, verify ou reconciliação processar a mesma venda novamente, o sistema deve atualizar o lançamento existente, não duplicar.
+
+---
+
+## 13. Baixas manuais
+
+A baixa manual deve ser registrada separadamente do lançamento principal.
+
+O lançamento principal representa a comissão gerada.
+
+As baixas representam pagamentos manuais realizados pelo Developer.
+
+Cada baixa manual deve registrar:
+
+* lançamento de comissão vinculado;
+* valor pago;
+* data do pagamento;
+* forma de pagamento;
+* usuário que registrou;
+* data/hora do registro;
+* observação opcional.
+
+Comprovante não será obrigatório no MVP.
+
+---
+
+## 14. Baixa parcial
+
+O ledger deve suportar baixa parcial.
+
+Exemplo:
+
+* comissão gerada: R$ 500,00;
+* baixa manual 1: R$ 300,00;
+* saldo restante: R$ 200,00;
+* status: Parcial manual.
+
+Quando a soma das baixas manuais atingir o valor da comissão:
+
+* saldo fica zerado;
+* status muda para Pago manual.
+
+---
+
+## 15. Ajustes e correções
+
+No MVP, o ledger não precisa ter uma tela avançada de ajustes.
+
+Mas deve permitir rastreabilidade suficiente para que inconsistências sejam investigadas.
+
+Não deve ser permitido alterar valores sensíveis sem log.
+
+Qualquer correção futura deve preservar histórico.
+
+---
+
+## 16. Relatórios
+
+O ledger será a base dos relatórios.
+
+### 16.1 Relatório interno
+
+Pode mostrar todos os recebedores:
+
+* Marketplace;
+* sócio;
+* representante;
+* gateway;
+* empresa;
+* evento;
+* venda;
+* valor da comissão;
+* status;
+* forma de liquidação;
+* saldo em aberto.
+
+### 16.2 Relatório do representante
+
+Deve mostrar apenas dados do próprio representante.
+
+Não deve mostrar:
+
+* parte da Marketplace;
+* parte do sócio;
+* dados de outros representantes;
+* comissão interna total da plataforma;
+* regra completa de divisão interna.
+
+---
+
+## 17. Auditoria
+
+O ledger deve permitir rastrear:
+
+* qual venda gerou a comissão;
+* quando o pagamento foi confirmado;
+* qual gateway confirmou o pagamento;
+* qual recebedor tinha direito ao valor;
+* se o gateway pagou automaticamente;
+* se o Developer fez repasse manual;
+* se houve baixa parcial;
+* qual saldo permanece em aberto.
+
+---
+
+## 18. Segurança e permissões
+
+O ledger contém dados financeiros sensíveis.
+
+Acesso completo deve ser restrito ao perfil Developer.
+
+Empresas não devem acessar o ledger completo.
+
+Representantes não devem acessar dados de Marketplace, sócio ou outros representantes.
+
+Relatórios externos devem ser filtrados e limitados ao recebedor correspondente.
+
+---
+
+## 19. Multiempresa
+
+Todo lançamento deve respeitar isolamento por empresa.
+
+Cada lançamento deve possuir vínculo com a empresa da venda.
+
+O sistema não deve misturar comissões de empresas diferentes sem filtro explícito.
+
+A tela administrativa do Developer pode consolidar várias empresas, mas os dados devem manter rastreabilidade por empresa.
+
+---
+
+## 20. Ambiente
+
+O ledger deve registrar o ambiente da venda.
+
+Ambientes possíveis:
+
+* produção;
+* sandbox.
+
+Dados de sandbox não devem ser misturados com produção.
+
+Filtros e relatórios devem permitir identificar o ambiente quando necessário.
+
+---
+
+## 21. O que não pode acontecer
+
+O ledger não pode:
+
+* gerar comissão para venda pendente;
+* gerar comissão para venda cancelada;
+* gerar comissão duplicada para a mesma venda e recebedor;
+* permitir baixa manual de comissão paga via split automático;
+* misturar sandbox e produção;
+* misturar empresas sem rastreabilidade;
+* recalcular valor diferente da regra oficial da taxa;
+* depender exclusivamente do Asaas;
+* ignorar gateway usado na venda;
+* esconder a origem da liquidação;
+* expor dados sigilosos para perfis não autorizados.
+
+---
+
+## 22. Critérios de aceite
+
+O ledger estará correto quando:
+
+* toda venda paga gerar lançamentos internos de comissão;
+* venda pendente não gerar lançamento;
+* venda cancelada não gerar lançamento;
+* Asaas com split automático gerar status Pago via split;
+* Mercado Pago gerar pendência manual para sócio e representante, quando aplicável;
+* baixa manual só existir para comissão pendente manual;
+* baixa parcial atualizar saldo corretamente;
+* baixa total mudar status para Pago manual;
+* a mesma venda não gerar lançamentos duplicados;
+* relatórios usarem o ledger como base;
+* o Developer conseguir auditar venda, gateway, empresa, evento e recebedor;
+* representantes não visualizarem dados de terceiros;
+* dados sensíveis permanecerem restritos.
+
+---
+
+## 23. Fora do escopo deste PRD
+
+Este PRD não cobre:
+
+* criação visual da tela de Comissões e Repasses;
+* implementação do Mercado Pago;
+* alteração da regra oficial da taxa;
+* criação de painel público do representante;
+* anexos obrigatórios de comprovante;
+* política fiscal ou contábil;
+* estorno ou chargeback;
+* fechamento contábil formal;
+* definição técnica final de migrations.
+
+---
+
+## 24. Relação com outros PRDs
+
+Este PRD serve como base para:
+
+* PRD 01 — Comissões e Repasses da Plataforma;
+* PRD futuro de relatórios de comissões;
+* PRD futuro de Mercado Pago;
+* PRD futuro de múltiplos gateways;
+* validação técnica do Codex sobre estrutura de tabelas e reaproveitamento do ledger atual.
+
+---
+
+## 25. Próximo passo recomendado
+
+Após aprovação deste PRD, solicitar ao Codex uma validação técnica sobre:
+
+* se já existe ledger reaproveitável;
+* se o ledger atual de representantes pode ser expandido;
+* quais campos faltam;
+* como registrar liquidação via split automático;
+* como registrar repasse manual;
+* como evitar duplicidade por venda e recebedor;
+* quais RLS precisam ser ajustadas;
+* quais telas atuais dependem desse ledger;
+* quais riscos existem para implementação mínima.

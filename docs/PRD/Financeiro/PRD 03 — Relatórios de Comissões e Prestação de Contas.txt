@@ -1,0 +1,560 @@
+# PRD 03 — Relatórios de Comissões e Prestação de Contas
+
+## 1. Objetivo
+
+Definir os relatórios financeiros relacionados às comissões geradas por vendas pagas no SmartBus BR.
+
+Os relatórios devem permitir:
+
+* conferência interna pelo Developer;
+* prestação de contas para representantes;
+* acompanhamento de valores pagos via split automático;
+* acompanhamento de valores pagos manualmente;
+* identificação de valores pendentes;
+* rastreabilidade por venda, empresa, evento, gateway e período.
+
+O objetivo principal é oferecer relatórios simples, confiáveis e seguros, sem expor informações sensíveis para perfis indevidos.
+
+---
+
+## 2. Contexto
+
+O SmartBus BR terá uma tela de Comissões e Repasses exclusiva para o perfil Developer.
+
+Essa tela será baseada no ledger interno de comissões.
+
+Como representantes podem solicitar prestação de contas das suas comissões, o sistema precisa gerar relatórios claros, objetivos e confiáveis.
+
+Ao mesmo tempo, os relatórios devem respeitar sigilo financeiro.
+
+Nem todo relatório pode mostrar todos os dados.
+
+Existem dois grandes grupos de relatórios:
+
+1. relatórios internos da plataforma;
+2. relatórios externos para representantes.
+
+---
+
+## 3. Regra de ouro
+
+Relatórios de comissão devem ser gerados a partir do ledger interno de comissões.
+
+Nenhum relatório deve recalcular comissão diretamente.
+
+Nenhum relatório externo deve expor dados financeiros sensíveis da Marketplace, do sócio ou de outros representantes.
+
+---
+
+## 4. Público e permissões
+
+### 4.1 Developer
+
+O Developer pode acessar todos os relatórios.
+
+O Developer pode visualizar:
+
+* Marketplace;
+* sócio;
+* representantes;
+* empresas;
+* eventos;
+* gateways;
+* vendas;
+* valores pagos via split;
+* valores pagos manualmente;
+* valores em aberto;
+* divergências;
+* histórico de baixas.
+
+### 4.2 Representante
+
+O representante não acessa a tela completa de relatórios internos.
+
+Quando necessário, o Developer poderá emitir um relatório filtrado para o representante.
+
+Esse relatório deve conter apenas informações relacionadas ao próprio representante.
+
+### 4.3 Empresa
+
+A empresa não deve acessar relatórios de comissão da plataforma, sócio ou representante.
+
+A empresa pode ter seus próprios relatórios operacionais de vendas, mas isso está fora do escopo deste PRD.
+
+---
+
+## 5. Tipos de relatório
+
+O MVP deve conter três relatórios principais:
+
+1. Relatório Interno Completo;
+2. Relatório do Representante;
+3. Relatório de Pendências de Repasse.
+
+Relatórios futuros podem ser criados somente se houver necessidade operacional real.
+
+---
+
+## 6. Relatório Interno Completo
+
+### 6.1 Objetivo
+
+Permitir que o Developer visualize toda a composição financeira das comissões geradas no período.
+
+Esse relatório é sigiloso.
+
+### 6.2 Uso principal
+
+* conferência interna;
+* auditoria;
+* validação de gateway;
+* conferência de repasses manuais;
+* análise de valores pagos via split;
+* análise de pendências.
+
+### 6.3 Filtros
+
+Filtros recomendados:
+
+* período;
+* empresa;
+* evento;
+* gateway;
+* recebedor;
+* tipo de recebedor;
+* status da comissão;
+* forma de liquidação;
+* ambiente.
+
+### 6.4 Colunas recomendadas
+
+| Coluna             | Descrição                                                                 |
+| ------------------ | ------------------------------------------------------------------------- |
+| Data confirmação   | Data em que o pagamento da venda foi confirmado                           |
+| Empresa            | Empresa responsável pela venda                                            |
+| Evento             | Evento vinculado à venda                                                  |
+| Venda              | Identificador da venda                                                    |
+| Gateway            | Gateway usado no pagamento                                                |
+| Ambiente           | Produção ou sandbox                                                       |
+| Valor da venda     | Valor total da venda paga                                                 |
+| Taxa da plataforma | Valor total da taxa da plataforma                                         |
+| Marketplace        | Parte da Marketplace                                                      |
+| Sócio              | Parte do sócio                                                            |
+| Representante      | Parte do representante                                                    |
+| Recebedor          | Nome do recebedor do lançamento                                           |
+| Tipo               | Marketplace, sócio ou representante                                       |
+| Valor da comissão  | Valor gerado para o recebedor                                             |
+| Valor pago         | Valor já liquidado                                                        |
+| Saldo em aberto    | Valor pendente                                                            |
+| Liquidação         | Split automático ou repasse manual                                        |
+| Status             | Pago via split, pendente manual, parcial manual, pago manual ou bloqueado |
+
+### 6.5 Informações permitidas
+
+O relatório interno pode mostrar:
+
+* valores da Marketplace;
+* valores do sócio;
+* valores de representantes;
+* valores por gateway;
+* valores por empresa;
+* valores por evento;
+* status de liquidação;
+* histórico financeiro consolidado.
+
+### 6.6 Restrições
+
+Esse relatório não deve ser disponibilizado para:
+
+* empresa comum;
+* representante;
+* usuário público;
+* usuário administrativo sem perfil Developer.
+
+---
+
+## 7. Relatório do Representante
+
+### 7.1 Objetivo
+
+Gerar uma prestação de contas simples e confiável para o representante.
+
+Esse relatório deve mostrar apenas os valores relacionados ao próprio representante.
+
+### 7.2 Uso principal
+
+* responder solicitação do representante;
+* comprovar comissões geradas;
+* demonstrar valores pagos;
+* demonstrar saldo em aberto;
+* evitar conferências manuais por fora do sistema.
+
+### 7.3 Filtros
+
+Filtros recomendados:
+
+* representante;
+* período;
+* empresa indicada;
+* evento;
+* gateway;
+* status;
+* forma de liquidação.
+
+### 7.4 Colunas recomendadas
+
+| Coluna             | Descrição                                      |
+| ------------------ | ---------------------------------------------- |
+| Representante      | Nome do representante                          |
+| Período            | Período do relatório                           |
+| Empresa indicada   | Empresa cadastrada pelo link do representante  |
+| Evento             | Evento relacionado à venda                     |
+| Data confirmação   | Data em que o pagamento foi confirmado         |
+| Venda              | Identificador simples da venda                 |
+| Gateway            | Gateway usado no pagamento                     |
+| Valor base         | Valor usado como base para comissão            |
+| Comissão gerada    | Valor da comissão do representante             |
+| Valor pago         | Valor já pago ao representante                 |
+| Saldo em aberto    | Valor ainda pendente                           |
+| Status             | Situação da comissão                           |
+| Data do pagamento  | Quando houver baixa manual ou split confirmado |
+| Forma de pagamento | Split automático, Pix, transferência ou outro  |
+
+### 7.5 Informações que podem aparecer
+
+O relatório do representante pode mostrar:
+
+* empresas indicadas por ele;
+* eventos dessas empresas;
+* vendas pagas que geraram comissão;
+* comissão dele;
+* valor pago para ele;
+* saldo em aberto dele;
+* data de pagamento;
+* forma de pagamento;
+* gateway da venda.
+
+### 7.6 Informações proibidas
+
+O relatório do representante não pode mostrar:
+
+* parte da Marketplace;
+* parte do sócio;
+* comissão de outros representantes;
+* total interno da taxa da plataforma, quando isso revelar divisão sigilosa;
+* wallet de terceiros;
+* dados sensíveis do gateway;
+* dados financeiros internos da SmartBus;
+* logs técnicos internos.
+
+### 7.7 Observação importante
+
+O relatório do representante deve ser simples e objetivo.
+
+Ele não deve explicar toda a regra interna de divisão da plataforma.
+
+Ele deve apenas demonstrar:
+
+```text
+O que gerou comissão.
+Quanto gerou.
+Quanto foi pago.
+Quanto está em aberto.
+```
+
+---
+
+## 8. Relatório de Pendências de Repasse
+
+### 8.1 Objetivo
+
+Permitir que o Developer veja rapidamente o que precisa ser pago manualmente.
+
+Esse relatório deve responder:
+
+```text
+Quem eu preciso pagar?
+Quanto está em aberto?
+De onde veio esse valor?
+```
+
+### 8.2 Uso principal
+
+* rotina mensal de pagamentos;
+* controle de valores em aberto;
+* priorização de repasses;
+* conferência antes de fazer Pix ou transferência.
+
+### 8.3 Filtros
+
+Filtros recomendados:
+
+* período;
+* recebedor;
+* tipo de recebedor;
+* empresa;
+* evento;
+* gateway;
+* status;
+* ambiente.
+
+### 8.4 Colunas recomendadas
+
+| Coluna          | Descrição                           |
+| --------------- | ----------------------------------- |
+| Recebedor       | Sócio ou representante              |
+| Tipo            | Sócio ou representante              |
+| Gateway         | Gateway de origem                   |
+| Empresa         | Empresa vinculada                   |
+| Evento          | Evento relacionado                  |
+| Vendas pagas    | Quantidade de vendas consideradas   |
+| Valor gerado    | Comissão total gerada               |
+| Valor pago      | Valor já pago manualmente           |
+| Saldo em aberto | Valor pendente                      |
+| Status          | Pendente manual ou Parcial manual   |
+| Última baixa    | Data do último pagamento registrado |
+
+### 8.5 Regra de exibição
+
+Esse relatório deve mostrar apenas comissões que dependem de ação manual.
+
+Não deve listar como pendente aquilo que já foi pago automaticamente via split.
+
+---
+
+## 9. Formatos de exportação
+
+No MVP, os relatórios devem priorizar formatos simples.
+
+Formatos recomendados:
+
+* PDF;
+* Excel ou CSV.
+
+### 9.1 PDF
+
+Uso recomendado:
+
+* enviar ao representante;
+* arquivar prestação de contas;
+* gerar conferência visual.
+
+### 9.2 Excel ou CSV
+
+Uso recomendado:
+
+* análise interna;
+* conferência financeira;
+* filtro e manipulação pelo Developer.
+
+---
+
+## 10. Layout dos relatórios
+
+Os relatórios devem ser simples.
+
+Cada relatório deve conter:
+
+* título;
+* período filtrado;
+* data de emissão;
+* usuário emissor, quando interno;
+* filtros aplicados;
+* resumo financeiro;
+* tabela de detalhes;
+* totalizadores finais.
+
+---
+
+## 11. Totalizadores
+
+### 11.1 Relatório Interno Completo
+
+Totalizadores recomendados:
+
+* total vendido;
+* taxa total da plataforma;
+* total Marketplace;
+* total sócio;
+* total representante;
+* total pago via split;
+* total pago manualmente;
+* total em aberto.
+
+### 11.2 Relatório do Representante
+
+Totalizadores recomendados:
+
+* comissão total gerada;
+* total pago;
+* saldo em aberto;
+* quantidade de empresas;
+* quantidade de eventos;
+* quantidade de vendas pagas.
+
+### 11.3 Relatório de Pendências
+
+Totalizadores recomendados:
+
+* total em aberto;
+* total pendente para representantes;
+* total pendente para sócio;
+* quantidade de recebedores com saldo;
+* quantidade de vendas envolvidas.
+
+---
+
+## 12. Data-base dos relatórios
+
+A data-base principal deve ser a data de confirmação do pagamento.
+
+Isso significa:
+
+* venda confirmada em junho entra no relatório de junho;
+* venda pendente em junho, mas confirmada em julho, entra em julho;
+* venda cancelada ou não confirmada não entra no relatório.
+
+---
+
+## 13. Relação com gateways
+
+Os relatórios devem identificar o gateway utilizado.
+
+Exemplos:
+
+* Asaas;
+* Mercado Pago;
+* PayPal;
+* outros futuros gateways.
+
+O relatório deve diferenciar:
+
+* comissão paga via split automático;
+* comissão pendente de repasse manual;
+* comissão paga manualmente.
+
+---
+
+## 14. Relação com baixa manual
+
+Quando houver baixa manual, o relatório deve exibir:
+
+* valor pago;
+* data da baixa;
+* forma de pagamento;
+* observação, quando existir.
+
+A observação não deve ser obrigatória no relatório, mas deve aparecer quando preenchida.
+
+---
+
+## 15. Relatórios e segurança
+
+Relatórios internos são sigilosos.
+
+Relatórios externos devem ser filtrados.
+
+O sistema não deve permitir que um relatório externo revele dados de outros recebedores.
+
+A geração do relatório deve respeitar o perfil do usuário.
+
+---
+
+## 16. Auditoria de emissão
+
+Sempre que possível, a emissão de relatórios internos deve ser auditável.
+
+Informações recomendadas:
+
+* usuário que emitiu;
+* data e hora da emissão;
+* filtros utilizados;
+* tipo de relatório emitido.
+
+Essa regra pode ser implementada de forma simples no MVP, sem criar um fluxo pesado.
+
+---
+
+## 17. O que não pode acontecer
+
+Os relatórios não podem:
+
+* recalcular comissão fora do ledger;
+* incluir vendas pendentes;
+* incluir vendas canceladas;
+* mostrar dados da Marketplace ao representante;
+* mostrar dados do sócio ao representante;
+* mostrar dados de outros representantes;
+* misturar sandbox com produção sem identificação;
+* exibir como pendente valor pago via split;
+* omitir saldo em aberto de repasse manual;
+* permitir exportação completa para perfil não autorizado;
+* gerar relatório externo com dados sigilosos internos.
+
+---
+
+## 18. Critérios de aceite
+
+O PRD estará atendido quando:
+
+* o Developer conseguir emitir relatório interno completo;
+* o Developer conseguir emitir relatório filtrado por representante;
+* o relatório do representante mostrar somente dados dele;
+* o relatório de pendências mostrar apenas valores que exigem repasse manual;
+* vendas pendentes e canceladas ficarem fora dos relatórios;
+* data-base principal for a confirmação do pagamento;
+* gateways forem identificados nos relatórios;
+* status de liquidação aparecer de forma clara;
+* valores pagos via split não aparecerem como pendência manual;
+* baixas manuais aparecerem com valor, data e forma de pagamento;
+* totalizadores forem exibidos corretamente;
+* relatórios puderem ser exportados em PDF e Excel ou CSV;
+* dados sensíveis ficarem restritos ao Developer.
+
+---
+
+## 19. Fora do escopo deste PRD
+
+Este PRD não cobre:
+
+* implementação da tela principal de Comissões e Repasses;
+* criação do ledger interno;
+* implementação do Mercado Pago;
+* alteração da regra oficial da taxa;
+* painel público do representante;
+* envio automático de relatório por e-mail ou WhatsApp;
+* anexos de comprovantes;
+* fechamento contábil formal;
+* reembolso, estorno ou chargeback.
+
+---
+
+## 20. Relação com outros PRDs
+
+Este PRD depende conceitualmente de:
+
+* PRD 01 — Comissões e Repasses da Plataforma;
+* PRD 02 — Ledger Interno de Comissões da Plataforma.
+
+Este PRD poderá apoiar futuros documentos sobre:
+
+* Mercado Pago;
+* múltiplos gateways;
+* painel do representante;
+* auditoria financeira;
+* automação de repasses.
+
+---
+
+## 21. Próximo passo recomendado
+
+Após aprovação deste PRD, solicitar ao Codex uma validação técnica sobre:
+
+* quais relatórios já existem no sistema;
+* se há estrutura atual de exportação PDF, Excel ou CSV reaproveitável;
+* quais dados já existem no ledger atual;
+* quais dados faltam para relatório do representante;
+* quais permissões precisam ser protegidas;
+* quais rotas/telas podem ser reaproveitadas;
+* como evitar exposição indevida de dados sensíveis;
+* qual seria a implementação mínima para relatórios confiáveis.

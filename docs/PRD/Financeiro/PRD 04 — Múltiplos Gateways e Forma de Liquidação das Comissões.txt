@@ -1,0 +1,544 @@
+# PRD 04 — Múltiplos Gateways e Forma de Liquidação das Comissões
+
+## 1. Objetivo
+
+Definir como o SmartBus BR deve tratar múltiplos gateways de pagamento sem alterar a regra oficial de comissão da plataforma, sócio e representante.
+
+Este PRD estabelece que o gateway de pagamento é responsável por processar a cobrança e confirmar o pagamento, mas não deve ser a fonte da regra de divisão financeira interna do SmartBus BR.
+
+O sistema deve estar preparado para operar com:
+
+* Asaas;
+* Mercado Pago;
+* PayPal;
+* outros gateways futuros;
+* bancos ou provedores de pagamento que venham a ser integrados.
+
+A regra principal é:
+
+```text
+O gateway confirma o pagamento.
+O SmartBus BR calcula e registra a comissão.
+A forma de liquidação depende da capacidade do gateway.
+```
+
+---
+
+## 2. Contexto
+
+Atualmente, o SmartBus BR utiliza o Asaas como gateway principal.
+
+O Asaas permite split automático para os envolvidos, quando a configuração está correta.
+
+Com a entrada de novos gateways, como Mercado Pago, nem sempre será possível liquidar automaticamente todos os recebedores.
+
+Por isso, o sistema precisa diferenciar:
+
+* pagamento da venda;
+* cálculo da comissão;
+* forma de liquidação da comissão;
+* repasse automático;
+* repasse manual.
+
+---
+
+## 3. Regra de ouro
+
+Todo gateway deve seguir o mesmo fluxo financeiro interno do SmartBus BR.
+
+Não deve existir uma regra de comissão para Asaas e outra para Mercado Pago.
+
+A regra de taxa, divisão e ledger deve ser única.
+
+O que muda entre gateways é apenas a forma de cobrança, confirmação e liquidação externa.
+
+---
+
+## 4. Conceitos principais
+
+## 4.1 Gateway de pagamento
+
+É o provedor responsável por processar a cobrança do cliente.
+
+Exemplos:
+
+* Asaas;
+* Mercado Pago;
+* PayPal;
+* outros futuros gateways.
+
+## 4.2 Pagamento da venda
+
+É a confirmação de que o comprador pagou a passagem, passeio, evento ou viagem.
+
+Somente vendas pagas entram no financeiro de comissões.
+
+## 4.3 Comissão calculada
+
+É o valor definido pela regra oficial do SmartBus BR para Marketplace, sócio e representante.
+
+Esse valor deve ser calculado pelo sistema, não pelo gateway.
+
+## 4.4 Liquidação da comissão
+
+É a forma como o valor de cada recebedor foi ou será pago.
+
+Pode ser:
+
+* split automático;
+* repasse manual;
+* não aplicável;
+* bloqueado.
+
+## 4.5 Repasse manual
+
+É o pagamento feito fora do gateway, normalmente via Pix, transferência ou outro meio.
+
+O Developer registra esse pagamento na tela de Comissões e Repasses.
+
+---
+
+## 5. Tipos de gateway
+
+O SmartBus BR deve classificar cada gateway conforme sua capacidade de liquidação.
+
+## 5.1 Gateway com split completo
+
+Gateway que consegue liquidar automaticamente todos os recebedores aplicáveis.
+
+Exemplo atual:
+
+```text
+Asaas
+```
+
+Cenário esperado:
+
+* empresa recebe sua parte;
+* Marketplace recebe sua parte;
+* sócio recebe sua parte;
+* representante recebe sua parte, quando aplicável.
+
+A tela de Comissões e Repasses deve exibir esses valores como:
+
+```text
+Pago via split
+```
+
+Não deve permitir baixa manual.
+
+---
+
+## 5.2 Gateway com split parcial
+
+Gateway que consegue liquidar automaticamente apenas parte dos envolvidos.
+
+Exemplo previsto:
+
+```text
+Mercado Pago
+```
+
+Cenário possível:
+
+* empresa recebe sua parte;
+* Marketplace recebe sua comissão;
+* sócio não recebe automaticamente;
+* representante não recebe automaticamente.
+
+Nesse caso, o sistema deve registrar:
+
+* Marketplace como recebida/conferida conforme regra do gateway;
+* sócio como pendente de repasse manual;
+* representante como pendente de repasse manual.
+
+---
+
+## 5.3 Gateway sem split
+
+Gateway que apenas cobra o comprador e envia o valor para uma conta principal, sem dividir automaticamente entre os envolvidos.
+
+Cenário possível:
+
+* pagamento é confirmado;
+* SmartBus BR calcula a comissão;
+* sistema registra os valores devidos;
+* repasses precisam ser controlados manualmente.
+
+Esse tipo de gateway deve ser suportado no futuro sem quebrar a estrutura do sistema.
+
+---
+
+## 6. Regra por empresa
+
+A configuração do gateway deve ser por empresa.
+
+Cada empresa pode ter sua própria configuração de pagamento.
+
+A empresa pode usar:
+
+* Asaas;
+* Mercado Pago;
+* outro gateway habilitado;
+* gateway padrão definido pela plataforma, se aplicável.
+
+O gateway escolhido deve ser registrado na venda.
+
+O sistema deve permitir saber, em cada venda paga:
+
+* qual empresa vendeu;
+* qual gateway processou o pagamento;
+* qual ambiente foi usado;
+* qual forma de liquidação foi aplicada.
+
+---
+
+## 7. Gateway na venda
+
+Toda venda online paga deve possuir identificação do gateway utilizado.
+
+Informações conceituais esperadas:
+
+* gateway de pagamento;
+* ambiente;
+* identificador externo do pagamento;
+* status externo do pagamento;
+* data de confirmação;
+* forma de liquidação das comissões;
+* vínculo com ledger interno.
+
+Exemplo de gateways:
+
+```text
+asaas
+mercado_pago
+paypal
+outro
+```
+
+---
+
+## 8. Ambiente
+
+Todo gateway deve respeitar ambiente de pagamento.
+
+Ambientes mínimos:
+
+* produção;
+* sandbox.
+
+A configuração de ambiente deve ser por empresa.
+
+O sistema não deve misturar:
+
+* venda de produção com liquidação de sandbox;
+* venda de sandbox com relatório de produção;
+* webhook de produção com pagamento de sandbox;
+* credenciais de um ambiente com outro.
+
+---
+
+## 9. Fluxo padrão de pagamento
+
+O fluxo financeiro padrão deve ser:
+
+1. cliente realiza compra;
+2. sistema cria venda com status inicial;
+3. sistema cria cobrança no gateway configurado;
+4. gateway retorna identificador externo;
+5. pagamento é confirmado por webhook, consulta ou fallback aprovado;
+6. venda muda para paga;
+7. sistema aplica regra oficial de comissão;
+8. sistema grava lançamentos no ledger;
+9. sistema identifica forma de liquidação por recebedor;
+10. tela de Comissões e Repasses exibe o resultado.
+
+---
+
+## 10. Fluxo com gateway de split completo
+
+Exemplo: Asaas.
+
+Quando a venda for paga e o split tiver sido processado corretamente:
+
+* venda fica paga;
+* comissão é registrada no ledger;
+* recebedores liquidados via split ficam com status Pago via split;
+* não existe obrigação manual;
+* não existe botão de baixa manual;
+* relatório interno mostra a liquidação automática;
+* relatório do representante pode mostrar que a comissão foi paga via split.
+
+---
+
+## 11. Fluxo com gateway de split parcial
+
+Exemplo: Mercado Pago.
+
+Quando a venda for paga:
+
+* venda fica paga;
+* comissão é calculada pelo SmartBus BR;
+* Marketplace pode receber sua parte pelo próprio gateway;
+* sócio pode ficar pendente de repasse manual;
+* representante pode ficar pendente de repasse manual;
+* tela de Comissões e Repasses mostra os valores em aberto;
+* Developer pode registrar baixa parcial ou total.
+
+---
+
+## 12. Fluxo com gateway sem split
+
+Quando a venda for paga:
+
+* venda fica paga;
+* comissão é calculada pelo SmartBus BR;
+* ledger registra valores dos recebedores;
+* sistema identifica quem recebeu e quem ainda precisa receber;
+* valores não liquidados automaticamente ficam pendentes de repasse manual.
+
+---
+
+## 13. Forma de liquidação por recebedor
+
+A forma de liquidação deve ser definida por recebedor, não apenas por gateway.
+
+Isso é importante porque um mesmo gateway pode liquidar um recebedor automaticamente e outro manualmente.
+
+Exemplo Mercado Pago:
+
+| Recebedor     | Liquidação |
+| ------------- | ---------- |
+| Marketplace   | Gateway    |
+| Sócio         | Manual     |
+| Representante | Manual     |
+
+Exemplo Asaas:
+
+| Recebedor     | Liquidação       |
+| ------------- | ---------------- |
+| Marketplace   | Split automático |
+| Sócio         | Split automático |
+| Representante | Split automático |
+
+---
+
+## 14. Status por recebedor
+
+Cada recebedor deve ter seu próprio status de comissão.
+
+Status mínimos:
+
+* Pago via split;
+* Pendente manual;
+* Parcial manual;
+* Pago manual;
+* Bloqueado;
+* Não aplicável.
+
+A venda pode estar paga, mas a comissão de um recebedor pode estar pendente.
+
+Isso deve ficar claro no sistema.
+
+---
+
+## 15. Marketplace
+
+A Marketplace deve ser registrada no ledger para auditoria.
+
+Quando o gateway pagar a Marketplace automaticamente:
+
+* registrar como liquidada pelo gateway;
+* exibir no relatório interno;
+* não exigir baixa manual.
+
+A Marketplace não deve ser tratada como pendência manual no MVP, salvo se um gateway futuro exigir regra específica documentada.
+
+---
+
+## 16. Sócio
+
+No MVP, existe apenas um sócio global da SmartBus.
+
+Quando o gateway liquidar a parte do sócio via split:
+
+* registrar como Pago via split;
+* não permitir baixa manual.
+
+Quando o gateway não liquidar a parte do sócio:
+
+* registrar como Pendente manual;
+* permitir baixa parcial ou total pelo Developer.
+
+---
+
+## 17. Representante
+
+O representante recebe comissão pelas vendas pagas das empresas cadastradas por seu link de indicação.
+
+Quando o gateway liquidar a parte do representante via split:
+
+* registrar como Pago via split;
+* não permitir baixa manual.
+
+Quando o gateway não liquidar a parte do representante:
+
+* registrar como Pendente manual;
+* permitir baixa parcial ou total pelo Developer.
+
+---
+
+## 18. Gateways e relatórios
+
+Todos os relatórios financeiros devem identificar o gateway da venda.
+
+Relatórios devem diferenciar:
+
+* comissão paga via split automático;
+* comissão pendente manual;
+* comissão paga manualmente;
+* comissão bloqueada.
+
+O relatório não deve mostrar como pendente um valor que já foi pago por split automático.
+
+---
+
+## 19. Configuração administrativa
+
+A escolha do gateway deve ser configurável por empresa.
+
+A tela de configuração da empresa deve permitir, quando implementado:
+
+* visualizar gateway ativo;
+* configurar credenciais;
+* identificar ambiente;
+* validar integração;
+* mostrar status de operação.
+
+Este PRD não define a tela de configuração de cada gateway específico.
+
+---
+
+## 20. Diagnóstico administrativo
+
+O diagnóstico financeiro deve permitir identificar:
+
+* venda;
+* empresa;
+* gateway;
+* ambiente;
+* status da venda;
+* status externo do pagamento;
+* forma de liquidação;
+* recebedores envolvidos;
+* valores calculados;
+* valores liquidados automaticamente;
+* valores pendentes manualmente;
+* inconsistências.
+
+---
+
+## 21. Regra para novos gateways
+
+Todo novo gateway deve ser integrado seguindo este contrato conceitual.
+
+Antes de implementar um novo gateway, deve ser definido:
+
+* se possui split completo;
+* se possui split parcial;
+* se não possui split;
+* quem recebe automaticamente;
+* quem depende de repasse manual;
+* como confirma pagamento;
+* como identifica pagamento externo;
+* como registra ambiente;
+* como alimenta o ledger interno.
+
+---
+
+## 22. O que não pode acontecer
+
+O sistema não pode:
+
+* criar uma regra de comissão diferente por gateway;
+* tratar Mercado Pago como se fosse Asaas;
+* tratar Asaas como se exigisse baixa manual quando o split já liquidou;
+* deixar venda paga sem gateway identificado;
+* deixar comissão sem forma de liquidação;
+* permitir baixa manual de valor pago via split;
+* mostrar comissão paga via split como pendente;
+* misturar sandbox e produção;
+* misturar empresas sem rastreabilidade;
+* expor dados internos da Marketplace para representantes ou empresas;
+* recalcular comissão no front-end;
+* criar fluxo paralelo de comissão fora do ledger.
+
+---
+
+## 23. Critérios de aceite
+
+Este PRD estará atendido quando:
+
+* toda venda paga possuir gateway identificado;
+* o sistema diferenciar gateway com split completo, parcial ou sem split;
+* a forma de liquidação for registrada por recebedor;
+* Asaas com split automático gerar status Pago via split;
+* Mercado Pago puder gerar pendência manual para sócio e representante;
+* futuros gateways puderem usar o mesmo modelo;
+* baixa manual só existir para liquidação manual;
+* relatórios identificarem gateway e forma de liquidação;
+* tela de Comissões e Repasses mostrar corretamente o que está pago e o que está pendente;
+* comissão não for recalculada no front-end;
+* dados de produção e sandbox não forem misturados;
+* dados sensíveis ficarem restritos ao Developer.
+
+---
+
+## 24. Fora do escopo deste PRD
+
+Este PRD não cobre:
+
+* implementação específica do Mercado Pago;
+* implementação específica do PayPal;
+* criação da tela de configuração de gateways;
+* criação de migrations;
+* alteração da regra oficial da taxa;
+* alteração do checkout público;
+* alteração do webhook Asaas;
+* criação de painel do representante;
+* automação de Pix ou transferência;
+* conciliação bancária externa.
+
+---
+
+## 25. Relação com outros PRDs
+
+Este PRD depende conceitualmente de:
+
+* PRD 01 — Comissões e Repasses da Plataforma;
+* PRD 02 — Ledger Interno de Comissões da Plataforma;
+* PRD 03 — Relatórios de Comissões e Prestação de Contas.
+
+Este PRD será base para:
+
+* PRD Mercado Pago;
+* PRD PayPal;
+* PRD Configuração de Gateways por Empresa;
+* PRD Diagnóstico Financeiro Multi-gateway;
+* PRD de conciliação futura.
+
+---
+
+## 26. Próximo passo recomendado
+
+Após aprovação deste PRD, solicitar ao Codex uma validação técnica sobre:
+
+* onde o sistema hoje está acoplado ao Asaas;
+* se existe campo de gateway persistido em vendas;
+* quais tabelas precisam identificar gateway;
+* como adaptar o ledger para liquidação por recebedor;
+* quais pontos do checkout dependem diretamente do Asaas;
+* quais edge functions precisam ser abstraídas;
+* quais telas precisam exibir gateway;
+* quais riscos existem para múltiplos gateways;
+* como implementar isso com mudanças mínimas e sem refatoração grande.

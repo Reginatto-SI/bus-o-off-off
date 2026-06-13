@@ -1,0 +1,560 @@
+# PRD 05 — Configuração de Gateway por Empresa
+
+## 1. Objetivo
+
+Definir como o SmartBus BR deve permitir que cada empresa configure seu próprio gateway de pagamento.
+
+A configuração de gateway por empresa deve permitir que o sistema opere com diferentes provedores de pagamento, mantendo isolamento por empresa, ambiente e credenciais.
+
+O objetivo principal é permitir que uma empresa venda pelo Asaas, outra pelo Mercado Pago e outras futuramente por PayPal ou novos provedores, sem criar fluxos paralelos desnecessários.
+
+---
+
+## 2. Contexto
+
+O SmartBus BR nasceu com o Asaas como gateway principal.
+
+Com a evolução do produto, o sistema deve suportar múltiplos gateways de pagamento.
+
+Cada empresa poderá ter sua própria configuração, pois:
+
+* cada empresa pode ter sua própria conta no gateway;
+* cada empresa pode usar um gateway diferente;
+* cada empresa pode operar em sandbox ou produção;
+* cada empresa pode ter credenciais próprias;
+* cada gateway pode ter capacidades diferentes de split e liquidação.
+
+A configuração deve ser simples para operação e segura para o sistema.
+
+---
+
+## 3. Regra de ouro
+
+A configuração de pagamento deve ser por empresa.
+
+Nenhuma venda deve ser criada sem identificar claramente:
+
+* empresa;
+* gateway;
+* ambiente;
+* configuração usada;
+* identificador externo do pagamento, quando existir.
+
+O sistema não deve misturar credenciais, ambientes ou dados financeiros entre empresas.
+
+---
+
+## 4. Público e permissões
+
+A configuração de gateway deve ser acessível apenas a perfis administrativos autorizados.
+
+### 4.1 Developer
+
+O Developer pode:
+
+* visualizar todos os gateways configurados;
+* configurar gateway de qualquer empresa;
+* validar integração;
+* diagnosticar erros;
+* alternar gateway ativo da empresa;
+* consultar ambiente;
+* acessar informações técnicas necessárias;
+* visualizar status operacional.
+
+### 4.2 Administrador da empresa
+
+O acesso do administrador da empresa deve ser definido com cautela.
+
+No MVP, recomenda-se que o administrador da empresa não configure diretamente integrações sensíveis de gateway, salvo fluxo já existente e validado.
+
+Caso a empresa tenha permissão futura para configurar, a tela deve limitar campos sensíveis e impedir exposição de dados internos da plataforma.
+
+### 4.3 Usuário comum
+
+Usuário comum não deve acessar nenhuma configuração de gateway.
+
+---
+
+## 5. Local sugerido da configuração
+
+A configuração deve ficar preferencialmente dentro da área administrativa da empresa.
+
+Tela sugerida:
+
+```text
+/admin/empresa
+```
+
+A seção pode se chamar:
+
+```text
+Pagamentos
+```
+
+ou
+
+```text
+Gateways de Pagamento
+```
+
+Se o sistema crescer, pode existir uma tela dedicada futura:
+
+```text
+/admin/gateways
+```
+
+No MVP, recomenda-se reaproveitar o padrão já existente em `/admin/empresa`, evitando criar tela nova sem necessidade.
+
+---
+
+## 6. Modelo conceitual da configuração
+
+Cada empresa deve poder ter configurações de gateway.
+
+Cada configuração deve possuir, conceitualmente:
+
+* empresa;
+* gateway;
+* ambiente;
+* status da configuração;
+* credenciais necessárias;
+* identificadores externos;
+* capacidade de split;
+* forma de liquidação padrão;
+* data de validação;
+* usuário que configurou;
+* logs de diagnóstico.
+
+---
+
+## 7. Gateways suportados
+
+Gateways mínimos previstos:
+
+```text
+asaas
+mercado_pago
+paypal
+outro
+```
+
+No MVP, pode existir apenas Asaas e Mercado Pago, mas a estrutura não deve impedir novos gateways.
+
+---
+
+## 8. Gateway ativo da empresa
+
+Cada empresa deve possuir um gateway ativo para venda online.
+
+O sistema deve saber qual gateway usar no momento de criar a cobrança.
+
+Regras:
+
+* empresa pode ter mais de um gateway configurado;
+* apenas um gateway deve ser o principal para novas vendas, salvo regra futura;
+* a venda deve salvar qual gateway foi utilizado no momento da cobrança;
+* trocar o gateway ativo não deve alterar vendas antigas;
+* vendas antigas devem continuar vinculadas ao gateway usado originalmente.
+
+---
+
+## 9. Ambiente por empresa
+
+Cada configuração de gateway deve respeitar ambiente.
+
+Ambientes mínimos:
+
+```text
+sandbox
+production
+```
+
+Regras obrigatórias:
+
+* o ambiente deve vir da configuração da empresa;
+* produção e sandbox não devem ser misturados;
+* credenciais de sandbox não devem ser usadas em produção;
+* credenciais de produção não devem ser usadas em sandbox;
+* relatórios devem conseguir identificar ambiente;
+* vendas de sandbox não devem contaminar financeiro de produção.
+
+---
+
+## 10. Credenciais
+
+As credenciais do gateway devem ser tratadas como dados sensíveis.
+
+O sistema não deve expor chaves completas no front-end.
+
+Quando necessário, a interface pode exibir apenas indicação de preenchimento, como:
+
+```text
+Configurado
+Não configurado
+```
+
+ou uma versão mascarada, quando aplicável.
+
+Exemplo:
+
+```text
+••••••••••••1234
+```
+
+As chamadas externas devem ser feitas por camada segura, nunca diretamente pelo front-end com credenciais expostas.
+
+---
+
+## 11. Status da configuração
+
+Cada gateway configurado por empresa deve ter um status operacional.
+
+Status sugeridos:
+
+### 11.1 Não configurado
+
+A empresa ainda não possui dados suficientes para usar o gateway.
+
+### 11.2 Configurado
+
+Dados mínimos foram preenchidos, mas ainda não houve validação completa.
+
+### 11.3 Validado
+
+A integração foi testada e está apta para uso.
+
+### 11.4 Inconsistente
+
+Existem dados preenchidos, mas a validação encontrou problema.
+
+### 11.5 Inativo
+
+Gateway configurado, mas não está ativo para novas vendas.
+
+### 11.6 Erro
+
+O gateway retornou falha operacional relevante.
+
+---
+
+## 12. Capacidade de split
+
+Cada configuração de gateway deve informar qual tipo de split ou liquidação ele suporta.
+
+Tipos:
+
+```text
+split_completo
+split_parcial
+sem_split
+```
+
+### 12.1 Split completo
+
+Gateway consegue liquidar automaticamente Marketplace, sócio e representante.
+
+Exemplo:
+
+```text
+Asaas
+```
+
+### 12.2 Split parcial
+
+Gateway consegue liquidar parte dos envolvidos, mas outros dependem de repasse manual.
+
+Exemplo previsto:
+
+```text
+Mercado Pago
+```
+
+### 12.3 Sem split
+
+Gateway apenas processa cobrança e exige controle manual dos repasses.
+
+---
+
+## 13. Forma de liquidação padrão
+
+A configuração do gateway deve orientar como o ledger tratará os recebedores.
+
+Exemplo Asaas:
+
+| Recebedor     | Liquidação       |
+| ------------- | ---------------- |
+| Marketplace   | Split automático |
+| Sócio         | Split automático |
+| Representante | Split automático |
+
+Exemplo Mercado Pago:
+
+| Recebedor     | Liquidação     |
+| ------------- | -------------- |
+| Marketplace   | Gateway        |
+| Sócio         | Repasse manual |
+| Representante | Repasse manual |
+
+A forma de liquidação final deve ser registrada por venda e por recebedor no ledger interno.
+
+---
+
+## 14. Validação da integração
+
+A tela de configuração deve permitir validar se o gateway está apto para uso.
+
+A validação deve verificar, conforme cada gateway:
+
+* credenciais;
+* ambiente;
+* conta vinculada;
+* capacidade de cobrança;
+* capacidade de split, quando aplicável;
+* identificadores necessários;
+* status operacional;
+* dados obrigatórios ausentes.
+
+A validação deve retornar mensagens claras.
+
+Exemplos:
+
+```text
+Gateway validado com sucesso.
+Credencial inválida.
+Ambiente divergente.
+Conta não apta para cobrança.
+Wallet ausente.
+Split indisponível.
+```
+
+---
+
+## 15. Diagnóstico
+
+A configuração deve oferecer diagnóstico básico para Developer.
+
+O diagnóstico deve mostrar:
+
+* gateway;
+* empresa;
+* ambiente;
+* status;
+* última validação;
+* último erro;
+* campos obrigatórios pendentes;
+* capacidade de split;
+* forma de liquidação prevista;
+* se pode vender online ou não.
+
+---
+
+## 16. Bloqueio de venda
+
+Uma empresa não deve vender online por um gateway inválido.
+
+Regras:
+
+* se o gateway ativo estiver inválido, o checkout não deve iniciar cobrança online;
+* se faltar credencial obrigatória, bloquear criação de cobrança;
+* se ambiente estiver inconsistente, bloquear criação de cobrança;
+* erro deve ser claro para suporte/admin;
+* usuário final não deve ver mensagens técnicas sensíveis.
+
+---
+
+## 17. Troca de gateway ativo
+
+O Developer pode alterar o gateway ativo da empresa.
+
+Regras:
+
+* a alteração vale apenas para novas vendas;
+* vendas antigas mantêm o gateway original;
+* relatórios devem continuar identificando corretamente vendas antigas;
+* a troca deve gerar log;
+* a troca não deve apagar configuração anterior;
+* a troca não deve alterar status de comissões já geradas.
+
+---
+
+## 18. Relação com venda
+
+Toda venda online criada após a configuração deve salvar:
+
+* gateway usado;
+* ambiente usado;
+* empresa;
+* identificador externo do pagamento;
+* status externo;
+* referência interna;
+* data de confirmação, quando paga.
+
+Essa informação é obrigatória para:
+
+* confirmação de pagamento;
+* ledger de comissões;
+* relatórios;
+* diagnóstico;
+* auditoria.
+
+---
+
+## 19. Relação com ledger
+
+A configuração do gateway deve orientar o ledger sobre a forma de liquidação.
+
+Exemplo:
+
+* Asaas com split completo gera comissão como Pago via split;
+* Mercado Pago gera comissão do sócio e representante como Pendente manual;
+* gateway sem split gera pendências manuais conforme regra aplicável.
+
+A configuração não altera a regra oficial da taxa.
+
+Ela apenas indica como cada comissão será liquidada.
+
+---
+
+## 20. Relação com relatórios
+
+Relatórios devem usar a informação de gateway configurado e gateway usado na venda para exibir:
+
+* gateway;
+* ambiente;
+* forma de liquidação;
+* valores pagos via split;
+* valores pendentes manualmente;
+* valores pagos manualmente.
+
+---
+
+## 21. Segurança
+
+A configuração de gateway envolve dados sensíveis.
+
+O sistema deve garantir:
+
+* credenciais não expostas no front-end;
+* acesso restrito por perfil;
+* logs sem vazamento de chave;
+* uso de camada segura para chamadas externas;
+* isolamento por empresa;
+* separação de sandbox e produção.
+
+---
+
+## 22. Logs obrigatórios
+
+O sistema deve registrar logs para eventos importantes:
+
+* criação de configuração;
+* alteração de gateway ativo;
+* validação realizada;
+* erro de validação;
+* troca de ambiente;
+* atualização de credenciais;
+* inativação de gateway;
+* tentativa de venda com gateway inválido.
+
+Logs devem registrar:
+
+* empresa;
+* gateway;
+* ambiente;
+* usuário responsável;
+* data/hora;
+* resultado;
+* mensagem resumida.
+
+---
+
+## 23. O que não pode acontecer
+
+O sistema não pode:
+
+* usar gateway sem configuração válida;
+* misturar credenciais entre empresas;
+* misturar sandbox e produção;
+* expor API key completa no front-end;
+* alterar vendas antigas ao trocar gateway ativo;
+* recalcular comissões por causa da troca de gateway;
+* criar regra financeira diferente por gateway;
+* permitir venda online com integração inconsistente;
+* mostrar erro técnico sensível para comprador;
+* depender exclusivamente de configuração global;
+* tratar todo gateway como se fosse Asaas.
+
+---
+
+## 24. Critérios de aceite
+
+Este PRD estará atendido quando:
+
+* cada empresa puder ter configuração própria de gateway;
+* o gateway ativo da empresa for identificado;
+* a venda salvar o gateway usado;
+* a venda salvar o ambiente usado;
+* a troca de gateway afetar apenas novas vendas;
+* credenciais sensíveis não forem expostas;
+* validação de gateway retornar status claro;
+* gateway inválido bloquear cobrança online;
+* Asaas continuar funcionando conforme regra atual;
+* Mercado Pago puder ser configurado por empresa futuramente;
+* a configuração informar capacidade de split;
+* o ledger conseguir identificar forma de liquidação;
+* relatórios conseguirem filtrar por gateway;
+* sandbox e produção não forem misturados;
+* logs registrarem alterações e validações relevantes.
+
+---
+
+## 25. Fora do escopo deste PRD
+
+Este PRD não cobre:
+
+* implementação específica do Mercado Pago;
+* implementação específica do PayPal;
+* criação de cobranças em cada gateway;
+* webhook específico de cada gateway;
+* regra oficial de taxa da plataforma;
+* tela de Comissões e Repasses;
+* relatórios de comissões;
+* criação de painel público para representante;
+* automação de repasse via Pix;
+* conciliação bancária externa.
+
+---
+
+## 26. Relação com outros PRDs
+
+Este PRD depende conceitualmente de:
+
+* PRD 01 — Comissões e Repasses da Plataforma;
+* PRD 02 — Ledger Interno de Comissões da Plataforma;
+* PRD 03 — Relatórios de Comissões e Prestação de Contas;
+* PRD 04 — Múltiplos Gateways e Forma de Liquidação das Comissões.
+
+Este PRD será base para:
+
+* PRD Mercado Pago;
+* PRD PayPal;
+* PRD Diagnóstico de Gateway;
+* PRD Checkout multi-gateway;
+* PRD Configuração avançada de pagamentos.
+
+---
+
+## 27. Próximo passo recomendado
+
+Após aprovação deste PRD, solicitar ao Codex uma validação técnica sobre:
+
+* onde hoje a configuração Asaas está salva;
+* se a configuração atual suporta múltiplos gateways;
+* quais campos atuais podem ser reaproveitados;
+* quais campos precisariam ser generalizados;
+* como salvar gateway ativo por empresa;
+* como salvar gateway usado na venda;
+* como proteger credenciais;
+* como validar ambiente;
+* como evitar quebrar o Asaas atual;
+* qual seria a implementação mínima para Mercado Pago futuramente.

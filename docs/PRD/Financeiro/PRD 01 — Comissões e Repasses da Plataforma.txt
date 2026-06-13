@@ -1,0 +1,599 @@
+# PRD 01 — Comissões e Repasses da Plataforma
+
+## 1. Objetivo
+
+Criar uma tela administrativa simples, exclusiva para o perfil Developer, para acompanhar as comissões geradas pelas vendas pagas no SmartBus BR e controlar os repasses quando eles não forem liquidados automaticamente pelo gateway de pagamento.
+
+A tela deve permitir que o Developer saiba rapidamente:
+
+* quem tem comissão a receber;
+* quanto está em aberto;
+* quanto já foi pago;
+* qual comissão foi paga automaticamente via split;
+* qual comissão depende de repasse manual;
+* quais vendas pagas originaram os valores;
+* quais empresas, eventos e gateways estão envolvidos;
+* quais relatórios podem ser emitidos para conferência interna ou prestação de contas ao representante.
+
+---
+
+## 2. Contexto
+
+O SmartBus BR trabalha com venda de passagens e eventos de transporte.
+
+Atualmente, o Asaas é o gateway principal e possui split automático para os envolvidos, quando todos estão corretamente configurados.
+
+Com a entrada de novos gateways, como Mercado Pago e futuros provedores de pagamento, nem sempre será possível dividir automaticamente o valor entre todos os envolvidos.
+
+Existem cenários diferentes:
+
+### 2.1 Gateway com split completo
+
+Exemplo: Asaas.
+
+Nesse cenário, o gateway consegue liquidar automaticamente a comissão da Marketplace, do sócio e do representante, quando aplicável.
+
+A tela deve apenas registrar e exibir que a comissão foi paga via split automático.
+
+Não deve existir baixa manual para esses valores.
+
+### 2.2 Gateway com split parcial
+
+Exemplo inicial previsto: Mercado Pago.
+
+Nesse cenário, o gateway pode pagar a empresa/vendedor e a Marketplace, mas não necessariamente consegue liquidar automaticamente sócio e representante.
+
+A tela deve exibir os valores do sócio e do representante como pendentes de repasse manual.
+
+### 2.3 Gateway sem split
+
+Cenário futuro possível.
+
+Nesse cenário, o sistema deve continuar calculando internamente a comissão dos envolvidos e indicar o que precisa ser repassado manualmente.
+
+---
+
+## 3. Regra de ouro
+
+Toda venda paga deve gerar rastreabilidade financeira interna da comissão, independentemente do gateway utilizado.
+
+A tela não deve calcular comissão diretamente no front-end.
+
+A tela deve exibir valores já calculados e persistidos pelo sistema, respeitando a regra oficial de taxa da plataforma, sócio e representante.
+
+---
+
+## 4. Público e permissões
+
+A tela será exclusiva para o perfil Developer.
+
+Somente o Developer poderá:
+
+* visualizar valores da Marketplace;
+* visualizar valores do sócio;
+* visualizar valores de representantes;
+* consultar repasses pendentes;
+* registrar baixa manual;
+* emitir relatórios internos completos;
+* visualizar detalhes financeiros sensíveis por gateway.
+
+Empresas, representantes e usuários comuns não devem acessar essa tela administrativa completa.
+
+Representantes poderão receber relatórios próprios, quando emitidos pelo Developer, contendo apenas informações relacionadas às suas próprias comissões.
+
+---
+
+## 5. Nome sugerido da tela
+
+Nome principal sugerido:
+
+```text
+Comissões e Repasses
+```
+
+Alternativas aceitáveis:
+
+```text
+Financeiro de Comissões
+Comissões da Plataforma
+Repasses da Plataforma
+```
+
+Recomendação: usar **Comissões e Repasses**, por ser simples e direto.
+
+---
+
+## 6. Regra de entrada dos dados
+
+A tela deve considerar apenas vendas com pagamento confirmado.
+
+Entram na tela:
+
+* vendas com status pago;
+* vendas com confirmação válida de pagamento;
+* vendas com comissão calculada;
+* vendas com vínculo de empresa;
+* vendas com gateway identificado;
+* vendas com recebedores aplicáveis.
+
+Não entram na tela:
+
+* vendas pendentes;
+* vendas reservadas;
+* vendas canceladas;
+* vendas sem pagamento confirmado;
+* vendas sem vínculo financeiro válido.
+
+---
+
+## 7. Visão principal da tela
+
+A visão principal deve ser por recebedor, não por evento.
+
+O objetivo é responder rapidamente:
+
+```text
+Quem eu preciso pagar?
+Quanto eu preciso pagar?
+O que já foi pago automaticamente?
+O que ainda está pendente?
+```
+
+A tela deve listar recebedores com saldo ou histórico no período filtrado.
+
+Recebedores possíveis:
+
+* sócio;
+* representante;
+* Marketplace, apenas para conferência interna;
+* outros recebedores futuros, se houver regra documentada.
+
+---
+
+## 8. Cards principais
+
+A tela deve ter cards simples no topo:
+
+### 8.1 Total em aberto
+
+Soma dos valores que ainda dependem de repasse manual.
+
+### 8.2 Total pago manualmente
+
+Soma dos valores já baixados manualmente pelo Developer.
+
+### 8.3 Total pago via split
+
+Soma dos valores liquidados automaticamente pelo gateway.
+
+### 8.4 Representantes a pagar
+
+Total pendente de repasse manual para representantes.
+
+### 8.5 Sócio a pagar
+
+Total pendente de repasse manual para o sócio.
+
+---
+
+## 9. Tabela principal
+
+A tabela principal deve ser simples e objetiva.
+
+Colunas recomendadas:
+
+| Coluna       | Descrição                                                    |
+| ------------ | ------------------------------------------------------------ |
+| Recebedor    | Nome do sócio ou representante                               |
+| Tipo         | Sócio, Representante ou Marketplace                          |
+| Empresas     | Quantidade ou lista resumida de empresas vinculadas ao valor |
+| Vendas pagas | Quantidade de vendas pagas consideradas                      |
+| Gateway      | Gateway de origem das vendas                                 |
+| Liquidação   | Split automático ou Repasse manual                           |
+| Valor gerado | Comissão total gerada                                        |
+| Valor pago   | Valor já liquidado                                           |
+| Em aberto    | Saldo pendente                                               |
+| Status       | Situação atual da comissão                                   |
+| Ação         | Ver detalhes ou registrar pagamento manual                   |
+
+---
+
+## 10. Status da comissão
+
+O MVP deve usar poucos status, evitando complexidade desnecessária.
+
+### 10.1 Pago via split
+
+Usado quando o gateway liquidou automaticamente a comissão do recebedor.
+
+Exemplo:
+
+* Asaas pagou o representante via split;
+* Asaas pagou o sócio via split.
+
+Não permite baixa manual.
+
+### 10.2 Pendente manual
+
+Usado quando a comissão foi gerada, mas o gateway não liquidou automaticamente o recebedor.
+
+Exemplo:
+
+* Mercado Pago gerou comissão do sócio, mas o repasse precisa ser feito manualmente;
+* Mercado Pago gerou comissão do representante, mas o repasse precisa ser feito manualmente.
+
+Permite baixa manual.
+
+### 10.3 Parcial manual
+
+Usado quando parte da comissão já foi paga manualmente, mas ainda existe saldo em aberto.
+
+Permite nova baixa manual.
+
+### 10.4 Pago manual
+
+Usado quando a comissão que dependia de repasse manual foi quitada totalmente.
+
+Não deve aparecer como pendente.
+
+### 10.5 Bloqueado
+
+Usado quando existe comissão prevista, mas algum dado impede a liquidação ou conferência.
+
+Exemplos:
+
+* representante sem cadastro financeiro suficiente;
+* recebedor inconsistente;
+* vínculo ausente;
+* erro de rastreabilidade.
+
+---
+
+## 11. Baixa manual
+
+A baixa manual só deve existir para comissões que dependem de repasse manual.
+
+A baixa manual não deve estar disponível para comissões pagas via split automático.
+
+### 11.1 Quando permitir baixa manual
+
+Permitir quando o status for:
+
+* Pendente manual;
+* Parcial manual.
+
+### 11.2 Quando não permitir baixa manual
+
+Não permitir quando o status for:
+
+* Pago via split;
+* Pago manual;
+* Bloqueado.
+
+### 11.3 Campos da baixa manual
+
+Ao registrar pagamento manual, o Developer deve informar:
+
+* valor pago;
+* data do pagamento;
+* forma de pagamento;
+* observação opcional.
+
+Formas de pagamento sugeridas:
+
+* Pix;
+* Transferência;
+* Outro.
+
+Comprovante não será obrigatório no MVP.
+
+### 11.4 Baixa parcial
+
+A tela deve permitir baixa parcial.
+
+Exemplo:
+
+* representante tem R$ 500,00 em aberto;
+* Developer registra pagamento de R$ 300,00;
+* sistema mantém R$ 200,00 em aberto;
+* status muda para Parcial manual.
+
+---
+
+## 12. Tratamento por gateway
+
+### 12.1 Asaas
+
+Quando o Asaas liquidar a comissão por split automático:
+
+* exibir status Pago via split;
+* não permitir baixa manual;
+* exibir gateway Asaas;
+* exibir origem da liquidação como Split automático;
+* permitir consulta dos detalhes para auditoria.
+
+Se o representante ou sócio já recebeu via split, não deve existir ação manual para esse valor.
+
+### 12.2 Mercado Pago
+
+No cenário inicial do Mercado Pago:
+
+* a empresa recebe sua parte conforme o fluxo do gateway;
+* a Marketplace recebe sua comissão conforme configuração do gateway;
+* sócio e representante podem depender de repasse manual;
+* a tela deve mostrar sócio e representante como Pendente manual, quando aplicável;
+* o Developer poderá registrar baixa parcial ou total desses valores.
+
+### 12.3 Futuros gateways
+
+A tela deve suportar novos gateways sem mudar a regra visual principal.
+
+Cada gateway deverá informar se determinada comissão foi:
+
+* liquidada por split automático;
+* recebida pela Marketplace e pendente de repasse;
+* não aplicável;
+* bloqueada por inconsistência.
+
+---
+
+## 13. Filtros
+
+Filtros recomendados para o MVP:
+
+* período;
+* recebedor;
+* tipo de recebedor;
+* empresa;
+* evento;
+* gateway;
+* status;
+* forma de liquidação.
+
+Filtro padrão ao abrir a tela:
+
+```text
+Mês atual + valores em aberto
+```
+
+A tela deve permitir alterar o período livremente.
+
+---
+
+## 14. Detalhamento do recebedor
+
+Ao clicar em um recebedor, a tela deve mostrar os detalhes que compõem o saldo.
+
+Informações recomendadas:
+
+* empresa;
+* evento;
+* venda;
+* data da venda;
+* data da confirmação do pagamento;
+* gateway;
+* valor total da venda;
+* taxa total da plataforma;
+* parte do recebedor;
+* status da comissão;
+* valor pago;
+* saldo em aberto;
+* origem da liquidação;
+* histórico de baixas manuais, quando existir.
+
+---
+
+## 15. Relatórios
+
+A tela deve permitir emissão de relatórios simples e confiáveis.
+
+### 15.1 Relatório interno completo
+
+Uso: Developer.
+
+Deve conter:
+
+* período;
+* gateway;
+* empresa;
+* evento;
+* venda;
+* valor vendido;
+* taxa da plataforma;
+* parte Marketplace;
+* parte sócio;
+* parte representante;
+* status de liquidação;
+* valor pago via split;
+* valor pago manualmente;
+* saldo em aberto.
+
+Esse relatório é sigiloso.
+
+### 15.2 Relatório do representante
+
+Uso: quando o representante solicitar prestação de contas.
+
+Deve conter apenas informações do próprio representante.
+
+Campos recomendados:
+
+* nome do representante;
+* período;
+* empresas indicadas;
+* eventos vendidos;
+* quantidade de vendas pagas;
+* valor base das comissões;
+* comissão gerada;
+* comissão paga;
+* saldo em aberto;
+* data de pagamento, quando houver;
+* forma de pagamento, quando houver.
+
+Não deve exibir:
+
+* comissão da Marketplace;
+* comissão do sócio;
+* regra interna completa da divisão;
+* dados de outros representantes;
+* valores sigilosos da plataforma.
+
+### 15.3 Relatório de pendências
+
+Uso: controle operacional do Developer.
+
+Deve conter:
+
+* recebedor;
+* tipo;
+* valor em aberto;
+* gateway;
+* empresa;
+* evento;
+* período;
+* status.
+
+---
+
+## 16. Fechamento mensal
+
+No MVP, não deve existir processo obrigatório de fechar mês ou fechar evento.
+
+A tela deve funcionar por filtro de período.
+
+Recomendação operacional:
+
+```text
+Fechamento mensal por data de confirmação do pagamento.
+```
+
+Exemplo:
+
+* vendas pagas confirmadas entre 01/06 e 30/06 entram na visão de junho;
+* o Developer pode pagar os valores no início do mês seguinte;
+* pagamentos podem ser totais ou parciais;
+* saldos pendentes continuam visíveis até quitação.
+
+---
+
+## 17. Evento como filtro, não como tela principal
+
+O evento deve ser filtro e detalhe de auditoria.
+
+A tela principal não deve ser organizada primeiro por evento, porque o representante recebe por empresa indicada e pode acumular comissões de vários eventos.
+
+Fluxo correto:
+
+```text
+Recebedor → Empresas indicadas → Vendas pagas → Eventos relacionados
+```
+
+E não:
+
+```text
+Evento → Vendas → Recebedores
+```
+
+---
+
+## 18. Regra do representante
+
+O representante ganha comissão sobre vendas pagas realizadas por empresas cadastradas a partir do seu link de indicação, conforme regra oficial vigente da plataforma.
+
+O vínculo principal do representante é com a empresa indicada.
+
+Quando a empresa indicada realizar vendas pagas de passeios, eventos ou viagens, o sistema deve identificar a comissão do representante conforme regra oficial.
+
+---
+
+## 19. Regra do sócio
+
+No MVP, haverá apenas um sócio global da SmartBus.
+
+O sócio participa da divisão da taxa conforme regra oficial vigente.
+
+Quando o gateway não liquidar automaticamente a parte do sócio, a tela deve mostrar o valor como pendente de repasse manual.
+
+---
+
+## 20. Marketplace
+
+A Marketplace deve aparecer para conferência interna do Developer.
+
+A tela deve exibir a parte da Marketplace para auditoria, mas não deve exigir baixa manual da Marketplace, pois ela recebe sua parte diretamente pelo gateway ou pela estrutura financeira principal da venda.
+
+---
+
+## 21. O que não pode acontecer
+
+A tela não pode:
+
+* exibir vendas pendentes, reservadas ou canceladas como comissão a pagar;
+* permitir baixa manual para comissão paga via split automático;
+* recalcular comissão diretamente no front-end;
+* mostrar dados da Marketplace ou do sócio para representante;
+* mostrar dados financeiros sensíveis para empresa comum;
+* duplicar comissão por venda;
+* gerar comissão sem vínculo com venda paga;
+* misturar empresas diferentes sem respeitar isolamento por empresa;
+* misturar sandbox e produção;
+* confundir pagamento da venda com liquidação da comissão;
+* tratar todo gateway como se fosse Asaas;
+* tratar todo gateway como se exigisse repasse manual.
+
+---
+
+## 22. Critérios de aceite
+
+A tela estará correta quando:
+
+* somente o Developer conseguir acessar;
+* somente vendas pagas entrarem na apuração;
+* vendas pendentes, reservadas e canceladas ficarem fora;
+* Asaas com split automático aparecer como Pago via split;
+* Asaas não permitir baixa manual para comissão liquidada via split;
+* Mercado Pago permitir repasse manual para sócio e representante, quando aplicável;
+* baixa parcial for permitida;
+* saldo em aberto for atualizado após baixa parcial;
+* saldo zerado mudar para Pago manual;
+* relatórios internos mostrarem todos os envolvidos;
+* relatório do representante mostrar apenas dados do representante;
+* evento funcionar como filtro e detalhe, não como única unidade de fechamento;
+* período padrão abrir no mês atual com valores em aberto;
+* logs/auditoria registrarem baixa manual com usuário, data, valor e observação;
+* não houver cálculo financeiro sensível no front-end;
+* o comportamento for consistente para gateways atuais e futuros.
+
+---
+
+## 23. Fora do escopo deste PRD
+
+Este PRD não cobre:
+
+* implementação do Mercado Pago;
+* criação técnica de tabelas;
+* definição final de migrations;
+* alteração da regra oficial da taxa da plataforma;
+* política fiscal ou contábil externa;
+* anexos obrigatórios de comprovantes;
+* fechamento contábil formal;
+* chargeback ou estorno operacional;
+* criação de painel público para representante;
+* alteração no checkout público.
+
+---
+
+## 24. Próximo passo recomendado
+
+Após aprovação deste PRD funcional, o próximo passo é solicitar ao Codex uma validação técnica.
+
+A validação deve responder:
+
+* quais tabelas atuais podem ser reaproveitadas;
+* se o ledger de representante atual atende parcialmente;
+* quais campos faltam para identificar gateway e forma de liquidação;
+* onde a baixa manual deve ser registrada;
+* quais permissões/RLS precisam ser revisadas;
+* quais telas existentes podem ser reaproveitadas;
+* quais riscos existem para não duplicar cálculo financeiro;
+* qual seria a implementação mínima segura.
