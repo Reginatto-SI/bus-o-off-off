@@ -85,7 +85,8 @@ type TermFormState = {
 
 type FormMode =
   | { type: 'create' }
-  | { type: 'edit'; term: CompanyTermWithVersions; version: CompanyTermVersion };
+  | { type: 'edit'; term: CompanyTermWithVersions; version: CompanyTermVersion }
+  | { type: 'recover'; term: CompanyTermWithVersions };
 
 type ContentDialogState = {
   term: CompanyTermWithVersions;
@@ -144,11 +145,15 @@ const getFriendlyErrorMessage = (error: unknown, fallback: string) => {
   const normalized = message.toLowerCase();
 
   if (normalized.includes('duplicate') || normalized.includes('unique')) {
-    return 'Já existe um termo com este título e tipo para a empresa ativa.';
+    return 'Já existe um termo com este título e tipo para esta empresa. Abra o termo existente para editar ou criar uma nova versão.';
   }
 
   if (normalized.includes('published term versions are immutable')) {
     return 'Esta versão já foi publicada e não pode ser editada. Crie uma nova versão para alterar o conteúdo.';
+  }
+
+  if (normalized.includes('term is not eligible for draft recovery')) {
+    return 'Este termo não está elegível para recuperação. Atualize a página e verifique se ele ainda é um rascunho sem versões.';
   }
 
   if (normalized.includes('current version must be published')) {
@@ -281,6 +286,17 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
     setFormMode({ type: 'create' });
   };
 
+  const openRecoverDialog = (term: CompanyTermWithVersions) => {
+    setForm({
+      title: term.title,
+      term_type: term.term_type,
+      content: '',
+      summary: '',
+      internal_note: '',
+    });
+    setFormMode({ type: 'recover', term });
+  };
+
   const openEditDialog = (term: CompanyTermWithVersions, version: CompanyTermVersion) => {
     if (version.status !== 'draft') {
       toast.error('Esta versão já foi publicada e não pode ser editada. Crie uma nova versão para alterar o conteúdo.');
@@ -329,40 +345,20 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
 
     try {
       if (formMode?.type === 'create') {
-        const { data: term, error: termError } = await supabaseAny
-          .from('company_terms')
-          .insert({
-            company_id: companyId,
-            title: form.title.trim(),
-            term_type: form.term_type,
-            status: 'rascunho',
-            created_by: user?.id ?? null,
-            updated_by: user?.id ?? null,
-          })
-          .select('*')
-          .single();
+        const { data: createdDraft, error: createError } = await supabaseAny.rpc('create_company_term_with_initial_version', {
+          p_company_id: companyId,
+          p_title: form.title.trim(),
+          p_term_type: form.term_type,
+          p_content: form.content.trim(),
+          p_summary: form.summary.trim() || null,
+          p_internal_note: form.internal_note.trim() || null,
+        });
 
-        if (termError) throw termError;
+        if (createError) throw createError;
 
-        const { data: version, error: versionError } = await supabaseAny
-          .from('company_term_versions')
-          .insert({
-            company_id: companyId,
-            term_id: term.id,
-            version_number: 1,
-            title: form.title.trim(),
-            term_type: form.term_type,
-            content: form.content.trim(),
-            summary: form.summary.trim() || null,
-            internal_note: form.internal_note.trim() || null,
-            status: 'draft',
-            created_by: user?.id ?? null,
-            updated_by: user?.id ?? null,
-          })
-          .select('*')
-          .single();
-
-        if (versionError) throw versionError;
+        const draftRow = Array.isArray(createdDraft) ? createdDraft[0] : createdDraft;
+        const term = { id: draftRow.term_id };
+        const version = { id: draftRow.version_id };
 
         await addAuditLog({
           termId: term.id,
@@ -379,7 +375,34 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           metadata: { version_number: 1 },
         });
 
-        toast.success('Termo criado em rascunho.');
+        toast.success('Rascunho criado com sucesso.');
+      }
+
+      if (formMode?.type === 'recover') {
+        const { term } = formMode;
+
+        const { data: recoveredDraft, error: recoverError } = await supabaseAny.rpc('recover_company_term_initial_version', {
+          p_company_id: companyId,
+          p_term_id: term.id,
+          p_content: form.content.trim(),
+          p_summary: form.summary.trim() || null,
+          p_internal_note: form.internal_note.trim() || null,
+        });
+
+        if (recoverError) throw recoverError;
+
+        const draftRow = Array.isArray(recoveredDraft) ? recoveredDraft[0] : recoveredDraft;
+        const version = { id: draftRow.version_id };
+
+        await addAuditLog({
+          termId: term.id,
+          versionId: version.id,
+          action: 'draft_version_recovered',
+          description: 'Versão inicial criada para termo em rascunho sem conteúdo vinculado.',
+          metadata: { version_number: 1 },
+        });
+
+        toast.success('Rascunho atualizado com sucesso.');
       }
 
       if (formMode?.type === 'edit') {
@@ -420,7 +443,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
 
         if (versionError) throw versionError;
 
-        toast.success('Rascunho atualizado.');
+        toast.success('Rascunho atualizado com sucesso.');
       }
 
       setFormMode(null);
@@ -653,16 +676,20 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
   const getPrimaryVersion = (term: CompanyTermWithVersions) =>
     getCurrentVersion(term) ?? term.versions.find((version) => version.status === 'published') ?? term.versions[0] ?? null;
 
+  const isDraftWithoutVersion = (term: CompanyTermWithVersions) =>
+    term.status === 'rascunho' && term.versions.length === 0;
+
   const stats = useMemo(() => {
     return {
       total: terms.length,
       vigentes: terms.filter((term) => term.status === 'vigente').length,
-      rascunhos: terms.filter((term) => term.versions.some((version) => version.status === 'draft')).length,
+      rascunhos: terms.filter((term) => term.status === 'rascunho' || term.versions.some((version) => version.status === 'draft')).length,
     };
   }, [terms]);
 
   const buildActions = (term: CompanyTermWithVersions): ActionItem[] => {
     const draft = getEditableDraft(term);
+    const draftWithoutVersion = isDraftWithoutVersion(term);
     const primary = getPrimaryVersion(term);
     const publishedToMark = term.versions.find((version) => version.status === 'published' && version.id !== term.current_version_id);
     const hasPublishedVersion = term.versions.some((version) => version.status === 'published');
@@ -676,8 +703,8 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       {
         label: 'Editar rascunho',
         icon: Pencil,
-        disabled: !draft || !canManage,
-        onClick: () => draft && openEditDialog(term, draft),
+        disabled: (!draft && !draftWithoutVersion) || !canManage,
+        onClick: () => draft ? openEditDialog(term, draft) : draftWithoutVersion && openRecoverDialog(term),
       },
       {
         label: hasPublishedVersion ? 'Publicar versão (use vigente)' : 'Publicar versão',
@@ -848,9 +875,9 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       <Dialog open={Boolean(formMode)} onOpenChange={(open) => !open && setFormMode(null)}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{formMode?.type === 'edit' ? 'Editar rascunho' : 'Novo termo'}</DialogTitle>
+            <DialogTitle>{formMode?.type === 'create' ? 'Novo termo' : 'Editar rascunho'}</DialogTitle>
             <DialogDescription>
-              Versões em rascunho podem ser editadas. Depois de publicar, o conteúdo fica protegido para auditoria.
+              {formMode?.type === 'recover' ? 'Este termo não possui versão de conteúdo vinculada. Salve o conteúdo para recuperar o rascunho.' : 'Versões em rascunho podem ser editadas. Depois de publicar, o conteúdo fica protegido para auditoria.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -863,11 +890,12 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
                   value={form.title}
                   onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
                   placeholder="Ex.: Termos gerais da empresa"
+                  disabled={formMode?.type === 'recover'}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={form.term_type} onValueChange={(value) => setForm((prev) => ({ ...prev, term_type: value as CompanyTermType }))}>
+                <Select value={form.term_type} onValueChange={(value) => setForm((prev) => ({ ...prev, term_type: value as CompanyTermType }))} disabled={formMode?.type === 'recover'}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
@@ -944,6 +972,13 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {historyDialog?.term.versions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-muted-foreground">
+                    Este termo foi criado como rascunho, mas não possui conteúdo vinculado. Clique em "Editar rascunho" para informar o conteúdo e recuperar o termo.
+                  </TableCell>
+                </TableRow>
+              )}
               {historyDialog?.term.versions.map((version) => (
                 <TableRow key={version.id}>
                   <TableCell>v{version.version_number}</TableCell>
@@ -1021,6 +1056,13 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
               <div><span className="text-muted-foreground">Total de versões:</span> {detailTerm.versions.length}</div>
               <div><span className="text-muted-foreground">Criado em:</span> {formatDateTime(detailTerm.created_at)}</div>
               <div><span className="text-muted-foreground">Atualizado em:</span> {formatDateTime(detailTerm.updated_at)}</div>
+              {isDraftWithoutVersion(detailTerm) && (
+                <Alert className="sm:col-span-2">
+                  <AlertDescription>
+                    Este termo foi criado como rascunho, mas não possui conteúdo vinculado. Clique em "Editar rascunho" para informar o conteúdo e recuperar o termo.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
         </DialogContent>
