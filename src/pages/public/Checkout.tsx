@@ -1825,6 +1825,24 @@ export default function Checkout() {
         return;
       }
 
+      if (errorCode === "company_asaas_unauthorized") {
+        console.error("[checkout] company_asaas_unauthorized", {
+          saleId: sale.id,
+          eventId: event.id,
+          companyId: event.company_id,
+        });
+        await supabase.from("seat_locks").delete().eq("sale_id", sale.id);
+        await supabase.from("sale_passengers").delete().eq("sale_id", sale.id);
+        await supabase.from("sales").delete().eq("id", sale.id);
+        toast.error(
+          "Pagamentos desta empresa estão temporariamente indisponíveis. Entre em contato com o organizador do evento.",
+        );
+        preOpenedPaymentTab?.close();
+        setSubmitting(false);
+        setPaymentCheckoutStatus("idle");
+        return;
+      }
+
       // Generic error — rollback everything
       preserveCheckoutFailureTrace({
         saleId: sale.id,
