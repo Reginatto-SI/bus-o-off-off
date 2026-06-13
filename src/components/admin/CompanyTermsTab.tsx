@@ -467,6 +467,25 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       if (formMode?.type === 'recover') {
         const { term } = formMode;
 
+        // Pré-checagem: se já existir versão (criada por outra aba/tentativa anterior), orienta o usuário.
+        const { data: existingVersion } = await supabaseAny
+          .from('company_term_versions')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('term_id', term.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingVersion?.id) {
+          toast.info('Este termo já foi recuperado em outra tentativa. Atualize a página para ver a versão criada.');
+          setIsFormDirty(false);
+          setFormMode(null);
+          await fetchTerms();
+          return;
+        }
+
+        let versionId: string | null = null;
+
         const { data: recoveredDraft, error: recoverError } = await supabaseAny.rpc('recover_company_term_initial_version', {
           p_company_id: companyId,
           p_term_id: term.id,
@@ -475,20 +494,56 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           p_internal_note: form.internal_note.trim() || null,
         });
 
-        if (recoverError) throw recoverError;
+        if (recoverError) {
+          // Fallback resiliente: a RPC pode estar indisponível (cache do PostgREST, schema antigo, hash etc.).
+          // Como a RLS de gerente permite inserir em company_term_versions, criamos a versão inicial diretamente.
+          logSupabaseError({
+            label: 'RPC recover_company_term_initial_version falhou; aplicando fallback client-side',
+            error: recoverError,
+            context: { action: 'rpc_recover_fallback', companyId, termId: term.id, userId: user?.id },
+          });
 
-        const draftRow = Array.isArray(recoveredDraft) ? recoveredDraft[0] : recoveredDraft;
-        const version = { id: draftRow.version_id };
+          const { data: insertedVersion, error: insertError } = await supabaseAny
+            .from('company_term_versions')
+            .insert({
+              company_id: companyId,
+              term_id: term.id,
+              version_number: 1,
+              title: term.title,
+              term_type: term.term_type,
+              content: form.content.trim(),
+              summary: form.summary.trim() || null,
+              internal_note: form.internal_note.trim() || null,
+              status: 'draft',
+              created_by: user?.id ?? null,
+              updated_by: user?.id ?? null,
+            })
+            .select('id')
+            .single();
+
+          if (insertError) throw insertError;
+          versionId = insertedVersion?.id ?? null;
+
+          // Mantém updated_by/updated_at do termo coerentes com a recuperação.
+          await supabaseAny
+            .from('company_terms')
+            .update({ updated_by: user?.id ?? null })
+            .eq('id', term.id)
+            .eq('company_id', companyId);
+        } else {
+          const draftRow = Array.isArray(recoveredDraft) ? recoveredDraft[0] : recoveredDraft;
+          versionId = draftRow?.version_id ?? null;
+        }
 
         await addAuditLog({
           termId: term.id,
-          versionId: version.id,
+          versionId,
           action: 'draft_version_recovered',
           description: 'Versão inicial criada para termo em rascunho sem conteúdo vinculado.',
           metadata: { version_number: 1 },
         });
 
-        toast.success('Rascunho atualizado com sucesso.');
+        toast.success('Rascunho recuperado com sucesso.');
       }
 
       if (formMode?.type === 'edit') {
