@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
