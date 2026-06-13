@@ -598,8 +598,8 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         context: { action: formMode?.type ?? 'unknown', companyId, userId: user?.id },
       });
       const fallback = formMode?.type === 'recover'
-        ? 'Não foi possível recuperar o rascunho do termo. Verifique se a função de recuperação foi aplicada no banco de dados.'
-        : 'Não foi possível salvar o termo.';
+        ? 'Não foi possível recuperar o rascunho. Verifique se o termo pertence à empresa ativa e tente novamente.'
+        : 'Não foi possível salvar o rascunho. Verifique se o termo pertence à empresa ativa.';
       toast.error(getFriendlyErrorMessage(error, fallback));
     } finally {
       setSaving(false);
