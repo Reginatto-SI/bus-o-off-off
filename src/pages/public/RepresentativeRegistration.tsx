@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { usePageMeta } from '@/lib/usePageMeta';
 import { BriefcaseBusiness, CheckCircle2, Handshake, Loader2, Megaphone } from 'lucide-react';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
