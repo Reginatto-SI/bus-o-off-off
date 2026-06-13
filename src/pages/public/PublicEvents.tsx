@@ -36,6 +36,12 @@ function interleaveEventCards<T>(items: T[]): T[] {
 }
 
 export default function PublicEvents() {
+  usePageMeta({
+    title: "Passagens disponíveis | Smartbus BR",
+    description:
+      "Veja todas as passagens e excursões disponíveis no Smartbus BR. Compre online com pagamento seguro e escolha do assento.",
+    path: "/eventos",
+  });
   const [events, setEvents] = useState<EventWithCompany[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
