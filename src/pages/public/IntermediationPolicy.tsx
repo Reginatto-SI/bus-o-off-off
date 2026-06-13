@@ -4,6 +4,12 @@ import { usePageMeta } from '@/lib/usePageMeta';
 import { Button } from '@/components/ui/button';
 
 export default function IntermediationPolicy() {
+  usePageMeta({
+    title: "Política de Intermediação | Smartbus BR",
+    description:
+      "Entenda o papel do Smartbus BR como plataforma intermediadora de venda de passagens e a responsabilidade das empresas organizadoras.",
+    path: "/politica-de-intermediacao",
+  });
   return (
     <PublicLayout>
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
