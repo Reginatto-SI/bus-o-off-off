@@ -67,6 +67,9 @@ export function useVersionCheck() {
     const versionToApply = targetVersion ?? availableVersion;
     if (!versionToApply) return;
 
+    const refreshEvent = new Event('smartbus:request-refresh', { cancelable: true });
+    if (!window.dispatchEvent(refreshEvent)) return;
+
     // Limpar Cache Storage (PWA / service worker caches)
     try {
       if ("caches" in window) {
