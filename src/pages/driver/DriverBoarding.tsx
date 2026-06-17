@@ -19,6 +19,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -28,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, CheckCircle2, Clock, Loader2, MapPin, RefreshCw, Search, Users } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, Loader2, MapPin, Phone, RefreshCw, Search, Users, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface PassengerRow {
@@ -39,11 +46,66 @@ interface PassengerRow {
   qrCodeToken: string;
   boardingLocationId: string;
   boardingLocationName: string;
+  passengerPhone: string | null;
+  saleCustomerName: string | null;
+  saleCustomerPhone: string | null;
+  ticketNumber: string | null;
+  ticketTypeName: string | null;
+  finalPrice: number | null;
+}
+
+type StatusFilter = 'all' | 'done' | 'pending';
+
+interface DriverTripRow {
+  id: string;
+  events: {
+    id: string;
+    date: string;
+  };
+}
+
+interface DriverBoardingRow {
+  event_id: string;
+  departure_date: string | null;
+  departure_time: string | null;
+}
+
+interface ValidationResult {
+  result?: string;
+  boarding_status?: string;
+  reason_code?: string;
 }
 
 interface LocationOption {
   id: string;
   name: string;
+}
+
+
+function getDisplayStatus(status: string) {
+  if (status === 'pendente') return 'Pendente';
+  if (status === 'checked_in') return 'Embarcado';
+  if (status === 'checked_out') return 'Desembarcou';
+  if (status === 'reboarded') return 'Reembarcou';
+  return status;
+}
+
+function getContactDigits(phone?: string | null) {
+  return phone?.replace(/\D/g, '') ?? '';
+}
+
+function getBrazilWhatsappDigits(phone?: string | null) {
+  const digits = getContactDigits(phone);
+  if (!digits) return '';
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return '';
+}
+
+function formatCurrency(value: number | null) {
+  return typeof value === 'number'
+    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+    : '—';
 }
 
 export default function DriverBoarding() {
@@ -58,7 +120,9 @@ export default function DriverBoarding() {
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [loadingData, setLoadingData] = useState(true);
+  const [selectedPassenger, setSelectedPassenger] = useState<PassengerRow | null>(null);
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
   const [undoPassenger, setUndoPassenger] = useState<PassengerRow | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -97,7 +161,8 @@ export default function DriverBoarding() {
         .eq('events.status', 'a_venda')
         .limit(1);
       if (data && data.length > 0) {
-        const eventRows = data.map((row: any) => ({ id: row.events.id, date: row.events.date }));
+        const tripRows = data as unknown as DriverTripRow[];
+        const eventRows = tripRows.map((row) => ({ id: row.events.id, date: row.events.date }));
         const { data: boardings } = await supabase
           .from('event_boarding_locations')
           .select('event_id, departure_date, departure_time')
@@ -105,9 +170,9 @@ export default function DriverBoarding() {
           .eq('company_id', activeCompanyId)
           .not('departure_date', 'is', null);
 
-        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
-        if (isOperationallyVisible(data[0].events.id, operationalEndMap)) {
-          tripId = data[0].id;
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as DriverBoardingRow[]);
+        if (isOperationallyVisible(tripRows[0].events.id, operationalEndMap)) {
+          tripId = tripRows[0].id;
         }
       }
     }
@@ -121,7 +186,7 @@ export default function DriverBoarding() {
         .single();
 
       const driverId = roleData?.driver_id;
-      let trips: any[] | null = null;
+      let trips: DriverTripRow[] | null = null;
 
       if (driverId) {
         const { data } = await supabase
@@ -131,7 +196,7 @@ export default function DriverBoarding() {
           .eq('events.status', 'a_venda')
           .or(`driver_id.eq.${driverId},assistant_driver_id.eq.${driverId}`)
           .order('events(date)', { ascending: true });
-        trips = data;
+        trips = data as unknown as DriverTripRow[] | null;
       }
 
       if (!trips || trips.length === 0) {
@@ -141,11 +206,11 @@ export default function DriverBoarding() {
           .eq('company_id', activeCompanyId)
           .eq('events.status', 'a_venda')
           .order('events(date)', { ascending: true });
-        trips = data;
+        trips = data as unknown as DriverTripRow[] | null;
       }
 
       if (trips && trips.length > 0) {
-        const eventRows = trips.map((row: any) => ({ id: row.events.id, date: row.events.date }));
+        const eventRows = trips.map((row) => ({ id: row.events.id, date: row.events.date }));
         const { data: boardings } = await supabase
           .from('event_boarding_locations')
           .select('event_id, departure_date, departure_time')
@@ -153,8 +218,8 @@ export default function DriverBoarding() {
           .eq('company_id', activeCompanyId)
           .not('departure_date', 'is', null);
 
-        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
-        tripId = trips.find((row: any) => isOperationallyVisible(row.events.id, operationalEndMap))?.id ?? null;
+        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as DriverBoardingRow[]);
+        tripId = trips.find((row) => isOperationallyVisible(row.events.id, operationalEndMap))?.id ?? null;
       }
     }
 
@@ -168,7 +233,7 @@ export default function DriverBoarding() {
 
     const { data: tickets } = await supabase
       .from('tickets')
-      .select('id, passenger_name, seat_label, boarding_status, qr_code_token, sale_id')
+      .select('id, passenger_name, passenger_phone, seat_label, boarding_status, qr_code_token, sale_id, ticket_number, ticket_type_name, final_price')
       .eq('trip_id', tripId)
       .eq('company_id', activeCompanyId);
 
@@ -182,7 +247,7 @@ export default function DriverBoarding() {
     const saleIds = [...new Set(tickets.map(t => t.sale_id))];
     const { data: sales } = await supabase
       .from('sales')
-      .select('id, boarding_location_id, status, boarding_locations!inner(id, name)')
+      .select('id, boarding_location_id, status, customer_name, customer_phone, boarding_locations!inner(id, name)')
       .in('id', saleIds)
       .eq('status', 'pago');
 
@@ -194,9 +259,9 @@ export default function DriverBoarding() {
     }
 
     const salesMap = new Map(
-      sales.map((s: any) => [
+      sales.map((s) => [
         s.id,
-        { blId: s.boarding_location_id, blName: s.boarding_locations?.name ?? '—' },
+        { blId: s.boarding_location_id, blName: s.boarding_locations?.name ?? '—', customerName: s.customer_name ?? null, customerPhone: s.customer_phone ?? null },
       ])
     );
 
@@ -212,6 +277,12 @@ export default function DriverBoarding() {
           qrCodeToken: t.qr_code_token,
           boardingLocationId: saleInfo.blId,
           boardingLocationName: saleInfo.blName,
+          passengerPhone: t.passenger_phone,
+          saleCustomerName: saleInfo.customerName,
+          saleCustomerPhone: saleInfo.customerPhone,
+          ticketNumber: t.ticket_number,
+          ticketTypeName: t.ticket_type_name,
+          finalPrice: t.final_price,
         };
       })
       .sort((a, b) => {
@@ -245,7 +316,7 @@ export default function DriverBoarding() {
     return () => clearInterval(interval);
   }, [user, activeCompanyId, canAccess, fetchData]);
 
-  const filteredPassengers = useMemo(() => {
+  const baseFilteredPassengers = useMemo(() => {
     let list = passengers;
     if (selectedLocation !== 'all') {
       list = list.filter(p => p.boardingLocationId === selectedLocation);
@@ -256,18 +327,34 @@ export default function DriverBoarding() {
         p =>
           p.passengerName.toLowerCase().includes(q) ||
           p.seatLabel.toLowerCase().includes(q) ||
-          p.boardingLocationName.toLowerCase().includes(q)
+          p.boardingLocationName.toLowerCase().includes(q) ||
+          (p.passengerPhone?.toLowerCase().includes(q) ?? false) ||
+          getContactDigits(p.passengerPhone).includes(getContactDigits(q)) ||
+          (p.saleCustomerPhone?.toLowerCase().includes(q) ?? false) ||
+          getContactDigits(p.saleCustomerPhone).includes(getContactDigits(q)) ||
+          (p.saleCustomerName?.toLowerCase().includes(q) ?? false) ||
+          (p.ticketNumber?.toLowerCase().includes(q) ?? false)
       );
     }
     return list;
   }, [passengers, selectedLocation, searchQuery]);
 
+  const filteredPassengers = useMemo(() => {
+    if (statusFilter === 'done') {
+      return baseFilteredPassengers.filter(p => phaseConfig.doneStatuses.includes(p.boardingStatus));
+    }
+    if (statusFilter === 'pending') {
+      return baseFilteredPassengers.filter(p => phaseConfig.pendingStatuses.includes(p.boardingStatus));
+    }
+    return baseFilteredPassengers;
+  }, [baseFilteredPassengers, statusFilter, phaseConfig]);
+
   const kpis = useMemo(() => {
-    const list = filteredPassengers;
+    const list = baseFilteredPassengers;
     const done = list.filter(p => phaseConfig.doneStatuses.includes(p.boardingStatus)).length;
     const pending = list.filter(p => phaseConfig.pendingStatuses.includes(p.boardingStatus)).length;
     return { total: done + pending, done, pending };
-  }, [filteredPassengers, phaseConfig]);
+  }, [baseFilteredPassengers, phaseConfig]);
 
   const locationSummaries = useMemo(() => {
     if (locations.length <= 1) return [];
@@ -302,7 +389,7 @@ export default function DriverBoarding() {
       return;
     }
 
-    const result = (Array.isArray(data) ? data[0] : data) as any;
+    const result = (Array.isArray(data) ? data[0] : data) as ValidationResult;
     if (result?.result === 'success') {
       const newStatus = result.boarding_status;
       setPassengers(prev =>
@@ -310,6 +397,7 @@ export default function DriverBoarding() {
           p.ticketId === passenger.ticketId ? { ...p, boardingStatus: newStatus } : p
         )
       );
+      setSelectedPassenger(null);
       toast({ title: phaseConfig.successTitle, description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
     } else {
       const reasonMap: Record<string, string> = {
@@ -345,7 +433,7 @@ export default function DriverBoarding() {
       return;
     }
 
-    const result = (Array.isArray(data) ? data[0] : data) as any;
+    const result = (Array.isArray(data) ? data[0] : data) as ValidationResult;
     if (result?.result === 'success') {
       const newStatus = result.boarding_status;
       setPassengers(prev =>
@@ -353,6 +441,7 @@ export default function DriverBoarding() {
           p.ticketId === passenger.ticketId ? { ...p, boardingStatus: newStatus } : p
         )
       );
+      setSelectedPassenger(null);
       toast({ title: phaseConfig.undoSuccessTitle, description: `${passenger.passengerName} — Assento ${passenger.seatLabel}` });
     } else {
       const reason = result?.reason_code === 'undo_not_applicable'
@@ -428,18 +517,30 @@ export default function DriverBoarding() {
             <Card>
               <CardContent className="p-4">
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div>
+                  <button
+                    type="button"
+                    className={`rounded-lg p-2 transition-colors ${statusFilter === 'all' ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-muted'}`}
+                    onClick={() => setStatusFilter('all')}
+                  >
                     <p className="text-2xl font-bold">{kpis.total}</p>
                     <p className="text-xs text-muted-foreground">Total</p>
-                  </div>
-                  <div>
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg p-2 transition-colors ${statusFilter === 'done' ? 'bg-green-500/10 ring-1 ring-green-500/40' : 'hover:bg-muted'}`}
+                    onClick={() => setStatusFilter('done')}
+                  >
                     <p className="text-2xl font-bold text-green-600">{kpis.done}</p>
                     <p className="text-xs text-muted-foreground">{phaseConfig.doneLabel}</p>
-                  </div>
-                  <div>
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg p-2 transition-colors ${statusFilter === 'pending' ? 'bg-orange-500/10 ring-1 ring-orange-500/40' : 'hover:bg-muted'}`}
+                    onClick={() => setStatusFilter('pending')}
+                  >
                     <p className="text-2xl font-bold text-orange-600">{kpis.pending}</p>
                     <p className="text-xs text-muted-foreground">{phaseConfig.pendingLabel}</p>
-                  </div>
+                  </button>
                 </div>
               </CardContent>
             </Card>
@@ -510,18 +611,28 @@ export default function DriverBoarding() {
 
             {/* Passenger list */}
             <div className="space-y-2">
-              {filteredPassengers.map(p => {
+              {filteredPassengers.length === 0 ? (
+                <Card>
+                  <CardContent className="p-5 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {searchQuery.trim()
+                        ? 'Nenhum passageiro encontrado para esta busca.'
+                        : statusFilter === 'pending'
+                          ? `Nenhum passageiro ${phaseConfig.pendingLabel.toLowerCase()}.`
+                          : statusFilter === 'done'
+                            ? `Nenhum passageiro ${phaseConfig.doneLabel.toLowerCase()}.`
+                            : 'Nenhum passageiro encontrado.'}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : filteredPassengers.map(p => {
                 const done = isDone(p);
                 const actionable = isActionable(p);
-                const manualActionEnabled = actionable && allowManualBoarding;
                 return (
                   <Card
                     key={p.ticketId}
-                    className={`transition-colors ${done ? 'border-green-500/40 bg-green-500/5 cursor-pointer' : ''} ${actionable ? 'cursor-pointer' : ''}`}
-                    onClick={() => {
-                      if (manualActionEnabled) setConfirmPassenger(p);
-                      else if (done) setUndoPassenger(p);
-                    }}
+                    className={`cursor-pointer transition-colors hover:border-primary/50 ${done ? 'border-green-500/40 bg-green-500/5' : ''}`}
+                    onClick={() => setSelectedPassenger(p)}
                   >
                     <CardContent className="flex items-center gap-3 p-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted font-bold text-sm">
@@ -536,7 +647,7 @@ export default function DriverBoarding() {
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           {phaseConfig.doneBadge}
                         </Badge>
-                      ) : manualActionEnabled ? (
+                      ) : actionable && allowManualBoarding ? (
                         <Badge variant="outline" className="shrink-0">
                           <Clock className="mr-1 h-3 w-3" />
                           {phaseConfig.pendingBadge}
@@ -545,10 +656,7 @@ export default function DriverBoarding() {
                         <Badge variant="secondary" className="shrink-0 text-xs">Via QR Code</Badge>
                       ) : (
                         <Badge variant="secondary" className="shrink-0 text-xs">
-                          {p.boardingStatus === 'pendente' ? 'Pendente' :
-                           p.boardingStatus === 'checked_in' ? 'Embarcado' :
-                           p.boardingStatus === 'checked_out' ? 'Desembarcou' :
-                           p.boardingStatus === 'reboarded' ? 'Reembarcou' : p.boardingStatus}
+                          {getDisplayStatus(p.boardingStatus)}
                         </Badge>
                       )}
                     </CardContent>
@@ -558,6 +666,126 @@ export default function DriverBoarding() {
             </div>
           </>
         )}
+
+        {/* Passenger details */}
+        <Dialog open={!!selectedPassenger} onOpenChange={(open) => !open && setSelectedPassenger(null)}>
+          <DialogContent className="max-w-[calc(100vw-2rem)] rounded-lg sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{selectedPassenger?.passengerName}</DialogTitle>
+              <DialogDescription>
+                Assento {selectedPassenger?.seatLabel} · {selectedPassenger ? getDisplayStatus(selectedPassenger.boardingStatus) : ''}
+              </DialogDescription>
+            </DialogHeader>
+            {selectedPassenger && (() => {
+              const hasPassengerPhone = Boolean(selectedPassenger.passengerPhone?.trim());
+              const hasBuyerPhone = Boolean(selectedPassenger.saleCustomerPhone?.trim());
+              const phone = hasPassengerPhone ? selectedPassenger.passengerPhone : selectedPassenger.saleCustomerPhone;
+              const phoneLabel = hasPassengerPhone ? 'Telefone do passageiro' : 'Telefone do comprador';
+              const telDigits = getContactDigits(phone);
+              const whatsappDigits = getBrazilWhatsappDigits(phone);
+              const canCall = telDigits.length >= 10;
+              const canWhatsapp = Boolean(whatsappDigits);
+              const hasAnyPhone = hasPassengerPhone || hasBuyerPhone;
+              const phoneFeedback = !hasAnyPhone
+                ? 'Telefone não informado para este passageiro.'
+                : !canCall && !canWhatsapp
+                  ? 'Telefone informado não parece válido para WhatsApp ou ligação.'
+                  : null;
+              return (
+                <div className="space-y-4">
+                  <div className="grid gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{hasAnyPhone ? phoneLabel : 'Telefone'}</p>
+                      <p className="font-medium">{phone || 'Telefone não informado para este passageiro.'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Ponto/local de embarque</p>
+                      <p className="font-medium">{selectedPassenger.boardingLocationName}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <p className="font-medium">{getDisplayStatus(selectedPassenger.boardingStatus)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Passagem</p>
+                        <p className="font-medium">{selectedPassenger.ticketNumber || selectedPassenger.ticketId.slice(0, 8)}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tipo</p>
+                        <p className="font-medium">{selectedPassenger.ticketTypeName || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Valor</p>
+                        <p className="font-medium">{formatCurrency(selectedPassenger.finalPrice)}</p>
+                      </div>
+                    </div>
+                    {selectedPassenger.saleCustomerName && selectedPassenger.saleCustomerName !== selectedPassenger.passengerName && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Comprador</p>
+                        <p className="font-medium">{selectedPassenger.saleCustomerName}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {phoneFeedback && (
+                    <p className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                      {phoneFeedback}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {canWhatsapp ? (
+                      <Button asChild variant="default">
+                        <a href={`https://wa.me/${whatsappDigits}`} target="_blank" rel="noreferrer">
+                          <MessageCircle className="mr-2 h-4 w-4" />
+                          WhatsApp
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button disabled variant="default">
+                        <MessageCircle className="mr-2 h-4 w-4" />
+                        WhatsApp
+                      </Button>
+                    )}
+                    {canCall ? (
+                      <Button asChild variant="outline">
+                        <a href={`tel:${telDigits}`}>
+                          <Phone className="mr-2 h-4 w-4" />
+                          Ligar
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button disabled variant="outline">
+                        <Phone className="mr-2 h-4 w-4" />
+                        Ligar
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={!isActionable(selectedPassenger) || !allowManualBoarding}
+                      onClick={() => setConfirmPassenger(selectedPassenger)}
+                    >
+                      {phaseConfig.confirmAction}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={!isDone(selectedPassenger)}
+                      onClick={() => setUndoPassenger(selectedPassenger)}
+                    >
+                      Desfazer
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
 
         {/* Confirm dialog */}
         <AlertDialog open={!!confirmPassenger} onOpenChange={() => setConfirmPassenger(null)}>
