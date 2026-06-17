@@ -450,9 +450,11 @@ export default function DriverHome() {
                 variant="outline"
                 role="combobox"
                 aria-expanded={tripSelectorOpen}
-                className="w-full justify-between"
+                className="h-auto min-h-10 w-full justify-between whitespace-normal py-2"
               >
-                {selectedTripOption ? getTripOptionLabel(selectedTripOption) : 'Selecione a viagem'}
+                <span className="line-clamp-2 flex-1 text-left leading-snug">
+                  {selectedTripOption ? getTripOptionLabel(selectedTripOption) : 'Selecione a viagem'}
+                </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -472,9 +474,11 @@ export default function DriverHome() {
                             handleTripChange(trip.tripId);
                             setTripSelectorOpen(false);
                           }}
+                          className="items-start py-2"
                         >
-                          <Check className={cn('mr-2 h-4 w-4', selectedTripId === trip.tripId ? 'opacity-100' : 'opacity-0')} />
-                          <span className="truncate">{label}</span>
+                          <Check className={cn('mr-2 mt-0.5 h-4 w-4 shrink-0', selectedTripId === trip.tripId ? 'opacity-100' : 'opacity-0')} />
+                          {/* Mantém opções longas legíveis no mobile sem mudar o valor usado na busca/seleção. */}
+                          <span className="line-clamp-2 flex-1 whitespace-normal leading-snug">{label}</span>
                         </CommandItem>
                       );
                     })}
