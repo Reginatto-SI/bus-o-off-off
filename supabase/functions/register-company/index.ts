@@ -197,8 +197,8 @@ serve(async (req) => {
         phone,
         email,
         referral_code: generatedReferralCode,
-        platform_fee_percent: 3,
-        socio_split_percent: 3,
+        platform_fee_percent: 6,
+        socio_split_percent: 0,
       })
       .select("id")
       .single();
