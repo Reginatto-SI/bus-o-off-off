@@ -261,9 +261,9 @@ export default function CompanyPage() {
     social_telegram: '',
     social_twitter: '',
     social_website: '',
-    // Padrão para novas empresas: comissão inicial de 3% + 3%.
-    platform_fee_percent: '3',
-    socio_split_percent: '3',
+    // Padrão para novas empresas: comissão da plataforma 6% + sócio 0%.
+    platform_fee_percent: '6',
+    socio_split_percent: '0',
     // Política de reservas (Fase 1): validade padrão em horas + minutos.
     allow_manual_reservations: true,
     allow_manual_boarding: true,
@@ -414,8 +414,8 @@ export default function CompanyPage() {
       social_website: data?.social_website ?? '',
       // Comentário: taxas ficam no estado local do formulário para evitar autosave no onChange
       // e impedir perda de foco durante a digitação de decimais.
-      platform_fee_percent: String(data?.platform_fee_percent ?? 3),
-      socio_split_percent: String(data?.socio_split_percent ?? 3),
+      platform_fee_percent: String(data?.platform_fee_percent ?? 6),
+      socio_split_percent: String(data?.socio_split_percent ?? 0),
       // Política de reservas: UX em horas + minutos, persistência em minutos totais.
       allow_manual_reservations: data?.allow_manual_reservations ?? true,
       allow_manual_boarding: data?.allow_manual_boarding ?? true,
@@ -710,8 +710,8 @@ export default function CompanyPage() {
       social_telegram: '',
       social_twitter: '',
       social_website: '',
-      platform_fee_percent: '3',
-      socio_split_percent: '3',
+      platform_fee_percent: '6',
+      socio_split_percent: '0',
       allow_manual_reservations: true,
       allow_manual_boarding: true,
       manual_reservation_ttl_hours: '72',
@@ -2230,7 +2230,7 @@ export default function CompanyPage() {
                               Sua conta está conectada para recebimentos online. O Pix só é liberado quando houver chave ativa validada no ambiente operacional.
                               {/* Comentário de regra de negócio: o desconto total exibido ao usuário
                                   soma taxa da plataforma + taxa do sócio (split Asaas). */}
-                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 3) + (company?.socio_split_percent ?? 3)).toFixed(1)}%</strong> de comissão sobre cada venda online.
+                              A plataforma retém automaticamente <strong>{((company?.platform_fee_percent ?? 6) + (company?.socio_split_percent ?? 0)).toFixed(1)}%</strong> de comissão sobre cada venda online.
                             </p>
                             <p className={`text-xs ${pixReadyEffective ? 'text-green-700' : 'text-amber-700'}`}>
                               Readiness Pix: <strong>{pixReadyEffective ? 'Pix pronto' : 'Pix pendente de configuração'}</strong>.
