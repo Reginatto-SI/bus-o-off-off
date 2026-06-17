@@ -82,7 +82,7 @@ export function AsaasOnboardingWizard({
    * Por isso somente developer pode alterar o ambiente; para os demais o fluxo nasce
    * e permanece forçado em produção também na lógica de envio para a edge function.
    */
-  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('sandbox');
+  const [targetEnvironment, setTargetEnvironment] = useState<AsaasEnvironmentSelection>('production');
   const [localCompanyData, setLocalCompanyData] = useState(companyData);
   const effectiveTargetEnvironment: 'sandbox' | 'production' = !isDeveloper
     ? 'production'
@@ -131,7 +131,7 @@ export function AsaasOnboardingWizard({
       setApiKeyInput('');
       setShowApiKeyTutorialModal(false);
       setShowAddressModal(false);
-      setTargetEnvironment('sandbox');
+      setTargetEnvironment('production');
     }
   }, [open]);
 
