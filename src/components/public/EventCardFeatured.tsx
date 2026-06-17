@@ -37,15 +37,15 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
   return (
     <div className="group relative overflow-hidden rounded-2xl border-border/70 bg-card shadow-[0_16px_40px_-24px_rgba(15,23,42,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_24px_55px_-24px_rgba(15,23,42,0.6)]">
       <Link to={linkTo} className="block">
-        {/* Mobile usa banner mais alto para evitar que o destaque pareça "espremido" quando o título for maior. */}
-        <div className="relative aspect-[4/5] sm:aspect-video">
+        {/* Mobile prioriza leitura da arte completa; desktop preserva o banner impactante com cover. */}
+        <div className="relative aspect-video bg-black sm:aspect-video">
           <img
             src={imageUrl}
             alt={event.name}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+            className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.02] sm:object-cover"
           />
-          {/* Overlay escuro mantido para preservar legibilidade dos textos sobre o banner. */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10 z-20" />
+          {/* Mobile recebe overlay mais suave para não apagar a arte; desktop mantém o gradiente forte para textos sobrepostos. */}
+          <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/45 via-black/10 to-transparent sm:from-black/90 sm:via-black/50 sm:to-black/10" />
 
           {/* Mobile: categoria e data ficam sobre o banner sem sobrecarregar o bloco de conteúdo textual. */}
           <div className="absolute inset-x-0 bottom-0 z-30 flex items-end justify-between gap-2 p-4 sm:hidden">
