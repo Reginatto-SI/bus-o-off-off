@@ -92,10 +92,10 @@ export default function PublicEvents() {
   return (
     <PublicLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
-        {/* Título e Microcopy */}
+        {/* Título e Microcopy: mantém a marca fora do título principal para evitar separador visual pesado. */}
         <section className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Passagens disponíveis — Smartbus BR
+            Passagens disponíveis
           </h1>
           <p className="text-muted-foreground">
             Compra segura com confirmação imediata após o pagamento
