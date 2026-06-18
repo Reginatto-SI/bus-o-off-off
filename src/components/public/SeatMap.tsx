@@ -21,6 +21,25 @@ interface SeatMapProps {
   showSelectionQuantityLabel?: boolean;
 }
 
+const getSeatFloor = (seat: Seat) => {
+  // Compatibilidade defensiva com layouts antigos/importados: o banco oficial usa `floor`
+  // numérico, mas snapshots históricos podem chegar ao componente com variações de nome/valor.
+  const rawFloor = (seat as Seat & { floor_number?: number | string; deck?: number | string; level?: number | string }).floor
+    ?? (seat as Seat & { floor_number?: number | string }).floor_number
+    ?? (seat as Seat & { deck?: number | string }).deck
+    ?? (seat as Seat & { level?: number | string }).level
+    ?? 1;
+
+  if (typeof rawFloor === 'number' && Number.isFinite(rawFloor)) return rawFloor;
+
+  const normalizedFloor = String(rawFloor).trim().toLowerCase();
+  if (['upper', 'superior', 'piso superior'].includes(normalizedFloor)) return 2;
+  if (['lower', 'inferior', 'piso inferior'].includes(normalizedFloor)) return 1;
+
+  const parsedFloor = Number.parseInt(normalizedFloor, 10);
+  return Number.isFinite(parsedFloor) && parsedFloor > 0 ? parsedFloor : 1;
+};
+
 export function SeatMap({
   seats,
   occupiedSeatIds,
@@ -56,15 +75,21 @@ export function SeatMap({
 
   const seatCategories = seats.map((s) => (s.category || 'convencional') as SeatCategory);
 
+  const normalizedFloors = Math.max(
+    1,
+    floors,
+    ...seats.map((seat) => getSeatFloor(seat)),
+  );
+
   const availableSeatsByFloor = useMemo(() => {
     // Vagas vendáveis por piso: total de assentos do piso - ocupados - bloqueados operacionais.
     // Mantido no front apenas para apresentação dinâmica sem alterar regra de negócio.
     const blockedSet = new Set(blockedSeatIds);
     const occupiedSet = new Set(occupiedSeatIds);
 
-    return Array.from({ length: floors }, (_, index) => {
+    return Array.from({ length: normalizedFloors }, (_, index) => {
       const floor = index + 1;
-      const floorSeatList = seats.filter((seat) => seat.floor === floor);
+      const floorSeatList = seats.filter((seat) => getSeatFloor(seat) === floor);
       const availableCount = floorSeatList.filter((seat) => {
         if (seat.status === 'bloqueado') return false;
         if (blockedSet.has(seat.id)) return false;
@@ -74,11 +99,11 @@ export function SeatMap({
 
       return { floor, availableCount };
     });
-  }, [seats, blockedSeatIds, occupiedSeatIds, floors]);
+  }, [seats, blockedSeatIds, occupiedSeatIds, normalizedFloors]);
 
 
   const floorSeats = seats
-    .filter((s) => s.floor === activeFloor)
+    .filter((s) => getSeatFloor(s) === activeFloor)
     .sort((a, b) => {
       if (a.row_number !== b.row_number) return a.row_number - b.row_number;
       return a.column_number - b.column_number;
@@ -124,7 +149,7 @@ export function SeatMap({
   return (
     <div className="space-y-4">
       {/* Floor selector */}
-      {floors > 1 && (
+      {normalizedFloors > 1 && (
         <Tabs value={String(activeFloor)} onValueChange={(v) => setActiveFloor(Number(v))}>
           <TabsList className="w-full h-auto gap-1 p-1">
             {availableSeatsByFloor.map(({ floor, availableCount }) => (
@@ -146,7 +171,7 @@ export function SeatMap({
       )}
 
       {/* Contexto dinâmico para reforçar o piso ativo sem exigir leitura dos botões. */}
-      {floors > 1 && (
+      {normalizedFloors > 1 && (
         <div className="text-center text-xs text-muted-foreground">
           Escolha seu assento no{' '}
           <span className="font-semibold text-foreground">
