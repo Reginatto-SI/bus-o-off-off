@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Clock, Copy, Eye, FileText, History, Loader2, Pencil, Plus, Send, ShieldCheck } from 'lucide-react';
+import { Clock, Copy, Eye, FileText, History, Loader2, Pencil, Plus, Send, ShieldCheck, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -100,6 +100,16 @@ type HistoryDialogState = {
   term: CompanyTermWithVersions;
 };
 
+type ApplyToActiveEventsDialogState = {
+  term: CompanyTermWithVersions;
+  version: CompanyTermVersion;
+  loading: boolean;
+  activeEventsCount: number;
+  alreadyUsingCount: number;
+  toUpdateCount: number;
+  replacedSameTypeCount: number;
+};
+
 interface CompanyTermsTabProps {
   companyId: string | null;
 }
@@ -193,6 +203,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
   const [historyDialog, setHistoryDialog] = useState<HistoryDialogState | null>(null);
   const [contentDialog, setContentDialog] = useState<ContentDialogState | null>(null);
   const [detailTerm, setDetailTerm] = useState<CompanyTermWithVersions | null>(null);
+  const [applyDialog, setApplyDialog] = useState<ApplyToActiveEventsDialogState | null>(null);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const draftHydratedRef = useRef(false);
 
@@ -813,6 +824,235 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
     }
   };
 
+
+  const openApplyToActiveEventsDialog = async (term: CompanyTermWithVersions) => {
+    if (!canManage) {
+      toast.error('Somente gerentes podem aplicar termos aos eventos ativos.');
+      return;
+    }
+
+    const currentVersion = getCurrentVersion(term);
+    if (!currentVersion || term.status !== 'vigente' || currentVersion.status !== 'published') {
+      toast.error('Aplique apenas termos publicados e vigentes para evitar uso automático de rascunhos.');
+      return;
+    }
+
+    setApplyDialog({
+      term,
+      version: currentVersion,
+      loading: true,
+      activeEventsCount: 0,
+      alreadyUsingCount: 0,
+      toUpdateCount: 0,
+      replacedSameTypeCount: 0,
+    });
+
+    try {
+      const { data: activeEvents, error: eventsError } = await supabaseAny
+        .from('events')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('status', 'a_venda')
+        .eq('is_archived', false);
+
+      if (eventsError) throw eventsError;
+
+      const eventIds = (activeEvents ?? []).map((event: { id: string }) => event.id);
+      const sameTypeTermIds = terms
+        .filter((item) => item.company_id === companyId && item.term_type === term.term_type)
+        .map((item) => item.id);
+      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string }> = [];
+
+      if (eventIds.length > 0 && sameTypeTermIds.length > 0) {
+        const { data: linksData, error: linksError } = await supabaseAny
+          .from('event_term_links')
+          .select('event_id, term_id, term_version_id')
+          .eq('company_id', companyId)
+          .in('term_id', sameTypeTermIds)
+          .in('event_id', eventIds);
+
+        if (linksError) throw linksError;
+        existingLinks = linksData ?? [];
+      }
+
+      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string }>>();
+      existingLinks.forEach((link) => {
+        linksByEvent.set(link.event_id, [...(linksByEvent.get(link.event_id) ?? []), link]);
+      });
+
+      const alreadyUsingCount = eventIds.filter((eventId: string) =>
+        (linksByEvent.get(eventId) ?? []).some((link) => link.term_id === term.id && link.term_version_id === currentVersion.id),
+      ).length;
+      const replacedSameTypeCount = eventIds.filter((eventId: string) =>
+        (linksByEvent.get(eventId) ?? []).some((link) => link.term_id !== term.id),
+      ).length;
+      const toUpdateCount = eventIds.filter((eventId: string) => {
+        const eventLinks = linksByEvent.get(eventId) ?? [];
+        const alreadyUsesCurrentVersion = eventLinks.some((link) => link.term_id === term.id && link.term_version_id === currentVersion.id);
+        const hasOtherSameTypeTerm = eventLinks.some((link) => link.term_id !== term.id);
+        return !alreadyUsesCurrentVersion || hasOtherSameTypeTerm;
+      }).length;
+
+      setApplyDialog({
+        term,
+        version: currentVersion,
+        loading: false,
+        activeEventsCount: eventIds.length,
+        alreadyUsingCount,
+        toUpdateCount,
+        replacedSameTypeCount,
+      });
+    } catch (error) {
+      logSupabaseError({
+        label: 'Erro ao calcular aplicação de termo em eventos ativos',
+        error,
+        context: { action: 'bulk_apply_preview', companyId, termId: term.id, versionId: currentVersion.id, userId: user?.id },
+      });
+      toast.error('Não foi possível calcular os eventos ativos para aplicar este termo. Tente novamente.');
+      setApplyDialog(null);
+    }
+  };
+
+  const handleApplyToActiveEvents = async () => {
+    if (!applyDialog || !companyId) return;
+    if (!canManage) {
+      toast.error('Somente gerentes podem aplicar termos aos eventos ativos.');
+      return;
+    }
+
+    const { term, version } = applyDialog;
+    if (term.status !== 'vigente' || version.status !== 'published' || term.current_version_id !== version.id) {
+      toast.error('Aplique apenas a versão publicada e vigente do termo.');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { data: activeEvents, error: eventsError } = await supabaseAny
+        .from('events')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('status', 'a_venda')
+        .eq('is_archived', false);
+
+      if (eventsError) throw eventsError;
+
+      const eventIds = (activeEvents ?? []).map((event: { id: string }) => event.id);
+      if (eventIds.length === 0) {
+        toast.info('Nenhum evento ativo encontrado para aplicar este termo.');
+        setApplyDialog(null);
+        return;
+      }
+
+      if (applyDialog.toUpdateCount === 0) {
+        toast.info('Todos os eventos ativos já utilizam esta versão.');
+        setApplyDialog(null);
+        return;
+      }
+
+      const sameTypeTermIds = terms
+        .filter((item) => item.company_id === companyId && item.term_type === term.term_type)
+        .map((item) => item.id);
+      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string }> = [];
+
+      if (sameTypeTermIds.length > 0) {
+        const { data: linksData, error: linksError } = await supabaseAny
+          .from('event_term_links')
+          .select('event_id, term_id, term_version_id')
+          .eq('company_id', companyId)
+          .in('event_id', eventIds)
+          .in('term_id', sameTypeTermIds);
+
+        if (linksError) throw linksError;
+        existingLinks = linksData ?? [];
+      }
+
+      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string }>>();
+      existingLinks.forEach((link) => {
+        linksByEvent.set(link.event_id, [...(linksByEvent.get(link.event_id) ?? []), link]);
+      });
+
+      const alreadyUsingCount = eventIds.filter((eventId: string) =>
+        (linksByEvent.get(eventId) ?? []).some((link) => link.term_id === term.id && link.term_version_id === version.id),
+      ).length;
+      const replacedSameTypeCount = eventIds.filter((eventId: string) =>
+        (linksByEvent.get(eventId) ?? []).some((link) => link.term_id !== term.id),
+      ).length;
+      const eventIdsToApply = eventIds.filter((eventId: string) => {
+        const eventLinks = linksByEvent.get(eventId) ?? [];
+        const alreadyUsesCurrentVersion = eventLinks.some((link) => link.term_id === term.id && link.term_version_id === version.id);
+        const hasOtherSameTypeTerm = eventLinks.some((link) => link.term_id !== term.id);
+        return !alreadyUsesCurrentVersion || hasOtherSameTypeTerm;
+      });
+
+      if (eventIdsToApply.length === 0) {
+        toast.info('Todos os eventos ativos já utilizam esta versão.');
+        setApplyDialog(null);
+        return;
+      }
+
+      const otherSameTypeTermIds = sameTypeTermIds.filter((termId) => termId !== term.id);
+      if (otherSameTypeTermIds.length > 0) {
+        // Comentário de manutenção: remove apenas vínculos de outros termos do mesmo tipo nos eventos ativos da empresa atual.
+        const { error: deleteSameTypeError } = await supabaseAny
+          .from('event_term_links')
+          .delete()
+          .eq('company_id', companyId)
+          .in('event_id', eventIdsToApply)
+          .in('term_id', otherSameTypeTermIds);
+
+        if (deleteSameTypeError) throw deleteSameTypeError;
+      }
+
+      const rows = eventIdsToApply.map((eventId: string) => ({
+        company_id: companyId,
+        event_id: eventId,
+        term_id: term.id,
+        term_version_id: version.id,
+        selection_mode: 'specific_version',
+        acceptance_required: true,
+        linked_by: user?.id ?? null,
+      }));
+
+      // Comentário de manutenção: o upsert reutiliza a chave evento+termo da etapa 5 e nunca toca snapshots de aceite já gravados.
+      const { error: upsertError } = await supabaseAny
+        .from('event_term_links')
+        .upsert(rows, { onConflict: 'event_id,term_id' });
+
+      if (upsertError) throw upsertError;
+
+      await addAuditLog({
+        termId: term.id,
+        versionId: version.id,
+        action: 'term_applied_to_active_events',
+        description: `Termo aplicado em ${eventIds.length} eventos ativos da empresa.`,
+        metadata: {
+          company_id: companyId,
+          term_type: term.term_type,
+          active_events_count: eventIds.length,
+          already_using_count: alreadyUsingCount,
+          updated_count: eventIdsToApply.length,
+          replaced_same_type_count: replacedSameTypeCount,
+          selection_mode: 'specific_version',
+          acceptance_required: true,
+        },
+      });
+
+      toast.success(`Termo aplicado com sucesso. ${eventIdsToApply.length} eventos atualizados e ${alreadyUsingCount} já estavam usando esta versão.`);
+      setApplyDialog(null);
+    } catch (error) {
+      logSupabaseError({
+        label: 'Erro ao aplicar termo em eventos ativos (event_term_links.upsert)',
+        error,
+        context: { action: 'bulk_upsert', table: 'event_term_links', companyId, termId: term.id, versionId: version.id, userId: user?.id },
+      });
+      toast.error('Não foi possível aplicar o vínculo nos eventos ativos. Tente novamente em instantes.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const getCurrentVersion = (term: CompanyTermWithVersions) =>
     term.versions.find((version) => version.id === term.current_version_id) ?? null;
 
@@ -863,6 +1103,12 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         icon: ShieldCheck,
         disabled: !draft || !canManage,
         onClick: () => draft && publishVersion(term, draft, true),
+      },
+      {
+        label: 'Aplicar em todos os eventos ativos',
+        icon: Wand2,
+        disabled: !canManage || term.status !== 'vigente' || !getCurrentVersion(term) || getCurrentVersion(term)?.status !== 'published',
+        onClick: () => openApplyToActiveEventsDialog(term),
       },
       {
         label: 'Criar nova versão',
@@ -1184,6 +1430,72 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           <div className="whitespace-pre-wrap rounded-md border p-4 text-sm leading-relaxed">
             {contentDialog?.version.content}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(applyDialog)} onOpenChange={(open) => !open && setApplyDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Aplicar em todos os eventos ativos</DialogTitle>
+            <DialogDescription>
+              {applyDialog ? `${applyDialog.term.title} • versão ${applyDialog.version.version_number}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-sm">
+            <Alert>
+              <ShieldCheck className="h-4 w-4" />
+              <AlertDescription className="space-y-2">
+                <p>O termo selecionado será aplicado em todos os eventos ativos da empresa atual e valerá para os próximos checkouts.</p>
+                <p>Os aceites já registrados anteriormente permanecem preservados para auditoria. Esta ação não altera histórico de aceite existente nem apaga versões antigas.</p>
+              </AlertDescription>
+            </Alert>
+
+            {applyDialog?.loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Calculando eventos ativos...
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Eventos ativos</CardDescription>
+                    <CardTitle>{applyDialog?.activeEventsCount ?? 0}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Já usam esta versão</CardDescription>
+                    <CardTitle>{applyDialog?.alreadyUsingCount ?? 0}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Serão atualizados</CardDescription>
+                    <CardTitle>{applyDialog?.toUpdateCount ?? 0}</CardTitle>
+                  </CardHeader>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Substituição mesmo tipo</CardDescription>
+                    <CardTitle>{applyDialog?.replacedSameTypeCount ?? 0}</CardTitle>
+                  </CardHeader>
+                </Card>
+              </div>
+            )}
+
+            {!applyDialog?.loading && applyDialog?.activeEventsCount !== 0 && applyDialog?.toUpdateCount === 0 && (
+              <p className="text-sm font-medium text-muted-foreground">Todos os eventos ativos já utilizam esta versão.</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setApplyDialog(null)} disabled={saving}>Cancelar</Button>
+            <Button type="button" onClick={handleApplyToActiveEvents} disabled={saving || applyDialog?.loading || !canManage || applyDialog?.toUpdateCount === 0}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmar aplicação
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
