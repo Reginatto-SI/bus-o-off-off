@@ -329,6 +329,12 @@ export default function DriverHome() {
     }
   };
 
+  const handlePassengerListOpen = (status: 'all' | 'done' | 'pending') => {
+    if (!activeTrip) return;
+    // Reutiliza a lista operacional existente e entrega apenas o filtro inicial pela URL.
+    navigate(`/validador/embarque?status=${status}`);
+  };
+
   const handlePhaseChange = (phase: OperationalPhase) => {
     setActivePhase(phase);
     if (user && activeCompanyId) {
@@ -552,18 +558,33 @@ export default function DriverHome() {
               ) : (
                 <>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <button
+                      type="button"
+                      className="rounded-lg bg-muted/50 p-3 text-center transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
+                      onClick={() => handlePassengerListOpen('all')}
+                      aria-label="Abrir lista com todos os passageiros"
+                    >
                       <p className="text-2xl font-bold">{kpis.total}</p>
                       <p className="text-xs text-muted-foreground">Total</p>
-                    </div>
-                    <div className="rounded-lg bg-green-500/10 p-3 text-center">
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-green-500/10 p-3 text-center transition-colors hover:bg-green-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 active:scale-[0.99]"
+                      onClick={() => handlePassengerListOpen('done')}
+                      aria-label={`Abrir lista de passageiros em ${phaseConfig.doneLabel.toLowerCase()}`}
+                    >
                       <p className="text-2xl font-bold text-green-600">{kpis.done}</p>
                       <p className="text-xs text-muted-foreground">{phaseConfig.doneLabel}</p>
-                    </div>
-                    <div className="rounded-lg bg-orange-500/10 p-3 text-center">
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-orange-500/10 p-3 text-center transition-colors hover:bg-orange-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 active:scale-[0.99]"
+                      onClick={() => handlePassengerListOpen('pending')}
+                      aria-label={`Abrir lista de passageiros em ${phaseConfig.pendingLabel.toLowerCase()}`}
+                    >
                       <p className="text-2xl font-bold text-orange-600">{kpis.pending}</p>
                       <p className="text-xs text-muted-foreground">{phaseConfig.pendingLabel}</p>
-                    </div>
+                    </button>
                   </div>
 
                   {/* Progress bar */}
