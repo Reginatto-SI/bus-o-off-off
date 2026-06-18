@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { syncSeatsFromSnapshot } from '@/lib/vehicleSeatSync';
 import { SeatCategory, TemplateLayout, Vehicle } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
@@ -122,247 +123,6 @@ const TEMPLATE_PREVIEW_CATEGORY_COLORS: Record<SeatCategory, string> = {
   leito_cama: 'bg-rose-100 text-rose-700 border-rose-200',
 };
 
-
-// Comentário P0: sincronização idempotente layout_snapshot → seats.
-// Garante que assentos no banco reflitam exatamente o snapshot do veículo.
-// Reescrito com fases seguras para evitar conflito de labels (UNIQUE vehicle_id+label).
-async function syncSeatsFromSnapshot(
-  vehicleId: string,
-  companyId: string,
-  snapshot: Record<string, any> | null,
-): Promise<{ inserted: number; updated: number; deleted: number; blocked: number; errors: string[] }> {
-  const result = { inserted: 0, updated: 0, deleted: 0, blocked: 0, errors: [] as string[] };
-
-  if (!snapshot || !snapshot.items || !Array.isArray(snapshot.items)) return result;
-
-  const items = snapshot.items as Array<{
-    floor_number: number;
-    row_number: number;
-    column_number: number;
-    seat_number?: string | null;
-    category?: string;
-    is_blocked?: boolean;
-  }>;
-
-  // === FASE 0: Limpar lixo técnico (_legacy_ e _tmp_) sem tickets vinculados ===
-  // Isso evita acúmulo progressivo de seats fantasmas a cada re-sync.
-  {
-    // Buscar todos os seats técnicos do veículo
-    const { data: techSeats } = await supabase
-      .from('seats')
-      .select('id, label')
-      .eq('vehicle_id', vehicleId)
-      .or('label.ilike._legacy_%,label.ilike._tmp_%');
-
-    if (techSeats && techSeats.length > 0) {
-      const techIds = techSeats.map((s) => s.id);
-
-      // Verificar quais têm tickets vinculados
-      const { data: linkedTickets } = await supabase
-        .from('tickets')
-        .select('seat_id')
-        .in('seat_id', techIds);
-
-      const linkedIds = new Set((linkedTickets ?? []).filter((t) => t.seat_id).map((t) => t.seat_id!));
-      const toClean = techIds.filter((id) => !linkedIds.has(id));
-
-      if (toClean.length > 0) {
-        const { error: cleanErr } = await supabase
-          .from('seats')
-          .delete()
-          .in('id', toClean);
-
-        if (cleanErr) {
-          result.errors.push(`Erro ao limpar seats técnicos: ${cleanErr.message}`);
-        } else {
-          result.deleted += toClean.length;
-          console.log(`[syncSeats] FASE 0: removidos ${toClean.length} seats técnicos (_legacy_/_tmp_)`);
-        }
-      }
-    }
-  }
-
-  // === FASE 1: Montar estado desejado ===
-  // Numerar sequencialmente (items já vêm ordenados do snapshot)
-  let seatNumber = 1;
-  const desiredSeats = items.map((item) => {
-    const label = item.is_blocked
-      ? (item.seat_number || 'X')
-      : (item.seat_number || String(seatNumber++));
-    if (!item.is_blocked && !item.seat_number) {
-      // seat_number was auto-assigned
-    }
-    return {
-      floor: item.floor_number,
-      row_number: item.row_number,
-      column_number: item.column_number,
-      label,
-      status: item.is_blocked ? 'bloqueado' as const : 'disponivel' as const,
-      category: item.category || 'convencional',
-      coordKey: `${item.floor_number}-${item.row_number}-${item.column_number}`,
-    };
-  });
-
-  const desiredCoordMap = new Map(desiredSeats.map((s) => [s.coordKey, s]));
-
-  // === FASE 2: Buscar seats existentes do veículo ===
-  const { data: existingSeats, error: fetchErr } = await supabase
-    .from('seats')
-    .select('id, label, floor, row_number, column_number, category, status')
-    .eq('vehicle_id', vehicleId);
-
-  if (fetchErr) {
-    result.errors.push(`Erro ao buscar assentos: ${fetchErr.message}`);
-    throw new Error(result.errors[0]);
-  }
-
-  const existing = existingSeats ?? [];
-
-  // === FASE 3: Identificar órfãos (assentos fora do snapshot) ===
-  const orphanSeats = existing.filter((s) => !desiredCoordMap.has(`${s.floor}-${s.row_number}-${s.column_number}`));
-  const orphanIds = orphanSeats.map((s) => s.id);
-
-  // Verificar tickets vinculados a órfãos
-  let linkedSeatIds = new Set<string>();
-  if (orphanIds.length > 0) {
-    const { data: linkedTickets } = await supabase
-      .from('tickets')
-      .select('seat_id')
-      .in('seat_id', orphanIds);
-    linkedSeatIds = new Set((linkedTickets ?? []).filter((t) => t.seat_id).map((t) => t.seat_id!));
-  }
-
-  // === FASE 4: Deletar/bloquear órfãos PRIMEIRO (libera labels) ===
-  const orphansToDelete = orphanSeats.filter((s) => !linkedSeatIds.has(s.id));
-  const orphansToBlock = orphanSeats.filter((s) => linkedSeatIds.has(s.id));
-
-  if (orphansToDelete.length > 0) {
-    const { error: delErr } = await supabase.from('seats').delete().in('id', orphansToDelete.map((s) => s.id));
-    if (delErr) {
-      result.errors.push(`Erro ao deletar órfãos: ${delErr.message}`);
-    } else {
-      result.deleted = orphansToDelete.length;
-    }
-  }
-
-  // Órfãos com ticket: renomear label para técnica única e bloquear
-  for (const orphan of orphansToBlock) {
-    const techLabel = `_legacy_${orphan.id.slice(0, 8)}`;
-    const { error: blockErr } = await supabase
-      .from('seats')
-      .update({ status: 'bloqueado', label: techLabel })
-      .eq('id', orphan.id);
-    if (blockErr) {
-      result.errors.push(`Erro ao bloquear órfão ${orphan.label}: ${blockErr.message}`);
-    } else {
-      result.blocked++;
-    }
-  }
-
-  // Rebuild existingByLabel after orphan cleanup (orphan labels are now freed)
-  // Re-fetch to get current state
-  const { data: currentSeats } = await supabase
-    .from('seats')
-    .select('id, label, floor, row_number, column_number, category, status')
-    .eq('vehicle_id', vehicleId);
-
-  const currentByCoord = new Map((currentSeats ?? []).map((s) => [`${s.floor}-${s.row_number}-${s.column_number}`, s]));
-  const currentByLabel = new Map((currentSeats ?? []).map((s) => [s.label, s]));
-
-  // === FASE 5: Atualizar assentos que permanecem (mesma coordenada) ===
-  for (const desired of desiredSeats) {
-    const existingSeat = currentByCoord.get(desired.coordKey);
-    if (existingSeat) {
-      // Check if label is changing and new label conflicts with another seat
-      if (existingSeat.label !== desired.label) {
-        const conflicting = currentByLabel.get(desired.label);
-        if (conflicting && conflicting.id !== existingSeat.id) {
-          // Temporarily rename conflicting seat to avoid unique violation
-          const tempLabel = `_tmp_${conflicting.id.slice(0, 8)}`;
-          await supabase.from('seats').update({ label: tempLabel }).eq('id', conflicting.id);
-          currentByLabel.delete(desired.label);
-          currentByLabel.set(tempLabel, { ...conflicting, label: tempLabel });
-        }
-      }
-
-      const needsUpdate =
-        existingSeat.label !== desired.label ||
-        existingSeat.status !== desired.status ||
-        existingSeat.category !== desired.category;
-
-      if (needsUpdate) {
-        const { error: updErr } = await supabase
-          .from('seats')
-          .update({ label: desired.label, status: desired.status, category: desired.category })
-          .eq('id', existingSeat.id);
-        if (updErr) {
-          result.errors.push(`Erro ao atualizar ${desired.label}: ${updErr.message}`);
-        } else {
-          result.updated++;
-          currentByLabel.delete(existingSeat.label);
-          currentByLabel.set(desired.label, { ...existingSeat, label: desired.label });
-        }
-      }
-    }
-  }
-
-  // === FASE 6: Inserir assentos faltantes ===
-  const toInsert = desiredSeats
-    .filter((d) => !currentByCoord.has(d.coordKey))
-    .map((d) => ({
-      vehicle_id: vehicleId,
-      company_id: companyId,
-      label: d.label,
-      floor: d.floor,
-      row_number: d.row_number,
-      column_number: d.column_number,
-      status: d.status,
-      category: d.category,
-    }));
-
-  if (toInsert.length > 0) {
-    // Insert in batches to handle label conflicts gracefully
-    for (const seat of toInsert) {
-      // Check if label still conflicts
-      const conflicting = currentByLabel.get(seat.label);
-      if (conflicting) {
-        const tempLabel = `_tmp_${conflicting.id.slice(0, 8)}`;
-        await supabase.from('seats').update({ label: tempLabel }).eq('id', conflicting.id);
-        currentByLabel.delete(seat.label);
-        currentByLabel.set(tempLabel, { ...conflicting, label: tempLabel });
-      }
-
-      const { error: insErr } = await supabase.from('seats').insert(seat);
-      if (insErr) {
-        result.errors.push(`Erro ao inserir ${seat.label}: ${insErr.message}`);
-      } else {
-        result.inserted++;
-        currentByLabel.set(seat.label, seat as any);
-      }
-    }
-  }
-
-  // === FASE 7: Atualizar capacidade do veículo ===
-  const calculatedCapacity = desiredSeats.filter((s) => s.status === 'disponivel').length;
-  await supabase.from('vehicles').update({ capacity: calculatedCapacity }).eq('id', vehicleId);
-
-  // === FASE 8: Validação final ===
-  const { data: finalSeats } = await supabase
-    .from('seats')
-    .select('category, status')
-    .eq('vehicle_id', vehicleId)
-    .not('label', 'like', '_legacy_%')
-    .not('label', 'like', '_tmp_%');
-
-  const finalSellable = (finalSeats ?? []).filter((s) => s.status === 'disponivel').length;
-  const expectedSellable = desiredSeats.filter((s) => s.status === 'disponivel').length;
-
-  if (finalSellable !== expectedSellable) {
-    result.errors.push(`Divergência: esperado ${expectedSellable} vendáveis, encontrado ${finalSellable}`);
-  }
-
-  return result;
-}
 
 const getSeatSidesByType = (type: Vehicle['type']) => {
   // Comentário: usamos presets brasileiros para acelerar cadastro e manter edição manual quando necessário.
@@ -772,7 +532,7 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      layout_snapshot: null as Record<string, any> | null,
+      layout_snapshot: null as Record<string, unknown> | null,
       template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
@@ -863,7 +623,7 @@ export default function Fleet() {
       // Comentário P0: sincronizar seats a partir do layout_snapshot após salvar veículo.
       if (savedVehicleId && vehicleData.layout_snapshot) {
         try {
-          const syncResult = await syncSeatsFromSnapshot(savedVehicleId, activeCompanyId, vehicleData.layout_snapshot as Record<string, any>);
+          const syncResult = await syncSeatsFromSnapshot(savedVehicleId, activeCompanyId, vehicleData.layout_snapshot);
           if (syncResult.errors.length > 0) {
             console.error('Erros na sincronização:', syncResult.errors);
             toast.error(`Veículo salvo com ${syncResult.errors.length} erro(s) na sincronização de assentos.`);
