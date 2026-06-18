@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getPersistedTripId, getPersistedPhase } from '@/lib/driverTripStorage';
@@ -108,8 +108,13 @@ function formatCurrency(value: number | null) {
     : '—';
 }
 
+function getInitialStatusFilter(value: string | null): StatusFilter {
+  return value === 'done' || value === 'pending' ? value : 'all';
+}
+
 export default function DriverBoarding() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, userRole, loading, activeCompanyId } = useAuth();
   const { toast } = useToast();
 
@@ -120,7 +125,7 @@ export default function DriverBoarding() {
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => getInitialStatusFilter(searchParams.get('status')));
   const [loadingData, setLoadingData] = useState(true);
   const [selectedPassenger, setSelectedPassenger] = useState<PassengerRow | null>(null);
   const [confirmPassenger, setConfirmPassenger] = useState<PassengerRow | null>(null);
@@ -307,6 +312,11 @@ export default function DriverBoarding() {
       fetchData();
     }
   }, [user, activeCompanyId, canAccess, fetchData]);
+
+  useEffect(() => {
+    // Permite que os cards da home abram esta lista existente já com o filtro ativo.
+    setStatusFilter(getInitialStatusFilter(searchParams.get('status')));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!user || !activeCompanyId || !canAccess) return;
