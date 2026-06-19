@@ -468,7 +468,14 @@ export default function Checkout() {
           );
         }
 
-        setEventTerms(hydratedTerms as PublicEventTerm[]);
+        // Comentário de suporte: evita exibir mais de um termo do mesmo tipo no checkout
+        // público caso existam vínculos legados duplicados para o evento.
+        const uniqueTermsByType = (hydratedTerms as PublicEventTerm[]).filter(
+          (term, index, terms) =>
+            terms.findIndex((candidate) => candidate.termType === term.termType) === index,
+        );
+
+        setEventTerms(uniqueTermsByType);
       } catch (error) {
         console.error("[checkout] event_terms_load_failed", {
           eventId: event.id,
@@ -1273,7 +1280,7 @@ export default function Checkout() {
     }
 
     if (eventTermsRequireAcceptance && !eventTermsAccepted) {
-      toast.error("Para continuar, é necessário aceitar os termos deste evento.");
+      toast.error("Para continuar, aceite os termos obrigatórios deste evento.");
       return;
     }
 
@@ -2640,6 +2647,13 @@ export default function Checkout() {
               </Button>
             )}
           </div>
+
+
+          {step === 3 && eventTermsRequireAcceptance && !eventTermsAccepted && (
+            <p className="text-[11px] font-medium text-orange-700">
+              Para continuar, aceite os termos obrigatórios deste evento.
+            </p>
+          )}
 
           <button
             type="button"
