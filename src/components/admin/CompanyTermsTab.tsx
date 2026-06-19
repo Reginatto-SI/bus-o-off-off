@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -108,6 +109,7 @@ type ApplyToActiveEventsDialogState = {
   alreadyUsingCount: number;
   toUpdateCount: number;
   replacedSameTypeCount: number;
+  requireAcceptance: boolean;
 };
 
 interface CompanyTermsTabProps {
@@ -845,6 +847,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       alreadyUsingCount: 0,
       toUpdateCount: 0,
       replacedSameTypeCount: 0,
+      requireAcceptance: true,
     });
 
     try {
@@ -861,12 +864,12 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       const sameTypeTermIds = terms
         .filter((item) => item.company_id === companyId && item.term_type === term.term_type)
         .map((item) => item.id);
-      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string }> = [];
+      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string; acceptance_required: boolean }> = [];
 
       if (eventIds.length > 0 && sameTypeTermIds.length > 0) {
         const { data: linksData, error: linksError } = await supabaseAny
           .from('event_term_links')
-          .select('event_id, term_id, term_version_id')
+          .select('event_id, term_id, term_version_id, acceptance_required')
           .eq('company_id', companyId)
           .in('term_id', sameTypeTermIds)
           .in('event_id', eventIds);
@@ -875,7 +878,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         existingLinks = linksData ?? [];
       }
 
-      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string }>>();
+      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string; acceptance_required: boolean }>>();
       existingLinks.forEach((link) => {
         linksByEvent.set(link.event_id, [...(linksByEvent.get(link.event_id) ?? []), link]);
       });
@@ -888,9 +891,9 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       ).length;
       const toUpdateCount = eventIds.filter((eventId: string) => {
         const eventLinks = linksByEvent.get(eventId) ?? [];
-        const alreadyUsesCurrentVersion = eventLinks.some((link) => link.term_id === term.id && link.term_version_id === currentVersion.id);
+        const currentVersionLink = eventLinks.find((link) => link.term_id === term.id && link.term_version_id === currentVersion.id);
         const hasOtherSameTypeTerm = eventLinks.some((link) => link.term_id !== term.id);
-        return !alreadyUsesCurrentVersion || hasOtherSameTypeTerm;
+        return !currentVersionLink || !currentVersionLink.acceptance_required || hasOtherSameTypeTerm;
       }).length;
 
       setApplyDialog({
@@ -901,6 +904,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         alreadyUsingCount,
         toUpdateCount,
         replacedSameTypeCount,
+        requireAcceptance: true,
       });
     } catch (error) {
       logSupabaseError({
@@ -954,12 +958,12 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       const sameTypeTermIds = terms
         .filter((item) => item.company_id === companyId && item.term_type === term.term_type)
         .map((item) => item.id);
-      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string }> = [];
+      let existingLinks: Array<{ event_id: string; term_id: string; term_version_id: string; acceptance_required: boolean }> = [];
 
       if (sameTypeTermIds.length > 0) {
         const { data: linksData, error: linksError } = await supabaseAny
           .from('event_term_links')
-          .select('event_id, term_id, term_version_id')
+          .select('event_id, term_id, term_version_id, acceptance_required')
           .eq('company_id', companyId)
           .in('event_id', eventIds)
           .in('term_id', sameTypeTermIds);
@@ -968,7 +972,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         existingLinks = linksData ?? [];
       }
 
-      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string }>>();
+      const linksByEvent = new Map<string, Array<{ event_id: string; term_id: string; term_version_id: string; acceptance_required: boolean }>>();
       existingLinks.forEach((link) => {
         linksByEvent.set(link.event_id, [...(linksByEvent.get(link.event_id) ?? []), link]);
       });
@@ -981,9 +985,10 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
       ).length;
       const eventIdsToApply = eventIds.filter((eventId: string) => {
         const eventLinks = linksByEvent.get(eventId) ?? [];
-        const alreadyUsesCurrentVersion = eventLinks.some((link) => link.term_id === term.id && link.term_version_id === version.id);
+        const currentVersionLink = eventLinks.find((link) => link.term_id === term.id && link.term_version_id === version.id);
         const hasOtherSameTypeTerm = eventLinks.some((link) => link.term_id !== term.id);
-        return !alreadyUsesCurrentVersion || hasOtherSameTypeTerm;
+        const mustEnableAcceptance = applyDialog.requireAcceptance && !currentVersionLink?.acceptance_required;
+        return !currentVersionLink || mustEnableAcceptance || hasOtherSameTypeTerm;
       });
 
       if (eventIdsToApply.length === 0) {
@@ -1011,7 +1016,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
         term_id: term.id,
         term_version_id: version.id,
         selection_mode: 'specific_version',
-        acceptance_required: true,
+        acceptance_required: applyDialog.requireAcceptance,
         linked_by: user?.id ?? null,
       }));
 
@@ -1035,7 +1040,7 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
           updated_count: eventIdsToApply.length,
           replaced_same_type_count: replacedSameTypeCount,
           selection_mode: 'specific_version',
-          acceptance_required: true,
+          acceptance_required: applyDialog.requireAcceptance,
         },
       });
 
@@ -1450,6 +1455,20 @@ export function CompanyTermsTab({ companyId }: CompanyTermsTabProps) {
                 <p>Os aceites já registrados anteriormente permanecem preservados para auditoria. Esta ação não altera histórico de aceite existente nem apaga versões antigas.</p>
               </AlertDescription>
             </Alert>
+
+            <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+              <div className="space-y-1">
+                <Label>Exigir aceite dos termos no checkout</Label>
+                <p className="text-sm text-muted-foreground">
+                  Quando marcado, os vínculos criados ou atualizados ficam como aceite obrigatório para próximos checkouts.
+                </p>
+              </div>
+              <Switch
+                checked={applyDialog?.requireAcceptance ?? true}
+                onCheckedChange={(checked) => setApplyDialog((prev) => prev ? ({ ...prev, requireAcceptance: checked }) : prev)}
+                disabled={saving || applyDialog?.loading}
+              />
+            </div>
 
             {applyDialog?.loading ? (
               <div className="flex items-center gap-2 text-muted-foreground">
