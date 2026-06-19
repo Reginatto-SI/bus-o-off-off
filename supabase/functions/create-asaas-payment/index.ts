@@ -120,6 +120,14 @@ function getPayloadTermsAcceptance(value: unknown): TermsAcceptancePayload | nul
   return value as TermsAcceptancePayload;
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function getPayloadAcceptedTerms(payload: TermsAcceptancePayload | null): TermsAcceptancePayloadTerm[] {
   if (!payload || !Array.isArray(payload.accepted_terms)) return [];
   return payload.accepted_terms.filter(
@@ -312,8 +320,12 @@ async function ensureSaleTermsAcceptance(params: {
 
   if (missingLinks.length > 0) {
     const acceptedAt = new Date().toISOString();
-    const rows = missingLinks.map((link) => {
+    const rows = await Promise.all(missingLinks.map(async (link) => {
       const version = versionsById.get(link.term_version_id)!;
+      const acceptedTextSnapshot = String(version.content ?? "");
+      const persistedContentHash = normalizeOptionalText(version.content_hash);
+      // Comentário de suporte: termos legados podem ter sido publicados antes do hash ser preenchido no banco.
+      const contentHash = persistedContentHash ?? await sha256Hex(acceptedTextSnapshot);
       return {
         company_id: companyId,
         sale_id: saleId,
@@ -323,8 +335,8 @@ async function ensureSaleTermsAcceptance(params: {
         term_title_snapshot: String(version.title ?? ""),
         term_type_snapshot: String(version.term_type ?? ""),
         version_number: Number(version.version_number ?? 0),
-        content_hash: String(version.content_hash ?? ""),
-        accepted_text_snapshot: String(version.content ?? ""),
+        content_hash: contentHash,
+        accepted_text_snapshot: acceptedTextSnapshot,
         summary_snapshot: version.summary ?? null,
         accepted_at: acceptedAt,
         accepted_by_name: normalizeOptionalText(termsAcceptance?.accepted_by_name),
@@ -333,7 +345,7 @@ async function ensureSaleTermsAcceptance(params: {
         acceptance_origin: "public_checkout",
         explicit_acceptance: true,
       };
-    });
+    }));
 
     const { error: insertError } = await supabaseAdmin
       .from("sale_term_acceptances")
