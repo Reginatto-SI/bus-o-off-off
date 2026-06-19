@@ -104,6 +104,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // Popover removed — transport policy now uses clickable cards instead of Select+Popover
 import { formatCurrencyBRL, formatCurrencyInputValueFromDigits, formatCurrencyValueBRL, parseCurrencyInputBRL } from '@/lib/currency';
+import { getSnapshotSellableSeatSummary, syncSeatsFromSnapshot } from '@/lib/vehicleSeatSync';
 import { EventSponsorsTab } from '@/components/admin/EventSponsorsTab';
 import { EventServicesTab } from '@/components/admin/EventServicesTab';
 import { EventTermsTab } from '@/components/admin/EventTermsTab';
@@ -1919,6 +1920,54 @@ export default function Events() {
     }
   }, [tripDialogOpen, editingTripId, isRoundTripMandatoryPolicy, isSomenteIdaPolicy, tripForm.trip_creation_type]);
 
+
+  const ensureVehicleSeatsFromSnapshot = async (vehicle: Vehicle) => {
+    const snapshot = vehicle.layout_snapshot;
+    const snapshotItems = Array.isArray(snapshot?.items) ? snapshot.items : [];
+    if (!activeCompanyId || snapshotItems.length === 0) return vehicle.capacity;
+
+    const expectedSummary = getSnapshotSellableSeatSummary(snapshot);
+    const expectedSellable = expectedSummary.total;
+    const expectedByFloor = expectedSummary.byFloor;
+
+    const { data: currentSeats, error: currentSeatsError } = await supabase
+      .from('seats')
+      .select('id, floor, label, status')
+      .eq('vehicle_id', vehicle.id)
+      .eq('company_id', activeCompanyId)
+      .not('label', 'like', '_legacy_%')
+      .not('label', 'like', '_tmp_%');
+
+    if (currentSeatsError) throw currentSeatsError;
+
+    const currentSellableSeats = (currentSeats ?? []).filter((seat) => seat.status !== 'bloqueado');
+    const currentByFloor = currentSellableSeats.reduce<Record<number, number>>((acc, seat) => {
+      acc[seat.floor] = (acc[seat.floor] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const floors = new Set([
+      ...Object.keys(expectedByFloor).map(Number),
+      ...Object.keys(currentByFloor).map(Number),
+    ]);
+    const hasFloorMismatch = Array.from(floors).some((floor) => (expectedByFloor[floor] ?? 0) !== (currentByFloor[floor] ?? 0));
+
+    if (currentSellableSeats.length === expectedSellable && !hasFloorMismatch) {
+      return expectedSellable;
+    }
+
+    // Comentário: /admin/eventos é o ponto em que o veículo passa a alimentar o checkout público.
+    // Se os seats materializados estiverem incompletos/defasados do layout_snapshot, reusamos a
+    // sincronização oficial da Frota antes de vincular o transporte ao evento.
+    const syncResult = await syncSeatsFromSnapshot(vehicle.id, activeCompanyId, snapshot, { updateVehicleCapacity: false });
+    if (syncResult.errors.length > 0) {
+      console.error('Erros ao sincronizar assentos do veículo antes de salvar transporte:', syncResult.errors);
+      throw new Error('Não foi possível sincronizar os assentos do veículo com o layout oficial. Reabra o cadastro do veículo na Frota, salve novamente ou acione o suporte.');
+    }
+
+    return syncResult.capacity || expectedSellable;
+  };
+
   const handleSaveTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId || !activeCompanyId) return;
@@ -1931,15 +1980,19 @@ export default function Events() {
     setSavingTrip(true);
 
     const selectedVehicle = vehicles.find(v => v.id === tripForm.vehicle_id);
-    const capacity = tripForm.capacity 
-      ? parseInt(tripForm.capacity, 10) 
-      : selectedVehicle?.capacity ?? 0;
 
     const assistantDriverId = tripForm.assistant_driver_id && tripForm.assistant_driver_id !== '__none__' 
       ? tripForm.assistant_driver_id 
       : null;
 
     try {
+      const syncedCapacity = selectedVehicle
+        ? await ensureVehicleSeatsFromSnapshot(selectedVehicle)
+        : null;
+      const capacity = syncedCapacity ?? (tripForm.capacity
+        ? parseInt(tripForm.capacity, 10)
+        : selectedVehicle?.capacity ?? 0);
+
       if (editingTripId) {
         // EDITING existing trip
         const updateData = {
@@ -2029,7 +2082,10 @@ export default function Events() {
       fetchEventTrips(editingId);
       fetchEvents();
     } catch (error) {
-      toast.error('Erro ao salvar transporte');
+      const message = error instanceof Error
+        ? error.message
+        : 'Erro ao salvar transporte';
+      toast.error(message);
       console.error(error);
     }
     setSavingTrip(false);
