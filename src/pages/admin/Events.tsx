@@ -1394,6 +1394,78 @@ export default function Events() {
     ]);
   };
 
+  const linkCurrentCompanyTermsToNewEvent = async (eventId: string, companyId: string) => {
+    try {
+      const { data: termRows, error: termsError } = await supabase
+        .from('company_terms')
+        .select('id, company_id, term_type, current_version_id, updated_at')
+        .eq('company_id', companyId)
+        .eq('status', 'vigente')
+        .not('current_version_id', 'is', null)
+        .order('updated_at', { ascending: false });
+
+      if (termsError) throw termsError;
+
+      const termIdsByType = new Map<string, { termId: string; versionId: string }>();
+      (termRows ?? []).forEach((term) => {
+        // Segurança multi-tenant e antiduplicidade: um novo evento recebe no máximo um termo vigente por tipo.
+        if (term.company_id !== companyId || !term.current_version_id || termIdsByType.has(term.term_type)) return;
+        termIdsByType.set(term.term_type, { termId: term.id, versionId: term.current_version_id });
+      });
+
+      const currentVersionIds = Array.from(termIdsByType.values()).map((term) => term.versionId);
+      if (currentVersionIds.length === 0) return 0;
+
+      const { data: versionRows, error: versionsError } = await supabase
+        .from('company_term_versions')
+        .select('id, company_id, term_id, status')
+        .eq('company_id', companyId)
+        .eq('status', 'published')
+        .in('id', currentVersionIds);
+
+      if (versionsError) throw versionsError;
+
+      const publishedCurrentVersions = new Map(
+        (versionRows ?? []).map((version) => [version.id, version]),
+      );
+
+      const linksToInsert = Array.from(termIdsByType.values())
+        .filter(({ termId, versionId }) => {
+          const version = publishedCurrentVersions.get(versionId);
+          return version?.company_id === companyId && version.term_id === termId && version.status === 'published';
+        })
+        .map(({ termId, versionId }) => ({
+          company_id: companyId,
+          event_id: eventId,
+          term_id: termId,
+          term_version_id: versionId,
+          // Consistente com a aplicação em massa: grava exatamente a versão vigente no momento da criação.
+          selection_mode: 'specific_version',
+          acceptance_required: true,
+          linked_by: user?.id ?? null,
+        }));
+
+      if (linksToInsert.length === 0) return 0;
+
+      const { error: linksError } = await supabase
+        .from('event_term_links')
+        // Reexecuções/retries devem reaproveitar a chave evento+termo, sem duplicar vínculos.
+        .upsert(linksToInsert, { onConflict: 'event_id,term_id' });
+
+      if (linksError) throw linksError;
+
+      return linksToInsert.length;
+    } catch (error) {
+      logSupabaseError({
+        label: 'Erro ao vincular termos vigentes automaticamente ao novo evento (event_term_links.upsert)',
+        error,
+        context: { action: 'auto_upsert_current_terms', table: 'event_term_links', companyId, eventId, userId: user?.id },
+      });
+      toast.warning('O evento foi criado, mas não foi possível vincular os termos vigentes automaticamente. Você pode corrigir manualmente em Termos e Políticas.');
+      return 0;
+    }
+  };
+
   // Handlers
   const persistEvent = async (targetStatus: 'rascunho' | 'a_venda' | 'encerrado') => {
     if (!activeCompanyId) {
@@ -1479,6 +1551,14 @@ export default function Events() {
       const { data, error: insertError } = await supabase.from('events').insert([eventData]).select('id').single();
       error = insertError;
       if (data) newEventId = data.id;
+    }
+
+    if (!error && isCreating && newEventId && activeCompanyId) {
+      const linkedTermsCount = await linkCurrentCompanyTermsToNewEvent(newEventId, activeCompanyId);
+      if (linkedTermsCount > 0) {
+        setEventTermLinksCount(linkedTermsCount);
+        toast.success('Termos vigentes da empresa vinculados automaticamente ao evento.');
+      }
     }
 
     if (!error && pendingImageFile && newEventId) {
