@@ -532,7 +532,7 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      layout_snapshot: null as Record<string, unknown> | null,
+      layout_snapshot: null as any,
       template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
