@@ -10,8 +10,8 @@ import {
   logSaleOperationalEvent,
 } from "../_shared/payment-observability.ts";
 import {
-  isWebhookTokenValidForContext,
   resolvePaymentContext,
+  validateWebhookTokenForContext,
 } from "../_shared/payment-context-resolver.ts";
 import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 
@@ -495,6 +495,107 @@ serve(async (req) => {
     }
 
     if (!saleEnv) {
+      // Venda inexistente não fornece ambiente persistido; ainda assim o token
+      // precisa ser validado antes de ignorarmos o webhook com 200 auditável.
+      const tokenEnvironment = resolveEnvironmentFromWebhookToken(req);
+      const existingSaleWithoutEnvironment = actualSaleId
+        ? await saleExists(supabaseAdmin, actualSaleId)
+        : false;
+
+      if (!tokenEnvironment.hasConfiguredToken) {
+        const missingSecretResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "failed",
+          resultCategory: "error",
+          httpStatus: 500,
+          message: "Secret de webhook ausente para validar evento sem ambiente de venda",
+          responseBody: { error: "Webhook secret not configured" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...missingSecretResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          missingSecretResult.httpStatus,
+          missingSecretResult.responseBody,
+        );
+      }
+
+      if (!tokenEnvironment.tokenValid) {
+        const unauthorizedResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "unauthorized",
+          resultCategory: "rejected",
+          httpStatus: 401,
+          message: "Token de webhook inválido",
+          responseBody: { error: "Invalid token" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...unauthorizedResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          unauthorizedResult.httpStatus,
+          unauthorizedResult.responseBody,
+        );
+      }
+
+      if (!existingSaleWithoutEnvironment) {
+        const saleNotFoundResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "ignored",
+          resultCategory: "ignored",
+          httpStatus: 200,
+          message: `Venda não localizada para externalReference=${externalReference}; webhook autenticado ignorado sem retry útil`,
+          responseBody: {
+            received: true,
+            ignored: true,
+            reason: "sale_not_found",
+            sale_id: actualSaleId || null,
+          },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          paymentEnvironment: tokenEnvironment.environment,
+          environmentDecisionSource: "request",
+          warningCode: "sale_not_found_before_environment_resolution",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...saleNotFoundResult,
+          payload: requestPayload,
+        });
+
+        logPaymentTrace("warn", "asaas-webhook", "webhook_sale_not_found_ignored", {
+          event_type: eventType,
+          asaas_payment_id: paymentId,
+          external_reference: externalReference,
+          sale_id: actualSaleId || null,
+          payment_environment: tokenEnvironment.environment,
+        });
+
+        return jsonResponse(
+          saleNotFoundResult.httpStatus,
+          saleNotFoundResult.responseBody,
+        );
+      }
+
       const unresolvedContextResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
@@ -510,6 +611,8 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: tokenEnvironment.environment,
+        environmentDecisionSource: "request",
       };
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -532,8 +635,10 @@ serve(async (req) => {
     const expectedTokenSecretName = getAsaasWebhookTokenSecretName(
       paymentContext.environment,
     );
-    const hasExpectedToken = paymentContext.webhookTokenCandidates.length > 0;
-    const tokenValid = isWebhookTokenValidForContext(req, paymentContext);
+    const tokenValidation = validateWebhookTokenForContext(req, paymentContext);
+    const hasExpectedToken =
+      tokenValidation.reason !== "missing_expected_secret";
+    const tokenValid = tokenValidation.valid;
 
     logPaymentTrace("info", "asaas-webhook", "webhook_received", {
       sale_id: actualSaleId || null,
@@ -549,6 +654,8 @@ serve(async (req) => {
       token_validation_mode: "single_environment_token",
       expected_token_secret: expectedTokenSecretName,
       token_validation_result: tokenValid ? "valid" : "invalid",
+      token_validation_reason: tokenValidation.reason,
+      received_header_name: tokenValidation.receivedHeaderName,
     });
 
     if (!hasExpectedToken) {
@@ -562,6 +669,10 @@ serve(async (req) => {
         responseBody: {
           error: "Webhook secret not configured",
           expected_secret: expectedTokenSecretName,
+          token_validation_result: "invalid",
+          token_validation_reason: tokenValidation.reason,
+          received_header_name: tokenValidation.receivedHeaderName,
+          incident_code: "webhook_expected_secret_missing",
         },
         saleId: actualSaleId || null,
         eventType,
@@ -571,6 +682,7 @@ serve(async (req) => {
         environmentDecisionSource:
           paymentContext.decisionTrace.environmentSource,
         environmentHostDetected: paymentContext.decisionTrace.hostDetected,
+        incidentCode: "webhook_expected_secret_missing",
       };
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -585,14 +697,25 @@ serve(async (req) => {
     }
 
     if (!tokenValid) {
+      const isMissingWebhookToken = tokenValidation.reason === "missing_header";
       const unauthorizedResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
         status: "unauthorized",
         resultCategory: "rejected",
         httpStatus: 401,
-        message: "Token de webhook inválido",
-        responseBody: { error: "Invalid token" },
+        message: isMissingWebhookToken
+          ? "Token de webhook ausente"
+          : "Token de webhook inválido",
+        responseBody: {
+          error: isMissingWebhookToken ? "Missing token" : "Invalid token",
+          token_validation_result: "invalid",
+          token_validation_reason: tokenValidation.reason,
+          received_header_name: tokenValidation.receivedHeaderName,
+          incident_code: isMissingWebhookToken
+            ? "webhook_token_missing"
+            : "webhook_token_invalid",
+        },
         saleId: actualSaleId || null,
         eventType,
         paymentId,
@@ -601,6 +724,9 @@ serve(async (req) => {
         environmentDecisionSource:
           paymentContext.decisionTrace.environmentSource,
         environmentHostDetected: paymentContext.decisionTrace.hostDetected,
+        incidentCode: isMissingWebhookToken
+          ? "webhook_token_missing"
+          : "webhook_token_invalid",
       };
 
       await persistIntegrationLog(supabaseAdmin, {
