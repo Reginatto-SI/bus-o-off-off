@@ -85,6 +85,7 @@ import {
   Star,
   Tag,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
@@ -148,6 +149,23 @@ type EventSortOption =
   | 'name_desc';
 
 const EVENTS_PER_PAGE = 12;
+
+const isValidWhatsAppGroupLink = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    return (
+      host === 'chat.whatsapp.com' &&
+      url.protocol === 'https:' &&
+      url.pathname.length > 1
+    );
+  } catch {
+    return false;
+  }
+};
 
 const eventSortOptions: Array<{ value: EventSortOption; label: string }> = [
   { value: 'event_date_asc', label: 'Data do evento (mais próximo primeiro)' },
@@ -434,6 +452,7 @@ export default function Events() {
     // Novo padrão de criação: 90% dos eventos operam com ida e volta obrigatória.
     transport_policy: 'ida_volta_obrigatorio' as TransportPolicy,
     use_category_pricing: false,
+    whatsapp_group_link: '',
   });
   const [transportPolicyAutoHintVisible, setTransportPolicyAutoHintVisible] = useState(false);
 
@@ -744,6 +763,13 @@ export default function Events() {
       return null;
     }
 
+    if (tabValue === 'whatsapp') {
+      if (!effectiveEventId) {
+        return 'Salve o evento na aba Geral para liberar Grupo WhatsApp.';
+      }
+      return null;
+    }
+
     if (tabValue === 'patrocinadores') {
       if (!effectiveEventId) {
         return 'Salve o evento na aba Geral para liberar Patrocinadores.';
@@ -783,7 +809,7 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'termos', 'servicos', 'patrocinadores', 'publicacao'] as const;
+  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'termos', 'servicos', 'whatsapp', 'patrocinadores', 'publicacao'] as const;
   type EventWizardTab = typeof WIZARD_TABS_ORDER[number];
   const isEventWizardTab = (tab: string): tab is EventWizardTab => WIZARD_TABS_ORDER.includes(tab as EventWizardTab);
   const WIZARD_TAB_LABELS: Record<EventWizardTab, string> = {
@@ -793,6 +819,7 @@ export default function Events() {
     passagens: 'Passagens',
     termos: 'Termos e Políticas',
     servicos: 'Serviços',
+    whatsapp: 'Grupo WhatsApp',
     patrocinadores: 'Patrocinadores',
     publicacao: 'Publicação',
   };
@@ -821,6 +848,7 @@ export default function Events() {
     if (tab === 'passagens') return hasTicketsRequirements;
     // Fase 3: termos são opcionais; exibimos concluído apenas quando há vínculo salvo.
     if (tab === 'termos') return eventTermLinksCount > 0;
+    if (tab === 'whatsapp') return Boolean(form.whatsapp_group_link.trim()) && isValidWhatsAppGroupLink(form.whatsapp_group_link);
     if (tab === 'publicacao') return publishChecklist.valid;
     return false;
   };
@@ -1501,6 +1529,12 @@ export default function Events() {
       return { error: true, eventId: editingId, isNew: false };
     }
 
+    if (!isValidWhatsAppGroupLink(form.whatsapp_group_link)) {
+      toast.error('Informe um link de convite de grupo válido, normalmente iniciado por https://chat.whatsapp.com/...');
+      setActiveTab('whatsapp');
+      return { error: true, eventId: editingId, isNew: false };
+    }
+
     const parsedBoardingTolerance = form.boarding_tolerance_minutes === ''
       ? null
       : parseInt(form.boarding_tolerance_minutes, 10);
@@ -1537,6 +1571,8 @@ export default function Events() {
         ? ((currentEditingEvent as any)?.transport_policy ?? form.transport_policy)
         : form.transport_policy,
       use_category_pricing: form.use_category_pricing,
+      // Grupo opcional do evento: salvo no próprio registro e exibido apenas para vendas pagas.
+      whatsapp_group_link: form.whatsapp_group_link.trim() || null,
       company_id: activeCompanyId,
     };
 
@@ -1546,7 +1582,7 @@ export default function Events() {
 
     if (editingId) {
       const { company_id: _companyId, ...updateData } = eventData;
-      ({ error } = await supabase.from('events').update(updateData).eq('id', editingId));
+      ({ error } = await supabase.from('events').update(updateData).eq('id', editingId).eq('company_id', activeCompanyId));
     } else {
       const { data, error: insertError } = await supabase.from('events').insert([eventData]).select('id').single();
       error = insertError;
@@ -1844,6 +1880,7 @@ export default function Events() {
       image_url: (event as any).image_url ?? null,
       transport_policy: (event as any).transport_policy ?? 'trecho_independente',
       use_category_pricing: (event as any).use_category_pricing ?? false,
+      whatsapp_group_link: (event as any).whatsapp_group_link ?? '',
     });
     setTransportPolicyAutoHintVisible(false);
     setActiveTab('geral');
@@ -2505,6 +2542,7 @@ export default function Events() {
       // Mantém o mesmo default ao reabrir/limpar o modal de criação.
       transport_policy: 'ida_volta_obrigatorio',
       use_category_pricing: false,
+      whatsapp_group_link: '',
     });
     setTransportPolicyAutoHintVisible(false);
     setCategoryPrices([]);
@@ -3267,6 +3305,7 @@ export default function Events() {
                     { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
                     { value: 'termos', label: 'Termos e Políticas', icon: ShieldCheck, count: editingId ? eventTermLinksCount : null, optional: true },
                     { value: 'servicos', label: 'Serviços', icon: Sparkles, count: null },
+                    { value: 'whatsapp', label: 'Grupo WhatsApp', icon: MessageCircle, count: form.whatsapp_group_link.trim() ? 1 : null, optional: true },
                     { value: 'patrocinadores', label: 'Patrocinadores', icon: Star, count: null },
                     { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
                   ].map((tab) => {
@@ -4765,6 +4804,59 @@ export default function Events() {
                         Salve o evento primeiro para vincular serviços.
                       </p>
                     )}
+                  </TabsContent>
+
+
+                  {/* Tab Grupo WhatsApp */}
+                  <TabsContent value="whatsapp" className="mt-0 space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-full bg-green-100 p-2 text-green-700">
+                            <MessageCircle className="h-5 w-5" />
+                          </div>
+                          <div className="space-y-1">
+                            <CardTitle>Grupo WhatsApp</CardTitle>
+                            <CardDescription>
+                              Cadastre o link de convite do grupo para que passageiros com compra confirmada possam acompanhar avisos e orientações do evento.
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <Alert className="border-green-200 bg-green-50 text-green-900">
+                          <Info className="h-4 w-4" />
+                          <AlertDescription>
+                            O link será exibido somente para passageiros com venda confirmada como paga. Se não houver grupo, deixe o campo em branco.
+                          </AlertDescription>
+                        </Alert>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="whatsapp_group_link">Link de convite do grupo do WhatsApp (opcional)</Label>
+                          <Input
+                            id="whatsapp_group_link"
+                            type="url"
+                            placeholder="https://chat.whatsapp.com/..."
+                            value={form.whatsapp_group_link}
+                            onChange={(e) => setForm({ ...form, whatsapp_group_link: e.target.value })}
+                            disabled={isReadOnly}
+                            className={form.whatsapp_group_link && !isValidWhatsAppGroupLink(form.whatsapp_group_link) ? 'border-destructive' : undefined}
+                          />
+                          {form.whatsapp_group_link && !isValidWhatsAppGroupLink(form.whatsapp_group_link) ? (
+                            <p className="text-sm text-destructive">Informe um link de convite de grupo válido, normalmente iniciado por https://chat.whatsapp.com/...</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Cole aqui o link de convite do grupo, normalmente iniciado por https://chat.whatsapp.com/...</p>
+                          )}
+                        </div>
+
+                        {form.whatsapp_group_link.trim() && isValidWhatsAppGroupLink(form.whatsapp_group_link) && (
+                          <Button type="button" variant="outline" onClick={() => window.open(form.whatsapp_group_link.trim(), '_blank', 'noopener,noreferrer')}>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Abrir/testar link
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
                   </TabsContent>
 
                   {/* Tab Patrocinadores */}
