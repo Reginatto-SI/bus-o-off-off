@@ -194,49 +194,40 @@ async function getSaleEnvironment(
   return null;
 }
 
-function readWebhookTokenFromRequest(req: Request): string | null {
+function getWebhookTokenFromRequest(req: Request): string | null {
   return (
     req.headers.get("asaas-access-token") ||
     req.headers.get("x-asaas-webhook-token")
   );
 }
 
-function resolveEnvironmentFromWebhookToken(
+function resolveTokenEnvironmentForMissingPlatformFeeSale(
   req: Request,
 ): {
-  environment: PaymentEnvironment | null;
   hasConfiguredToken: boolean;
   tokenValid: boolean;
+  environment: PaymentEnvironment | null;
 } {
-  const receivedToken = readWebhookTokenFromRequest(req);
-  const environments: PaymentEnvironment[] = ["production", "sandbox"];
-  let hasConfiguredToken = false;
+  const receivedToken = getWebhookTokenFromRequest(req);
+  const configuredTokens = (["production", "sandbox"] as PaymentEnvironment[])
+    .map((environment) => {
+      const secretName = getAsaasWebhookTokenSecretName(environment);
+      return {
+        environment,
+        token: Deno.env.get(secretName) ?? null,
+      };
+    })
+    .filter((candidate) => Boolean(candidate.token));
 
-  for (const environment of environments) {
-    const secretName = getAsaasWebhookTokenSecretName(environment);
-    const configuredToken = Deno.env.get(secretName) ?? null;
-    if (!configuredToken) continue;
+  const matchingToken = configuredTokens.find((candidate) =>
+    candidate.token === receivedToken
+  );
 
-    hasConfiguredToken = true;
-    if (receivedToken && receivedToken === configuredToken) {
-      return { environment, hasConfiguredToken, tokenValid: true };
-    }
-  }
-
-  return { environment: null, hasConfiguredToken, tokenValid: false };
-}
-
-async function saleExists(
-  supabaseAdmin: ReturnType<typeof createClient<any>>,
-  saleId: string,
-): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("sales")
-    .select("id")
-    .eq("id", saleId)
-    .maybeSingle();
-
-  return Boolean(data?.id);
+  return {
+    hasConfiguredToken: configuredTokens.length > 0,
+    tokenValid: Boolean(matchingToken),
+    environment: matchingToken?.environment ?? null,
+  };
 }
 
 async function registerWebhookEvent(params: {
@@ -400,6 +391,107 @@ serve(async (req) => {
     let saleEnv: PaymentEnvironment | null = null;
     if (actualSaleId && hasUuidPattern) {
       saleEnv = await getSaleEnvironment(supabaseAdmin, actualSaleId);
+    }
+
+    if (!saleEnv && isPlatformFee) {
+      /**
+       * Fluxo platform_fee sem venda: não há `sales.payment_environment` para
+       * isolar produção/sandbox. Validamos estritamente contra os tokens
+       * configurados antes de tratar a referência órfã como ignorável, evitando
+       * quebrar a fila do Asaas sem aceitar token inválido.
+       */
+      const missingSaleTokenContext =
+        resolveTokenEnvironmentForMissingPlatformFeeSale(req);
+
+      if (!missingSaleTokenContext.hasConfiguredToken) {
+        const missingSecretResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "failed",
+          resultCategory: "error",
+          httpStatus: 500,
+          message:
+            "Secrets de webhook ausentes para validar taxa da plataforma sem venda",
+          responseBody: {
+            error: "Webhook secret not configured",
+            expected_secret: [
+              getAsaasWebhookTokenSecretName("production"),
+              getAsaasWebhookTokenSecretName("sandbox"),
+            ],
+          },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...missingSecretResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          missingSecretResult.httpStatus,
+          missingSecretResult.responseBody,
+        );
+      }
+
+      if (!missingSaleTokenContext.tokenValid) {
+        const unauthorizedResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "unauthorized",
+          resultCategory: "rejected",
+          httpStatus: 401,
+          message: "Token de webhook inválido",
+          responseBody: { error: "Invalid token" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...unauthorizedResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          unauthorizedResult.httpStatus,
+          unauthorizedResult.responseBody,
+        );
+      }
+
+      const platformFeeSaleNotFoundResult: ProcessingResult = {
+        asaasEventId,
+        durationMs: Date.now() - startedAt,
+        status: "ignored",
+        resultCategory: "ignored",
+        httpStatus: 200,
+        message: `Venda da taxa da plataforma não localizada: ${actualSaleId}; retry não mudará o resultado`,
+        responseBody: {
+          received: true,
+          ignored: true,
+          reason: "sale_not_found",
+          sale_id: actualSaleId,
+          flow: "platform_fee",
+        },
+        saleId: actualSaleId || null,
+        eventType,
+        paymentId,
+        externalReference,
+        paymentEnvironment: missingSaleTokenContext.environment,
+      };
+
+      await persistIntegrationLog(supabaseAdmin, {
+        ...platformFeeSaleNotFoundResult,
+        payload: requestPayload,
+      });
+
+      return jsonResponse(
+        platformFeeSaleNotFoundResult.httpStatus,
+        platformFeeSaleNotFoundResult.responseBody,
+      );
     }
 
     if (!saleEnv) {
