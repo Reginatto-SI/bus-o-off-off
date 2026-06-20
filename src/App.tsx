@@ -31,6 +31,7 @@ import CommercialPartners from "./pages/admin/CommercialPartners";
 import SalesDiagnostic from "./pages/admin/SalesDiagnostic";
 import BoardingManifestReport from "./pages/admin/BoardingManifestReport";
 import EventReport from "./pages/admin/EventReport";
+import CompanyActivationReport from "./pages/admin/CompanyActivationReport";
 import Referrals from "./pages/admin/Referrals";
 import BenefitPrograms from "./pages/admin/BenefitPrograms";
 import BenefitProgramEditor from "./pages/admin/BenefitProgramEditor";
@@ -149,6 +150,7 @@ const App = () => (
             <Route path="/admin/relatorios/eventos" element={<EventReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/relatorios/lista-embarque" element={<BoardingManifestReport />} />
+            <Route path="/admin/relatorios/empresas-ativacao" element={<CompanyActivationReport />} />
             <Route path="/admin/templates-layout" element={<TemplatesLayout />} />
             <Route path="/admin/diagnostico-vendas" element={<SalesDiagnostic />} />
             

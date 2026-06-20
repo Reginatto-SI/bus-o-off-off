@@ -3751,6 +3751,42 @@ export type Database = {
           total_tickets: number
         }[]
       }
+      get_company_activation_report: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          asaas_account_id_production: string | null
+          asaas_account_id_sandbox: string | null
+          asaas_onboarding_complete_production: boolean
+          asaas_onboarding_complete_sandbox: boolean
+          asaas_pix_last_checked_at_production: string | null
+          asaas_pix_last_checked_at_sandbox: string | null
+          asaas_pix_ready_production: boolean
+          asaas_pix_ready_sandbox: boolean
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          city: string | null
+          cnpj: string | null
+          created_at: string
+          document: string | null
+          document_number: string | null
+          driver_count: number
+          email: string | null
+          event_count: number
+          id: string
+          is_active: boolean
+          last_activity_at: string | null
+          legal_name: string | null
+          name: string
+          paid_sale_count: number
+          phone: string | null
+          sale_count: number
+          state: string | null
+          trade_name: string | null
+          updated_at: string
+          vehicle_count: number
+          whatsapp: string | null
+        }[]
+      }
       get_trip_available_capacity: {
         Args: { trip_uuid: string }
         Returns: number
