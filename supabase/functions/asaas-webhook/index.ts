@@ -421,6 +421,107 @@ serve(async (req) => {
     }
 
     if (!saleEnv) {
+      // Venda inexistente não fornece ambiente persistido; ainda assim o token
+      // precisa ser validado antes de ignorarmos o webhook com 200 auditável.
+      const tokenEnvironment = resolveEnvironmentFromWebhookToken(req);
+      const existingSaleWithoutEnvironment = actualSaleId
+        ? await saleExists(supabaseAdmin, actualSaleId)
+        : false;
+
+      if (!tokenEnvironment.hasConfiguredToken) {
+        const missingSecretResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "failed",
+          resultCategory: "error",
+          httpStatus: 500,
+          message: "Secret de webhook ausente para validar evento sem ambiente de venda",
+          responseBody: { error: "Webhook secret not configured" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...missingSecretResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          missingSecretResult.httpStatus,
+          missingSecretResult.responseBody,
+        );
+      }
+
+      if (!tokenEnvironment.tokenValid) {
+        const unauthorizedResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "unauthorized",
+          resultCategory: "rejected",
+          httpStatus: 401,
+          message: "Token de webhook inválido",
+          responseBody: { error: "Invalid token" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...unauthorizedResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          unauthorizedResult.httpStatus,
+          unauthorizedResult.responseBody,
+        );
+      }
+
+      if (!existingSaleWithoutEnvironment) {
+        const saleNotFoundResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "ignored",
+          resultCategory: "ignored",
+          httpStatus: 200,
+          message: `Venda não localizada para externalReference=${externalReference}; webhook autenticado ignorado sem retry útil`,
+          responseBody: {
+            received: true,
+            ignored: true,
+            reason: "sale_not_found",
+            sale_id: actualSaleId || null,
+          },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          paymentEnvironment: tokenEnvironment.environment,
+          environmentDecisionSource: "request",
+          warningCode: "sale_not_found_before_environment_resolution",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...saleNotFoundResult,
+          payload: requestPayload,
+        });
+
+        logPaymentTrace("warn", "asaas-webhook", "webhook_sale_not_found_ignored", {
+          event_type: eventType,
+          asaas_payment_id: paymentId,
+          external_reference: externalReference,
+          sale_id: actualSaleId || null,
+          payment_environment: tokenEnvironment.environment,
+        });
+
+        return jsonResponse(
+          saleNotFoundResult.httpStatus,
+          saleNotFoundResult.responseBody,
+        );
+      }
+
       const unresolvedContextResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
@@ -436,6 +537,8 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: tokenEnvironment.environment,
+        environmentDecisionSource: "request",
       };
 
       logStructuredWebhookEvent("environment_unresolved", {
