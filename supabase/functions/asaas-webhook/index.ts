@@ -18,7 +18,7 @@ import { finalizeConfirmedPayment } from "../_shared/payment-finalization.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, asaas-access-token, x-asaas-webhook-token, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 type ProcessingStatus =
@@ -194,6 +194,43 @@ async function getSaleEnvironment(
   return null;
 }
 
+function readWebhookTokenFromRequest(req: Request): string | null {
+  return (
+    req.headers.get("asaas-access-token") ||
+    req.headers.get("x-asaas-webhook-token")
+  );
+}
+
+type OfficialWebhookTokenValidation = {
+  hasConfiguredToken: boolean;
+  isValid: boolean;
+  matchedEnvironment: PaymentEnvironment | null;
+  configuredSecretNames: string[];
+};
+
+function validateOfficialWebhookToken(
+  req: Request,
+): OfficialWebhookTokenValidation {
+  const receivedToken = readWebhookTokenFromRequest(req);
+  const configuredTokens = (["production", "sandbox"] as PaymentEnvironment[])
+    .map((environment) => {
+      const secretName = getAsaasWebhookTokenSecretName(environment);
+      const token = Deno.env.get(secretName) ?? null;
+      return { environment, secretName, token };
+    })
+    .filter((entry) => Boolean(entry.token));
+
+  const matchedToken = receivedToken
+    ? configuredTokens.find((entry) => entry.token === receivedToken)
+    : null;
+
+  return {
+    hasConfiguredToken: configuredTokens.length > 0,
+    isValid: Boolean(matchedToken),
+    matchedEnvironment: matchedToken?.environment ?? null,
+    configuredSecretNames: configuredTokens.map((entry) => entry.secretName),
+  };
+}
 
 async function registerWebhookEvent(params: {
   supabaseAdmin: ReturnType<typeof createClient<any>>;
@@ -209,9 +246,10 @@ async function registerWebhookEvent(params: {
     return { isDuplicate: false };
   }
 
-  const payloadRecord = params.payload && typeof params.payload === "object"
-    ? params.payload as Record<string, unknown>
-    : null;
+  const payloadRecord =
+    params.payload && typeof params.payload === "object"
+      ? (params.payload as Record<string, unknown>)
+      : null;
 
   const { error } = await params.supabaseAdmin
     .from("asaas_webhook_event_dedup")
@@ -304,13 +342,104 @@ serve(async (req) => {
      * Risco mitigado: classificar referência inválida como "potencial venda".
      */
     const hasUuidPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        .test(actualSaleId);
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        actualSaleId,
+      );
     const isClearlyOutsideSmartbusScope = !actualSaleId || !hasUuidPattern;
     if (isClearlyOutsideSmartbusScope) {
       const reason = !externalReference
         ? "missing_external_reference"
         : "invalid_external_reference_scope";
+      const officialTokenValidation = validateOfficialWebhookToken(req);
+
+      // Eventos sem vínculo de venda não têm ambiente financeiro resolvível.
+      // Portanto validamos somente contra os tokens oficiais configurados e,
+      // quando válidos, encerramos como ignorados sem executar processamento financeiro.
+      if (!officialTokenValidation.hasConfiguredToken) {
+        const missingOfficialTokenResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "failed",
+          resultCategory: "error",
+          httpStatus: 500,
+          message: "Nenhum token oficial de webhook Asaas configurado",
+          responseBody: {
+            error: "Webhook secret not configured",
+            incident_code: "webhook_official_tokens_missing",
+          },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          incidentCode: "webhook_official_tokens_missing",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...missingOfficialTokenResult,
+          payload: requestPayload,
+        });
+
+        logPaymentTrace(
+          "error",
+          "asaas-webhook",
+          "webhook_official_tokens_missing",
+          {
+            event_type: eventType,
+            asaas_payment_id: paymentId,
+            external_reference: externalReference,
+            asaas_account_id: asaasAccountId,
+            reason,
+          },
+        );
+
+        return jsonResponse(
+          missingOfficialTokenResult.httpStatus,
+          missingOfficialTokenResult.responseBody,
+        );
+      }
+
+      if (!officialTokenValidation.isValid) {
+        const unauthorizedOutsideScopeResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "unauthorized",
+          resultCategory: "rejected",
+          httpStatus: 401,
+          message: "Token de webhook inválido para evento fora do escopo",
+          responseBody: { error: "Invalid token" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          incidentCode: "webhook_outside_scope_invalid_token",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...unauthorizedOutsideScopeResult,
+          payload: requestPayload,
+        });
+
+        logPaymentTrace(
+          "warn",
+          "asaas-webhook",
+          "webhook_outside_scope_invalid_token",
+          {
+            event_type: eventType,
+            asaas_payment_id: paymentId,
+            external_reference: externalReference,
+            asaas_account_id: asaasAccountId,
+            reason,
+            configured_token_secrets:
+              officialTokenValidation.configuredSecretNames,
+          },
+        );
+
+        return jsonResponse(
+          unauthorizedOutsideScopeResult.httpStatus,
+          unauthorizedOutsideScopeResult.responseBody,
+        );
+      }
+
       const outsideScopeResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
@@ -330,6 +459,7 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: officialTokenValidation.matchedEnvironment,
         incidentCode: "webhook_event_outside_smartbus_scope",
       };
 
@@ -338,13 +468,19 @@ serve(async (req) => {
         payload: requestPayload,
       });
 
-      logPaymentTrace("warn", "asaas-webhook", "webhook_event_outside_smartbus_scope", {
-        event_type: eventType,
-        asaas_payment_id: paymentId,
-        external_reference: externalReference,
-        asaas_account_id: asaasAccountId,
-        reason,
-      });
+      logPaymentTrace(
+        "warn",
+        "asaas-webhook",
+        "webhook_event_outside_smartbus_scope",
+        {
+          event_type: eventType,
+          asaas_payment_id: paymentId,
+          external_reference: externalReference,
+          asaas_account_id: asaasAccountId,
+          matched_token_environment: officialTokenValidation.matchedEnvironment,
+          reason,
+        },
+      );
 
       return jsonResponse(
         outsideScopeResult.httpStatus,
@@ -359,6 +495,68 @@ serve(async (req) => {
     }
 
     if (!saleEnv) {
+      const officialTokenValidation = validateOfficialWebhookToken(req);
+
+      // Sem venda encontrada/ambiente persistido não há como escolher um ambiente financeiro.
+      // Ainda assim, o endpoint só responde erro operacional após validar que o chamado
+      // veio de um token oficial configurado, sem inferir ambiente por URL.
+      if (!officialTokenValidation.hasConfiguredToken) {
+        const missingOfficialTokenResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "failed",
+          resultCategory: "error",
+          httpStatus: 500,
+          message: "Nenhum token oficial de webhook Asaas configurado",
+          responseBody: {
+            error: "Webhook secret not configured",
+            incident_code: "webhook_official_tokens_missing",
+          },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          incidentCode: "webhook_official_tokens_missing",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...missingOfficialTokenResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          missingOfficialTokenResult.httpStatus,
+          missingOfficialTokenResult.responseBody,
+        );
+      }
+
+      if (!officialTokenValidation.isValid) {
+        const unauthorizedUnresolvedResult: ProcessingResult = {
+          asaasEventId,
+          durationMs: Date.now() - startedAt,
+          status: "unauthorized",
+          resultCategory: "rejected",
+          httpStatus: 401,
+          message: "Token de webhook inválido",
+          responseBody: { error: "Invalid token" },
+          saleId: actualSaleId || null,
+          eventType,
+          paymentId,
+          externalReference,
+          incidentCode: "webhook_unresolved_sale_invalid_token",
+        };
+
+        await persistIntegrationLog(supabaseAdmin, {
+          ...unauthorizedUnresolvedResult,
+          payload: requestPayload,
+        });
+
+        return jsonResponse(
+          unauthorizedUnresolvedResult.httpStatus,
+          unauthorizedUnresolvedResult.responseBody,
+        );
+      }
+
       const unresolvedContextResult: ProcessingResult = {
         asaasEventId,
         durationMs: Date.now() - startedAt,
@@ -374,6 +572,7 @@ serve(async (req) => {
         eventType,
         paymentId,
         externalReference,
+        paymentEnvironment: officialTokenValidation.matchedEnvironment,
       };
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -633,11 +832,20 @@ serve(async (req) => {
       platformFeeResult.paymentId = paymentId;
       platformFeeResult.externalReference = externalReference;
 
-      platformFeeResult.resultCategory ??= platformFeeResult.status === "partial_failure" ? "partial_failure" : platformFeeResult.status === "ignored" ? "ignored" : platformFeeResult.status === "failed" ? "error" : "success";
+      platformFeeResult.resultCategory ??=
+        platformFeeResult.status === "partial_failure"
+          ? "partial_failure"
+          : platformFeeResult.status === "ignored"
+            ? "ignored"
+            : platformFeeResult.status === "failed"
+              ? "error"
+              : "success";
       platformFeeResult.asaasEventId = asaasEventId;
       platformFeeResult.paymentEnvironment = paymentContext.environment;
-      platformFeeResult.environmentDecisionSource = paymentContext.decisionTrace.environmentSource;
-      platformFeeResult.environmentHostDetected = paymentContext.decisionTrace.hostDetected;
+      platformFeeResult.environmentDecisionSource =
+        paymentContext.decisionTrace.environmentSource;
+      platformFeeResult.environmentHostDetected =
+        paymentContext.decisionTrace.hostDetected;
       platformFeeResult.durationMs = Date.now() - startedAt;
 
       await persistIntegrationLog(supabaseAdmin, {
@@ -693,16 +901,14 @@ serve(async (req) => {
     let result: ProcessingResult;
 
     const normalizedAsaasStatus = normalizeAsaasStatus(payment?.status);
-    const hasExplicitConfirmationEvent = ASAAS_CONFIRMATION_EVENTS.has(eventType);
-    const hasExplicitCriticalReversalEvent = ASAAS_CRITICAL_REVERSAL_EVENTS.has(
-      eventType,
-    );
-    const hasExplicitRiskInProgressEvent = ASAAS_RISK_IN_PROGRESS_EVENTS.has(
-      eventType,
-    );
-    const hasExplicitPrepaidFailureEvent = ASAAS_PREPAID_FAILURE_EVENTS.has(
-      eventType,
-    );
+    const hasExplicitConfirmationEvent =
+      ASAAS_CONFIRMATION_EVENTS.has(eventType);
+    const hasExplicitCriticalReversalEvent =
+      ASAAS_CRITICAL_REVERSAL_EVENTS.has(eventType);
+    const hasExplicitRiskInProgressEvent =
+      ASAAS_RISK_IN_PROGRESS_EVENTS.has(eventType);
+    const hasExplicitPrepaidFailureEvent =
+      ASAAS_PREPAID_FAILURE_EVENTS.has(eventType);
 
     /**
      * Prioridade explícita de decisão:
@@ -862,7 +1068,9 @@ async function processPlatformFeeWebhook(
 
   const { data: sale, error: saleError } = await supabaseAdmin
     .from("sales")
-    .select("id, company_id, status, platform_fee_status, platform_fee_amount, platform_fee_total")
+    .select(
+      "id, company_id, status, platform_fee_status, platform_fee_amount, platform_fee_total",
+    )
     .eq("id", saleId)
     .maybeSingle();
 
@@ -1144,7 +1352,8 @@ async function upsertFinancialSnapshot(
     processingStatus: "warning",
     resultCategory: "warning",
     warningCode: "financial_snapshot_missing",
-    message: "Webhook não recalculou financeiro por ausência de snapshot congelado",
+    message:
+      "Webhook não recalculou financeiro por ausência de snapshot congelado",
     payloadJson: payment,
     responseJson: {
       action: "blocked_without_snapshot",
@@ -1210,7 +1419,9 @@ async function processPaymentFailed(
        */
       await supabaseAdmin
         .from("sales")
-        .update({ asaas_payment_status: asaasStatusNormalized || payment.status })
+        .update({
+          asaas_payment_status: asaasStatusNormalized || payment.status,
+        })
         .eq("id", saleId)
         .eq("company_id", sale.company_id);
 
@@ -1222,16 +1433,14 @@ async function processPaymentFailed(
         source: "asaas-webhook",
         result: "ignored",
         paymentEnvironment: sale.payment_environment ?? null,
-        detail:
-          `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|non_terminal_for_post_paid_reversal`,
+        detail: `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|non_terminal_for_post_paid_reversal`,
       });
 
       return {
         status: "ignored",
         resultCategory: "ignored",
         httpStatus: 200,
-        message:
-          `Evento ${eventType} registrado sem blindagem pós-pago na venda ${saleId} (status não terminal de perda financeira)`,
+        message: `Evento ${eventType} registrado sem blindagem pós-pago na venda ${saleId} (status não terminal de perda financeira)`,
         responseBody: {
           received: true,
           ignored: true,
@@ -1250,8 +1459,8 @@ async function processPaymentFailed(
       .eq("sale_id", saleId)
       .eq("company_id", sale.company_id);
 
-    const hasConsumedBoarding = (ticketsData ?? []).some((ticket) =>
-      (ticket.boarding_status ?? "pendente") !== "pendente"
+    const hasConsumedBoarding = (ticketsData ?? []).some(
+      (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
     );
 
     if (hasConsumedBoarding) {
@@ -1278,8 +1487,7 @@ async function processPaymentFailed(
         result: "warning",
         paymentEnvironment: sale.payment_environment ?? null,
         errorCode: "post_paid_reversal_after_boarding",
-        detail:
-          `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+        detail: `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
       });
 
       return {
@@ -1306,20 +1514,20 @@ async function processPaymentFailed(
      * reversão financeira pós-pago invalida venda para impedir uso indevido.
      * Não há reembolso automático de split/taxa neste fluxo.
      */
-    const { data: cancelledPaidSale, error: cancelPaidError } = await supabaseAdmin
-      .from("sales")
-      .update({
-        status: "cancelado",
-        cancel_reason:
-          `Reversão financeira (${eventType}/${asaasStatusNormalized || "unknown"}) pós-pagamento; venda invalidada operacionalmente. Reembolso/split permanece manual pela empresa.`,
-        cancelled_at: new Date().toISOString(),
-        asaas_payment_status: asaasStatusNormalized || payment.status,
-      })
-      .eq("id", saleId)
-      .eq("company_id", sale.company_id)
-      .eq("status", "pago")
-      .select("id")
-      .maybeSingle();
+    const { data: cancelledPaidSale, error: cancelPaidError } =
+      await supabaseAdmin
+        .from("sales")
+        .update({
+          status: "cancelado",
+          cancel_reason: `Reversão financeira (${eventType}/${asaasStatusNormalized || "unknown"}) pós-pagamento; venda invalidada operacionalmente. Reembolso/split permanece manual pela empresa.`,
+          cancelled_at: new Date().toISOString(),
+          asaas_payment_status: asaasStatusNormalized || payment.status,
+        })
+        .eq("id", saleId)
+        .eq("company_id", sale.company_id)
+        .eq("status", "pago")
+        .select("id")
+        .maybeSingle();
 
     if (cancelPaidError) {
       return {
@@ -1377,8 +1585,7 @@ async function processPaymentFailed(
         status: "partial_failure",
         resultCategory: "partial_failure",
         httpStatus: 200,
-        message:
-          `Venda paga ${saleId} invalidada por reversão, mas falhou remoção de seat_locks`,
+        message: `Venda paga ${saleId} invalidada por reversão, mas falhou remoção de seat_locks`,
         responseBody: {
           received: true,
           processed: true,
@@ -1406,8 +1613,7 @@ async function processPaymentFailed(
       source: "asaas-webhook",
       result: "success",
       paymentEnvironment: sale.payment_environment ?? null,
-      detail:
-        `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+      detail: `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
     });
 
     return {
@@ -1570,8 +1776,8 @@ async function processPaymentRiskInProgress(
     .eq("sale_id", saleId)
     .eq("company_id", sale.company_id);
 
-  const hasConsumedBoarding = (ticketsData ?? []).some((ticket) =>
-    (ticket.boarding_status ?? "pendente") !== "pendente"
+  const hasConsumedBoarding = (ticketsData ?? []).some(
+    (ticket) => (ticket.boarding_status ?? "pendente") !== "pendente",
   );
 
   await logSaleOperationalEvent({
@@ -1587,8 +1793,7 @@ async function processPaymentRiskInProgress(
     errorCode: hasConsumedBoarding
       ? "post_paid_reversal_after_boarding"
       : "financial_reversal_under_review",
-    detail:
-      `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
+    detail: `${eventType}|status=${asaasStatusNormalized || "unknown"}|payment=${payment.id}|manual_refund_required_no_split_rollback`,
   });
 
   return {
