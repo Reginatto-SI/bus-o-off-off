@@ -340,10 +340,58 @@ export function isWebhookTokenValidForContext(
   req: Request,
   context: ResolvedPaymentContext,
 ): boolean {
-  const receivedToken =
-    req.headers.get("asaas-access-token") ||
-    req.headers.get("x-asaas-webhook-token");
-  if (!receivedToken) return false;
-  if (context.webhookTokenCandidates.length === 0) return false;
-  return context.webhookTokenCandidates.includes(receivedToken);
+  return validateWebhookTokenForContext(req, context).valid;
+}
+
+export type WebhookTokenValidationReason =
+  | "missing_header"
+  | "invalid_token"
+  | "missing_expected_secret";
+
+export type WebhookTokenReceivedHeaderName =
+  | "asaas-access-token"
+  | "x-asaas-webhook-token";
+
+export type WebhookTokenValidationResult = {
+  valid: boolean;
+  reason: WebhookTokenValidationReason | null;
+  receivedHeaderName: WebhookTokenReceivedHeaderName | null;
+};
+
+export function validateWebhookTokenForContext(
+  req: Request,
+  context: ResolvedPaymentContext,
+): WebhookTokenValidationResult {
+  const primaryHeaderName: WebhookTokenReceivedHeaderName =
+    "asaas-access-token";
+  const fallbackHeaderName: WebhookTokenReceivedHeaderName =
+    "x-asaas-webhook-token";
+  const primaryToken = req.headers.get(primaryHeaderName);
+  const fallbackToken = req.headers.get(fallbackHeaderName);
+  const receivedHeaderName = primaryToken
+    ? primaryHeaderName
+    : fallbackToken
+    ? fallbackHeaderName
+    : null;
+  const receivedToken = primaryToken || fallbackToken;
+
+  // Comentário de segurança: retornamos apenas metadados da validação para auditoria,
+  // nunca o valor bruto recebido no header do webhook.
+  if (!receivedToken) {
+    return { valid: false, reason: "missing_header", receivedHeaderName };
+  }
+
+  if (context.webhookTokenCandidates.length === 0) {
+    return {
+      valid: false,
+      reason: "missing_expected_secret",
+      receivedHeaderName,
+    };
+  }
+
+  if (!context.webhookTokenCandidates.includes(receivedToken)) {
+    return { valid: false, reason: "invalid_token", receivedHeaderName };
+  }
+
+  return { valid: true, reason: null, receivedHeaderName };
 }
