@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AlertTriangle, Building2, Bus, CalendarClock, CheckCircle2, Loader2, PlugZap, Search, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Bus, CalendarClock, CheckCircle2, FileText, Loader2, PlugZap, Search, Users } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -10,6 +12,7 @@ import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard } from '@/components/admin/FilterCard';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -197,6 +200,45 @@ function resolveActivation(row: Omit<CompanyActivationRow, 'activationStatus' | 
   return { activationStatus: 'em_implantacao', suggestedAction: 'Entrar em contato para onboarding' };
 }
 
+function getFilteredStats(reportRows: CompanyActivationRow[]) {
+  return {
+    total: reportRows.length,
+    active: reportRows.filter((row) => row.activationStatus === 'ativa').length,
+    withoutEvents: reportRows.filter((row) => row.eventCount === 0).length,
+    withoutAsaas: reportRows.filter((row) => !row.hasAsaas).length,
+    withoutFleet: reportRows.filter((row) => row.vehicleCount === 0).length,
+    withoutDrivers: reportRows.filter((row) => row.driverCount === 0).length,
+    abandoned: reportRows.filter((row) => row.activationStatus === 'abandonada').length,
+  };
+}
+
+function getTriStateLabel(value: TriStateFilter, yesLabel: string, noLabel: string) {
+  if (value === 'yes') return yesLabel;
+  if (value === 'no') return noLabel;
+  return 'Todos';
+}
+
+function getAppliedFiltersLabel(filters: Filters) {
+  const labels = [
+    `Busca = ${filters.search.trim() || 'Todas'}`,
+    `Status = ${filters.status === 'all' ? 'Todos' : statusLabels[filters.status]}`,
+    `Asaas = ${getTriStateLabel(filters.asaas, 'Com Asaas', 'Sem Asaas')}`,
+    `Eventos = ${getTriStateLabel(filters.events, 'Com eventos', 'Sem eventos')}`,
+    `Frota = ${getTriStateLabel(filters.fleet, 'Com cadastro', 'Sem cadastro')}`,
+    `Motoristas = ${getTriStateLabel(filters.drivers, 'Com cadastro', 'Sem cadastro')}`,
+  ];
+
+  if (filters.createdFrom || filters.createdTo) labels.push(`Cadastro = ${filters.createdFrom || 'início'} até ${filters.createdTo || 'hoje'}`);
+  if (filters.activityFrom || filters.activityTo) labels.push(`Atividade = ${filters.activityFrom || 'início'} até ${filters.activityTo || 'hoje'}`);
+
+  return labels.join(' | ');
+}
+
+function formatPdfText(value?: string | number | null) {
+  if (value === null || value === undefined || value === '') return 'Não informado';
+  return String(value);
+}
+
 
 export default function CompanyActivationReport() {
   const { isDeveloper, loading: authLoading } = useAuth();
@@ -267,15 +309,125 @@ export default function CompanyActivationReport() {
     });
   }, [filters, rows]);
 
-  const stats = useMemo(() => ({
-    total: rows.length,
-    active: rows.filter((row) => row.activationStatus === 'ativa').length,
-    withoutEvents: rows.filter((row) => row.eventCount === 0).length,
-    withoutAsaas: rows.filter((row) => !row.hasAsaas).length,
-    withoutFleet: rows.filter((row) => row.vehicleCount === 0).length,
-    withoutDrivers: rows.filter((row) => row.driverCount === 0).length,
-    abandoned: rows.filter((row) => row.activationStatus === 'abandonada').length,
-  }), [rows]);
+  const stats = useMemo(() => getFilteredStats(rows), [rows]);
+
+  const handleExportPdf = () => {
+    if (filteredRows.length === 0) {
+      toast.error('Não há empresas para exportar com os filtros atuais.');
+      return;
+    }
+
+    const issuedAt = new Date();
+    const exportStats = getFilteredStats(filteredRows);
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const filtersLabel = getAppliedFiltersLabel(filters);
+
+    const addHeader = () => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(249, 115, 22);
+      doc.text('SmartBus BR', margin, 10);
+
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(11);
+      doc.text('Relatório de Empresas e Ativação', margin, 16);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('Relatório interno para acompanhamento comercial e marketing', margin, 21);
+      doc.text('Relatório interno - acesso exclusivo ao perfil Desenvolvedor', margin, 25);
+      doc.text(`Emitido em: ${format(issuedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, pageWidth - margin, 10, { align: 'right' });
+      doc.text(`Total de empresas: ${filteredRows.length}`, pageWidth - margin, 15, { align: 'right' });
+
+      const splitFilters = doc.splitTextToSize(`Filtros: ${filtersLabel}`, pageWidth - (margin * 2));
+      doc.text(splitFilters.slice(0, 2), margin, 30);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, 38, pageWidth - margin, 38);
+    };
+
+    addHeader();
+
+    const summaryItems = [
+      ['Total de empresas', exportStats.total],
+      ['Empresas ativas', exportStats.active],
+      ['Sem evento', exportStats.withoutEvents],
+      ['Sem Asaas', exportStats.withoutAsaas],
+      ['Sem frota', exportStats.withoutFleet],
+      ['Sem motoristas', exportStats.withoutDrivers],
+      ['Abandonadas', exportStats.abandoned],
+    ];
+
+    autoTable(doc, {
+      startY: 42,
+      body: [summaryItems.map(([label, value]) => `${label}: ${value}`)],
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 2, halign: 'center', valign: 'middle' },
+      bodyStyles: { fillColor: [255, 247, 237], textColor: [67, 67, 67] },
+      margin: { left: margin, right: margin },
+    });
+
+    autoTable(doc, {
+      startY: 56,
+      head: [[
+        'Nº', 'Empresa', 'Contato', 'WhatsApp', 'E-mail', 'Cidade/UF', 'Cadastro', 'Última atividade',
+        'Eventos/Vendas', 'Asaas', 'Frota/Mot.', 'Status', 'Ação sugerida',
+      ]],
+      body: filteredRows.map((row, index) => [
+        index + 1,
+        [
+          formatPdfText(row.name),
+          `Razão: ${formatPdfText(row.legal_name)}`,
+          `Doc: ${formatPdfText(row.cnpj || row.document || row.document_number)}`,
+        ].join('\n'),
+        formatPdfText(row.trade_name || row.legal_name || row.name),
+        formatPdfText(row.whatsapp || row.phone),
+        formatPdfText(row.email),
+        formatPdfText([row.city, row.state].filter(Boolean).join('/')),
+        formatDateTime(row.created_at),
+        formatDateTime(row.lastActivityAt),
+        `${row.eventCount} eventos\n${row.saleCount} vendas`,
+        asaasLabels[row.asaasStatus],
+        `${row.vehicleCount > 0 ? 'Frota: sim' : 'Frota: não'}\n${row.driverCount > 0 ? 'Mot.: sim' : 'Mot.: não'}`,
+        statusLabels[row.activationStatus],
+        row.suggestedAction,
+      ]),
+      theme: 'grid',
+      margin: { top: 42, right: margin, bottom: 12, left: margin },
+      tableWidth: 'auto',
+      styles: { fontSize: 6, cellPadding: 1.2, overflow: 'linebreak', valign: 'top', lineColor: [226, 232, 240], lineWidth: 0.1 },
+      headStyles: { fillColor: [249, 115, 22], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.2 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { cellWidth: 7, halign: 'center' },
+        1: { cellWidth: 37 },
+        2: { cellWidth: 24 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 34 },
+        5: { cellWidth: 17 },
+        6: { cellWidth: 18 },
+        7: { cellWidth: 18 },
+        8: { cellWidth: 15 },
+        9: { cellWidth: 23 },
+        10: { cellWidth: 18 },
+        11: { cellWidth: 18 },
+        12: { cellWidth: 33 },
+      },
+      didDrawPage: (data) => {
+        // O cabeçalho já foi desenhado antes do resumo; nas próximas páginas do autoTable ele é redesenhado sem duplicar a página 1.
+        if (data.pageNumber > 1) addHeader();
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Página ${data.pageNumber}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+      },
+    });
+
+    doc.save(`smartbus-empresas-ativacao-${format(issuedAt, 'yyyy-MM-dd')}.pdf`);
+    toast.success('PDF de empresas e ativação gerado com sucesso.');
+  };
 
   if (!authLoading && !isDeveloper) return <Navigate to="/admin/dashboard" replace />;
 
@@ -286,6 +438,12 @@ export default function CompanyActivationReport() {
           title="Empresas e Ativação"
           description="Relatório interno para acompanhar onboarding, uso inicial e oportunidades de contato comercial."
           metadata={<Badge variant="outline">Acesso exclusivo: Perfil Desenvolvedor</Badge>}
+          actions={
+            <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={loading || filteredRows.length === 0}>
+              <FileText className="mr-2 h-4 w-4" />
+              Exportar PDF
+            </Button>
+          }
         />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7">
@@ -345,12 +503,13 @@ export default function CompanyActivationReport() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Empresa</TableHead><TableHead>Contato</TableHead><TableHead>Cidade/UF</TableHead><TableHead>Cadastro</TableHead><TableHead>Última atividade</TableHead><TableHead className="text-right">Eventos</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead>Asaas</TableHead><TableHead>Frota</TableHead><TableHead>Motoristas</TableHead><TableHead>Status</TableHead><TableHead>Ação sugerida</TableHead>
+                      <TableHead className="w-14 text-center">Nº</TableHead><TableHead>Empresa</TableHead><TableHead>Contato</TableHead><TableHead>Cidade/UF</TableHead><TableHead>Cadastro</TableHead><TableHead>Última atividade</TableHead><TableHead className="text-right">Eventos</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead>Asaas</TableHead><TableHead>Frota</TableHead><TableHead>Motoristas</TableHead><TableHead>Status</TableHead><TableHead>Ação sugerida</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRows.map((row) => (
+                    {filteredRows.map((row, index) => (
                       <TableRow key={row.id}>
+                        <TableCell className="text-center font-medium text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="min-w-[240px]"><div className="font-medium">{row.name || 'Não informado'}</div><div className="text-xs text-muted-foreground">Razão social: {row.legal_name || 'Não informado'}</div><div className="text-xs text-muted-foreground">CNPJ: {row.cnpj || row.document || row.document_number || 'Não informado'}</div></TableCell>
                         <TableCell className="min-w-[230px]"><div className="font-medium">Contato disponível</div><div className="text-xs text-muted-foreground">Base: {row.trade_name || row.legal_name || row.name || 'Não informado'}</div><div className="text-xs text-muted-foreground">WhatsApp: {row.whatsapp || row.phone || 'Não informado'}</div><div className="text-xs text-muted-foreground">E-mail: {row.email || 'Não informado'}</div></TableCell>
                         <TableCell>{[row.city, row.state].filter(Boolean).join('/') || 'Não informado'}</TableCell>
