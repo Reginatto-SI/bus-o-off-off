@@ -1,0 +1,21 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Tipos de passagem</title>
+  <desc id="desc">Ilustração de cartões de passagem e categorias de público.</desc>
+  <rect width="640" height="360" rx="32" fill="#F8FAFC"/>
+  <circle cx="132" cy="92" r="54" fill="#FFEDD5"/>
+  <circle cx="525" cy="262" r="64" fill="#DBEAFE"/>
+  <rect x="132" y="102" width="376" height="168" rx="26" fill="#0F172A"/>
+  <path d="M132 152H508" stroke="#FB923C" stroke-width="18"/>
+  <circle cx="188" cy="212" r="30" fill="#FDBA74"/>
+  <path d="M237 195H444" stroke="#E2E8F0" stroke-width="12" stroke-linecap="round"/>
+  <path d="M237 226H384" stroke="#94A3B8" stroke-width="10" stroke-linecap="round"/>
+  <rect x="92" y="196" width="150" height="88" rx="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="4"/>
+  <circle cx="136" cy="240" r="18" fill="#FB923C"/>
+  <path d="M170 226H216" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M170 252H202" stroke="#CBD5E1" stroke-width="7" stroke-linecap="round"/>
+  <rect x="398" y="76" width="150" height="88" rx="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="4"/>
+  <circle cx="442" cy="120" r="18" fill="#0284C7"/>
+  <path d="M476 106H522" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M476 132H508" stroke="#CBD5E1" stroke-width="7" stroke-linecap="round"/>
+  <path d="M290 300H350" stroke="#FB923C" stroke-width="10" stroke-linecap="round"/>
+</svg>

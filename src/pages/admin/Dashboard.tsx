@@ -17,6 +17,8 @@ import {
   Circle,
   CheckCircle2,
   ArrowRight,
+  ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
@@ -40,11 +42,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { normalizePublicSlug } from '@/lib/publicSlug';
 import { toast } from 'sonner';
@@ -87,6 +91,18 @@ interface RankItem {
   count: number;
 }
 
+type SaleStatus = Database['public']['Enums']['sale_status'];
+type EventSalesRankRow = {
+  event_id: string;
+  quantity: number | null;
+  events: { name: string | null } | null;
+};
+type SellerSalesRankRow = {
+  seller_id: string | null;
+  quantity: number | null;
+  sellers: { name: string | null } | null;
+};
+
 interface OnboardingChecklistStatus {
   hasVehicle: boolean;
   hasDriver: boolean;
@@ -127,6 +143,31 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const CHART_LINE_COLOR = 'hsl(var(--primary))';
+const SMARTBUS_TIPS_ADMIN_ROLES = ['developer', 'gerente', 'operador'] as const;
+
+const smartbusTips = [
+  {
+    title: 'Venda passeios e experiências',
+    description: 'Cadastre passeios de bugue, catamarã, mergulho, city tour, traslado, hospedagem e outros serviços turísticos.',
+    image: '/marketing/smartbus-tips/passeios-servicos.svg',
+    buttonLabel: 'Criar novo evento',
+    href: '/admin/eventos?novo=1',
+  },
+  {
+    title: 'Crie tipos de passagem',
+    description: 'Venda categorias diferentes como adulto, infantil, idoso, meia entrada, pacote com hotel ou pacote sem hotel.',
+    image: '/marketing/smartbus-tips/tipos-passagem.svg',
+    buttonLabel: 'Ver eventos',
+    href: '/admin/eventos',
+  },
+  {
+    title: 'Use recursos inclusos',
+    description: 'Aproveite embarques, veículos, assentos, passageiros, QR Code, check-in e vitrine pública sem custo adicional.',
+    image: '/marketing/smartbus-tips/recursos-inclusos.svg',
+    buttonLabel: 'Abrir vitrine pública',
+    href: null,
+  },
+] as const;
 
 /* ═══════════════════════════════════════════════════
    Helpers
@@ -137,15 +178,39 @@ function formatPercent(value: number | null) {
   return `${value.toFixed(1)}%`;
 }
 
+function SmartbusTipImage({ src, alt }: { src: string; alt: string }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-xl border bg-muted/40 text-muted-foreground">
+        <ImageIcon className="h-10 w-10" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-32 w-full rounded-xl border bg-muted/20 object-cover"
+      loading="lazy"
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
 /* ═══════════════════════════════════════════════════
    Componente principal
    ═══════════════════════════════════════════════════ */
 
 export default function Dashboard() {
-  const { activeCompanyId, activeCompany, canViewFinancials } = useAuth();
+  const { user, activeCompanyId, activeCompany, canViewFinancials, userRole } = useAuth();
   const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>(30);
   const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
+  const [smartbusTipsOpen, setSmartbusTipsOpen] = useState(false);
+  const [doNotShowSmartbusTips, setDoNotShowSmartbusTips] = useState(false);
   const lastPopupModeRef = useRef<OnboardingPopupMode | null>(null);
   const onboardingWelcomeDismissKey = useMemo(
     () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
@@ -179,6 +244,44 @@ export default function Dashboard() {
 
   // ─── Guard: sem empresa ativa não consulta ─────────────
   const enabled = Boolean(activeCompanyId);
+  const canViewSmartbusTips =
+    Boolean(activeCompanyId) &&
+    SMARTBUS_TIPS_ADMIN_ROLES.includes(userRole as (typeof SMARTBUS_TIPS_ADMIN_ROLES)[number]);
+
+  const smartbusTipsDismissKey = useMemo(
+    () => (
+      activeCompanyId
+        ? `admin-dashboard:smartbus-tips-dismissed:${activeCompanyId}:${user?.id ?? 'no-user'}`
+        : null
+    ),
+    [activeCompanyId, user?.id]
+  );
+
+  const handleSmartbusTipsOpenChange = (open: boolean) => {
+    if (!open && doNotShowSmartbusTips && smartbusTipsDismissKey) {
+      window.localStorage.setItem(smartbusTipsDismissKey, '1');
+    }
+    setSmartbusTipsOpen(open);
+  };
+
+  const handleOpenSmartbusTipsFromCard = () => {
+    // Comentário: o card fixo sempre permite reabrir a comunicação, mesmo quando o popup automático foi dispensado.
+    setDoNotShowSmartbusTips(false);
+    setSmartbusTipsOpen(true);
+  };
+
+  const handleOpenPublicShowcaseFromSmartbusTips = () => {
+    // Comentário: valida a vitrine antes de fechar o modal promocional para evitar transição brusca.
+    if (!publicShowcaseUrl) {
+      toast.warning('Configure o link da sua vitrine em /admin/empresa antes de acessar.');
+      handleSmartbusTipsOpenChange(false);
+      navigate('/admin/empresa');
+      return;
+    }
+
+    handleSmartbusTipsOpenChange(false);
+    window.open(publicShowcaseUrl, '_blank', 'noopener,noreferrer');
+  };
 
   /* ─── Onboarding inicial ───────────────────────────────
      Comentário: esta leitura usa dados reais por empresa (company_id)
@@ -438,6 +541,14 @@ export default function Dashboard() {
       onboardingHeavyLoading ||
       onboardingCompletedCount < onboardingItems.length);
 
+  useEffect(() => {
+    // Comentário: o popup promocional automático só aparece quando o onboarding não está ativo,
+    // evitando dois modais no carregamento. O card fixo continua abrindo manualmente.
+    if (!canViewSmartbusTips || !smartbusTipsDismissKey || shouldShowOnboardingCard || onboardingPopupOpen) return;
+    setDoNotShowSmartbusTips(false);
+    setSmartbusTipsOpen(window.localStorage.getItem(smartbusTipsDismissKey) !== '1');
+  }, [canViewSmartbusTips, onboardingPopupOpen, shouldShowOnboardingCard, smartbusTipsDismissKey]);
+
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
     queryKey: ['dashboard-op', activeCompanyId, period],
@@ -535,7 +646,7 @@ export default function Dashboard() {
       const { data } = await supabase.rpc('get_sales_report_kpis', {
         p_company_id: activeCompanyId!,
         p_date_from: dateFrom,
-        p_status: 'pago' as any,
+        p_status: 'pago' satisfies SaleStatus,
       });
 
       const row = data?.[0];
@@ -622,7 +733,7 @@ export default function Dashboard() {
         .gte('created_at', dateFrom);
 
       const map = new Map<string, { name: string; count: number }>();
-      (data ?? []).forEach((s: any) => {
+      ((data ?? []) as EventSalesRankRow[]).forEach((s) => {
         const id = s.event_id;
         const name = s.events?.name ?? 'Evento';
         const prev = map.get(id) ?? { name, count: 0 };
@@ -649,7 +760,7 @@ export default function Dashboard() {
         .gte('created_at', dateFrom);
 
       const map = new Map<string, { name: string; count: number }>();
-      (data ?? []).forEach((s: any) => {
+      ((data ?? []) as SellerSalesRankRow[]).forEach((s) => {
         const id = s.seller_id ?? '__none__';
         const name = s.sellers?.name ?? 'Sem vendedor';
         const prev = map.get(id) ?? { name, count: 0 };
@@ -760,6 +871,60 @@ export default function Dashboard() {
           </DialogContent>
         </Dialog>
 
+        {canViewSmartbusTips && (
+          <Dialog open={smartbusTipsOpen} onOpenChange={handleSmartbusTipsOpenChange}>
+            <DialogContent className="max-w-5xl">
+              <DialogHeader>
+                <DialogTitle>Explore mais possibilidades com o SmartBus</DialogTitle>
+                <DialogDescription>
+                  Além de passagens, você também pode vender passeios, serviços, pacotes e experiências.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {smartbusTips.map((tip) => (
+                  <Card key={tip.title} className="overflow-hidden">
+                    <CardContent className="flex h-full flex-col gap-4 p-4">
+                      <SmartbusTipImage src={tip.image} alt={tip.title} />
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold">{tip.title}</h3>
+                        <p className="text-sm text-muted-foreground">{tip.description}</p>
+                      </div>
+                      <Button
+                        className="mt-auto w-full"
+                        variant={tip.href ? 'outline' : 'default'}
+                        onClick={() => {
+                          if (tip.href) {
+                            handleSmartbusTipsOpenChange(false);
+                            navigate(tip.href);
+                            return;
+                          }
+                          handleOpenPublicShowcaseFromSmartbusTips();
+                        }}
+                      >
+                        {tip.buttonLabel}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <DialogFooter className="items-center justify-between gap-3 sm:justify-between">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={doNotShowSmartbusTips}
+                    onCheckedChange={(checked) => setDoNotShowSmartbusTips(checked === true)}
+                  />
+                  Não mostrar novamente
+                </label>
+                <Button variant="outline" onClick={() => handleSmartbusTipsOpenChange(false)}>
+                  Fechar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
         {shouldShowOnboardingCard && (
           <Card>
             <CardHeader className="space-y-3">
@@ -860,6 +1025,27 @@ export default function Dashboard() {
             </Button>
           </div>
         </section>
+
+        {canViewSmartbusTips && (
+          <Card className="border-primary/15 bg-orange-50/60">
+            <CardContent className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold leading-tight">Você sabia?</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Venda passeios, serviços, pacotes, experiências e tipos diferentes de passagem.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" className="shrink-0" onClick={handleOpenSmartbusTipsFromCard}>
+                Ver possibilidades
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── KPIs Operacionais ───────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
