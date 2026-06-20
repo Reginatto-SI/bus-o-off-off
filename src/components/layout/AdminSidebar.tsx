@@ -172,6 +172,11 @@ const navigationGroups: NavigationGroup[] = [{
     href: '/admin/relatorios/lista-embarque',
     icon: ClipboardList
   }, {
+    name: 'Empresas e Ativação',
+    href: '/admin/relatorios/empresas-ativacao',
+    icon: Building2,
+    roles: ['developer']
+  }, {
     name: 'Comissão de Vendedores',
     href: '/admin/relatorios/comissao-vendedores',
     icon: BadgePercent
