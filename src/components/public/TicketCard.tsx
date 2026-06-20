@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User, QrCode, ShieldAlert } from 'lucide-react';
+import { Download, FileText, Armchair, Calendar, MapPin, Clock, Phone, MessageCircle, Copy, Loader2, RefreshCw, Bus, Hash, User, QrCode, ShieldAlert, ExternalLink } from 'lucide-react';
 import { formatDateOnlyBR, formatPurchaseDateTimeBR } from '@/lib/date';
 import { generateTicketPdf } from '@/lib/ticketPdfGenerator';
 import { generateTicketImageFromCanvas } from '@/lib/ticketImageGenerator';
@@ -35,6 +35,7 @@ export interface TicketCardData {
   eventDate: string;
   eventCity: string;
   eventTransportPolicy?: TransportPolicy;
+  whatsappGroupLink?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
   boardingLocationAddress: string;
@@ -103,6 +104,8 @@ interface TicketCardProps {
   // Callback para verificar status do pagamento oficial atual (Asaas).
   onRefreshStatus?: (saleId: string) => Promise<void>;
   isRefreshing?: boolean;
+  /** Permite que listas agrupadas exibam o CTA do grupo uma única vez por venda. */
+  showWhatsAppGroupCta?: boolean;
 }
 
 function getFriendlySeatLabel(seatLabel: string): string {
@@ -120,6 +123,7 @@ export function TicketCard({
   reservedPresentation = 'default',
   onRefreshStatus,
   isRefreshing,
+  showWhatsAppGroupCta = true,
 }: TicketCardProps) {
   const { toast } = useToast();
   const qrRef = useRef<HTMLCanvasElement>(null);
@@ -291,6 +295,21 @@ export function TicketCard({
               </div>
               <StatusBadge status={displayStatus} />
             </div>
+
+            {showWhatsAppGroupCta && ticket.saleStatus === 'pago' && ticket.whatsappGroupLink && (
+              <Alert className="border-green-200 bg-green-50 text-green-900">
+                <MessageCircle className="h-4 w-4" />
+                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>Entre no grupo do WhatsApp para acompanhar avisos e orientações do organizador.</span>
+                  <Button asChild size="sm" variant="outline" className="border-green-300 bg-white text-green-800 hover:bg-green-100">
+                    <a href={ticket.whatsappGroupLink} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Entrar no grupo do WhatsApp
+                    </a>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {isReservedReceipt && (
               <Alert className="border-amber-400 bg-amber-50 text-amber-900">

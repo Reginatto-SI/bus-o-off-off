@@ -394,6 +394,7 @@ export default function Confirmation() {
       eventDate: sale?.event?.date || '',
       eventCity: sale?.event?.city || '',
       eventTransportPolicy: sale?.event?.transport_policy ?? 'trecho_independente',
+      whatsappGroupLink: sale?.status === 'pago' ? ((sale?.event as any)?.whatsapp_group_link ?? null) : null,
       boardingToleranceMinutes: sale?.event?.boarding_tolerance_minutes ?? null,
       boardingLocationName: sale?.boarding_location?.name || '',
       boardingLocationAddress: sale?.boarding_location?.address || '',

@@ -456,6 +456,7 @@ export interface Event {
   boarding_tolerance_minutes: number | null;
   description: string | null;
   public_info: string | null;
+  whatsapp_group_link: string | null;
   status: EventStatus;
   unit_price: number;
   max_tickets_per_purchase: number;

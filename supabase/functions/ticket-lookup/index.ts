@@ -167,6 +167,8 @@ serve(async (req) => {
         eventCity: t.sale?.event?.city || "",
         // Mantém modelagem por trecho, mas informa política para a camada de apresentação consolidar quando obrigatório.
         eventTransportPolicy: t.sale?.event?.transport_policy || "trecho_independente",
+        // Segurança: só retorna link do grupo para vendas confirmadas/pagas.
+        whatsappGroupLink: t.sale?.status === "pago" ? (t.sale?.event?.whatsapp_group_link || null) : null,
         eventId: t.trip?.event_id || null,
         boardingToleranceMinutes: t.sale?.event?.boarding_tolerance_minutes ?? null,
         boardingLocationName: t.sale?.boarding_location?.name || "",

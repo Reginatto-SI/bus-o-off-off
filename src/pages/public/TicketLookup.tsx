@@ -30,6 +30,7 @@ type TicketLookupResponseTicket = {
   eventDate: string;
   eventCity: string;
   eventTransportPolicy?: TransportPolicy;
+  whatsappGroupLink?: string | null;
   eventId?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
@@ -119,6 +120,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
       eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
+      whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? null) : null,
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
       boardingLocationAddress: ticket.boardingLocationAddress,
