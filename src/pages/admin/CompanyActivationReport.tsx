@@ -333,7 +333,7 @@ export default function CompanyActivationReport() {
             {loading ? (
               <div className="flex h-56 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
             ) : filteredRows.length === 0 ? (
-              <div className="p-6"><EmptyState title="Nenhuma empresa encontrada" description="Ajuste os filtros para visualizar empresas cadastradas." icon={Building2} /></div>
+              <div className="p-6"><EmptyState title="Nenhuma empresa encontrada" description="Ajuste os filtros para visualizar empresas cadastradas." icon={<Building2 className="h-6 w-6 text-muted-foreground" />} /></div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
