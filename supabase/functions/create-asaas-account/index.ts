@@ -225,11 +225,15 @@ async function ensureAsaasWebhook(params: {
   ) as AsaasWebhookRecord | undefined;
 
   const hasExpectedEvents = JSON.stringify(normalizeWebhookEvents(existingWebhook?.events)) === JSON.stringify([...ASAAS_PAYMENT_WEBHOOK_EVENTS].sort());
+  // Mantém o authToken remoto alinhado ao secret de webhook do ambiente;
+  // nunca reutilize a API key Asaas como token de autenticação do webhook.
+  const hasExpectedAuthToken = existingWebhook?.authToken === payload.authToken;
   const needsUpdate = Boolean(existingWebhook) && (
     existingWebhook?.url !== webhookUrl ||
     existingWebhook?.enabled !== true ||
     existingWebhook?.interrupted !== false ||
     existingWebhook?.sendType !== payload.sendType ||
+    !hasExpectedAuthToken ||
     !hasExpectedEvents
   );
 
