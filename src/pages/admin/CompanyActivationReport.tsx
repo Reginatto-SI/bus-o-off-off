@@ -232,7 +232,13 @@ export default function CompanyActivationReport() {
 
         setRows(nextRows);
       } catch (error) {
-        console.error('[CompanyActivationReport] erro ao carregar relatório interno', error);
+        const rpcError = error as { message?: string; code?: string; details?: string; hint?: string };
+        console.error('[CompanyActivationReport] erro ao carregar RPC get_company_activation_report', {
+          message: rpcError.message,
+          code: rpcError.code,
+          details: rpcError.details,
+          hint: rpcError.hint,
+        });
         toast.error('Não foi possível carregar o relatório de empresas e ativação.');
       } finally {
         setLoading(false);
@@ -275,7 +281,7 @@ export default function CompanyActivationReport() {
 
   return (
     <AdminLayout>
-      <div className="admin-page-container space-y-5">
+      <div className="page-container">
         <PageHeader
           title="Empresas e Ativação"
           description="Relatório interno para acompanhar onboarding, uso inicial e oportunidades de contato comercial."

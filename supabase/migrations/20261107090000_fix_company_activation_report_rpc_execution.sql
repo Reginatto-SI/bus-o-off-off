@@ -1,5 +1,16 @@
--- Relatório interno de empresas e ativação.
--- Centraliza agregações no banco para evitar carregar vendas/eventos/frota/motoristas brutos no frontend.
+-- Reaplica a correção da RPC de Empresas e Ativação para bancos onde a migration original já rodou.
+-- Mantém somente campos não sensíveis do Asaas/Pix; API keys não são criadas nem retornadas aqui.
+ALTER TABLE public.companies
+  ADD COLUMN IF NOT EXISTS asaas_wallet_id_production text,
+  ADD COLUMN IF NOT EXISTS asaas_account_id_production text,
+  ADD COLUMN IF NOT EXISTS asaas_onboarding_complete_production boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS asaas_pix_ready_production boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS asaas_pix_last_checked_at_production timestamptz NULL,
+  ADD COLUMN IF NOT EXISTS asaas_wallet_id_sandbox text,
+  ADD COLUMN IF NOT EXISTS asaas_account_id_sandbox text,
+  ADD COLUMN IF NOT EXISTS asaas_onboarding_complete_sandbox boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS asaas_pix_ready_sandbox boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS asaas_pix_last_checked_at_sandbox timestamptz NULL;
 
 CREATE OR REPLACE FUNCTION public.get_company_activation_report()
 RETURNS TABLE (
