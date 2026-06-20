@@ -1,0 +1,17 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Cadastre patrocinadores</title>
+  <desc id="desc">Ilustração de megafone e banner para marcas patrocinadoras.</desc>
+  <rect width="640" height="360" rx="32" fill="#FFF7ED"/>
+  <circle cx="488" cy="82" r="44" fill="#FED7AA"/>
+  <rect x="94" y="92" width="452" height="188" rx="28" fill="#FFFFFF" stroke="#FFEDD5" stroke-width="6"/>
+  <rect x="344" y="120" width="146" height="44" rx="16" fill="#0F172A"/>
+  <path d="M370 142H464" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+  <path d="M176 164L304 118V242L176 196V164Z" fill="#FB923C" stroke="#0F172A" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="132" y="152" width="62" height="56" rx="16" fill="#0F172A"/>
+  <path d="M304 146C336 146 360 168 360 180C360 192 336 214 304 214" stroke="#FDBA74" stroke-width="18" stroke-linecap="round"/>
+  <path d="M162 216L142 266" stroke="#0F172A" stroke-width="12" stroke-linecap="round"/>
+  <path d="M198 216L230 266" stroke="#0F172A" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="414" cy="222" r="34" fill="#FFEDD5"/>
+  <path d="M414 198L421 213L438 216L426 228L429 244L414 236L399 244L402 228L390 216L407 213L414 198Z" fill="#16A34A"/>
+  <rect x="344" y="250" width="146" height="16" rx="8" fill="#CBD5E1"/>
+</svg>
