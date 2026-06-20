@@ -1,0 +1,23 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Recursos inclusos</title>
+  <desc id="desc">Ilustração de recursos do sistema como QR Code, assentos e check-in.</desc>
+  <rect width="640" height="360" rx="32" fill="#F0FDF4"/>
+  <rect x="78" y="72" width="484" height="216" rx="28" fill="#FFFFFF" stroke="#DCFCE7" stroke-width="6"/>
+  <rect x="118" y="112" width="116" height="116" rx="20" fill="#0F172A"/>
+  <rect x="138" y="132" width="28" height="28" rx="5" fill="#FFFFFF"/>
+  <rect x="186" y="132" width="28" height="28" rx="5" fill="#FFFFFF"/>
+  <rect x="138" y="180" width="28" height="28" rx="5" fill="#FFFFFF"/>
+  <rect x="184" y="178" width="12" height="12" rx="2" fill="#FFFFFF"/>
+  <rect x="202" y="196" width="12" height="12" rx="2" fill="#FFFFFF"/>
+  <rect x="184" y="208" width="30" height="8" rx="2" fill="#FB923C"/>
+  <circle cx="310" cy="142" r="30" fill="#FFEDD5"/>
+  <path d="M296 142L306 152L326 130" stroke="#16A34A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="368" y="118" width="118" height="48" rx="16" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="4"/>
+  <path d="M392 143H462" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M286 206H516" stroke="#CBD5E1" stroke-width="10" stroke-linecap="round"/>
+  <path d="M286 238H458" stroke="#CBD5E1" stroke-width="10" stroke-linecap="round"/>
+  <rect x="116" y="250" width="74" height="46" rx="16" fill="#FB923C"/>
+  <rect x="206" y="250" width="74" height="46" rx="16" fill="#FDBA74"/>
+  <rect x="296" y="250" width="74" height="46" rx="16" fill="#0284C7"/>
+  <path d="M132 271H174M222 271H264M312 271H354" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+</svg>
