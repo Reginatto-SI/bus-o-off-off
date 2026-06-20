@@ -2641,6 +2641,13 @@ export default function Events() {
     setEventToClose(null);
   };
 
+  const buildPublicEventStoreUrl = (eventId: string) => `/eventos/${eventId}`;
+
+  const handleViewEventInStore = (event: EventWithTrips) => {
+    // Reutiliza a rota pública já existente usada pelos cards da vitrine/checkout.
+    window.open(buildPublicEventStoreUrl(event.id), '_blank', 'noopener,noreferrer');
+  };
+
   const handleCopyEventId = async (eventId: string) => {
     try {
       await navigator.clipboard.writeText(eventId);
@@ -2674,6 +2681,15 @@ export default function Events() {
         window.location.href = `/admin/eventos/${event.id}`;
       },
     });
+
+    if (event.status === 'a_venda' && !event.is_archived) {
+      // Exibe somente quando o evento está disponível na vitrine pública.
+      actions.push({
+        label: 'Ver evento na loja',
+        icon: ExternalLink,
+        onClick: () => handleViewEventInStore(event),
+      });
+    }
 
     actions.push({
       label: 'Copiar ID do evento',
