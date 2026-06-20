@@ -1,0 +1,17 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Cadastre parceiros</title>
+  <desc id="desc">Ilustração de cartões conectados simbolizando parceiros comerciais.</desc>
+  <rect width="640" height="360" rx="32" fill="#F0F9FF"/>
+  <circle cx="142" cy="92" r="44" fill="#E0F2FE"/>
+  <rect x="82" y="80" width="178" height="104" rx="24" fill="#FFFFFF" stroke="#BAE6FD" stroke-width="6"/>
+  <rect x="380" y="176" width="178" height="104" rx="24" fill="#FFFFFF" stroke="#BAE6FD" stroke-width="6"/>
+  <rect x="232" y="126" width="178" height="104" rx="24" fill="#0F172A"/>
+  <path d="M260 178H382" stroke="#FDBA74" stroke-width="12" stroke-linecap="round"/>
+  <path d="M172 184C196 226 236 246 284 226" stroke="#0284C7" stroke-width="10" stroke-linecap="round" stroke-dasharray="18 18"/>
+  <path d="M360 132C402 96 462 104 492 150" stroke="#0284C7" stroke-width="10" stroke-linecap="round" stroke-dasharray="18 18"/>
+  <circle cx="172" cy="132" r="22" fill="#FB923C"/>
+  <circle cx="321" cy="178" r="26" fill="#FFFFFF"/>
+  <circle cx="469" cy="228" r="22" fill="#16A34A"/>
+  <path d="M120 158H222M420 254H520" stroke="#CBD5E1" stroke-width="10" stroke-linecap="round"/>
+  <path d="M285 206H357" stroke="#CBD5E1" stroke-width="10" stroke-linecap="round"/>
+</svg>

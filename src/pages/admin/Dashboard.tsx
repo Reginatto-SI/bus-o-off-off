@@ -167,6 +167,28 @@ const smartbusTips = [
     buttonLabel: 'Abrir vitrine pública',
     href: null,
   },
+  {
+    title: 'Cadastre patrocinadores',
+    description: 'Divulgue marcas e empresas apoiadoras nos seus eventos, fortalecendo parcerias comerciais e aumentando o valor da experiência.',
+    image: '/marketing/smartbus-tips/patrocinadores.svg',
+    buttonLabel: 'Gerenciar patrocinadores',
+    href: '/admin/patrocinadores',
+  },
+  {
+    title: 'Cadastre parceiros',
+    description: 'Organize parceiros comerciais e operacionais para ampliar sua rede de divulgação, apoio e relacionamento dentro do SmartBus.',
+    image: '/marketing/smartbus-tips/parceiros.svg',
+    buttonLabel: 'Gerenciar parceiros',
+    href: '/admin/parceiros',
+  },
+  {
+    title: 'Valide passagens com QR Code',
+    description: 'Use o aplicativo de embarque para escanear QR Codes, confirmar passageiros e acompanhar quem já embarcou ou ainda está pendente.',
+    image: '/marketing/smartbus-tips/qr-code-embarque.svg',
+    buttonLabel: 'Abrir aplicativo',
+    href: '/validador',
+    openInNewTab: true,
+  },
 ] as const;
 
 /* ═══════════════════════════════════════════════════
@@ -873,7 +895,7 @@ export default function Dashboard() {
 
         {canViewSmartbusTips && (
           <Dialog open={smartbusTipsOpen} onOpenChange={handleSmartbusTipsOpenChange}>
-            <DialogContent className="max-w-5xl">
+            <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Explore mais possibilidades com o SmartBus</DialogTitle>
                 <DialogDescription>
@@ -881,7 +903,7 @@ export default function Dashboard() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {smartbusTips.map((tip) => (
                   <Card key={tip.title} className="overflow-hidden">
                     <CardContent className="flex h-full flex-col gap-4 p-4">
@@ -896,6 +918,10 @@ export default function Dashboard() {
                         onClick={() => {
                           if (tip.href) {
                             handleSmartbusTipsOpenChange(false);
+                            if ('openInNewTab' in tip && tip.openInNewTab) {
+                              window.open(tip.href, '_blank', 'noopener,noreferrer');
+                              return;
+                            }
                             navigate(tip.href);
                             return;
                           }
