@@ -55,15 +55,17 @@ interface CompanyActivationReportRpcRow {
   event_count: number;
   sale_count: number;
   paid_sale_count: number;
+  cancelled_sale_count: number;
   vehicle_count: number;
   driver_count: number;
   last_activity_at: string | null;
 }
 
-interface CompanyActivationRow extends Omit<CompanyActivationReportRpcRow, 'event_count' | 'sale_count' | 'paid_sale_count' | 'vehicle_count' | 'driver_count' | 'last_activity_at'> {
+interface CompanyActivationRow extends Omit<CompanyActivationReportRpcRow, 'event_count' | 'sale_count' | 'paid_sale_count' | 'cancelled_sale_count' | 'vehicle_count' | 'driver_count' | 'last_activity_at'> {
   eventCount: number;
   saleCount: number;
   paidSaleCount: number;
+  cancelledSaleCount: number;
   vehicleCount: number;
   driverCount: number;
   lastActivityAt: string | null;
@@ -178,7 +180,8 @@ function getAsaasStatus(company: CompanyActivationReportRpcRow): AsaasStatus {
 
 function resolveActivation(row: Omit<CompanyActivationRow, 'activationStatus' | 'suggestedAction'>): Pick<CompanyActivationRow, 'activationStatus' | 'suggestedAction'> {
   const hasEvents = row.eventCount > 0;
-  const hasSales = row.saleCount > 0;
+  // Para ativação comercial, venda válida é somente passagem efetivamente paga; canceladas ficam em métrica separada.
+  const hasSales = row.paidSaleCount > 0;
   const hasFleet = row.vehicleCount > 0;
   const hasDrivers = row.driverCount > 0;
   const configuredSteps = [row.hasAsaas, hasEvents, hasFleet, hasDrivers].filter(Boolean).length;
@@ -263,6 +266,7 @@ export default function CompanyActivationReport() {
             eventCount: Number(company.event_count ?? 0),
             saleCount: Number(company.sale_count ?? 0),
             paidSaleCount: Number(company.paid_sale_count ?? 0),
+            cancelledSaleCount: Number(company.cancelled_sale_count ?? 0),
             vehicleCount: Number(company.vehicle_count ?? 0),
             driverCount: Number(company.driver_count ?? 0),
             lastActivityAt: company.last_activity_at ?? company.updated_at ?? company.created_at,
@@ -374,7 +378,7 @@ export default function CompanyActivationReport() {
       startY: 56,
       head: [[
         'Nº', 'Empresa', 'Contato', 'WhatsApp', 'E-mail', 'Cidade/UF', 'Cadastro', 'Última atividade',
-        'Eventos/Vendas', 'Asaas', 'Frota/Mot.', 'Status', 'Ação sugerida',
+        'Eventos/Vendas pagas/Canceladas', 'Asaas', 'Frota/Mot.', 'Status', 'Ação sugerida',
       ]],
       body: filteredRows.map((row, index) => [
         index + 1,
@@ -389,7 +393,7 @@ export default function CompanyActivationReport() {
         formatPdfText([row.city, row.state].filter(Boolean).join('/')),
         formatDateTime(row.created_at),
         formatDateTime(row.lastActivityAt),
-        `${row.eventCount} eventos\n${row.saleCount} vendas`,
+        `${row.eventCount} eventos\n${row.paidSaleCount} pagas\n${row.cancelledSaleCount} canceladas`,
         asaasLabels[row.asaasStatus],
         `${row.vehicleCount > 0 ? 'Frota: sim' : 'Frota: não'}\n${row.driverCount > 0 ? 'Mot.: sim' : 'Mot.: não'}`,
         statusLabels[row.activationStatus],
@@ -410,11 +414,11 @@ export default function CompanyActivationReport() {
         5: { cellWidth: 17 },
         6: { cellWidth: 18 },
         7: { cellWidth: 18 },
-        8: { cellWidth: 15 },
+        8: { cellWidth: 19 },
         9: { cellWidth: 23 },
         10: { cellWidth: 18 },
         11: { cellWidth: 18 },
-        12: { cellWidth: 33 },
+        12: { cellWidth: 29 },
       },
       didDrawPage: (data) => {
         // O cabeçalho já foi desenhado antes do resumo; nas próximas páginas do autoTable ele é redesenhado sem duplicar a página 1.
@@ -503,7 +507,7 @@ export default function CompanyActivationReport() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-14 text-center">Nº</TableHead><TableHead>Empresa</TableHead><TableHead>Contato</TableHead><TableHead>Cidade/UF</TableHead><TableHead>Cadastro</TableHead><TableHead>Última atividade</TableHead><TableHead className="text-right">Eventos</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead>Asaas</TableHead><TableHead>Frota</TableHead><TableHead>Motoristas</TableHead><TableHead>Status</TableHead><TableHead>Ação sugerida</TableHead>
+                      <TableHead className="w-14 text-center">Nº</TableHead><TableHead>Empresa</TableHead><TableHead>Contato</TableHead><TableHead>Cidade/UF</TableHead><TableHead>Cadastro</TableHead><TableHead>Última atividade</TableHead><TableHead className="text-right">Eventos</TableHead><TableHead className="text-right">Vendas pagas</TableHead><TableHead className="text-right">Vendas canceladas</TableHead><TableHead>Asaas</TableHead><TableHead>Frota</TableHead><TableHead>Motoristas</TableHead><TableHead>Status</TableHead><TableHead>Ação sugerida</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -516,7 +520,8 @@ export default function CompanyActivationReport() {
                         <TableCell>{formatDateTime(row.created_at)}</TableCell>
                         <TableCell>{formatDateTime(row.lastActivityAt)}</TableCell>
                         <TableCell className="text-right">{row.eventCount}</TableCell>
-                        <TableCell className="text-right">{row.saleCount}</TableCell>
+                        <TableCell className="text-right">{row.paidSaleCount}</TableCell>
+                        <TableCell className="text-right">{row.cancelledSaleCount}</TableCell>
                         <TableCell><Badge variant="outline" className={cn(asaasStyles[row.asaasStatus])}>{asaasLabels[row.asaasStatus]}</Badge></TableCell>
                         <TableCell>{row.vehicleCount > 0 ? 'Sim' : 'Não cadastrado'}</TableCell>
                         <TableCell>{row.driverCount > 0 ? 'Sim' : 'Não cadastrado'}</TableCell>
