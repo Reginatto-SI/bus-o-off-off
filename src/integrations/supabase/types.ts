@@ -1562,6 +1562,7 @@ export type Database = {
           unit_price: number
           updated_at: string
           use_category_pricing: boolean
+          whatsapp_group_link: string | null
         }
         Insert: {
           allow_online_sale?: boolean
@@ -1590,6 +1591,7 @@ export type Database = {
           unit_price?: number
           updated_at?: string
           use_category_pricing?: boolean
+          whatsapp_group_link?: string | null
         }
         Update: {
           allow_online_sale?: boolean
@@ -1618,6 +1620,7 @@ export type Database = {
           unit_price?: number
           updated_at?: string
           use_category_pricing?: boolean
+          whatsapp_group_link?: string | null
         }
         Relationships: [
           {
@@ -3679,6 +3682,7 @@ export type Database = {
           asaas_pix_ready_sandbox: boolean
           asaas_wallet_id_production: string
           asaas_wallet_id_sandbox: string
+          cancelled_sale_count: number
           city: string
           cnpj: string
           created_at: string
@@ -3693,7 +3697,6 @@ export type Database = {
           legal_name: string
           name: string
           paid_sale_count: number
-          cancelled_sale_count: number
           phone: string
           sale_count: number
           state: string

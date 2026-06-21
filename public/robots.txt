@@ -12,5 +12,14 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /admin
+Disallow: /driver
+Disallow: /seller
+Disallow: /checkout
+Disallow: /confirmacao/
+Disallow: /v/
+Disallow: /i/
+Disallow: /eventos/
 
 Sitemap: https://www.smartbusbr.com.br/sitemap.xml
