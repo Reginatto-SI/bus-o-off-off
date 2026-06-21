@@ -3693,6 +3693,7 @@ export type Database = {
           legal_name: string
           name: string
           paid_sale_count: number
+          cancelled_sale_count: number
           phone: string
           sale_count: number
           state: string
