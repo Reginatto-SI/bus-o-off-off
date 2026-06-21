@@ -17,6 +17,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -86,6 +87,7 @@ interface Filters {
   createdTo: string;
   activityFrom: string;
   activityTo: string;
+  onlyActiveCompanies: boolean;
 }
 
 const defaultFilters: Filters = {
@@ -99,6 +101,7 @@ const defaultFilters: Filters = {
   createdTo: '',
   activityFrom: '',
   activityTo: '',
+  onlyActiveCompanies: true,
 };
 
 const statusLabels: Record<ActivationStatus, string> = {
@@ -229,6 +232,7 @@ function getAppliedFiltersLabel(filters: Filters) {
     `Eventos = ${getTriStateLabel(filters.events, 'Com eventos', 'Sem eventos')}`,
     `Frota = ${getTriStateLabel(filters.fleet, 'Com cadastro', 'Sem cadastro')}`,
     `Motoristas = ${getTriStateLabel(filters.drivers, 'Com cadastro', 'Sem cadastro')}`,
+    `Empresas = ${filters.onlyActiveCompanies ? 'Somente ativas' : 'Todas'}`,
   ];
 
   if (filters.createdFrom || filters.createdTo) labels.push(`Cadastro = ${filters.createdFrom || 'início'} até ${filters.createdTo || 'hoje'}`);
@@ -301,6 +305,7 @@ export default function CompanyActivationReport() {
       const createdAt = row.created_at.slice(0, 10);
       const activityAt = row.lastActivityAt?.slice(0, 10) ?? '';
       return (!term || searchable.includes(term))
+        && (!filters.onlyActiveCompanies || row.is_active)
         && (filters.status === 'all' || row.activationStatus === filters.status)
         && (filters.asaas === 'all' || (filters.asaas === 'yes' ? row.hasAsaas : !row.hasAsaas))
         && (filters.events === 'all' || (filters.events === 'yes' ? row.eventCount > 0 : row.eventCount === 0))
@@ -313,7 +318,7 @@ export default function CompanyActivationReport() {
     });
   }, [filters, rows]);
 
-  const stats = useMemo(() => getFilteredStats(rows), [rows]);
+  const stats = useMemo(() => getFilteredStats(filteredRows), [filteredRows]);
 
   const handleExportPdf = () => {
     if (filteredRows.length === 0) {
@@ -471,6 +476,21 @@ export default function CompanyActivationReport() {
             { id: 'asaas', label: 'Asaas', placeholder: 'Todos', value: filters.asaas, onChange: (asaas) => setFilters((prev) => ({ ...prev, asaas: asaas as TriStateFilter })), options: [{ value: 'all', label: 'Todos' }, { value: 'yes', label: 'Com Asaas' }, { value: 'no', label: 'Sem Asaas' }] },
             { id: 'events', label: 'Eventos', placeholder: 'Todos', value: filters.events, onChange: (events) => setFilters((prev) => ({ ...prev, events: events as TriStateFilter })), options: [{ value: 'all', label: 'Todos' }, { value: 'yes', label: 'Com eventos' }, { value: 'no', label: 'Sem eventos' }] },
           ]}
+          mainFilters={
+            <div className="flex min-h-[3.75rem] items-center rounded-lg border border-dashed border-border/80 px-3 py-2">
+              <label className="flex cursor-pointer items-start gap-3">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={filters.onlyActiveCompanies}
+                  onCheckedChange={(checked) => setFilters((prev) => ({ ...prev, onlyActiveCompanies: Boolean(checked) }))}
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-medium text-foreground">Somente empresas ativas</span>
+                  <span className="block text-xs text-muted-foreground">Oculta empresas inativas ou usadas apenas para teste.</span>
+                </span>
+              </label>
+            </div>
+          }
           advancedFilters={
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
               {(['fleet', 'drivers'] as const).map((key) => (
