@@ -294,8 +294,9 @@ export default function PublicEventDetail() {
               variant="link"
               className="h-auto p-0 text-sm"
               onClick={() => setIsDescriptionDialogOpen(true)}
+              aria-label="Ver descrição completa do evento"
             >
-              Ler mais
+              Ver descrição completa do evento
             </Button>
           </section>
         )}
