@@ -69,3 +69,26 @@ export function usePageMeta(options: PageMetaOptions) {
     }
   }, [title, description, path, ogType, ogImage]);
 }
+
+/**
+ * Injeta um bloco JSON-LD por rota usando um id estável. Remove o bloco ao
+ * desmontar para evitar acúmulo entre navegações.
+ */
+export function useJsonLd(id: string, data: Record<string, unknown> | null) {
+  useEffect(() => {
+    if (!data) return;
+    const elementId = `jsonld-${id}`;
+    let script = document.getElementById(elementId) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement("script");
+      script.type = "application/ld+json";
+      script.id = elementId;
+      document.head.appendChild(script);
+    }
+    script.textContent = JSON.stringify(data);
+    return () => {
+      const existing = document.getElementById(elementId);
+      if (existing) existing.remove();
+    };
+  }, [id, data]);
+}

@@ -517,6 +517,7 @@ export default function PublicCompanyShowcase() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title={s.label}
+                          aria-label={`Acessar ${s.label}`}
                           className={`inline-flex items-center justify-center rounded-full p-2.5 transition-colors ${
                             hasCover
                               ? 'bg-white/20 text-white hover:bg-white/30'
