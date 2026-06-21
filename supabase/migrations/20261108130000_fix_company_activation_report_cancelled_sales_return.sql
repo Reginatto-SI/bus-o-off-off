@@ -1,5 +1,5 @@
--- Adiciona a métrica separada de vendas canceladas ao relatório de Empresas e Ativação.
--- A coluna operacional de vendas pagas continua baseada somente em sales.status = 'pago'.
+-- Reaplica a versão final da RPC após migrations futuras que recriam get_company_activation_report.
+-- Corrige compatibilidade de tipos do RETURN QUERY com casts explícitos para text e mantém canceladas separadas.
 ALTER TABLE public.companies
   ADD COLUMN IF NOT EXISTS asaas_wallet_id_production text,
   ADD COLUMN IF NOT EXISTS asaas_account_id_production text,
