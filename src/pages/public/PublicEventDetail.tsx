@@ -15,6 +15,7 @@ import { QuantitySelector } from '@/components/public/QuantitySelector';
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { useJsonLd } from '@/lib/usePageMeta';
 import { parseDateOnlyAsLocal } from '@/lib/date';
 import { normalizeWhatsappForWaMe } from '@/lib/whatsapp';
 import {
