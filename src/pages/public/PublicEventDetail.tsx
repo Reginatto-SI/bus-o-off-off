@@ -62,6 +62,32 @@ export default function PublicEventDetail() {
   const eventDescription = event?.description?.trim() ?? '';
   const hasEventDescription = eventDescription.length > 0;
 
+  // Schema.org Event para enriquecer resultados de busca da página do evento.
+  useJsonLd(
+    'event',
+    event
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Event',
+          name: event.name,
+          description: eventDescription || `Passagens para ${event.name} em ${event.city}.`,
+          startDate: event.date,
+          eventStatus: 'https://schema.org/EventScheduled',
+          eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+          location: {
+            '@type': 'Place',
+            name: event.city,
+            address: event.city,
+          },
+          organizer: {
+            '@type': 'Organization',
+            name: eventCompanyName,
+          },
+          url: `https://www.smartbusbr.com.br/eventos/${event.id}`,
+        }
+      : null,
+  );
+
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
