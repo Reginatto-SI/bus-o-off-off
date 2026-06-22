@@ -1297,9 +1297,28 @@ export default function Checkout() {
       return;
     }
 
-    // Comentário de suporte: abrimos a aba de pagamento ainda no clique do usuário
-    // para evitar bloqueio de pop-up após as etapas assíncronas do checkout.
-    const preOpenedPaymentTab = window.open("", "_blank");
+    // Em contexto "instalado" (PWA standalone, WebView, TWA, iOS standalone),
+    // abrir o Asaas em nova aba joga o usuário para o navegador externo e o
+    // autoRedirect do Asaas volta nesse navegador — não no app. Nesses casos
+    // navegamos na mesma "aba" para preservar a imersão de aplicativo.
+    const isInstalledAppContext = (() => {
+      if (typeof window === "undefined") return false;
+      try {
+        const mqStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches ?? false;
+        const mqMinimalUi = window.matchMedia?.("(display-mode: minimal-ui)")?.matches ?? false;
+        const iosStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+        const ua = window.navigator.userAgent || "";
+        const isAndroidWebView = /\bwv\b/.test(ua) || /; wv\)/.test(ua);
+        return mqStandalone || mqMinimalUi || iosStandalone || isAndroidWebView;
+      } catch {
+        return false;
+      }
+    })();
+
+    // Comentário de suporte: em navegador comum abrimos a aba de pagamento ainda
+    // no clique do usuário para evitar bloqueio de pop-up após as etapas
+    // assíncronas do checkout. Em app instalado, usamos a mesma aba.
+    const preOpenedPaymentTab = isInstalledAppContext ? null : window.open("", "_blank");
     if (preOpenedPaymentTab) {
       renderPaymentPreparingTab(preOpenedPaymentTab);
     }
@@ -1763,6 +1782,14 @@ export default function Checkout() {
         // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up.
         if (preOpenedPaymentTab) {
           preOpenedPaymentTab.location.href = checkoutData.url;
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          // Navigate to waiting/confirmation screen in current tab
+          navigate(`/confirmacao/${sale.id}`);
+        } else if (isInstalledAppContext) {
+          // App instalado / standalone / WebView: navega na mesma aba para que o
+          // autoRedirect do Asaas devolva o usuário dentro do app em /confirmacao.
+          window.location.assign(checkoutData.url);
         } else {
           const openedTab = window.open(checkoutData.url, "_blank");
           if (!openedTab) {
@@ -1775,11 +1802,10 @@ export default function Checkout() {
             );
             return;
           }
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          navigate(`/confirmacao/${sale.id}`);
         }
-        setSubmitting(false);
-        setPaymentCheckoutStatus("idle");
-        // Navigate to waiting/confirmation screen in current tab
-        navigate(`/confirmacao/${sale.id}`);
         return;
       }
 

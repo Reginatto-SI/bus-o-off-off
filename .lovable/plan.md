@@ -1,55 +1,74 @@
-## Diagnóstico
+## Diagnóstico — Retorno do Asaas no SmartBus BR (Android/iOS)
 
-Investiguei diretamente o banco e o frontend:
+### O que está correto hoje (evidência em código)
 
-- `public.companies` tem **33 registros**. ✅
-- A função `public.get_company_activation_report()` **existe** e está com o corpo correto (LEFT JOINs em `events`, `sales`, `vehicles`, `drivers`, agregados com `COALESCE(..,0)`, retorno apenas de campos seguros — nenhuma `asaas_api_key_*`). ✅
-- Todas as colunas usadas (`legal_name`, `trade_name`, `cnpj`, `document`, `whatsapp`, `asaas_*`, etc.) existem em `companies`. ✅
-- Existe **1 usuário developer** real em `user_roles` (`27add21e-ade9-436a-9ec2-185a3d7819cc`), então o guard `is_developer(auth.uid())` não é o problema. ✅
-- A tela `src/pages/admin/CompanyActivationReport.tsx` já chama a RPC corretamente, mapeia os campos e tem `Navigate` para não-developer. ✅
-
-**Causa real (encontrada via `information_schema.routine_privileges`):**
-
+**1. Payload do callback — OK**
+`supabase/functions/create-asaas-payment/index.ts` linhas 1804‑1816 enviam exatamente:
+```json
+"callback": { "successUrl": "<URL>/confirmacao/<saleId>?retorno=asaas", "autoRedirect": true }
 ```
-   grantee    | privilege_type
---------------+----------------
- sandbox_exec | EXECUTE
-```
+Há log explícito `callback_success_url` (linha 1827) e log `requested` em `sale_integration_logs` com o payload real (linha 1830). Dá para auditar por venda.
 
-A função **não tem `GRANT EXECUTE` para `authenticated`**. Quando o frontend chama `supabase.rpc('get_company_activation_report')`, PostgREST executa como `authenticated` e recebe `42501 permission denied for function get_company_activation_report`. O `try/catch` da página captura, mostra o toast "Não foi possível carregar…" e `rows` permanece `[]` — exatamente o sintoma relatado (zeros + empty state).
+**2. URL pública resolvida — OK em produção**
+`resolvePublicAppBaseUrl` (linhas 84‑100) lê, nesta ordem: `PUBLIC_APP_URL` → `VITE_PUBLIC_APP_URL` → `APP_BASE_URL`. Se nenhuma estiver setada e o ambiente for `production`, faz fallback hardcoded para `https://www.smartbusbr.com.br` (com `www`). Em sandbox sem env retorna `null` e a edge falha cedo (linhas 1523‑1538, `missing_public_app_url_for_asaas_callback`).
 
-A migration que recriou a RPC (`CREATE OR REPLACE`) preservou o owner, mas como o `CREATE OR REPLACE` não reaplicou GRANTs e nenhuma migration concedeu execute a `authenticated`, a função ficou inacessível pelo Data API.
+**3. Tela de retorno — OK**
+`/confirmacao/:id` já lê `retorno=asaas` (Confirmation.tsx:51) e já tem polling + `verify-payment-status` + reabertura via `get-asaas-payment-link`. Confirmação financeira segue sendo webhook → verify → `finalizeConfirmedPayment`. Nada precisa mudar aí.
 
-## Correção (mínima)
+**4. invoiceUrl no frontend — usa o link novo da cobrança recém‑criada**
+`Checkout.tsx:1765` faz `preOpenedPaymentTab.location.href = checkoutData.url`, ou seja, usa o `invoiceUrl` retornado por `create-asaas-payment` (linha 2052 da edge). Não há reuso de cobrança antiga nesse caminho.
 
-Uma única migration, sem tocar em RPC, frontend, RLS ou regra de negócio:
+### Causa raiz mais provável do "não volta para o app"
 
-```sql
--- A proteção real continua dentro da função (is_developer(auth.uid())).
--- Sem este GRANT, PostgREST devolve 42501 antes mesmo de executar o corpo.
-GRANT EXECUTE ON FUNCTION public.get_company_activation_report() TO authenticated;
-REVOKE EXECUTE ON FUNCTION public.get_company_activation_report() FROM anon, public;
-```
+O checkout abre a fatura do Asaas em **nova aba** (`window.open(url, "_blank")` — Checkout.tsx:1302, :1767). Em qualquer experiência tipo app instalado isso é o problema central:
 
-Justificativa de segurança (atende todas as restrições do pedido):
-- `anon`/`public` permanecem **sem** execute → endpoint não é exposto a anônimos.
-- `authenticated` ganha execute, mas o **primeiro statement da função** é `IF NOT public.is_developer(auth.uid()) THEN RAISE EXCEPTION ... USING ERRCODE = '42501'`, ou seja, qualquer usuário autenticado que não seja developer continua bloqueado pelo próprio banco.
-- Nenhuma `asaas_api_key_*` é retornada (a função já não seleciona essas colunas).
-- Item de menu / `Navigate` no frontend continuam exclusivos para developer.
+- **PWA standalone / "Adicionar à tela inicial" (iOS Safari, Chrome Android)**: `target="_blank"` sai do contexto standalone e abre no navegador do sistema. O usuário paga lá e o `successUrl` https retorna **no navegador**, não no ícone do app. Parece que "ficou preso no Asaas".
+- **TWA Android / WebView**: idem, `_blank` dispara Custom Tabs/navegador externo. Para voltar ao TWA seria preciso ter Digital Asset Links com `www.smartbusbr.com.br` apontando para o package do app.
+- **iOS Universal Links**: só funciona se houver `apple-app-site-association` servido em `https://www.smartbusbr.com.br/.well-known/...` apontando para o appID. Senão o https abre no Safari.
 
-## Pequeno reforço de diagnóstico no frontend (opcional, escopo mínimo)
+Hoje **não existe Capacitor, não existe `android/`, `ios/`, nem `capacitor.config.*` no repositório, e não há `public/manifest.webmanifest`**. Ou seja, no código deste projeto não há nenhum app nativo nem PWA instalável configurado. Se há "app nas lojas", ele foi gerado fora deste repositório (provavelmente um TWA/WebView wrapper) e o vínculo de domínio precisa ser configurado lá, não aqui.
 
-O `catch` em `CompanyActivationReport.tsx` já loga `message/code/details/hint`. Vou manter como está — nada a mudar. Se em algum suporte futuro a RPC voltar a falhar, o `code` 42501 fica visível no console e o toast amigável segue para o usuário.
+### Painel do Asaas
 
-## Validação
+O `successUrl` do callback aceita qualquer https público válido por cobrança — não exige cadastro prévio. O campo "site" da conta Asaas é informativo/compliance, não restringe o domínio do callback. Mesmo assim, recomendação: padronizar **tudo em `https://www.smartbusbr.com.br`** (com `www`) — código já faz isso; só garantir que o painel Asaas, a env `PUBLIC_APP_URL` e o domínio cadastrado nas lojas usem a mesma forma. `smartbusbr.com.br` sem `www` cria cookie/origem diferente e quebra qualquer tentativa futura de Universal Link / Asset Links.
 
-1. Aplicar a migration.
-2. Conferir `routine_privileges` mostrando `authenticated | EXECUTE`.
-3. Acessar `/admin/relatorios/empresas-ativacao` como developer → 33 empresas listadas, cards com números reais, empresas sem eventos/Asaas/frota/motoristas aparecem com contador 0 e status Asaas "Não cadastrado"/"Parcial".
-4. Acessar como não-developer → `Navigate` redireciona; mesmo que chame a RPC manualmente, recebe `42501` do guard interno.
+### Respostas diretas
 
-## Fora de escopo (não será tocado)
+| Pergunta | Resposta |
+|---|---|
+| Callback chega ao Asaas? | Sim, com `autoRedirect:true`. Confirmar nos logs `callback_success_url` e em `sale_integration_logs` (stage `requested`). |
+| Domínio do callback correto? | Sim, `https://www.smartbusbr.com.br/confirmacao/{saleId}?retorno=asaas` em produção. |
+| Bate com o painel Asaas? | Asaas não valida o successUrl contra o "site" da conta. Padronizar mesmo assim. |
+| Configuração manual obrigatória no painel? | Não para o redirect funcionar. Sim para boa prática (campo site = `https://www.smartbusbr.com.br`). |
+| invoiceUrl novo ou antigo? | Novo a cada checkout. Reabertura usa `get-asaas-payment-link`. |
+| Adicionar `autoRedirect=true` ao invoiceUrl? | Opcional. Útil só quando reabrindo cobrança já paga. Se for fazer, usar concatenação segura (`?` vs `&`). Baixo impacto. |
+| HTTPS volta para dentro do app? | **Não automaticamente**. Depende de App Links (Android) / Universal Links (iOS) / scope do PWA. |
+| Android precisa de App Links/TWA? | Sim. Digital Asset Links em `https://www.smartbusbr.com.br/.well-known/assetlinks.json` apontando para o package + SHA‑256 da chave de assinatura do app. |
+| iOS precisa de Universal Links? | Sim. `apple-app-site-association` em `https://www.smartbusbr.com.br/.well-known/apple-app-site-association` (JSON, content-type correto, sem extensão) com o Team ID + bundle ID. |
+| Ajuste mínimo recomendado? | Ver abaixo. |
 
-- Checkout, vendas, webhook Asaas, fluxo financeiro.
-- Lógica da RPC, lógica da tela, layout, tipagem.
-- Outras migrations / outras RPCs.
+### Ajuste mínimo recomendado (sem mudar regra financeira)
+
+1. **No checkout, parar de abrir o Asaas em nova aba quando estiver em contexto standalone/WebView**. Detectar `window.matchMedia('(display-mode: standalone)').matches`, `navigator.standalone` (iOS), ou user-agent do wrapper, e nesses casos navegar com `window.location.assign(checkoutData.url)` na mesma "aba". Assim o `autoRedirect` do Asaas devolve o usuário no mesmo contexto e ele cai em `/confirmacao/:id?retorno=asaas` dentro do app.
+2. **Garantir env `PUBLIC_APP_URL=https://www.smartbusbr.com.br` em produção** (a edge já tem fallback, mas explícito evita acidentes).
+3. **No app instalado (fora deste repo)**:
+   - **Android (TWA)**: publicar `/.well-known/assetlinks.json` com o package e SHA‑256 do app. Sem isso, `_blank` continua indo para Chrome.
+   - **iOS**: publicar `/.well-known/apple-app-site-association` com `applinks` cobrindo `/confirmacao/*` e `/eventos/*`. Sem isso, https abre no Safari.
+4. **(Opcional)** Adicionar `?autoRedirect=true`/`&autoRedirect=true` ao `invoiceUrl` ao reabrir cobrança em `/confirmacao` para acelerar o retorno em cobrança já paga.
+5. **Nada muda em**: webhook, verify-payment-status, finalizeConfirmedPayment, split, criação de tickets, venda manual.
+
+### Testes a executar
+
+- Android Chrome (PWA "Adicionar à tela inicial"): pagar Pix → confirmar que volta em `/confirmacao/...?retorno=asaas` no mesmo contexto.
+- Android, app da loja (TWA): repetir; confirmar `assetlinks.json` retornando 200 com content-type `application/json`.
+- iOS Safari standalone: repetir; verificar se o retorno fica no PWA ou cai no Safari.
+- iOS, app da loja: repetir; validar `apple-app-site-association` via `curl -I` (sem extensão, sem redirect, sem `Content-Type: text/html`).
+- Em todos: conferir `sale_integration_logs` da venda (stage `requested`) → confirmar `callback.successUrl` exato; conferir log da edge `callback_success_url`.
+
+### Critério de aceite
+
+Quando o item 1 (mesma aba em standalone/WebView) + os arquivos `.well-known` estiverem no ar, o usuário paga e cai em `/confirmacao/:saleId?retorno=asaas` dentro do app; se a venda já estiver `pago` com tickets, vê a passagem digital com QR Code; webhook continua sendo a fonte da verdade financeira.
+
+### Próximo passo
+
+Confirmar comigo se posso implementar **apenas o item 1** (detecção de standalone/WebView no `Checkout.tsx` para usar `location.assign` em vez de `window.open` nesses contextos) — é a única mudança de código deste repositório. Os arquivos `.well-known` e o vínculo Android/iOS são configuração de domínio/loja, fora deste codebase.
