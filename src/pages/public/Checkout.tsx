@@ -1782,6 +1782,14 @@ export default function Checkout() {
         // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up.
         if (preOpenedPaymentTab) {
           preOpenedPaymentTab.location.href = checkoutData.url;
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          // Navigate to waiting/confirmation screen in current tab
+          navigate(`/confirmacao/${sale.id}`);
+        } else if (isInstalledAppContext) {
+          // App instalado / standalone / WebView: navega na mesma aba para que o
+          // autoRedirect do Asaas devolva o usuário dentro do app em /confirmacao.
+          window.location.assign(checkoutData.url);
         } else {
           const openedTab = window.open(checkoutData.url, "_blank");
           if (!openedTab) {
@@ -1794,11 +1802,10 @@ export default function Checkout() {
             );
             return;
           }
+          setSubmitting(false);
+          setPaymentCheckoutStatus("idle");
+          navigate(`/confirmacao/${sale.id}`);
         }
-        setSubmitting(false);
-        setPaymentCheckoutStatus("idle");
-        // Navigate to waiting/confirmation screen in current tab
-        navigate(`/confirmacao/${sale.id}`);
         return;
       }
 
