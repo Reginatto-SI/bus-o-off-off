@@ -61,6 +61,8 @@ export default function Confirmation() {
   const [feeLines, setFeeLines] = useState<FeeLineItem[]>([]);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [isReopeningInvoice, setIsReopeningInvoice] = useState(false);
+  const [paidTicketReloadTimedOut, setPaidTicketReloadTimedOut] = useState(false);
+  const [isReloadingPaidTickets, setIsReloadingPaidTickets] = useState(false);
   const [lastVerificationAt, setLastVerificationAt] = useState<Date | null>(null);
   const [commercialPartners, setCommercialPartners] = useState<{ name: string; logo_url: string | null }[]>([]);
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
@@ -439,6 +441,66 @@ export default function Confirmation() {
     };
   });
 
+
+  const hasGeneratedTickets = ticketCards.length > 0;
+
+  const reloadPaidTickets = useCallback(async (origin: 'auto' | 'manual', attempts = 0) => {
+    if (!id) return false;
+
+    if (origin === 'manual') setIsReloadingPaidTickets(true);
+    try {
+      // Consulta segura: apenas busca tickets existentes da venda; não cria passagem nem confirma pagamento.
+      const { data: freshTickets, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('sale_id', id)
+        .order('seat_label', { ascending: true });
+
+      if (error) {
+        console.error('[confirmation] paid_ticket_reload:error', { sale_id: id, attempts, origin, error });
+        return false;
+      }
+
+      if (freshTickets && freshTickets.length > 0) {
+        setTickets(freshTickets as TicketRecord[]);
+        setPaidTicketReloadTimedOut(false);
+        return true;
+      }
+
+      return false;
+    } finally {
+      if (origin === 'manual') setIsReloadingPaidTickets(false);
+    }
+  }, [id]);
+
+  // Quando a venda já está paga, apenas recarregamos tickets existentes; nunca criamos passagem no frontend.
+  useEffect(() => {
+    if (!id || sale?.status !== 'pago' || hasGeneratedTickets) return;
+
+    setPaidTicketReloadTimedOut(false);
+    let attempts = 0;
+    const maxAttempts = 20;
+    const interval = setInterval(async () => {
+      attempts++;
+      const foundTickets = await reloadPaidTickets('auto', attempts);
+
+      if (foundTickets) {
+        clearInterval(interval);
+      } else if (attempts >= maxAttempts) {
+        console.warn('[confirmation] paid_without_loaded_tickets_on_confirmation', {
+          sale_id: id,
+          sale_status: sale.status,
+          attempts,
+          message: 'paid_without_loaded_tickets_on_confirmation',
+        });
+        setPaidTicketReloadTimedOut(true);
+        clearInterval(interval);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [hasGeneratedTickets, id, reloadPaidTickets, sale?.status]);
+
   if (loading) {
     return (
       <PublicLayout>
@@ -464,6 +526,7 @@ export default function Confirmation() {
   const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn));
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
   const canReopenAsaasInvoice = isAwaitingPayment && Boolean(sale.asaas_payment_id);
+
 
   const paymentPendingActions = (
     <>
@@ -507,6 +570,40 @@ export default function Confirmation() {
     </>
   );
 
+  const companyIdentity = company ? (
+    <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
+      {company.logo_url && (
+        <img
+          src={company.logo_url}
+          alt={companyDisplayName}
+          className="h-14 w-14 rounded-lg object-contain shrink-0"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+      <div className="min-w-0">
+        <p className="font-semibold text-foreground text-base">{companyDisplayName}</p>
+        {formattedCnpj && <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>}
+        {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          {company.phone && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Phone className="h-3 w-3" />
+              {company.phone}
+            </span>
+          )}
+          {company.whatsapp && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MessageCircle className="h-3 w-3" />
+              {company.whatsapp}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">Transporte oficial do evento</p>
+      </div>
+    </div>
+  ) : null;
+
+
   return (
     <PublicLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -514,11 +611,46 @@ export default function Confirmation() {
         <div className="text-center mb-8">
           {sale.status === 'pago' ? (
             <>
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
-                <CheckCircle2 className="h-8 w-8 text-green-600" />
-              </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado!</h1>
-              <p className="text-muted-foreground">Seu pagamento foi confirmado e suas passagens estão garantidas.</p>
+              {hasGeneratedTickets ? (
+                <>
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-foreground mb-2">Sua passagem digital</h1>
+                  <p className="text-muted-foreground">Apresente esta passagem no embarque.</p>
+                </>
+              ) : paidTicketReloadTimedOut ? (
+                <>
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
+                    <AlertCircle className="h-8 w-8 text-amber-600" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento confirmado</h1>
+                  <p className="text-muted-foreground mb-4">
+                    Seu pagamento foi confirmado, mas ainda não conseguimos carregar sua passagem digital. Toque em atualizar para tentar novamente.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => reloadPaidTickets('manual')}
+                    disabled={isReloadingPaidTickets}
+                  >
+                    {isReloadingPaidTickets ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Atualizar passagem
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
+                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                  </div>
+                  <h1 className="text-2xl font-bold text-foreground mb-2">Pagamento Confirmado</h1>
+                  <p className="text-muted-foreground">Pagamento confirmado. Estamos carregando sua passagem digital.</p>
+                </>
+              )}
             </>
           ) : isAwaitingPayment && !pollingTimedOut ? (
             <>
@@ -567,47 +699,23 @@ export default function Confirmation() {
           )}
         </div>
 
-        {/* Company identity + ticket cards when paid/cancelled */}
+        {/* Ticket cards first when paid, so QR Code is visible before reservation details. */}
         {(isPaid || sale.status === 'cancelado') && ticketCards.length > 0 && (
           <div className="space-y-4 mb-6">
-            {company && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/40 border">
-                {company.logo_url && (
-                  <img
-                    src={company.logo_url}
-                    alt={companyDisplayName}
-                    className="h-14 w-14 rounded-lg object-contain shrink-0"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                )}
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground text-base">{companyDisplayName}</p>
-                  {formattedCnpj && <p className="text-xs text-muted-foreground">CNPJ: {formattedCnpj}</p>}
-                  {companyLocation && <p className="text-xs text-muted-foreground">{companyLocation}</p>}
-                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                    {company.phone && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        {company.phone}
-                      </span>
-                    )}
-                    {company.whatsapp && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MessageCircle className="h-3 w-3" />
-                        {company.whatsapp}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Transporte oficial do evento</p>
-                </div>
-              </div>
+            {isPaid ? (
+              <>
+                {/* Agrupamento por passageiro com ida/volta sob demanda */}
+                <PassengerTicketList tickets={ticketCards} />
+                {companyIdentity}
+              </>
+            ) : (
+              <>
+                {companyIdentity}
+                <h2 className="font-semibold text-lg">Passagens (Canceladas)</h2>
+                {/* Agrupamento por passageiro com ida/volta sob demanda */}
+                <PassengerTicketList tickets={ticketCards} />
+              </>
             )}
-
-            <h2 className="font-semibold text-lg">
-              {isPaid ? 'Suas Passagens' : 'Passagens (Canceladas)'}
-            </h2>
-            {/* Agrupamento por passageiro com ida/volta sob demanda */}
-            <PassengerTicketList tickets={ticketCards} />
           </div>
         )}
 
