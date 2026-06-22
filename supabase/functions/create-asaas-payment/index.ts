@@ -81,6 +81,31 @@ async function safeJson(res: Response): Promise<unknown> {
   }
 }
 
+function resolvePublicAppBaseUrl(paymentEnvironment: PaymentEnvironment) {
+  // URL pública usada em callbacks externos (Asaas). Prioriza configuração explícita para manter sandbox/produção isolados.
+  const configuredUrl =
+    Deno.env.get("PUBLIC_APP_URL")?.trim() ||
+    Deno.env.get("VITE_PUBLIC_APP_URL")?.trim() ||
+    Deno.env.get("APP_BASE_URL")?.trim();
+
+  if (configuredUrl) return configuredUrl.replace(/\/+$/, "");
+
+  console.warn("[create-asaas-payment] public_app_url_not_configured", {
+    payment_environment: paymentEnvironment,
+  });
+
+  if (paymentEnvironment === "production") return "https://www.smartbusbr.com.br";
+
+  return null;
+}
+
+function buildAsaasSuccessUrl(saleId: string, paymentEnvironment: PaymentEnvironment) {
+  const publicAppBaseUrl = resolvePublicAppBaseUrl(paymentEnvironment);
+  if (!publicAppBaseUrl) return null;
+
+  return `${publicAppBaseUrl}/confirmacao/${encodeURIComponent(saleId)}?retorno=asaas`;
+}
+
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -1493,6 +1518,30 @@ serve(async (req) => {
       });
     }
 
+    const asaasSuccessUrl = buildAsaasSuccessUrl(sale.id, paymentEnv);
+    if (!asaasSuccessUrl) {
+      // Falha cedo para evitar criar/alterar dados no Asaas quando o callback público obrigatório está mal configurado.
+      await logSaleOperationalEvent({
+        supabaseAdmin,
+        saleId: sale.id,
+        companyId: sale.company_id,
+        action: "payment_create_blocked",
+        source: "create-asaas-payment",
+        result: "rejected",
+        paymentEnvironment: paymentEnv,
+        errorCode: "public_app_url_not_configured",
+        detail: "missing_public_app_url_for_asaas_callback",
+      });
+
+      return jsonResponse(
+        {
+          error: "URL pública do app não configurada para callback do Asaas",
+          error_code: "public_app_url_not_configured",
+        },
+        500,
+      );
+    }
+
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
     if (
@@ -1760,6 +1809,10 @@ serve(async (req) => {
       description: paymentDescription,
       externalReference: sale.id,
       split: splitArray,
+      callback: {
+        successUrl: asaasSuccessUrl,
+        autoRedirect: true,
+      },
     };
 
     console.log("[create-asaas-payment] sending payment payload", {
@@ -1771,6 +1824,7 @@ serve(async (req) => {
       grossAmount,
       splitArray,
       environment: paymentEnv,
+      callback_success_url: asaasSuccessUrl,
     });
 
     await insertIntegrationLog(
