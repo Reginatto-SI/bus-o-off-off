@@ -48,6 +48,7 @@ export default function Confirmation() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const paymentSuccess = searchParams.get('payment') === 'success';
+  const isAsaasReturn = searchParams.get('retorno') === 'asaas';
   const [sale, setSale] = useState<Sale | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [seatDataMap, setSeatDataMap] = useState<Record<string, { category: string; floor: number }>>({});
@@ -308,7 +309,7 @@ export default function Confirmation() {
   useEffect(() => {
     if (!id || !sale) return;
     // Only poll if sale is in a pending state
-    const isPending = sale.status === 'pendente_pagamento' || (sale.status === 'reservado' && paymentSuccess);
+    const isPending = sale.status === 'pendente_pagamento' || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn));
     if (!isPending) return;
 
     let attempts = 0;
@@ -353,7 +354,7 @@ export default function Confirmation() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [id, sale?.status, paymentSuccess]);
+  }, [id, sale?.status, paymentSuccess, isAsaasReturn]);
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
@@ -460,7 +461,7 @@ export default function Confirmation() {
 
   const isPaid = sale.status === 'pago';
   const isPendingPayment = sale.status === 'pendente_pagamento';
-  const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && paymentSuccess);
+  const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn));
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
   const canReopenAsaasInvoice = isAwaitingPayment && Boolean(sale.asaas_payment_id);
 
@@ -526,15 +527,18 @@ export default function Confirmation() {
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">Aguardando Confirmação do Pagamento</h1>
               <p className="text-muted-foreground">
-                Assim que o pagamento for confirmado, sua passagem será gerada automaticamente.
+                {isAsaasReturn
+                  ? 'Estamos aguardando a confirmação do pagamento. Assim que for confirmado, sua passagem será liberada nesta tela.'
+                  : 'Assim que o pagamento for confirmado, sua passagem será gerada automaticamente.'}
               </p>
               <p className="text-xs text-muted-foreground mt-2">
                 Você pode fechar esta página — sua passagem será gerada mesmo assim.
               </p>
               {paymentPendingActions}
             </>
-          ) : (isPendingPayment || paymentSuccess) && pollingTimedOut ? (
+          ) : (isPendingPayment || paymentSuccess || isAsaasReturn) && pollingTimedOut ? (
             <>
+              {/* Retorno do Asaas é apenas contexto de UX; o estado financeiro continua vindo do polling/verify. */}
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-amber-600" />
               </div>
