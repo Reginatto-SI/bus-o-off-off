@@ -173,6 +173,8 @@ export default function Confirmation() {
       }
       if (ticketsRes.data) {
         setTickets(ticketsRes.data as TicketRecord[]);
+        console.info('[confirmation] tickets_loaded', { sale_id: id, tickets_count: ticketsRes.data.length, source: 'initial_fetch' });
+
 
         // Fetch seat category/floor for each ticket
         const seatIds = (ticketsRes.data as TicketRecord[]).map(t => t.seat_id).filter(Boolean) as string[];
