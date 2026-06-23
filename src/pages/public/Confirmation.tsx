@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
+import { isInstalledAppPaymentContext, logAsaasInvoiceOpen, withAsaasAutoRedirect } from '@/lib/asaasInvoiceUrl';
 
 interface CompanyInfo {
   name: string;
@@ -275,20 +276,37 @@ export default function Confirmation() {
       });
       if (error) throw error;
 
-      const invoiceUrl = typeof data?.url === 'string' ? data.url : null;
+      const paymentLinkData = data as {
+        url?: unknown;
+        reason?: unknown;
+        paymentStatus?: unknown;
+        billingType?: unknown;
+      } | null;
+      const invoiceUrl = typeof paymentLinkData?.url === 'string' ? withAsaasAutoRedirect(paymentLinkData.url) : null;
       if (!invoiceUrl) {
         console.warn('[confirmation] reopen-asaas-invoice:unavailable', {
           sale_id: id,
-          reason: (data as any)?.reason ?? null,
-          payment_status: (data as any)?.paymentStatus ?? null,
+          reason: paymentLinkData?.reason ?? null,
+          payment_status: paymentLinkData?.paymentStatus ?? null,
         });
         toast({
-          title: getReopenInvoiceErrorMessage((data as any)?.reason),
+          title: getReopenInvoiceErrorMessage(paymentLinkData?.reason),
           variant: 'destructive',
         });
         return;
       }
 
+      const isInstalledAppContext = isInstalledAppPaymentContext();
+      const paymentMethod = typeof paymentLinkData?.billingType === 'string' ? paymentLinkData.billingType : null;
+      if (isInstalledAppContext) {
+        // Reabertura no app instalado também preserva o mesmo contexto para o retorno automático do Asaas.
+        logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'same_window_assign', invoiceUrl });
+        window.location.assign(invoiceUrl);
+        return;
+      }
+
+      // Reabertura pública em navegador comum mantém o padrão existente de nova aba.
+      logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'new_tab', invoiceUrl });
       const openedTab = window.open(invoiceUrl, '_blank', 'noopener,noreferrer');
       if (!openedTab) {
         toast({

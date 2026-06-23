@@ -54,6 +54,7 @@ import {
   CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE,
   getCheckoutResponsibilityAcceptanceLabel,
 } from "@/lib/intermediationPolicy";
+import { isInstalledAppPaymentContext, logAsaasInvoiceOpen, withAsaasAutoRedirect } from "@/lib/asaasInvoiceUrl";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -1301,19 +1302,7 @@ export default function Checkout() {
     // abrir o Asaas em nova aba joga o usuário para o navegador externo e o
     // autoRedirect do Asaas volta nesse navegador — não no app. Nesses casos
     // navegamos na mesma "aba" para preservar a imersão de aplicativo.
-    const isInstalledAppContext = (() => {
-      if (typeof window === "undefined") return false;
-      try {
-        const mqStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches ?? false;
-        const mqMinimalUi = window.matchMedia?.("(display-mode: minimal-ui)")?.matches ?? false;
-        const iosStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-        const ua = window.navigator.userAgent || "";
-        const isAndroidWebView = /\bwv\b/.test(ua) || /; wv\)/.test(ua);
-        return mqStandalone || mqMinimalUi || iosStandalone || isAndroidWebView;
-      } catch {
-        return false;
-      }
-    })();
+    const isInstalledAppContext = isInstalledAppPaymentContext();
 
     // Comentário de suporte: em navegador comum abrimos a aba de pagamento ainda
     // no clique do usuário para evitar bloqueio de pop-up após as etapas
@@ -1771,30 +1760,35 @@ export default function Checkout() {
         });
 
       if (!checkoutError && checkoutData?.url) {
+        // Reforço de retorno automático: o Asaas aceita autoRedirect também como query da invoiceUrl.
+        const asaasInvoiceUrl = withAsaasAutoRedirect(checkoutData.url);
         console.info(
           "Checkout público: cobrança Asaas gerada, iniciando abertura da fatura",
           {
             saleId: sale.id,
             paymentMethod,
             hasPreOpenedPaymentTab: Boolean(preOpenedPaymentTab),
+            hasAutoRedirect: asaasInvoiceUrl.includes("autoRedirect=true"),
           },
         );
-        // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up.
-        if (preOpenedPaymentTab) {
-          preOpenedPaymentTab.location.href = checkoutData.url;
+        if (isInstalledAppContext) {
+          // Prioridade máxima para app instalado: mantém Asaas e retorno no mesmo contexto do app.
+          logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "same_window_assign", invoiceUrl: asaasInvoiceUrl });
+          window.location.assign(asaasInvoiceUrl);
+        } else if (preOpenedPaymentTab) {
+          // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up no navegador comum.
+          logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "preopened_tab", invoiceUrl: asaasInvoiceUrl });
+          preOpenedPaymentTab.location.href = asaasInvoiceUrl;
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
           // Navigate to waiting/confirmation screen in current tab
           navigate(`/confirmacao/${sale.id}`);
-        } else if (isInstalledAppContext) {
-          // App instalado / standalone / WebView: navega na mesma aba para que o
-          // autoRedirect do Asaas devolva o usuário dentro do app em /confirmacao.
-          window.location.assign(checkoutData.url);
         } else {
-          const openedTab = window.open(checkoutData.url, "_blank");
+          logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "new_tab", invoiceUrl: asaasInvoiceUrl });
+          const openedTab = window.open(asaasInvoiceUrl, "_blank");
           if (!openedTab) {
             // Comentário de suporte: fallback manual para quando o navegador bloquear a abertura automática.
-            setManualCheckoutUrl(checkoutData.url);
+            setManualCheckoutUrl(asaasInvoiceUrl);
             setPaymentCheckoutStatus("popup_blocked");
             setSubmitting(false);
             toast.error(
@@ -2538,6 +2532,7 @@ export default function Checkout() {
                 <Button
                   type="button"
                   onClick={() => {
+                    logAsaasInvoiceOpen({ saleId: sale?.id ?? "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
                     const openedTab = window.open(manualCheckoutUrl, "_blank");
                     if (!openedTab) {
                       toast.error(
