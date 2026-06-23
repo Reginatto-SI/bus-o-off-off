@@ -1772,9 +1772,18 @@ export default function Checkout() {
           },
         );
         if (isInstalledAppContext) {
-          // Prioridade máxima para app instalado: mantém Asaas e retorno no mesmo contexto do app.
-          logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "same_window_assign", invoiceUrl: asaasInvoiceUrl });
-          window.location.assign(asaasInvoiceUrl);
+          // Em app instalado/PWA/WebView: abre a fatura em janela auxiliar (Custom Tab/Safari View)
+          // e mantém o app vivo na /confirmacao com polling ativo. Assim, Pix pago em outro device
+          // já é detectado pelo app sem depender de autoRedirect do Asaas.
+          const auxTab = window.open(asaasInvoiceUrl, "_blank", "noopener");
+          if (auxTab) {
+            logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "app_confirmation_plus_invoice_tab", invoiceUrl: asaasInvoiceUrl });
+            window.location.assign(`/confirmacao/${sale.id}?retorno=asaas`);
+          } else {
+            // Fallback: alguns wrappers bloqueiam window.open. Mantém o comportamento antigo.
+            logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "same_window_assign", invoiceUrl: asaasInvoiceUrl });
+            window.location.assign(asaasInvoiceUrl);
+          }
         } else if (preOpenedPaymentTab) {
           // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up no navegador comum.
           logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "preopened_tab", invoiceUrl: asaasInvoiceUrl });
@@ -2532,7 +2541,7 @@ export default function Checkout() {
                 <Button
                   type="button"
                   onClick={() => {
-                    logAsaasInvoiceOpen({ saleId: sale?.id ?? "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
+                    logAsaasInvoiceOpen({ saleId: "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
                     const openedTab = window.open(manualCheckoutUrl, "_blank");
                     if (!openedTab) {
                       toast.error(

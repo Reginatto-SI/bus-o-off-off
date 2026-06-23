@@ -38,7 +38,7 @@ export function logAsaasInvoiceOpen(params: {
   saleId: string;
   paymentMethod: string | null;
   isAppContext: boolean;
-  navigationStrategy: 'same_window_assign' | 'preopened_tab' | 'new_tab' | 'manual_new_tab';
+  navigationStrategy: 'same_window_assign' | 'preopened_tab' | 'new_tab' | 'manual_new_tab' | 'app_confirmation_plus_invoice_tab';
   invoiceUrl: string;
 }) {
   console.info('[asaas] open_invoice', {

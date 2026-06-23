@@ -69,6 +69,12 @@ export default function Confirmation() {
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
   // Removed verifyCalledRef — polling now calls verify-payment-status periodically (see below)
 
+  // Log seguro de montagem (sem dados sensíveis) para diagnosticar o retorno do Asaas.
+  useEffect(() => {
+    console.info('[confirmation] mount', { sale_id: id, retorno: isAsaasReturn ? 'asaas' : null, payment_success_param: paymentSuccess });
+  }, [id, isAsaasReturn, paymentSuccess]);
+
+
   useEffect(() => {
     const fetchSale = async () => {
       if (!id) return;
@@ -167,6 +173,8 @@ export default function Confirmation() {
       }
       if (ticketsRes.data) {
         setTickets(ticketsRes.data as TicketRecord[]);
+        console.info('[confirmation] tickets_loaded', { sale_id: id, tickets_count: ticketsRes.data.length, source: 'initial_fetch' });
+
 
         // Fetch seat category/floor for each ticket
         const seatIds = (ticketsRes.data as TicketRecord[]).map(t => t.seat_id).filter(Boolean) as string[];
@@ -333,16 +341,19 @@ export default function Confirmation() {
     if (!isPending) return;
 
     let attempts = 0;
-    const maxAttempts = 120; // 6 minutes at 3s intervals
+    // Retorno do Asaas: polling mais agressivo (2s) para capturar o pago o quanto antes.
+    const pollIntervalMs = isAsaasReturn ? 2000 : 3000;
+    const maxAttempts = Math.ceil((6 * 60 * 1000) / pollIntervalMs);
 
     const interval = setInterval(async () => {
       attempts++;
 
-      // FIX: Periodically call verify-payment-status every ~30s (every 10th attempt)
+      // FIX: Periodically call verify-payment-status every ~30s
       // instead of a single call at attempt 5. This ensures automatic sync with Asaas
       // even when the webhook doesn't fire (common in Sandbox). The manual button
       // already proves this logic works — now the polling reuses it automatically.
-      if (attempts >= 5 && attempts % 10 === 0) {
+      const verifyEveryNAttempts = Math.max(1, Math.round(30000 / pollIntervalMs));
+      if (attempts >= 5 && attempts % verifyEveryNAttempts === 0) {
         console.info('[confirmation] polling:trigger_verify_payment_status', { sale_id: id, attempts });
         // Hotfix Etapa 1: não engolir falha silenciosa no polling automático.
         // Mantemos UX discreta (sem toast automático), mas registramos o erro para suporte/diagnóstico.
@@ -361,7 +372,10 @@ export default function Confirmation() {
       if (data?.status === 'pago') {
         const { data: freshTickets } = await supabase
           .from('tickets').select('*').eq('sale_id', id).order('seat_label', { ascending: true });
-        if (freshTickets) setTickets(freshTickets as TicketRecord[]);
+        if (freshTickets) {
+          setTickets(freshTickets as TicketRecord[]);
+          console.info('[confirmation] tickets_loaded', { sale_id: id, tickets_count: freshTickets.length, source: 'polling_paid' });
+        }
         setSale((prev) => (prev ? { ...prev, status: 'pago', payment_confirmed_at: data?.payment_confirmed_at ?? ((data?.status === 'pago' && !data?.asaas_payment_id) ? data?.platform_fee_paid_at ?? null : prev.payment_confirmed_at) } : prev));
         clearInterval(interval);
       } else if (data?.status === 'cancelado') {
@@ -371,10 +385,11 @@ export default function Confirmation() {
         setPollingTimedOut(true);
         clearInterval(interval);
       }
-    }, 3000);
+    }, pollIntervalMs);
 
     return () => clearInterval(interval);
   }, [id, sale?.status, paymentSuccess, isAsaasReturn]);
+
 
   const companyDisplayName = company?.trade_name || company?.name || '';
   const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ');
