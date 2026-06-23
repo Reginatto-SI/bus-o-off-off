@@ -2541,7 +2541,7 @@ export default function Checkout() {
                 <Button
                   type="button"
                   onClick={() => {
-                    logAsaasInvoiceOpen({ saleId: sale?.id ?? "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
+                    logAsaasInvoiceOpen({ saleId: "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
                     const openedTab = window.open(manualCheckoutUrl, "_blank");
                     if (!openedTab) {
                       toast.error(
