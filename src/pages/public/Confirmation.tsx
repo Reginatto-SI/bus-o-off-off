@@ -69,6 +69,12 @@ export default function Confirmation() {
   const [eventSponsors, setEventSponsors] = useState<{ name: string; logo_url: string | null }[]>([]);
   // Removed verifyCalledRef — polling now calls verify-payment-status periodically (see below)
 
+  // Log seguro de montagem (sem dados sensíveis) para diagnosticar o retorno do Asaas.
+  useEffect(() => {
+    console.info('[confirmation] mount', { sale_id: id, retorno: isAsaasReturn ? 'asaas' : null, payment_success_param: paymentSuccess });
+  }, [id, isAsaasReturn, paymentSuccess]);
+
+
   useEffect(() => {
     const fetchSale = async () => {
       if (!id) return;
