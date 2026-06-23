@@ -295,6 +295,9 @@ export default function Checkout() {
   const [manualCheckoutUrl, setManualCheckoutUrl] = useState<string | null>(
     null,
   );
+  const [manualCheckoutSaleId, setManualCheckoutSaleId] = useState<string | null>(
+    null,
+  );
   const [payerIndex, setPayerIndex] = useState(0);
   const [openPassengerIdx, setOpenPassengerIdx] = useState<number | null>(0);
   const [eventFees, setEventFees] = useState<EventFeeInput[]>([]);
@@ -1798,6 +1801,7 @@ export default function Checkout() {
           if (!openedTab) {
             // Comentário de suporte: fallback manual para quando o navegador bloquear a abertura automática.
             setManualCheckoutUrl(asaasInvoiceUrl);
+            setManualCheckoutSaleId(sale.id);
             setPaymentCheckoutStatus("popup_blocked");
             setSubmitting(false);
             toast.error(
@@ -2541,7 +2545,7 @@ export default function Checkout() {
                 <Button
                   type="button"
                   onClick={() => {
-                    logAsaasInvoiceOpen({ saleId: "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
+                    logAsaasInvoiceOpen({ saleId: manualCheckoutSaleId ?? "manual_checkout_retry", paymentMethod, isAppContext: false, navigationStrategy: "manual_new_tab", invoiceUrl: manualCheckoutUrl });
                     const openedTab = window.open(manualCheckoutUrl, "_blank");
                     if (!openedTab) {
                       toast.error(
@@ -2549,8 +2553,14 @@ export default function Checkout() {
                       );
                       return;
                     }
+                    // Após abrir a cobrança manualmente, deixamos o SmartBus na confirmação com polling ativo.
+                    const confirmationSaleId = manualCheckoutSaleId;
                     setManualCheckoutUrl(null);
+                    setManualCheckoutSaleId(null);
                     setPaymentCheckoutStatus("idle");
+                    if (confirmationSaleId) {
+                      navigate(`/confirmacao/${confirmationSaleId}?retorno=asaas`);
+                    }
                   }}
                 >
                   Abrir cobrança agora
