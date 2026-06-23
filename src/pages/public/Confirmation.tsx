@@ -307,7 +307,15 @@ export default function Confirmation() {
       const isInstalledAppContext = isInstalledAppPaymentContext();
       const paymentMethod = typeof paymentLinkData?.billingType === 'string' ? paymentLinkData.billingType : null;
       if (isInstalledAppContext) {
-        // Reabertura no app instalado também preserva o mesmo contexto para o retorno automático do Asaas.
+        // Em app instalado, mantemos esta tela de confirmação aberta com polling ativo
+        // e usamos a fatura apenas como tela auxiliar. Se o wrapper bloquear a abertura,
+        // caímos para navegação na mesma janela para não impedir o pagamento.
+        const openedTab = window.open(invoiceUrl, '_blank', 'noopener');
+        if (openedTab) {
+          logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'app_confirmation_plus_invoice_tab', invoiceUrl });
+          return;
+        }
+
         logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'same_window_assign', invoiceUrl });
         window.location.assign(invoiceUrl);
         return;
@@ -557,6 +565,7 @@ export default function Confirmation() {
   const isPaid = sale.status === 'pago';
   const isPendingPayment = sale.status === 'pendente_pagamento';
   const isAwaitingPayment = isPendingPayment || (sale.status === 'reservado' && (paymentSuccess || isAsaasReturn));
+  const isInstalledAppContext = isInstalledAppPaymentContext();
   // Exibimos a ação somente quando existe cobrança Asaas vinculada e venda ainda aguardando pagamento.
   const canReopenAsaasInvoice = isAwaitingPayment && Boolean(sale.asaas_payment_id);
 
@@ -576,7 +585,7 @@ export default function Confirmation() {
           ) : (
             <RefreshCw className="h-4 w-4 mr-2" />
           )}
-          Atualizar status do pagamento
+          Já paguei, verificar minha passagem
         </Button>
         {canReopenAsaasInvoice && (
           <Button
@@ -591,7 +600,7 @@ export default function Confirmation() {
             ) : (
               <ExternalLink className="h-4 w-4 mr-2" />
             )}
-            Reabrir cobrança
+            Abrir pagamento novamente
           </Button>
         )}
       </div>
@@ -690,15 +699,21 @@ export default function Confirmation() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 mb-4">
                 <Loader2 className="h-8 w-8 text-primary animate-spin" />
               </div>
-              <h1 className="text-2xl font-bold text-foreground mb-2">Aguardando Confirmação do Pagamento</h1>
+              <h1 className="text-2xl font-bold text-foreground mb-2">Aguardando confirmação do pagamento</h1>
               <p className="text-muted-foreground">
-                {isAsaasReturn
-                  ? 'Estamos aguardando a confirmação do pagamento. Assim que for confirmado, sua passagem será liberada nesta tela.'
-                  : 'Assim que o pagamento for confirmado, sua passagem será gerada automaticamente.'}
+                Assim que o pagamento for confirmado, sua passagem digital aparecerá automaticamente aqui.
               </p>
               <p className="text-xs text-muted-foreground mt-2">
                 Você pode fechar esta página — sua passagem será gerada mesmo assim.
               </p>
+              {isInstalledAppContext && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-sm text-blue-900">
+                  <p className="font-medium">Pagamento aberto no Asaas</p>
+                  <p className="mt-1">
+                    Finalize o pagamento na tela do Asaas. Se você já pagou, volte para o SmartBus e toque em “Já paguei, verificar minha passagem”.
+                  </p>
+                </div>
+              )}
               {paymentPendingActions}
             </>
           ) : (isPendingPayment || paymentSuccess || isAsaasReturn) && pollingTimedOut ? (
