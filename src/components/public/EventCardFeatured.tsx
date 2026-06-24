@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { MapPin, MessageCircle } from 'lucide-react';
+import { MapPin, MessageCircle, Share2 } from 'lucide-react';
 import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { DateBadge } from './DateBadge';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { getEventCategoryLabel } from '@/lib/eventCategory';
+import { sharePublicEvent } from '@/lib/publicEventShare';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -20,8 +21,12 @@ const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 
 export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: EventCardFeaturedProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const handleShare = () => sharePublicEvent({ eventName: event.name, eventPath: linkTo });
   const imageUrl = event.image_url || DEFAULT_EVENT_IMAGE;
   const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
+  const companyPublicSlug = event.company && 'public_slug' in event.company
+    ? (event.company.public_slug as string | null | undefined)
+    : null;
   const whatsappHelpLink = buildWhatsappWaMeLink({
     phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
     message: `Olá! Estou com dúvida sobre o evento ${event.name} em ${(() => {
@@ -102,7 +107,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
 
             {event.company && (
               <Link
-                to={event.company && (event.company as any).public_slug ? `/empresa/${(event.company as any).public_slug}` : '#'}
+                to={companyPublicSlug ? `/empresa/${companyPublicSlug}` : '#'}
                 className="flex items-center gap-1.5 min-w-0 hover:opacity-80 transition-opacity"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -146,6 +151,7 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
         <p className="text-2xl font-extrabold leading-tight tracking-tight text-primary">
           {formatCurrencyBRL(event.unit_price)}
         </p>
+        {/* CTAs mobile: compra permanece em largura total e compartilhamento abaixo com texto. */}
         <Button
           size="lg"
           className={cn('h-12 w-full px-4 text-base font-semibold shadow-lg')}
@@ -158,10 +164,21 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             <Link to={linkTo}>Comprar passagem</Link>
           )}
         </Button>
+        {!isSoldOut && (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full gap-2 text-sm font-medium text-muted-foreground"
+            onClick={handleShare}
+          >
+            <Share2 className="h-4 w-4" />
+            Compartilhar
+          </Button>
+        )}
       </div>
 
-      {/* Desktop mantém CTA sobre o banner para preservar destaque comercial já conhecido. */}
-      <div className="absolute bottom-4 right-4 z-30 hidden sm:block">
+      {/* Desktop mantém compra como CTA principal e exibe compartilhar em botão menor secundário. */}
+      <div className="absolute bottom-4 right-4 z-30 hidden flex-col items-end gap-2 sm:flex">
         <Button
           size="lg"
           className={cn('h-12 w-auto px-6 text-base font-semibold shadow-lg')}
@@ -174,6 +191,17 @@ export function EventCardFeatured({ event, sellerRef, isSoldOut = false }: Event
             <Link to={linkTo}>Comprar passagem</Link>
           )}
         </Button>
+        {!isSoldOut && (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 gap-2 border-white/30 bg-white/10 px-4 text-sm font-medium text-white backdrop-blur-sm hover:bg-white/20 hover:text-white"
+            onClick={handleShare}
+          >
+            <Share2 className="h-4 w-4" />
+            Compartilhar
+          </Button>
+        )}
       </div>
     </div>
   );
