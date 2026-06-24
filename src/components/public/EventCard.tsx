@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPin, MessageCircle } from 'lucide-react';
+import { MapPin, MessageCircle, Share2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { parseDateOnlyAsLocal, formatDateOnlyBR } from '@/lib/date';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { getEventCategoryLabel } from '@/lib/eventCategory';
+import { sharePublicEvent } from '@/lib/publicEventShare';
 import { EventWithCompany } from '@/types/database';
 import { DateBadge } from './DateBadge';
 
@@ -21,8 +22,12 @@ const DEFAULT_EVENT_IMAGE = '/assets/eventos/evento_padrao.png';
 
 export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProps) {
   const linkTo = `/eventos/${event.id}${sellerRef ? `?ref=${sellerRef}` : ''}`;
+  const handleShare = () => sharePublicEvent({ eventName: event.name, eventPath: linkTo });
   const imageUrl = event.image_url || DEFAULT_EVENT_IMAGE;
   const eventWhatsapp = (event as EventWithCompany & { whatsapp?: string | null }).whatsapp;
+  const companyPublicSlug = event.company && 'public_slug' in event.company
+    ? (event.company.public_slug as string | null | undefined)
+    : null;
   const whatsappHelpLink = buildWhatsappWaMeLink({
     phone: eventWhatsapp ?? event.company?.whatsapp ?? null,
     message: `Olá! Estou com dúvida sobre o evento ${event.name} em ${(() => {
@@ -99,7 +104,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
         {/* Empresa organizadora */}
         {event.company && (
           <Link
-            to={event.company && (event.company as any).public_slug ? `/empresa/${(event.company as any).public_slug}` : '#'}
+            to={companyPublicSlug ? `/empresa/${companyPublicSlug}` : '#'}
             className="flex items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-muted/40 transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
@@ -137,18 +142,31 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
           </div>
         )}
 
-        {/* CTA */}
-          <Button 
-          className={cn("h-12 w-full text-base font-semibold shadow-sm")}
-          disabled={isSoldOut}
-          asChild={!isSoldOut}
-        >
-          {isSoldOut ? (
-            <span>Esgotado</span>
-          ) : (
-            <Link to={linkTo}>Comprar passagem</Link>
+        {/* CTAs: mobile mantém pilha tocável; desktop alinha compra e compartilhar na mesma linha. */}
+        <div className="space-y-2 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
+          <Button
+            className={cn('h-12 w-full text-base font-semibold shadow-sm sm:flex-1')}
+            disabled={isSoldOut}
+            asChild={!isSoldOut}
+          >
+            {isSoldOut ? (
+              <span>Esgotado</span>
+            ) : (
+              <Link to={linkTo}>Comprar passagem</Link>
+            )}
+          </Button>
+          {!isSoldOut && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full gap-2 text-sm font-medium text-muted-foreground sm:w-auto sm:px-4"
+              onClick={handleShare}
+            >
+              <Share2 className="h-4 w-4" />
+              Compartilhar
+            </Button>
           )}
-        </Button>
+        </div>
       </CardContent>
     </Card>
   );
