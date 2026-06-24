@@ -56,13 +56,8 @@ export async function sharePublicEvent({ eventName, eventPath }: SharePublicEven
 
   if (typeof window !== 'undefined') {
     if (isMobileOrPwaShareContext()) {
-      // Em celular/PWA, tenta primeiro o app nativo; se a tela continuar visível, cai para o link web.
+      // Em celular/PWA, tenta apenas o app nativo para não substituir o SmartBus por WhatsApp Web.
       window.location.href = whatsappNativeUrl;
-      window.setTimeout(() => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          window.location.href = whatsappUrl;
-        }
-      }, 800);
       return;
     }
 
