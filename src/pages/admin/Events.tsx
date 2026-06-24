@@ -86,6 +86,7 @@ import {
   Tag,
   Sparkles,
   MessageCircle,
+  Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
@@ -329,6 +330,8 @@ export default function Events() {
   // Quick status change
   const [closeEventDialogOpen, setCloseEventDialogOpen] = useState(false);
   const [eventToClose, setEventToClose] = useState<EventWithTrips | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [eventToShare, setEventToShare] = useState<EventWithTrips | null>(null);
 
   // Sales data for performance indicators
   const [salesByEvent, setSalesByEvent] = useState<Map<string, number>>(new Map());
@@ -2681,9 +2684,55 @@ export default function Events() {
 
   const buildPublicEventStoreUrl = (eventId: string) => `/eventos/${eventId}`;
 
+  const resolvePublicEventStoreUrl = (event: EventWithTrips | null) => {
+    if (!event?.id) return '';
+
+    const publicPath = buildPublicEventStoreUrl(event.id);
+    if (!publicPath) return '';
+
+    // Usa exatamente a mesma rota pública do botão "Ver evento na loja" e apenas resolve o domínio atual para compartilhamento externo.
+    return typeof window === 'undefined' ? publicPath : new URL(publicPath, window.location.origin).toString();
+  };
+
   const handleViewEventInStore = (event: EventWithTrips) => {
     // Reutiliza a rota pública já existente usada pelos cards da vitrine/checkout.
     window.open(buildPublicEventStoreUrl(event.id), '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenShareDialog = (event: EventWithTrips) => {
+    setEventToShare(event);
+    setShareDialogOpen(true);
+  };
+
+  const handleCopyEventLink = async () => {
+    const publicUrl = resolvePublicEventStoreUrl(eventToShare);
+    if (!publicUrl) {
+      toast.error('Não foi possível gerar o link público deste evento. Tente abrir o evento na loja para validar.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      toast.success('Link copiado com sucesso.');
+    } catch {
+      toast.error('Não foi possível copiar automaticamente. Selecione o link manualmente.');
+    }
+  };
+
+  const handleShareEventNative = async () => {
+    const publicUrl = resolvePublicEventStoreUrl(eventToShare);
+    if (!eventToShare || !publicUrl || !navigator.share) return;
+
+    try {
+      await navigator.share({
+        title: eventToShare.name,
+        text: 'Confira este evento disponível para compra.',
+        url: publicUrl,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      toast.error('Não foi possível compartilhar pelo celular.');
+    }
   };
 
   const handleCopyEventId = async (eventId: string) => {
@@ -2697,6 +2746,7 @@ export default function Events() {
 
   const getEventActions = (event: EventWithTrips): ActionItem[] => {
     const actions: ActionItem[] = [];
+    const isPubliclyAvailableInStore = event.status === 'a_venda' && !event.is_archived;
 
     if (event.status !== 'encerrado') {
       actions.push({
@@ -2712,6 +2762,15 @@ export default function Events() {
       });
     }
 
+    if (isPubliclyAvailableInStore) {
+      // Mantém a ação de compartilhamento restrita à mesma disponibilidade pública usada pela loja.
+      actions.push({
+        label: 'Compartilhar evento',
+        icon: Share2,
+        onClick: () => handleOpenShareDialog(event),
+      });
+    }
+
     actions.push({
       label: 'Ver Detalhes',
       icon: ExternalLink,
@@ -2720,7 +2779,7 @@ export default function Events() {
       },
     });
 
-    if (event.status === 'a_venda' && !event.is_archived) {
+    if (isPubliclyAvailableInStore) {
       // Exibe somente quando o evento está disponível na vitrine pública.
       actions.push({
         label: 'Ver evento na loja',
@@ -5645,6 +5704,92 @@ export default function Events() {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de compartilhamento do link público do evento. */}
+        <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader className="space-y-2">
+              <DialogTitle>Compartilhar evento</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Copie o link ou envie este evento para seus clientes.
+              </p>
+            </DialogHeader>
+
+            {(() => {
+              const publicUrl = resolvePublicEventStoreUrl(eventToShare);
+              const whatsappMessage = eventToShare && publicUrl
+                ? `Olá! Confira este evento disponível para compra:\n\n${eventToShare.name}\n\nAcesse o link:\n${publicUrl}`
+                : '';
+              const canUseNativeShare = typeof navigator !== 'undefined' && Boolean(navigator.share);
+
+              return (
+                <div className="space-y-5">
+                  {!publicUrl && (
+                    <Alert variant="destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        Não foi possível gerar o link público deste evento. Tente abrir o evento na loja para validar.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="event-share-link">Link do evento</Label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="event-share-link"
+                        readOnly
+                        value={publicUrl}
+                        placeholder="Link público indisponível"
+                        className="font-mono text-xs"
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                      <Button type="button" onClick={handleCopyEventLink} disabled={!publicUrl} className="shrink-0">
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copiar link
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!publicUrl}
+                      onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`, '_blank', 'noopener,noreferrer')}
+                      className="h-11 justify-start"
+                    >
+                      <MessageCircle className="mr-2 h-4 w-4" />
+                      Enviar pelo WhatsApp
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!publicUrl}
+                      onClick={() => publicUrl && eventToShare && handleViewEventInStore(eventToShare)}
+                      className="h-11 justify-start"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Abrir evento na loja
+                    </Button>
+                    {canUseNativeShare && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={!publicUrl}
+                        onClick={handleShareEventNative}
+                        className="h-11 justify-start sm:col-span-2"
+                      >
+                        <Share2 className="mr-2 h-4 w-4" />
+                        Compartilhar pelo celular
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </DialogContent>
         </Dialog>
 
