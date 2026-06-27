@@ -307,17 +307,10 @@ export default function Confirmation() {
       const isInstalledAppContext = isInstalledAppPaymentContext();
       const paymentMethod = typeof paymentLinkData?.billingType === 'string' ? paymentLinkData.billingType : null;
       if (isInstalledAppContext) {
-        // Em app instalado, mantemos esta tela de confirmação aberta com polling ativo
-        // e usamos a fatura apenas como tela auxiliar. Se o wrapper bloquear a abertura,
-        // caímos para navegação na mesma janela para não impedir o pagamento.
-        const openedTab = window.open(invoiceUrl, '_blank', 'noopener');
-        if (openedTab) {
-          logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'app_confirmation_plus_invoice_tab', invoiceUrl });
-          return;
-        }
-
-        logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'same_window_assign', invoiceUrl });
-        window.location.assign(invoiceUrl);
+        // Não confiamos no retorno de window.open em WebView/wrappers: mesmo null
+        // pode significar abertura externa. Mantemos a confirmação aberta com polling ativo.
+        window.open(invoiceUrl, '_blank', 'noopener');
+        logAsaasInvoiceOpen({ saleId: id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: 'app_confirmation_plus_invoice_tab', invoiceUrl });
         return;
       }
 
@@ -710,7 +703,13 @@ export default function Confirmation() {
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-sm text-blue-900">
                   <p className="font-medium">Pagamento aberto no Asaas</p>
                   <p className="mt-1">
-                    Finalize o pagamento na tela do Asaas. Se você já pagou, volte para o SmartBus e toque em “Já paguei, verificar minha passagem”.
+                    Finalize o pagamento no navegador.
+                  </p>
+                  <p className="mt-2">
+                    Assim que o pagamento for confirmado, sua passagem digital aparecerá automaticamente aqui.
+                  </p>
+                  <p className="mt-2">
+                    Se você já pagou, volte para o SmartBus e toque em “Já paguei, verificar minha passagem”.
                   </p>
                 </div>
               )}
