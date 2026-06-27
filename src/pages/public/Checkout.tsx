@@ -1301,15 +1301,14 @@ export default function Checkout() {
       return;
     }
 
-    // Em contexto "instalado" (PWA standalone, WebView, TWA, iOS standalone),
-    // abrir o Asaas em nova aba joga o usuário para o navegador externo e o
-    // autoRedirect do Asaas volta nesse navegador — não no app. Nesses casos
-    // navegamos na mesma "aba" para preservar a imersão de aplicativo.
+    // Em contexto instalado/WebView/PWA, o WebIntoApp pode enviar novas janelas
+    // para o navegador padrão. Por isso abrimos a cobrança como janela auxiliar
+    // e mantemos o SmartBus imediatamente na confirmação com polling ativo.
     const isInstalledAppContext = isInstalledAppPaymentContext();
 
     // Comentário de suporte: em navegador comum abrimos a aba de pagamento ainda
     // no clique do usuário para evitar bloqueio de pop-up após as etapas
-    // assíncronas do checkout. Em app instalado, usamos a mesma aba.
+    // assíncronas do checkout. Em app instalado, deixamos o wrapper tratar a nova janela.
     const preOpenedPaymentTab = isInstalledAppContext ? null : window.open("", "_blank");
     if (preOpenedPaymentTab) {
       renderPaymentPreparingTab(preOpenedPaymentTab);
@@ -1775,18 +1774,12 @@ export default function Checkout() {
           },
         );
         if (isInstalledAppContext) {
-          // Em app instalado/PWA/WebView: abre a fatura em janela auxiliar (Custom Tab/Safari View)
-          // e mantém o app vivo na /confirmacao com polling ativo. Assim, Pix pago em outro device
-          // já é detectado pelo app sem depender de autoRedirect do Asaas.
-          const auxTab = window.open(asaasInvoiceUrl, "_blank", "noopener");
-          if (auxTab) {
-            logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "app_confirmation_plus_invoice_tab", invoiceUrl: asaasInvoiceUrl });
-            window.location.assign(`/confirmacao/${sale.id}?retorno=asaas`);
-          } else {
-            // Fallback: alguns wrappers bloqueiam window.open. Mantém o comportamento antigo.
-            logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "same_window_assign", invoiceUrl: asaasInvoiceUrl });
-            window.location.assign(asaasInvoiceUrl);
-          }
+          // Não confiamos no retorno de window.open em WebView/wrappers: mesmo null
+          // pode significar que o navegador externo abriu. O SmartBus sempre vai
+          // para a confirmação para não prender o passageiro no checkout.
+          window.open(asaasInvoiceUrl, "_blank", "noopener");
+          logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "app_confirmation_plus_invoice_tab", invoiceUrl: asaasInvoiceUrl });
+          window.location.assign(`/confirmacao/${sale.id}?retorno=asaas`);
         } else if (preOpenedPaymentTab) {
           // Reaproveita a aba já aberta no clique para não cair em bloqueio de pop-up no navegador comum.
           logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "preopened_tab", invoiceUrl: asaasInvoiceUrl });
@@ -1794,7 +1787,7 @@ export default function Checkout() {
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
           // Navigate to waiting/confirmation screen in current tab
-          navigate(`/confirmacao/${sale.id}`);
+          navigate(`/confirmacao/${sale.id}?retorno=asaas`);
         } else {
           logAsaasInvoiceOpen({ saleId: sale.id, paymentMethod, isAppContext: isInstalledAppContext, navigationStrategy: "new_tab", invoiceUrl: asaasInvoiceUrl });
           const openedTab = window.open(asaasInvoiceUrl, "_blank");
@@ -1811,7 +1804,7 @@ export default function Checkout() {
           }
           setSubmitting(false);
           setPaymentCheckoutStatus("idle");
-          navigate(`/confirmacao/${sale.id}`);
+          navigate(`/confirmacao/${sale.id}?retorno=asaas`);
         }
         return;
       }
