@@ -230,28 +230,29 @@ function PassengerCollapsibleCard({
   const isVoltaSeatPlaceholder = !!group.voltaTicket && voltaSeatDisplay === 'Retorno incluso';
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={setOpen} className="mx-auto w-full max-w-[440px]">
       <CollapsibleTrigger asChild>
         <button
           className={cn(
-            'w-full rounded-lg border bg-card p-4 text-left transition-colors',
-            'hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            open && 'border-primary/30 bg-accent/30'
+            'w-full rounded-xl border p-4 text-left transition-colors',
+            'border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] text-[hsl(var(--ticket-text))]',
+            'hover:bg-[hsl(var(--ticket-surface-2))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ticket-accent))]',
+            open && 'border-[hsl(var(--ticket-accent))]/50 bg-[hsl(var(--ticket-surface-2))]'
           )}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <User className="h-4 w-4 text-primary" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--ticket-accent))]/15">
+                <User className="h-4 w-4 text-[hsl(var(--ticket-accent))]" />
               </div>
               <div className="min-w-0 space-y-0.5">
-                <p className="font-semibold text-sm text-foreground truncate">
+                <p className="font-semibold text-sm truncate">
                   {group.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[hsl(var(--ticket-muted))]">
                   CPF: {group.cpfDisplay}
                 </p>
-                <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mt-1">
+                <div className="flex items-center gap-2 flex-wrap text-xs text-[hsl(var(--ticket-muted))] mt-1">
                   {idaSeatDisplay && (
                     <span className="inline-flex items-center gap-1">
                       <Armchair className="h-3 w-3" />
@@ -259,7 +260,7 @@ function PassengerCollapsibleCard({
                     </span>
                   )}
                   {group.hasRoundTrip ? (
-                    <span className="inline-flex items-center gap-1 text-primary font-medium">
+                    <span className="inline-flex items-center gap-1 text-[hsl(var(--ticket-accent))] font-medium">
                       <ArrowLeftRight className="h-3 w-3" />
                       Ida e Volta
                     </span>
@@ -276,7 +277,7 @@ function PassengerCollapsibleCard({
               {saleStatus && <StatusBadge status={saleStatus} className="text-[10px]" />}
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-muted-foreground transition-transform',
+                  'h-4 w-4 text-[hsl(var(--ticket-muted))] transition-transform',
                   open && 'rotate-180'
                 )}
               />
