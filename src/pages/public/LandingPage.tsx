@@ -1047,9 +1047,6 @@ export default function LandingPage() {
                           </div>
                         </div>
                       )}
-                      <div className="absolute left-4 top-4 inline-flex items-center rounded-full border border-white/60 bg-white/75 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 shadow-sm backdrop-blur">
-                        Patrocinador Oficial
-                      </div>
                     </div>
                     <div className="flex flex-1 flex-col space-y-3 p-5">
                       <h3 className="min-h-[2.5rem] text-base font-bold leading-tight text-foreground">
