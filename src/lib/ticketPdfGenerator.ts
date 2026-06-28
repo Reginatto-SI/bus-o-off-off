@@ -9,6 +9,24 @@ interface GenerateTicketPdfParams {
   ticketElement?: HTMLElement | null;
 }
 
+function isTicketPdfDebugEnabled() {
+  try {
+    return (
+      window.localStorage.getItem('smartbus_ticket_pdf_debug') === 'true' ||
+      new URLSearchParams(window.location.search).get('ticketPdfDebug') === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function logTicketPdfDebug(message: string, data?: Record<string, unknown>) {
+  if (!isTicketPdfDebugEnabled()) return;
+  // Log de diagnóstico opt-in para confirmar o fluxo real de exportação em produção,
+  // sem expor dados sensíveis por padrão no console dos passageiros.
+  console.info(`[ticket-pdf] ${message}`, data ?? {});
+}
+
 async function waitForTicketExportAssets(ticketElement: HTMLElement) {
   // Garante que fontes web e imagens reais da passagem estejam prontas antes da captura.
   // Sem esta espera, o html2canvas pode rasterizar com fallback de fonte, logo ausente
@@ -128,6 +146,13 @@ function applyTicketExportMode(clonedElement: HTMLElement, width: number) {
 }
 
 export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: GenerateTicketPdfParams) {
+  const fileName = `passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.pdf`;
+
+  logTicketPdfDebug('generateTicketPdf chamado', {
+    hasTicketElement: Boolean(ticketElement),
+    fileName,
+  });
+
   if (ticketElement) {
     await waitForTicketExportAssets(ticketElement);
 
@@ -135,6 +160,15 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
     // área offscreen com a mesma largura real. Isso preserva responsividade, altura e
     // escala visual sem reconstruir um segundo layout para o PDF.
     const ticketWidth = Math.ceil(ticketElement.getBoundingClientRect().width || ticketElement.offsetWidth || 420);
+    const ticketHeightBeforeClone = Math.ceil(ticketElement.scrollHeight || ticketElement.getBoundingClientRect().height || 1);
+    const excludedElementsCount = ticketElement.querySelectorAll('[data-pdf-exclude="true"], [data-export-hidden="true"]').length;
+
+    logTicketPdfDebug('fluxo clone offscreen iniciado', {
+      ticketWidth,
+      ticketHeightBeforeClone,
+      excludedElementsCount,
+    });
+
     const exportElement = ticketElement.cloneNode(true) as HTMLElement;
     copyCanvasPixelsToClone(ticketElement, exportElement);
     applyTicketExportMode(exportElement, ticketWidth);
@@ -152,6 +186,13 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
     try {
       await waitForTicketExportAssets(exportElement);
       const ticketHeight = Math.ceil(exportElement.scrollHeight || exportElement.getBoundingClientRect().height || 1);
+
+      logTicketPdfDebug('capturando clone offscreen com html2canvas', {
+        ticketWidth,
+        ticketHeight,
+        fileName,
+      });
+
       const domCanvas = await html2canvas(exportElement, {
         backgroundColor: '#ffffff',
         width: ticketWidth,
@@ -170,6 +211,12 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
         ignoreElements: (element) => (element as HTMLElement).dataset?.pdfExclude === 'true',
       });
 
+      logTicketPdfDebug('PDF gerado pelo clone offscreen', {
+        canvasWidth: domCanvas.width,
+        canvasHeight: domCanvas.height,
+        fileName,
+      });
+
       const domImg = domCanvas.toDataURL('image/png', 1.0);
       const doc = new jsPDF({
         orientation: domCanvas.width > domCanvas.height ? 'landscape' : 'portrait',
@@ -178,7 +225,7 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       });
 
       doc.addImage(domImg, 'PNG', 0, 0, domCanvas.width, domCanvas.height, undefined, 'FAST');
-      doc.save(`passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.pdf`);
+      doc.save(fileName);
     } finally {
       exportHost.remove();
     }
@@ -201,6 +248,11 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
   qrCanvas.height = qrImg.height;
   qrCtx?.drawImage(qrImg, 0, 0);
 
+  logTicketPdfDebug('fallback renderTicketVisual acionado', {
+    hasTicketElement: false,
+    fileName,
+  });
+
   // Fallback seguro: mesmo sem DOM, renderizamos o template oficial (incluindo bloco de benefício
   // quando existir no ticket individual) sem quebrar geração de PDF.
   const ticketCanvas = await renderTicketVisual(ticket, qrCanvas, { width: 1200, backgroundColor: '#ffffff' });
@@ -215,5 +267,5 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
   const y = (pageH - renderH) / 2;
 
   doc.addImage(ticketImg, 'PNG', x, y, renderW, renderH, undefined, 'FAST');
-  doc.save(`passagem-${ticket.seatLabel}-${ticket.passengerName.split(' ')[0]}.pdf`);
+  doc.save(fileName);
 }
