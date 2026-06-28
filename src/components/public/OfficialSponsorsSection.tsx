@@ -128,11 +128,6 @@ export function OfficialSponsorsSection({
                   {title}
                 </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">{subtitle}</p>
-                {compact && (
-                  <p className="text-xs font-medium text-primary sm:text-sm">
-                    Marcas em destaque na vitrine pública de passagens.
-                  </p>
-                )}
               </div>
             </div>
             {!compact && (
