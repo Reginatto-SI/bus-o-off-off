@@ -130,15 +130,15 @@ export function OfficialSponsorsSection({
                 <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">{subtitle}</p>
                 {compact && (
                   <p className="text-xs font-medium text-primary sm:text-sm">
-                    Média atual: 1.600 visualizações mensais na landing.
+                    Marcas em destaque na vitrine pública de passagens.
                   </p>
                 )}
               </div>
             </div>
             {!compact && (
               <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 text-sm text-muted-foreground lg:max-w-sm">
-                <p className="font-semibold text-foreground">Média atual de 1.600 visualizações mensais na landing.</p>
-                <p className="mt-1">Uma presença de marca em uma plataforma que está crescendo no setor de excursões e venda de passagens.</p>
+                <p className="font-semibold text-foreground">Destaque sua marca em uma área oficial do SmartBus BR.</p>
+                <p className="mt-1">Espaços pensados para marcas que querem estar próximas de empresas, organizadores e passageiros em uma vitrine digital de viagens e excursões.</p>
               </div>
             )}
           </div>
