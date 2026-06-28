@@ -16,7 +16,7 @@ const statusItems = [
   {
     label: 'Ocupado',
     icon: <User className="h-2.5 w-2.5" />,
-    className: 'text-gray-400',
+    className: 'text-muted-foreground',
   },
   {
     label: 'Bloqueado',

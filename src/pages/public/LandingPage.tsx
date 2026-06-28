@@ -836,7 +836,7 @@ export default function LandingPage() {
               <div className="rounded-3xl border border-white/10 bg-white/[0.08] p-5 text-white backdrop-blur-sm">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                       Para quem quer viajar
                     </p>
                     <h2 className="mt-2 text-2xl font-bold">
@@ -935,7 +935,7 @@ export default function LandingPage() {
             <div className="rounded-3xl border border-primary/15 bg-[hsl(222_47%_11%)] p-6 text-white shadow-xl shadow-primary/5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                     Vitrine própria
                   </p>
                   <p className="mt-3 text-3xl font-bold text-primary">
@@ -947,7 +947,7 @@ export default function LandingPage() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                     Resultado operacional
                   </p>
                   <p className="mt-3 text-3xl font-bold text-primary">
