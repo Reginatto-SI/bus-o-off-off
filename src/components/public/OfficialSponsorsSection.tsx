@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { ArrowRight, Bus, Star, TrendingUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Bus, Star, TrendingUp } from "lucide-react";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 
 type OfficialSponsorPlaceholderCard = {
@@ -18,8 +18,12 @@ type OfficialSponsorRealCard = {
   text: string;
   cta: string;
   imageSrc: string;
+  desktopImageSrc?: string;
+  mobileImageSrc?: string;
   href: string;
   alt: string;
+  desktopAlt?: string;
+  mobileAlt?: string;
   accent?: string;
   icon?: typeof Star;
 };
@@ -34,7 +38,8 @@ type OfficialSponsorsSectionProps = {
 };
 
 // Manutenção: patrocinadores reais podem usar banners em /public/sponsors/.
-// Recomendado: .webp ou .png, proporção 16:9, 1200 x 675 px, arquivo leve e alt sempre preenchido.
+// Recomendado: desktop em /public/sponsors/ com .webp ou .png, proporção larga 5:1 (2000 x 400 px).
+// Mobile permanece 16:9 (1200 x 675 px). Use desktopImageSrc/mobileImageSrc quando houver criativos separados.
 // Exemplo para patrocinador real:
 // {
 //   type: "sponsor",
@@ -42,9 +47,13 @@ type OfficialSponsorsSectionProps = {
 //   headline: "Nome da Empresa",
 //   text: "Patrocinador oficial SmartBus BR.",
 //   cta: "Conhecer patrocinador",
-//   imageSrc: "/sponsors/patrocinador-01.webp",
+//   imageSrc: "/sponsors/patrocinador-01-mobile.webp",
+//   desktopImageSrc: "/sponsors/patrocinador-01-desktop.webp",
+//   mobileImageSrc: "/sponsors/patrocinador-01-mobile.webp",
 //   href: "https://site-do-patrocinador.com.br",
 //   alt: "Banner do patrocinador Nome da Empresa",
+//   desktopAlt: "Banner horizontal do patrocinador Nome da Empresa",
+//   mobileAlt: "Banner mobile do patrocinador Nome da Empresa",
 // }
 // Fonte única dos cards oficiais: landing e /eventos reaproveitam os mesmos placeholders e patrocinadores reais.
 const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
@@ -82,12 +91,49 @@ export function OfficialSponsorsSection({
 }: OfficialSponsorsSectionProps) {
   const [activeSponsorCardIndex, setActiveSponsorCardIndex] = useState(0);
   const sponsorCarouselRef = useRef<HTMLDivElement>(null);
+  const [isDesktopSponsorCarouselHovered, setIsDesktopSponsorCarouselHovered] = useState(false);
+  const [hasInteractedWithDesktopSponsorCarousel, setHasInteractedWithDesktopSponsorCarousel] = useState(false);
   const sponsorWhatsappUrl =
     buildWhatsappWaMeLink({
       phone: "(31) 99207-4309",
       message: "Olá! Quero conhecer os espaços de Patrocinadores Oficiais do SmartBus BR.",
     }) ??
     "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
+
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isDesktopViewport = window.matchMedia("(min-width: 1024px)").matches;
+    if (
+      prefersReducedMotion ||
+      !isDesktopViewport ||
+      isDesktopSponsorCarouselHovered ||
+      hasInteractedWithDesktopSponsorCarousel ||
+      OFFICIAL_SPONSOR_CARDS.length <= 1
+    ) {
+      return;
+    }
+
+    // Autoplay discreto apenas no banner desktop; mobile continua controlado por swipe para não piorar a experiência atual.
+    const interval = window.setInterval(() => {
+      setActiveSponsorCardIndex((currentIndex) => (currentIndex + 1) % OFFICIAL_SPONSOR_CARDS.length);
+    }, 8000);
+
+    return () => window.clearInterval(interval);
+  }, [hasInteractedWithDesktopSponsorCarousel, isDesktopSponsorCarouselHovered]);
+
+  const selectDesktopSponsorCard = (index: number) => {
+    setHasInteractedWithDesktopSponsorCarousel(true);
+    setActiveSponsorCardIndex(index);
+  };
+
+  const showPreviousDesktopSponsor = () => {
+    selectDesktopSponsorCard((activeSponsorCardIndex - 1 + OFFICIAL_SPONSOR_CARDS.length) % OFFICIAL_SPONSOR_CARDS.length);
+  };
+
+  const showNextDesktopSponsor = () => {
+    selectDesktopSponsorCard((activeSponsorCardIndex + 1) % OFFICIAL_SPONSOR_CARDS.length);
+  };
 
   const handleSponsorCarouselScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const container = event.currentTarget;
@@ -141,21 +187,23 @@ export function OfficialSponsorsSection({
           <div
             ref={sponsorCarouselRef}
             onScroll={handleSponsorCarouselScroll}
-            className={`${compact ? "mt-3 sm:mt-4" : "mt-6 sm:mt-7"} flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0 [&::-webkit-scrollbar]:hidden`}
+            className={`${compact ? "mt-3 sm:mt-4" : "mt-6 sm:mt-7"} flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
           >
             {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
+              const mobileImageSrc = card.type === "sponsor" ? card.mobileImageSrc ?? card.imageSrc : undefined;
+              const mobileAlt = card.type === "sponsor" ? card.mobileAlt ?? card.alt : undefined;
 
               return (
                 <article
                   key={card.headline}
                   data-sponsor-card={index}
-                  className="flex min-w-[86%] snap-center flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)] sm:min-w-[48%] lg:min-w-0"
+                  className="flex min-w-[86%] snap-center flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)] sm:min-w-[48%]"
                 >
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
                       <a href={card.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${card.sponsorName}`}>
-                        <img src={card.imageSrc} alt={card.alt} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
+                        <img src={mobileImageSrc} alt={mobileAlt} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
                       </a>
                     ) : (
                       <div className="flex h-full items-center justify-center px-6 text-center">
@@ -179,10 +227,57 @@ export function OfficialSponsorsSection({
               );
             })}
           </div>
+
           <div className="mt-3 flex justify-center gap-2 lg:hidden">
             {OFFICIAL_SPONSOR_CARDS.map((card, index) => (
               <button type="button" key={`sponsor-dot-${card.headline}`} onClick={() => scrollToSponsorCard(index)} className={`h-2 rounded-full transition-all ${index === activeSponsorCardIndex ? "w-6 bg-primary" : "w-2 bg-primary/30"}`} aria-label={`Ver patrocinador ${index + 1}`} />
             ))}
+          </div>
+
+          <div
+            className={`${compact ? "mt-4" : "mt-7"} hidden lg:block`}
+            onMouseEnter={() => setIsDesktopSponsorCarouselHovered(true)}
+            onMouseLeave={() => setIsDesktopSponsorCarouselHovered(false)}
+            onFocus={() => setHasInteractedWithDesktopSponsorCarousel(true)}
+          >
+            {(() => {
+              const activeCard = OFFICIAL_SPONSOR_CARDS[activeSponsorCardIndex] ?? OFFICIAL_SPONSOR_CARDS[0];
+              const desktopImageSrc = activeCard.type === "sponsor" ? activeCard.desktopImageSrc ?? activeCard.imageSrc : undefined;
+              const desktopAlt = activeCard.type === "sponsor" ? activeCard.desktopAlt ?? activeCard.alt : undefined;
+              const activeHref = activeCard.type === "sponsor" ? activeCard.href : sponsorWhatsappUrl;
+
+              return (
+                <div className="relative">
+                  <button type="button" onClick={showPreviousDesktopSponsor} className="absolute left-4 top-1/2 z-10 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/70 bg-background/80 text-foreground shadow-lg backdrop-blur transition hover:bg-background" aria-label="Ver patrocinador anterior">
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <div className={`overflow-hidden rounded-[1.75rem] border border-border/80 bg-gradient-to-br shadow-[0_28px_90px_-55px_rgba(15,23,42,0.7)] ${activeCard.accent ?? "from-white via-orange-50 to-primary/15"}`}>
+                    {activeCard.type === "sponsor" ? (
+                      <a href={activeCard.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${activeCard.sponsorName}`} className="block">
+                        <img src={desktopImageSrc} alt={desktopAlt} className="aspect-[5/1] w-full object-cover transition-transform duration-500 hover:scale-[1.01]" loading="lazy" />
+                      </a>
+                    ) : (
+                      <a href={activeHref} target="_blank" rel="noreferrer" className="flex aspect-[5/1] min-h-[220px] w-full items-center justify-center px-8 text-center">
+                        {/* Desktop valoriza o espaço comercial com banner amplo e sem ícones grandes. */}
+                        <div className="space-y-3">
+                          <p className="text-2xl font-bold uppercase tracking-[0.42em] text-slate-900">Anuncie aqui</p>
+                          <p className="text-sm font-medium text-slate-600">Espaço reservado para patrocinador oficial SmartBus BR</p>
+                          <span className="inline-flex rounded-full border border-primary/20 bg-background/75 px-4 py-2 text-sm font-semibold text-primary shadow-sm">Quero ser patrocinador</span>
+                        </div>
+                      </a>
+                    )}
+                  </div>
+                  <button type="button" onClick={showNextDesktopSponsor} className="absolute right-4 top-1/2 z-10 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/70 bg-background/80 text-foreground shadow-lg backdrop-blur transition hover:bg-background" aria-label="Ver próximo patrocinador">
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })()}
+            <div className="mt-4 flex justify-center gap-2">
+              {OFFICIAL_SPONSOR_CARDS.map((card, index) => (
+                <button type="button" key={`desktop-sponsor-dot-${card.headline}`} onClick={() => selectDesktopSponsorCard(index)} className={`h-2 rounded-full transition-all ${index === activeSponsorCardIndex ? "w-8 bg-primary" : "w-2.5 bg-primary/30 hover:bg-primary/50"}`} aria-label={`Ver patrocinador ${index + 1}`} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
