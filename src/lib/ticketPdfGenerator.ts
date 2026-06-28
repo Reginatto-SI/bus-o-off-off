@@ -19,6 +19,22 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       logging: false,
       scale: Math.max(2, window.devicePixelRatio || 1),
       onclone: (_document, clonedElement) => {
+        // Mantém a logo da empresa com o mesmo encaixe visual da passagem em tela no canvas do PDF.
+        clonedElement.querySelectorAll('[data-ticket-company-logo="true"]').forEach((logo) => {
+          const logoEl = logo as HTMLImageElement;
+          logoEl.style.width = '112px';
+          logoEl.style.height = '112px';
+          logoEl.style.maxWidth = '112px';
+          logoEl.style.minWidth = '112px';
+          logoEl.style.objectFit = 'contain';
+          logoEl.style.objectPosition = 'center';
+          logoEl.style.backgroundColor = '#ffffff';
+          logoEl.style.borderRadius = '16px';
+          logoEl.style.boxSizing = 'border-box';
+          logoEl.style.padding = '8px';
+          logoEl.style.flexShrink = '0';
+        });
+
         // O html2canvas pode comprimir fontes web no rodapé; no clone do PDF usamos estilos seguros.
         clonedElement.querySelectorAll('[data-ticket-pdf-footer="true"]').forEach((footer) => {
           const footerEl = footer as HTMLElement;
