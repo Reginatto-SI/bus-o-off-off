@@ -350,6 +350,14 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
             <p className="text-sm text-muted-foreground">
               Personalize a cor principal exibida nas passagens e tickets gerados.
             </p>
+            <div className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span className="font-semibold">Aviso:</span>
+              <span>
+                Esta cor <strong>não é mais aplicada na nova passagem virtual SmartBus</strong>.
+                A passagem digital segue o padrão visual oficial da plataforma para garantir contraste
+                e legibilidade. A configuração permanece disponível apenas para usos visuais legados.
+              </span>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -376,6 +384,7 @@ export function BrandIdentityTab({ company, colors, onColorsChange }: BrandIdent
             </div>
           </div>
         </div>
+
 
         <Separator />
 
