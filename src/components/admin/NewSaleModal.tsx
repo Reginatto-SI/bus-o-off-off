@@ -1284,13 +1284,26 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
   };
 
   // ── Render ──
+  const isConfirmationStep = step === 4 && !!confirmationData;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0">
-        <DialogHeader className="admin-modal__header px-6 py-4">
+      <DialogContent
+        className={
+          isConfirmationStep
+            ? "flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0 rounded-lg border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] shadow-sm"
+            : "admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-3xl flex-col gap-0 p-0"
+        }
+      >
+        <DialogHeader
+          className={
+            isConfirmationStep
+              ? "px-6 py-4 border-b border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))]"
+              : "admin-modal__header px-6 py-4"
+          }
+        >
           {/* Ajuste fino de alinhamento: título e subtítulo compartilham a mesma coluna visual sem padding manual. */}
           <div className="flex flex-col gap-1">
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className={`flex items-center gap-2 ${isConfirmationStep ? 'text-[hsl(var(--ticket-text))]' : ''}`}>
               {step < 4 && <Sparkles className="h-4 w-4 text-primary/80" />}
               {step === 4 ? 'Comprovante de Reserva' : 'Nova Venda'}
             </DialogTitle>
@@ -1303,14 +1316,14 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
           </div>
         </DialogHeader>
 
-        {step === 4 && confirmationData ? (
+        {isConfirmationStep ? (
           // ── Step 4: Confirmation using the same virtual ticket component used across the app ──
           <>
-            <ScrollArea className="flex-1 px-6 py-4">
-              <div className="mx-auto w-full max-w-2xl">
+            <ScrollArea className="flex-1 px-4 py-4 sm:px-6">
+              <div className="mx-auto w-full max-w-[460px]">
                 {/* Agrupamento por passageiro com ida/volta sob demanda */}
                 <PassengerTicketList
-                  tickets={confirmationData.map((item) => item.ticketCardData)}
+                  tickets={confirmationData!.map((item) => item.ticketCardData)}
                   allowReservedDownloads
                   // No fluxo de venda manual reservada, usamos modo de comprovante para descaracterizar
                   // a aparência de passe operacional (sem QR funcional e com alerta explícito).
@@ -1319,15 +1332,15 @@ export function NewSaleModal({ open, onOpenChange, onSuccess, company }: NewSale
                 />
               </div>
             </ScrollArea>
-            <DialogFooter className="px-6 py-4 border-t">
+            <DialogFooter className="px-6 py-4 border-t border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))]">
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-[hsl(var(--ticket-muted))]">
                   {canPayCreatedSalePlatformFee
                     ? 'A reserva continua ativa até a confirmação financeira da taxa da plataforma.'
                     : 'A reserva continua ativa até a confirmação financeira correspondente.'}
                 </div>
                 <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                  <Button variant="outline" onClick={handleClose}>
+                  <Button variant="outline" onClick={handleClose} className="border-[hsl(var(--ticket-border))] bg-transparent text-[hsl(var(--ticket-text))] hover:bg-[hsl(var(--ticket-surface-2))] hover:text-[hsl(var(--ticket-text))]">
                     {canPayCreatedSalePlatformFee ? 'Fechar e pagar depois' : 'Fechar'}
                   </Button>
                   {canPayCreatedSalePlatformFee && (
