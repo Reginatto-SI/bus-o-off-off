@@ -180,7 +180,7 @@ export function PassengerTicketList({
           onRefreshStatus={onRefreshStatus}
           isRefreshing={!!(groups[0].idaTicket?.saleId && isRefreshingSaleIds?.has(groups[0].idaTicket.saleId))}
           reservedPresentation={reservedPresentation}
-          showWhatsAppGroupCta={false}
+          showWhatsAppGroupCta={true}
         />
       ) : (
         groups.map((group) => (
@@ -299,7 +299,7 @@ function PassengerCollapsibleCard({
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
               reservedPresentation={reservedPresentation}
-              showWhatsAppGroupCta={false}
+              showWhatsAppGroupCta={true}
             />
           )
         ) : group.hasRoundTrip ? (
@@ -317,7 +317,7 @@ function PassengerCollapsibleCard({
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
                   reservedPresentation={reservedPresentation}
-                  showWhatsAppGroupCta={false}
+                  showWhatsAppGroupCta={true}
                 />
               )}
             </TabsContent>
@@ -329,7 +329,7 @@ function PassengerCollapsibleCard({
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.voltaTicket.saleId && isRefreshingSaleIds?.has(group.voltaTicket.saleId))}
                   reservedPresentation={reservedPresentation}
-                  showWhatsAppGroupCta={false}
+                  showWhatsAppGroupCta={true}
                 />
               )}
             </TabsContent>
@@ -343,7 +343,7 @@ function PassengerCollapsibleCard({
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(displayTicket.saleId && isRefreshingSaleIds?.has(displayTicket.saleId))}
               reservedPresentation={reservedPresentation}
-              showWhatsAppGroupCta={false}
+              showWhatsAppGroupCta={true}
             />
           )
         )}
