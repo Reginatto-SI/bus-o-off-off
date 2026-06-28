@@ -86,7 +86,8 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
 export function OfficialSponsorsSection({
   title = "Patrocinadores Oficiais SmartBus BR",
   subtitle = "Sua marca pode aparecer em uma vitrine digital em crescimento, vista por empresas, organizadores e passageiros.",
-  className = "bg-gradient-to-b from-background to-muted/30 py-12 sm:py-16",
+  // Landing padrão mais compacta para integrar a seção ao fluxo sem afetar o modo compact de /eventos.
+  className = "bg-gradient-to-b from-background to-muted/30 py-8 sm:py-10",
   compact = false,
 }: OfficialSponsorsSectionProps) {
   const [activeSponsorCardIndex, setActiveSponsorCardIndex] = useState(0);
@@ -162,9 +163,9 @@ export function OfficialSponsorsSection({
   return (
     <section className={className}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className={`rounded-[2rem] border border-border/80 bg-card/95 shadow-[0_28px_80px_-60px_rgba(15,23,42,0.55)] ${compact ? "p-3 sm:p-4 lg:p-5" : "p-5 sm:p-7 lg:p-8"}`}>
-          <div className={`flex flex-col ${compact ? "gap-3" : "gap-4"} lg:flex-row lg:items-end lg:justify-between`}>
-            <div className={`${compact ? "max-w-4xl space-y-2" : "max-w-3xl space-y-3"}`}>
+        <div className={`rounded-[2rem] border border-border/80 bg-card/95 shadow-[0_28px_80px_-60px_rgba(15,23,42,0.55)] ${compact ? "p-3 sm:p-4 lg:p-5" : "p-4 sm:p-5 lg:p-6"}`}>
+          <div className={`flex flex-col ${compact ? "gap-3" : "gap-3"} lg:flex-row lg:items-end lg:justify-between`}>
+            <div className={`${compact ? "max-w-4xl space-y-2" : "max-w-3xl space-y-2"}`}>
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Star className="h-3.5 w-3.5" />
                 Espaços comerciais oficiais
@@ -177,7 +178,7 @@ export function OfficialSponsorsSection({
               </div>
             </div>
             {!compact && (
-              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 text-sm text-muted-foreground lg:max-w-sm">
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 text-sm text-muted-foreground lg:max-w-sm">
                 <p className="font-semibold text-foreground">Destaque sua marca em uma área oficial do SmartBus BR.</p>
                 <p className="mt-1">Espaços pensados para marcas que querem estar próximas de empresas, organizadores e passageiros em uma vitrine digital de viagens e excursões.</p>
               </div>
@@ -187,7 +188,7 @@ export function OfficialSponsorsSection({
           <div
             ref={sponsorCarouselRef}
             onScroll={handleSponsorCarouselScroll}
-            className={`${compact ? "mt-3 sm:mt-4" : "mt-6 sm:mt-7"} flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
+            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
           >
             {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
@@ -235,7 +236,7 @@ export function OfficialSponsorsSection({
           </div>
 
           <div
-            className={`${compact ? "mt-4" : "mt-7"} hidden lg:block`}
+            className={`${compact ? "mt-4" : "mt-5"} hidden lg:block`}
             onMouseEnter={() => setIsDesktopSponsorCarouselHovered(true)}
             onMouseLeave={() => setIsDesktopSponsorCarouselHovered(false)}
             onFocus={() => setHasInteractedWithDesktopSponsorCarousel(true)}
