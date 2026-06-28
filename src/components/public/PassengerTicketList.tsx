@@ -147,11 +147,8 @@ export function PassengerTicketList({
 
   // Se só tem 1 passageiro e 1 ticket, mostra direto sem collapsible
   const isSingleSimple = groups.length === 1 && !groups[0].hasRoundTrip;
-  const paidWhatsAppGroupLinks = Array.from(new Map(
-    tickets
-      .filter((ticket) => ticket.saleStatus === 'pago' && ticket.whatsappGroupLink)
-      .map((ticket) => [ticket.saleId ?? ticket.whatsappGroupLink!, ticket.whatsappGroupLink!]),
-  ).values());
+
+
 
   if (tickets.length === 0) return null;
 
