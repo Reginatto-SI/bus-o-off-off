@@ -202,7 +202,7 @@ export default function TicketLookup() {
     }
   }, [toast]);
 
-  const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[]) => {
+  const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[], cpfDigits: string) => {
     const pendingSaleIds = [...new Set(
       cards
         .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && t.asaasPaymentId && t.saleId)
@@ -233,6 +233,16 @@ export default function TicketLookup() {
           ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(t.saleId) ?? t.purchaseConfirmedAt ?? null }
           : t))
       );
+
+      // Após confirmar pagamento no lookup público, recarrega a fonte oficial para trazer campos
+      // liberados apenas para venda paga, como o link do grupo WhatsApp do evento.
+      const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+        body: { cpf: cpfDigits },
+      });
+      if (!error) {
+        setTickets(normalizeCardsFromResponse((data || {}) as TicketLookupResponse));
+      }
+
       toast({ title: 'Status de pagamento atualizado ✅' });
     }
   }, [toast]);
@@ -289,12 +299,12 @@ export default function TicketLookup() {
         // Compatibilidade: se backend ainda exigir event_id, executa fallback transparente no front.
         const legacyCards = await fetchLegacyTicketsByCpf(cpfDigits);
         setTickets(legacyCards);
-        autoVerifyPendingSales(legacyCards);
+        autoVerifyPendingSales(legacyCards, cpfDigits);
       } else {
         const response = (data || {}) as TicketLookupResponse;
         const cards = normalizeCardsFromResponse(response);
         setTickets(cards);
-        autoVerifyPendingSales(cards);
+        autoVerifyPendingSales(cards, cpfDigits);
       }
     } catch {
       setTickets([]);

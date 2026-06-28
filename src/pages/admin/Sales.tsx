@@ -391,6 +391,8 @@ function buildTicketCardData(
     eventDate: sale.event?.date || '',
     eventCity: sale.event?.city || '',
     eventTransportPolicy: sale.event?.transport_policy ?? 'trecho_independente',
+    // Regra do ticket virtual: o grupo do WhatsApp só chega ao card quando a venda está paga.
+    whatsappGroupLink: sale.status === 'pago' ? (sale.event?.whatsapp_group_link ?? null) : null,
     boardingToleranceMinutes: sale.event?.boarding_tolerance_minutes ?? null,
     boardingLocationName: sale.boarding_location?.name || '',
     boardingLocationAddress: sale.boarding_location?.address || '',
