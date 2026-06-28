@@ -12,13 +12,26 @@ interface GenerateTicketPdfParams {
 export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: GenerateTicketPdfParams) {
   if (ticketElement) {
     // Fonte de verdade visual da passagem: o próprio TicketCard em tela.
-    // Benefício é por ticket/CPF individual e esta captura não pode bloquear a emissão.
+    // O clone abaixo estabiliza apenas a área exportada para evitar que html2canvas
+    // recalcule o card com outra largura/responsividade no PDF.
+    const ticketWidth = Math.ceil(ticketElement.getBoundingClientRect().width || ticketElement.offsetWidth || 420);
+    const ticketHeight = Math.ceil(ticketElement.scrollHeight || ticketElement.getBoundingClientRect().height || 1);
     const domCanvas = await html2canvas(ticketElement, {
       backgroundColor: '#ffffff',
+      width: ticketWidth,
+      height: ticketHeight,
+      windowWidth: Math.max(document.documentElement.clientWidth, ticketWidth),
       useCORS: true,
       logging: false,
       scale: Math.max(2, window.devicePixelRatio || 1),
       onclone: (_document, clonedElement) => {
+        const clonedRoot = clonedElement as HTMLElement;
+        clonedRoot.style.width = `${ticketWidth}px`;
+        clonedRoot.style.maxWidth = `${ticketWidth}px`;
+        clonedRoot.style.minWidth = `${ticketWidth}px`;
+        clonedRoot.style.height = 'auto';
+        clonedRoot.style.boxSizing = 'border-box';
+
         // Mantém o box fixo e deixa a logo encaixar proporcionalmente, sem forçar dimensões na imagem.
         clonedElement.querySelectorAll('[data-ticket-company-logo-box="true"]').forEach((box) => {
           const boxEl = box as HTMLElement;
