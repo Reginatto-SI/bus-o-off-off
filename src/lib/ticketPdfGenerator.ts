@@ -18,6 +18,33 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       useCORS: true,
       logging: false,
       scale: Math.max(2, window.devicePixelRatio || 1),
+      onclone: (_document, clonedElement) => {
+        // O html2canvas pode comprimir fontes web no rodapé; no clone do PDF usamos estilos seguros.
+        clonedElement.querySelectorAll('[data-ticket-pdf-footer="true"]').forEach((footer) => {
+          const footerEl = footer as HTMLElement;
+          footerEl.style.fontFamily = 'Arial, Helvetica, sans-serif';
+          footerEl.style.letterSpacing = 'normal';
+          footerEl.style.wordSpacing = 'normal';
+          footerEl.style.fontStretch = 'normal';
+          footerEl.style.lineHeight = '20px';
+          footerEl.style.whiteSpace = 'normal';
+          footerEl.style.wordBreak = 'normal';
+          footerEl.style.overflowWrap = 'break-word';
+
+          footerEl.querySelectorAll('p').forEach((paragraph) => {
+            const el = paragraph as HTMLElement;
+            el.style.margin = '0 0 8px 0';
+            el.style.fontFamily = 'Arial, Helvetica, sans-serif';
+            el.style.letterSpacing = 'normal';
+            el.style.wordSpacing = 'normal';
+            el.style.fontStretch = 'normal';
+            el.style.lineHeight = '20px';
+            el.style.whiteSpace = 'normal';
+            el.style.wordBreak = 'normal';
+            el.style.overflowWrap = 'break-word';
+          });
+        });
+      },
       // Evita exportar ações interativas (ex.: botões "Salvar PDF"/"Salvar QR Code") no arquivo final.
       ignoreElements: (element) => (element as HTMLElement).dataset?.pdfExclude === 'true',
     });
