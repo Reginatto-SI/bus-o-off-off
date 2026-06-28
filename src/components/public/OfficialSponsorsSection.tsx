@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bus, Star, TrendingUp } from "lucide-react";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 
@@ -94,6 +94,7 @@ export function OfficialSponsorsSection({
   const sponsorCarouselRef = useRef<HTMLDivElement>(null);
   const [isDesktopSponsorCarouselHovered, setIsDesktopSponsorCarouselHovered] = useState(false);
   const [hasInteractedWithDesktopSponsorCarousel, setHasInteractedWithDesktopSponsorCarousel] = useState(false);
+  const [hasInteractedWithMobileSponsorCarousel, setHasInteractedWithMobileSponsorCarousel] = useState(false);
   const sponsorWhatsappUrl =
     buildWhatsappWaMeLink({
       phone: "(31) 99207-4309",
@@ -115,7 +116,7 @@ export function OfficialSponsorsSection({
       return;
     }
 
-    // Autoplay discreto apenas no banner desktop; mobile continua controlado por swipe para não piorar a experiência atual.
+    // Autoplay discreto no banner desktop preservado sem alterar setas, dots ou layout amplo.
     const interval = window.setInterval(() => {
       setActiveSponsorCardIndex((currentIndex) => (currentIndex + 1) % OFFICIAL_SPONSOR_CARDS.length);
     }, 8000);
@@ -153,12 +154,37 @@ export function OfficialSponsorsSection({
     setActiveSponsorCardIndex(nextIndex);
   };
 
-  const scrollToSponsorCard = (index: number) => {
+  const scrollToSponsorCard = useCallback((index: number, shouldMarkInteraction = true) => {
+    if (shouldMarkInteraction) {
+      setHasInteractedWithMobileSponsorCarousel(true);
+    }
+
     const container = sponsorCarouselRef.current;
     const card = container?.querySelector<HTMLElement>(`[data-sponsor-card="${index}"]`);
     card?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     setActiveSponsorCardIndex(index);
-  };
+  }, []);
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isMobileViewport = window.matchMedia("(max-width: 1023px)").matches;
+    if (
+      prefersReducedMotion ||
+      !isMobileViewport ||
+      hasInteractedWithMobileSponsorCarousel ||
+      OFFICIAL_SPONSOR_CARDS.length <= 1
+    ) {
+      return;
+    }
+
+    // Mobile ganha rotação leve, mas para após toque/arraste/dot para priorizar controle manual.
+    const interval = window.setInterval(() => {
+      const nextIndex = (activeSponsorCardIndex + 1) % OFFICIAL_SPONSOR_CARDS.length;
+      scrollToSponsorCard(nextIndex, false);
+    }, 7000);
+
+    return () => window.clearInterval(interval);
+  }, [activeSponsorCardIndex, hasInteractedWithMobileSponsorCarousel, scrollToSponsorCard]);
 
   return (
     <section className={className}>
@@ -188,7 +214,8 @@ export function OfficialSponsorsSection({
           <div
             ref={sponsorCarouselRef}
             onScroll={handleSponsorCarouselScroll}
-            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
+            onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
+            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
           >
             {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
@@ -199,7 +226,7 @@ export function OfficialSponsorsSection({
                 <article
                   key={card.headline}
                   data-sponsor-card={index}
-                  className="flex min-w-[86%] snap-center flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)] sm:min-w-[48%]"
+                  className="flex min-w-full shrink-0 snap-center flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)]"
                 >
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
