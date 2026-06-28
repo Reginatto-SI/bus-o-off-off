@@ -160,28 +160,9 @@ export function PassengerTicketList({
   return (
     <div className="space-y-3">
 
-      {/* Exibe o convite uma única vez por venda/listagem, evitando repetição em cada passagem do passageiro. */}
-      {paidWhatsAppGroupLinks.map((paidWhatsAppGroupLink) => (
-        <Alert key={paidWhatsAppGroupLink} className="border-green-200 bg-green-50 text-green-900">
-          <MessageCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="space-y-0.5">
-              <span className="block font-semibold">Grupo WhatsApp do evento</span>
-              <span className="block">Entre no grupo oficial para acompanhar avisos e orientações da viagem.</span>
-            </span>
-            <Button asChild size="sm" variant="outline" className="border-green-300 bg-white text-green-800 hover:bg-green-100">
-              <a href={paidWhatsAppGroupLink} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Entrar no grupo
-              </a>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ))}
-
       {/* Resumo geral quando há múltiplos passageiros */}
       {groups.length > 1 && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+        <div className="flex items-center gap-2 text-sm text-[hsl(var(--ticket-muted))] mb-1">
           <User className="h-4 w-4" />
           <span>
             {groups.length} passageiro{groups.length > 1 ? 's' : ''}
