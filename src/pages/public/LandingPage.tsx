@@ -332,7 +332,7 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
     type: "placeholder",
     icon: TrendingUp,
     headline: "Sua marca em uma plataforma em crescimento",
-    text: "Média atual de 1.600 visualizações mensais na landing em uma vitrine digital de excursões e passagens.",
+    text: "Conecte sua empresa a uma vitrine digital de excursões e passagens.",
     cta: "Conhecer espaço publicitário",
     accent: "from-slate-950 via-slate-800 to-primary/70",
   },
@@ -1016,7 +1016,6 @@ export default function LandingPage() {
               className="mt-6 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] sm:mt-7 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0 [&::-webkit-scrollbar]:hidden"
             >
               {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
-                const Icon = card.icon ?? Star;
                 const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
 
                 return (
@@ -1036,37 +1035,20 @@ export default function LandingPage() {
                           />
                         </a>
                       ) : (
-                        <>
-                          <div className="absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.95),transparent_28%),radial-gradient(circle_at_82%_24%,rgba(249,115,22,0.28),transparent_24%)]" />
-                          <div className="absolute inset-x-8 bottom-8 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" aria-hidden="true" />
-                          <div className="absolute bottom-6 left-8 flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/85 text-primary shadow-sm backdrop-blur" aria-hidden="true">
-                            <MapPin className="h-4 w-4" />
+                        <div className="flex h-full items-center justify-center px-6 text-center">
+                          {/* Placeholder limpo: a área superior deve se comportar como banner real, sem competir com o conteúdo do card. */}
+                          <div className="space-y-3">
+                            <p className="text-lg font-semibold uppercase tracking-[0.34em] text-slate-900">
+                              Anuncie aqui
+                            </p>
+                            <p className="mx-auto max-w-[15rem] text-sm leading-relaxed text-slate-500">
+                              Espaço reservado para patrocinador oficial
+                            </p>
                           </div>
-                          <div className="absolute bottom-6 left-1/2 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-white/70 bg-white/85 text-slate-900 shadow-sm backdrop-blur" aria-hidden="true">
-                            <Bus className="h-4 w-4" />
-                          </div>
-                          <div className="absolute bottom-6 right-8 flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/85 text-primary shadow-sm backdrop-blur" aria-hidden="true">
-                            <TrendingUp className="h-4 w-4" />
-                          </div>
-                        </>
+                        </div>
                       )}
-                      <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-900 shadow-sm backdrop-blur">
+                      <div className="absolute left-4 top-4 inline-flex items-center rounded-full border border-white/60 bg-white/75 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 shadow-sm backdrop-blur">
                         Patrocinador Oficial
-                      </div>
-                      <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
-                        <div className="space-y-2">
-                          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
-                            <Icon className="h-5 w-5" />
-                          </div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">
-                            {card.type === "sponsor" ? card.sponsorName : "Anuncie aqui"}
-                          </p>
-                        </div>
-                        <div className="rounded-2xl border border-white/60 bg-white/75 px-3 py-2 text-right shadow-sm backdrop-blur" aria-hidden="true">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vitrine</p>
-                          <p className="text-lg font-black leading-none text-primary">1.6k</p>
-                          <p className="text-[10px] font-medium text-slate-600">views/mês</p>
-                        </div>
                       </div>
                     </div>
                     <div className="flex flex-1 flex-col space-y-3 p-5">
