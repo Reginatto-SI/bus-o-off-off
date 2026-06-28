@@ -33,6 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { formatPhoneBR } from '@/lib/phone';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import {
   getTicketTransportOperatedByText,
@@ -171,6 +172,9 @@ export function TicketCard({
   const isCancelled = ticket.saleStatus === 'cancelado';
   const companyLoc = [ticket.companyCity, ticket.companyState].filter(Boolean).join(' - ');
   const formattedCnpj = formatCnpjDisplay(ticket.companyCnpj);
+  // Formata apenas a exibição da passagem/PDF, preservando o valor original recebido do banco.
+  const formattedCompanyPhone = ticket.companyPhone ? formatPhoneBR(ticket.companyPhone) || ticket.companyPhone : null;
+  const formattedCompanyWhatsapp = ticket.companyWhatsapp ? formatPhoneBR(ticket.companyWhatsapp) || ticket.companyWhatsapp : null;
   const seatDisplayLabel = getFriendlySeatLabel(ticket.seatLabel);
   const ticketNumberDisplay = ticket.ticketNumber || null;
   const purchaseConfirmedLabel = ticket.purchaseConfirmedAt
@@ -341,14 +345,14 @@ export function TicketCard({
                 {companyLoc && (
                   <p className="text-[11px] text-[hsl(var(--ticket-muted))]">{companyLoc}</p>
                 )}
-                {ticket.companyPhone && (
+                {formattedCompanyPhone && (
                   <p className="text-[12px] text-[hsl(var(--ticket-text))] flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-[hsl(var(--ticket-accent))]" /> {ticket.companyPhone}
+                    <Phone className="h-4 w-4 text-[hsl(var(--ticket-accent))]" /> {formattedCompanyPhone}
                   </p>
                 )}
-                {ticket.companyWhatsapp && (
+                {formattedCompanyWhatsapp && (
                   <p className="text-[12px] text-[hsl(var(--ticket-text))] flex items-center gap-2">
-                    <WhatsAppIcon size={15} className="text-[hsl(var(--ticket-accent))]" /> {ticket.companyWhatsapp}
+                    <WhatsAppIcon size={15} className="text-[hsl(var(--ticket-accent))]" /> {formattedCompanyWhatsapp}
                   </p>
                 )}
               </div>
