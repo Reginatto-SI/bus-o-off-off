@@ -15,11 +15,9 @@
 import { useState, useMemo } from 'react';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { User, ChevronDown, Armchair, ArrowLeftRight, ArrowRight, MessageCircle, ExternalLink } from 'lucide-react';
+import { User, ChevronDown, Armchair, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TransportPolicy } from '@/types/database';
 
