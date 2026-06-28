@@ -4,6 +4,7 @@ import { usePageMeta } from '@/lib/usePageMeta';
 import { supabase } from '@/integrations/supabase/client';
 import { EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
+import { OfficialSponsorsSection } from '@/components/public/OfficialSponsorsSection';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,6 +111,15 @@ export default function PublicEvents() {
               sellerRef={sellerRef} 
             />
           </section>
+        )}
+
+        {/* Patrocinadores institucionais: só aparecem quando há passagens visíveis, para não competir com estados vazios. */}
+        {!loading && filteredEvents.length > 0 && (
+          <OfficialSponsorsSection
+            compact
+            className="py-0"
+            subtitle="Marcas parceiras em destaque na vitrine pública de passagens e excursões."
+          />
         )}
 
         {/* Todos os Eventos */}
