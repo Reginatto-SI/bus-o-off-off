@@ -1953,7 +1953,7 @@ export default function LandingPage() {
                 alt="Smartbus BR"
                 className="h-10 object-contain brightness-0 invert"
               />
-              <p className="text-sm leading-relaxed text-white/40">
+              <p className="text-sm leading-relaxed text-white/80">
                 Plataforma para empresas de viagens, eventos e excursões
                 venderem, divulgarem e operarem com mais controle.
               </p>
@@ -1989,7 +1989,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/eventos"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Buscar viagens
                   </Link>
@@ -1997,7 +1997,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/consultar-passagens"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Consultar passagens
                   </Link>
@@ -2012,7 +2012,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/cadastro"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Cadastrar empresa
                   </Link>
@@ -2020,7 +2020,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/login"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Acessar painel
                   </Link>
@@ -2028,7 +2028,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/seja-representante"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Seja um representante
                   </Link>
@@ -2043,7 +2043,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/sobre-smartbus-br"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Sobre a Smartbus BR
                   </Link>
@@ -2051,7 +2051,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     to="/politica-de-intermediacao"
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Política de intermediação
                   </Link>
@@ -2060,7 +2060,7 @@ export default function LandingPage() {
                   <button
                     type="button"
                     onClick={() => setOfficialQrModalOpen(true)}
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Baixar QR Code SmartBus BR
                   </button>
@@ -2070,7 +2070,7 @@ export default function LandingPage() {
                   <a
                     href="/Logo_Smartbusbr_.zip"
                     download
-                    className="text-sm text-white/40 transition-colors hover:text-white"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Baixar kit de marca
                   </a>
@@ -2081,7 +2081,7 @@ export default function LandingPage() {
         </div>
         <div className="border-t border-white/5 py-5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <p className="text-center text-xs text-white/30">
+            <p className="text-center text-xs text-white/70">
               © {new Date().getFullYear()} Smartbus BR. Todos os direitos
               reservados • CNPJ 59.461.123/0001-72
             </p>
