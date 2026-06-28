@@ -68,7 +68,19 @@
     --hero-gradient: linear-gradient(135deg, hsl(217 91% 45%) 0%, hsl(217 91% 55%) 100%);
     --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
     --card-shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+
+    /* SmartBus Ticket — tema fixo (não personalizável pela empresa) */
+    --ticket-bg: 222 47% 8%;
+    --ticket-surface: 222 40% 13%;
+    --ticket-surface-2: 222 35% 16%;
+    --ticket-border: 222 30% 22%;
+    --ticket-text: 0 0% 100%;
+    --ticket-muted: 215 20% 70%;
+    --ticket-accent: 25 95% 53%;
+    --ticket-success: 142 71% 45%;
+    --ticket-success-bg: 142 60% 14%;
   }
+
 
   .dark {
     --background: 222 47% 8%;

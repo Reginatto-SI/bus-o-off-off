@@ -1,96 +1,113 @@
-## Diagnóstico (causa provável)
+## Objetivo
 
-Hoje, em contexto de app instalado/PWA/TWA/WebView, o `Checkout.tsx` faz `window.location.assign(asaasInvoiceUrl)` (linha 1777). Isso **substitui a janela do app pela página do Asaas**. A partir desse momento:
+Substituir o visual atual de `TicketCard.tsx` por um layout mobile vertical, fundo azul-marinho escuro, acentos laranja SmartBus e verde apenas para status "Pago", fiel à imagem de referência. Em paralelo, parar de aplicar `ticket_color` / `primary_color` da empresa na passagem virtual e sinalizar isso na aba Identidade Visual.
 
-- Pix pago em **outro celular** → o Asaas no celular original só atualiza por polling interno; o `autoRedirect` só dispara quando a página do Asaas detecta `RECEIVED`. Em muitos cenários reais (Pix copiado/cobrança em outro device), o `autoRedirect` nunca acontece de forma confiável → usuário fica "preso na tela do Asaas".
-- Se o usuário fecha o Asaas com "voltar", em TWA/PWA standalone o app já tinha sido substituído pela URL externa, então o "voltar" leva ao histórico do navegador, não à tela de confirmação.
+Nada de regra de negócio muda: QR, status, PDF, geração de tickets, RLS, fluxos de pagamento e dados vindos do banco permanecem idênticos. Só muda apresentação.
 
-A tela `/confirmacao/:saleId` **já faz o certo** quando recebe o usuário: prioriza tickets (Confirmation.tsx:630‑638, 720‑738), faz polling 3s, chama `verify-payment-status` a cada ~30s, e tem fallback de recarga de tickets em pago. O problema é estrutural: o usuário não está nessa tela enquanto paga.
+## Escopo de arquivos
 
-## Decisão de UX (sua pergunta direta)
+1. **`src/components/public/TicketCard.tsx`** — reescrita visual completa do card mantendo a mesma assinatura de props (`TicketCardData`, `TicketCardProps`), os mesmos refs (`qrRef`, `ticketContainerRef`) e os mesmos handlers (`handleDownloadPdf`, `handleDownloadImage`, `handleCopySaleId`, `onRefreshStatus`). Remover uso de `ticket.companyPrimaryColor` / `accentColor` dinâmico — passar a usar tokens fixos SmartBus.
 
-**Opção A — passagem no topo da própria `/confirmacao/:saleId` (sem modal).** Mais segura para PWA/WebView/iOS standalone, onde modais e `window.open` automáticos têm comportamento inconsistente, podem ser bloqueados ou aparecer fora do contexto do app. A tela já está estruturada para isso. Não introduzir modal automático.
+2. **`src/components/admin/BrandIdentityTab.tsx`** — manter o campo "Cor principal da passagem" (continua salvando em `ticket_color`, pois `ticketVisualRenderer.ts` e outros lugares ainda consomem), mas adicionar aviso curto e não bloqueante explicando que essa cor **não é mais aplicada na nova passagem virtual SmartBus**, e segue valendo apenas para outros usos visuais legados (PDF antigo / renderer). Não remover o campo nem migration.
 
-## Mudança principal (fluxo)
+3. **`src/index.css`** — adicionar tokens fixos da passagem SmartBus (apenas escopados ao card), sem mexer em tokens globais:
+   - `--ticket-bg`, `--ticket-surface`, `--ticket-border`, `--ticket-text`, `--ticket-muted`, `--ticket-accent` (laranja SmartBus `#F97316`), `--ticket-success` (verde `#22C55E`).
 
-Trocar a estratégia em **app instalado/PWA/WebView** de "navegar a janela do app para o Asaas" para "navegar a janela do app para `/confirmacao/:saleId?retorno=asaas` e abrir o Asaas em janela auxiliar":
+4. **`docs/Analises/analise-redesign-passagem-virtual.md`** — relatório obrigatório (padrão do projeto) descrevendo a alteração visual, o porquê de descontinuar a cor personalizada na passagem, arquivos alterados, compatibilidade e testes.
+
+Não tocar em: `ticketPdfGenerator.ts`, `ticketImageGenerator.ts`, `ticketVisualRenderer.ts`, edge functions, schema, RLS, ou lógica de QR.
+
+## Estrutura visual (mobile vertical, largura máx ~420px, centralizado em desktop)
 
 ```text
-Antes (app instalado):
-  [App] -- assign(asaasInvoiceUrl) --> [Asaas no lugar do app]
-  Pix pago em outro device → autoRedirect incerto → preso
-
-Depois (app instalado):
-  [App] -- assign(/confirmacao/:saleId?retorno=asaas) --> [App na tela de confirmação, polling ativo]
-                                                              |
-                                                              +-- window.open(asaasInvoiceUrl) --> [Custom Tab/Safari View]
-  Pix pago em qualquer device → /confirmacao detecta pago → passagem aparece no topo
-  Usuário fechar a Custom Tab cai direto na /confirmacao (app continua vivo)
+┌──────────────────────────────────────────┐
+│ 🎟 Passagem digital                      │  Cabeçalho (ícone laranja + título branco)
+│   Apresente este bilhete no embarque     │  Subtítulo cinza claro
+├──────────────────────────────────────────┤
+│ ┌──────────────────────────────────────┐ │
+│ │ 👤  Nome do passageiro principal     │ │  Card resumo
+│ │     CPF: ***.209.226-**              │ │  (fundo --ticket-surface,
+│ │ ──────────────────────────────────── │ │   borda --ticket-border)
+│ │  [💺 16]   [↔ Ida e Volta]  [✓ Pago] │ │  3 blocos: Assento / Tipo / Status
+│ └──────────────────────────────────────┘ │
+│                                          │
+│ [WhatsApp]  [Salvar PDF]  [Salvar QR]    │  3 botões (WhatsApp condicional)
+│                                          │
+│ ┌──────────────────────────────────────┐ │
+│ │ SmartBus BR        [LOGO EMPRESA]    │ │  Card principal:
+│ │ VIAGENS & PASSEIOS  7 FEST           │ │  identidade
+│ │                     CNPJ/Cidade/Tel  │ │
+│ │ ──── divisória laranja fina ──────── │ │
+│ │                                      │ │
+│ │            [ QR CODE ]               │ │  QR centralizado, fundo branco
+│ │       Apresente no embarque          │ │
+│ │ ──── divisória ───────────────────── │ │
+│ │ PASSAGEIRO       │ BILHETE           │ │  Grid 2 colunas (empilha < 360px)
+│ │ ──── divisória ───────────────────── │ │
+│ │ EVENTO                               │ │
+│ │ ──── divisória ───────────────────── │ │
+│ │ EMBARQUE                             │ │
+│ │ ──── divisória ───────────────────── │ │
+│ │ INFORMAÇÕES DO VEÍCULO (3 blocos)    │ │
+│ │ ──── divisória ───────────────────── │ │
+│ │ OBSERVAÇÕES OPERACIONAIS             │ │
+│ └──────────────────────────────────────┘ │
+│ ┌──────────────────────────────────────┐ │
+│ │ Rodapé: operado por / plataforma /   │ │
+│ │ texto legal / gerado por             │ │
+│ └──────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
 ```
 
-Em navegador comum (não-app), manter o comportamento atual (nova aba pré-aberta).
+Títulos de seção (`PASSAGEIRO`, `BILHETE`, `EVENTO`, `EMBARQUE`, `INFORMAÇÕES DO VEÍCULO`, `OBSERVAÇÕES OPERACIONAIS`) em laranja SmartBus, tipografia caixa alta tracking-wide.
 
-## Arquivos a alterar
+## Detalhes técnicos
 
-1. **`src/pages/public/Checkout.tsx`**
-   - Em `isInstalledAppContext === true` (linha 1774‑1777), em vez de `window.location.assign(asaasInvoiceUrl)`:
-     - `window.open(asaasInvoiceUrl, '_blank', 'noopener')` (vira Custom Tab no TWA, Safari View no iOS standalone). Se `open` retornar `null`, fazer fallback para `location.assign` (comportamento antigo).
-     - Em seguida, `window.location.assign('/confirmacao/' + sale.id + '?retorno=asaas')` para deixar o app na tela de confirmação com polling ativo desde já.
-   - Atualizar `logAsaasInvoiceOpen` com `navigation_strategy: 'app_confirmation_plus_invoice_tab'` (e fallback `same_window_assign`).
-   - Nenhuma mudança no fluxo de navegador comum (preOpened tab continua como está).
+- **Cor fixa**: ignorar `ticket.companyPrimaryColor` no JSX. Acento sempre `var(--ticket-accent)`. Status "Pago" sempre verde. Substituir todas as referências a `accentColor` no componente por tokens fixos.
+- **Container raiz**: `Card` substituído por `<div>` com `bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] rounded-2xl max-w-[420px] mx-auto`. Mantém `ref={ticketContainerRef}` (PDF html2canvas continua funcionando).
+- **Reservado/cancelado/processando**: preservar exatamente os estados atuais (`isReservedReceipt`, `isCancelled`, `displayStatus`, `showRefreshButton`, alert de QR indisponível). Só re-skinar visualmente para o tema escuro.
+- **Botões**: usar `Button` shadcn com variantes adaptadas; WhatsApp só aparece quando `ticket.whatsappGroupLink && ticket.saleStatus === 'pago' && showWhatsAppGroupCta`. PDF e QR sempre quando `canDownload`.
+- **Ícones**: usar lucide-react já importado (`Ticket`, `User`, `Armchair`, `ArrowLeftRight`, `FileText`, `QrCode`, `Phone`, `MapPin`, `Calendar`, `Clock`, `Bus`, `Hash`, `Info`, `Star`). Adicionar `IdCard` para placa, ou caso indisponível, manter um SVG inline minimalista.
+- **WhatsApp**: usar `src/components/ui/WhatsAppIcon.tsx` que já existe (ícone oficial).
+- **Logo SmartBus**: usar `@/components/Logo` com variante apropriada (já existe). Logo da empresa permanece como `<img src={ticket.companyLogoUrl}>` em área controlada de ~48–56px.
+- **Responsividade**: passagem é sempre mobile-shape (`max-w-[420px]`). Em desktop, centraliza, sem expandir.
+- **Compatibilidade PDF**: `ticketPdfGenerator` usa html2canvas sobre `ticketContainerRef` → o novo visual será capturado automaticamente. `ticketVisualRenderer.ts` (canvas alternativo) não é alterado e continua usando `ticket_color` (uso legado, não impacta a tela).
 
-2. **`src/pages/public/Confirmation.tsx`** (apenas reforços, sem regra financeira)
-   - Adicionar logs estruturados sem dados sensíveis: `[confirmation] mount`, `[confirmation] tickets_loaded` com `{ sale_id, retorno, sale_status, tickets_count, payment_method }`; `[confirmation] paid_no_tickets_retry { attempt }`; `[confirmation] reload_tickets_error`.
-   - Quando `isAsaasReturn && !isPaid`, encurtar o intervalo de polling de 3s → 2s nos primeiros 30s (só nesse cenário), depois volta a 3s. Mantém timeout total de 6 min.
-   - Botão "Atualizar passagem" já existe (linha 649‑661) quando `paidTicketReloadTimedOut`. Adicionar também um botão secundário "Reabrir cobrança Asaas" no estado "pago sem tickets ainda" caso o usuário queira reconferir lá (reutiliza `handleReopenAsaasInvoice`, já existente).
-   - Garantir que, em `isPaid && ticketCards.length > 0`, o bloco de tickets (linha 721‑738) renderize **antes** do header de status (já está logicamente correto via fluxo do JSX, mas confirmar que o `<div className="text-center mb-8">` do header de "Sua passagem digital" + os cards juntos formam a primeira tela visível — sem precisar de scroll em mobile). Caso necessário, reduzir paddings no header em mobile.
+## Política de cor da empresa
 
-3. **`src/lib/asaasInvoiceUrl.ts`**
-   - Estender `logAsaasInvoiceOpen` aceitando `'app_confirmation_plus_invoice_tab'` no union de `navigationStrategy`.
+- Campo "Cor principal da passagem" em `BrandIdentityTab` continua salvando `companies.ticket_color` (não quebra dados existentes nem migration).
+- Adicionar aviso curto abaixo do campo: *"Esta cor não é mais aplicada na nova passagem virtual SmartBus. A passagem segue o padrão visual oficial da plataforma."*
+- Nenhum dado é apagado. Nenhum campo removido. Nenhuma migration.
+- `primary_color` e `accent_color` continuam intactos e seguem afetando vitrine pública e branding dinâmico — fora do escopo desta mudança.
 
-## O que NÃO muda (regra crítica)
+## O que não muda
 
-- Webhook Asaas, `verify-payment-status`, `finalizeConfirmedPayment`, split, criação de tickets, venda manual, `externalReference`, tabelas do banco, status de venda.
-- Nenhuma criação de ticket no frontend. Polling só consulta.
-- `?retorno=asaas` continua sendo apenas contexto de UX.
-
-## Por que essa abordagem é a mais segura em mobile
-
-- **App nunca é "abandonado"**: a tela do app fica em `/confirmacao` com polling ativo desde o segundo seguinte ao clique em "Pagar". Mesmo se o Asaas não disparar `autoRedirect` (caso comum de Pix pago em outro device), o app já detecta `pago` por conta própria e troca para a passagem digital.
-- **Custom Tabs/Safari View** preservam o app em segundo plano. Fechar a aba do gateway devolve o usuário automaticamente à tela de confirmação — sem precisar "apertar voltar várias vezes".
-- **Sem modal automático**: modais auto-abertos em PWA standalone/WebView têm histórico de bloqueio, foco perdido, e em iOS standalone podem fechar a stack. Passagem no topo da tela é nativamente confiável.
+- `TicketCardData` (mesmas propriedades).
+- Geração de QR, validação, PDF, imagem PNG.
+- Fluxo de status (`pago`, `reservado`, `cancelado`, `processando`).
+- `onRefreshStatus`, polling, alerts de reserva e cancelamento.
+- Regras de WhatsApp condicional e exibição de número global da passagem.
+- Lista agrupada `PassengerTicketList.tsx` (apenas consome `TicketCard`, não precisa alteração).
+- Edge functions, RLS, schema, types.
 
 ## Testes manuais
 
-### Android (PWA instalado + TWA da loja)
-1. Comprar passagem, escolher Pix.
-2. Confirmar que o app navega para `/confirmacao/:id?retorno=asaas` e o Asaas abre em Custom Tab por cima.
-3. Pagar Pix em **outro celular**.
-4. Voltar para a Custom Tab → autoRedirect ou fechar manualmente. Confirmar que cai em `/confirmacao` já com passagem no topo (ou com "carregando passagem" e depois passagem).
-5. Repetir com cartão.
+1. `/confirmacao/:id` com venda `pago` → ver a nova passagem escura no mobile (DevTools 390px) e desktop centralizada.
+2. Conferir QR escaneando com câmera real (validação via `/validador`).
+3. Salvar PDF → conferir layout do novo card no PDF gerado.
+4. Salvar só QR Code → arquivo PNG continua sendo só o QR.
+5. WhatsApp condicional: passagem com `whatsappGroupLink` → botão aparece em verde; sem link → some.
+6. Venda `reservado` (com pagamento pendente) → alerta amarelo de QR indisponível continua funcionando, botão "Atualizar status" presente.
+7. Venda `cancelado` → faixa CANCELADA aparece sobre QR e opacidade reduzida.
+8. `/admin/empresa` → aba Identidade Visual → aviso novo aparece em "Cor principal da passagem"; mudar a cor lá **não** afeta mais o card em `/confirmacao`.
+9. Empresa com `companyLogoUrl` ausente → área da logo não quebra layout.
+10. Smoke test em iOS PWA standalone e Android TWA via `/confirmacao/:id` real.
 
-### iOS (PWA Adicionar à Tela + TWA wrapper)
-1. Repetir os passos. A aba auxiliar abre como Safari View Controller.
-2. Validar que fechar o Safari View devolve direto para o app na `/confirmacao`.
-3. Confirmar que **não** aparece modal automático.
+## Critérios de aceite
 
-### Navegador comum (Chrome desktop, Safari desktop)
-1. Confirmar que o comportamento antigo (nova aba pré-aberta com "Preparando sua cobrança", aba original em `/confirmacao`) continua igual.
-
-### Logs (DevTools → Console)
-- `[asaas] open_invoice { navigation_strategy: 'app_confirmation_plus_invoice_tab', has_auto_redirect: true, ... }` no clique de pagar (app instalado).
-- `[confirmation] mount { sale_id, retorno: 'asaas', sale_status, payment_method }`.
-- `[confirmation] polling:trigger_verify_payment_status` a cada ~20‑30s.
-- `[confirmation] tickets_loaded { tickets_count > 0 }` quando passagem renderiza.
-
-## Critério de aceite
-
-- Em app instalado, após pagar Pix/cartão no Asaas, o usuário volta automaticamente (autoRedirect) **ou** ao fechar a Custom Tab cai em `/confirmacao/:saleId?retorno=asaas` dentro do app.
-- Se `sales.status='pago'` e existem `tickets`, a passagem digital com QR Code é a primeira coisa visível na tela.
-- Se `pago` sem tickets ainda, mensagem "Pagamento confirmado. Estamos carregando sua passagem digital." + retry automático + botão "Atualizar passagem" no timeout.
-- Se ainda processando, tela explica claramente e segue tentando.
-- Nenhuma regra financeira muda; webhook + verify continuam fontes únicas de verdade.
-
-## Próximo passo
-
-Confirmar para eu implementar exatamente os 3 arquivos acima.
+- Visual da passagem em `/confirmacao` corresponde à referência (cabeçalho, card passageiro, 3 botões, card principal com QR centralizado, seções, rodapé).
+- Largura máx ~420px, sempre vertical, fundo escuro fixo.
+- Nenhuma cor da empresa é aplicada como fundo/borda/destaque do card.
+- Botões salvar PDF e salvar QR continuam gerando os mesmos arquivos.
+- Build passa, nenhum teste existente quebra.
+- Relatório `docs/Analises/analise-redesign-passagem-virtual.md` criado.
