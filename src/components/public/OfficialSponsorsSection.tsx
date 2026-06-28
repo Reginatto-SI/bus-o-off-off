@@ -142,9 +142,8 @@ export function OfficialSponsorsSection({
     const firstCard = container.querySelector<HTMLElement>("[data-sponsor-card]");
     if (!firstCard) return;
 
-    // Mantém o indicador mobile sincronizado sem biblioteca extra: o índice vem da largura real do card + gap do carrossel.
-    const gap = Number.parseFloat(window.getComputedStyle(container).columnGap || "0");
-    const step = firstCard.offsetWidth + gap;
+    // Mantém o indicador mobile sincronizado sem biblioteca extra: cada item ocupa a largura visível do scroll.
+    const step = firstCard.offsetWidth;
     if (step <= 0) return;
 
     const nextIndex = Math.min(
@@ -161,7 +160,10 @@ export function OfficialSponsorsSection({
 
     const container = sponsorCarouselRef.current;
     const card = container?.querySelector<HTMLElement>(`[data-sponsor-card="${index}"]`);
-    card?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (container && card) {
+      // Evita desalinhamento lateral no mobile: o snap começa no início do item, não no centro.
+      container.scrollTo({ left: card.offsetLeft - container.offsetLeft, behavior: "smooth" });
+    }
     setActiveSponsorCardIndex(index);
   }, []);
 
@@ -188,7 +190,7 @@ export function OfficialSponsorsSection({
 
   return (
     <section className={className}>
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className={`mx-auto max-w-7xl ${compact ? "px-0" : "px-4 sm:px-6 lg:px-8"}`}>
         <div className={`rounded-[2rem] border border-border/80 bg-card/95 shadow-[0_28px_80px_-60px_rgba(15,23,42,0.55)] ${compact ? "p-3 sm:p-4 lg:p-5" : "p-4 sm:p-5 lg:p-6"}`}>
           <div className={`flex flex-col ${compact ? "gap-3" : "gap-3"} lg:flex-row lg:items-end lg:justify-between`}>
             <div className={`${compact ? "max-w-4xl space-y-2" : "max-w-3xl space-y-2"}`}>
@@ -215,7 +217,7 @@ export function OfficialSponsorsSection({
             ref={sponsorCarouselRef}
             onScroll={handleSponsorCarouselScroll}
             onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
-            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
+            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x snap-mandatory gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
           >
             {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
@@ -226,7 +228,7 @@ export function OfficialSponsorsSection({
                 <article
                   key={card.headline}
                   data-sponsor-card={index}
-                  className="flex min-w-full shrink-0 snap-center flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)]"
+                  className="flex w-full min-w-0 flex-none basis-full snap-start flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)]"
                 >
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
@@ -243,9 +245,9 @@ export function OfficialSponsorsSection({
                       </div>
                     )}
                   </div>
-                  <div className={`flex flex-1 flex-col ${compact ? "space-y-2 p-3 sm:p-4" : "space-y-3 p-5"}`}>
-                    <h3 className={`${compact ? "min-h-0" : "min-h-[2.5rem]"} text-base font-bold leading-tight text-foreground`}>{card.headline}</h3>
-                    <p className={`${compact ? "min-h-0" : "min-h-[3rem]"} flex-1 text-sm leading-relaxed text-muted-foreground`}>{card.text}</p>
+                  <div className={`flex min-w-0 flex-1 flex-col ${compact ? "space-y-2 p-4" : "space-y-3 p-5"}`}>
+                    <h3 className={`${compact ? "min-h-0" : "min-h-[2.5rem]"} break-words text-base font-bold leading-tight text-foreground`}>{card.headline}</h3>
+                    <p className={`${compact ? "min-h-0" : "min-h-[3rem]"} flex-1 break-words text-sm leading-relaxed text-muted-foreground`}>{card.text}</p>
                     <a href={cardHref} target="_blank" rel="noreferrer" className="mt-auto inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary to-orange-500 px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 transition-all hover:-translate-y-0.5 hover:shadow-primary/25">
                       {card.cta}
                       <ArrowRight className="h-4 w-4" />
