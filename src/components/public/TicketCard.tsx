@@ -320,12 +320,18 @@ export function TicketCard({
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[hsl(var(--ticket-accent))]">Empresa organizadora</p>
             <div className={ticket.companyLogoUrl ? "grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4" : "block"}>
               {ticket.companyLogoUrl ? (
-                <img
-                  src={ticket.companyLogoUrl}
-                  alt={ticket.companyName}
-                  className="h-28 w-28 rounded-2xl object-contain bg-white p-2 shadow-sm shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+                <div
+                  data-ticket-company-logo-box="true"
+                  className="h-28 w-28 rounded-2xl bg-white p-2 shadow-sm shrink-0 flex items-center justify-center overflow-hidden"
+                >
+                  <img
+                    src={ticket.companyLogoUrl}
+                    alt={ticket.companyName}
+                    data-ticket-company-logo="true"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
               ) : null}
               <div className={`min-w-0 space-y-2 ${ticket.companyLogoUrl ? 'border-l border-[hsl(var(--ticket-border))] pl-4' : ''}`}>
                 <p className="text-lg font-bold leading-tight break-words">{ticket.companyName}</p>
@@ -424,63 +430,49 @@ export function TicketCard({
 
         <SectionDivider />
 
-        {/* 7. Passageiro + Bilhete */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <SectionTitle>Passageiro</SectionTitle>
+        {/* 7. Bilhete — dados do passageiro já aparecem no resumo superior para evitar redundância. */}
+        <div className="space-y-2">
+          <SectionTitle>Bilhete</SectionTitle>
+          {ticketNumberDisplay && (
+            <div className="flex items-center gap-2 text-xs">
+              <Hash className="h-3.5 w-3.5 text-[hsl(var(--ticket-muted))]" />
+              <span className="text-[hsl(var(--ticket-muted))]">Passagem Nº</span>
+              <span className="font-medium">{ticketNumberDisplay}</span>
+            </div>
+          )}
+          {purchaseConfirmedLabel && (
             <div className="flex items-start gap-2 text-xs">
-              <User className="h-3.5 w-3.5 mt-0.5 text-[hsl(var(--ticket-muted))] shrink-0" />
-              <span className="break-words">{ticket.passengerName}</span>
+              <Calendar className="h-3.5 w-3.5 mt-0.5 text-[hsl(var(--ticket-muted))]" />
+              <span className="text-[hsl(var(--ticket-muted))]">Compra em</span>
+              <span>{purchaseConfirmedLabel}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[hsl(var(--ticket-muted))]">
-              <IdCard className="h-3.5 w-3.5" />
-              <span>CPF: {maskCpf(ticket.passengerCpf)}</span>
+          )}
+          {/* A seção Bilhete fica restrita a identificadores da compra; origem, tipo, assento e volta já aparecem no resumo/embarque. */}
+          {ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[hsl(var(--ticket-muted))]">Pavimento</span>
+              <span>{ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}</span>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <SectionTitle>Bilhete</SectionTitle>
-            {ticketNumberDisplay && (
-              <div className="flex items-center gap-2 text-xs">
-                <Hash className="h-3.5 w-3.5 text-[hsl(var(--ticket-muted))]" />
-                <span className="text-[hsl(var(--ticket-muted))]">Passagem Nº</span>
-                <span className="font-medium">{ticketNumberDisplay}</span>
-              </div>
-            )}
-            {purchaseConfirmedLabel && (
-              <div className="flex items-start gap-2 text-xs">
-                <Calendar className="h-3.5 w-3.5 mt-0.5 text-[hsl(var(--ticket-muted))]" />
-                <span className="text-[hsl(var(--ticket-muted))]">Compra em</span>
-                <span>{purchaseConfirmedLabel}</span>
-              </div>
-            )}
-            {/* A seção Bilhete fica restrita a identificadores da compra; origem, tipo, assento e volta já aparecem no resumo/embarque. */}
-            {ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-[hsl(var(--ticket-muted))]">Pavimento</span>
-                <span>{ticket.seatFloor === 2 ? 'Superior' : 'Inferior'}</span>
-              </div>
-            )}
-            {ticket.seatCategory && ticket.seatCategory !== 'convencional' && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-[hsl(var(--ticket-muted))]">Categoria</span>
-                <span>{seatCategoryLabel[ticket.seatCategory] || ticket.seatCategory}</span>
-              </div>
-            )}
-            {ticket.saleId && (
-              <div className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--ticket-muted))]">
-                <span>Código: <span className="font-mono">{ticket.saleId.slice(0, 8)}</span></span>
-                <button
-                  onClick={handleCopySaleId}
-                  className="p-0.5 rounded hover:bg-[hsl(var(--ticket-surface-2))] transition-colors"
-                  title="Copiar código completo"
-                  data-pdf-exclude="true"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>
+          )}
+          {ticket.seatCategory && ticket.seatCategory !== 'convencional' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[hsl(var(--ticket-muted))]">Categoria</span>
+              <span>{seatCategoryLabel[ticket.seatCategory] || ticket.seatCategory}</span>
+            </div>
+          )}
+          {ticket.saleId && (
+            <div className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--ticket-muted))]">
+              <span>Código: <span className="font-mono">{ticket.saleId.slice(0, 8)}</span></span>
+              <button
+                onClick={handleCopySaleId}
+                className="p-0.5 rounded hover:bg-[hsl(var(--ticket-surface-2))] transition-colors"
+                title="Copiar código completo"
+                data-pdf-exclude="true"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         <SectionDivider />
