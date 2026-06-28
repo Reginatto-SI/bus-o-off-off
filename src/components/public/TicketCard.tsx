@@ -364,6 +364,22 @@ export function TicketCard({
               <p>Contato: (31) 99207-4309</p>
             </div>
           </div>
+
+          <div className="h-px w-full bg-[hsl(var(--ticket-accent))]/40" />
+
+          <div className="rounded-xl bg-[hsl(var(--ticket-surface-2))]/45 px-3 py-4 text-center">
+            {/* Usa a marca oficial da passagem SmartBus em vez do SVG simplificado legado. */}
+            <img
+              src="/logo-branca2.png"
+              alt="SmartBus BR"
+              className="mx-auto h-16 w-auto max-w-[260px] object-contain"
+            />
+            <div className="mt-3 space-y-1 text-[11px] leading-5 text-[hsl(var(--ticket-muted))]">
+              <p>{TICKET_PLATFORM_SALES_TEXT}</p>
+              <p>www.smartbusbr.com.br</p>
+              <p>Contato: (31) 99207-4309</p>
+            </div>
+          </div>
         </div>
 
         <SectionDivider />
