@@ -69,6 +69,7 @@ import {
   Image,
   AlertTriangle,
   Copy,
+  ClipboardList,
   Eye,
   Upload,
   GripVertical,
@@ -2735,12 +2736,118 @@ export default function Events() {
     }
   };
 
-  const handleCopyEventId = async (eventId: string) => {
+  const formatSupportValue = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return 'Não informado';
+    return String(value);
+  };
+
+  const formatSupportDateTime = (value: string | null | undefined) => {
+    if (!value) return 'Não informado';
+
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) return value;
+
+    return parsedDate.toLocaleString('pt-BR');
+  };
+
+  const handleCopyEventSupportData = async (event: EventWithTrips) => {
+    if (!activeCompanyId || event.company_id !== activeCompanyId) {
+      toast.error('Não foi possível copiar os dados de suporte.');
+      return;
+    }
+
     try {
-      await navigator.clipboard.writeText(eventId);
-      toast.success('ID do evento copiado.');
-    } catch {
-      toast.error('Não foi possível copiar o ID do evento.');
+      // Dados consolidados e sem PII: buscamos apenas status, quantidades e identificadores técnicos da empresa/evento.
+      const salesResult = await supabase
+        .from('sales')
+        .select('id, status, quantity, asaas_payment_id, asaas_payment_status, payment_environment, payment_confirmed_at, created_at')
+        .eq('company_id', activeCompanyId)
+        .eq('event_id', event.id);
+
+      if (salesResult.error) throw salesResult.error;
+
+      const sales = salesResult.data ?? [];
+      const saleIds = sales.map((sale) => sale.id);
+      const ticketsResult = saleIds.length > 0
+        ? await supabase
+          .from('tickets')
+          .select('id, sale_id, boarding_status')
+          .eq('company_id', activeCompanyId)
+          .in('sale_id', saleIds)
+        : { data: [], error: null };
+
+      if (ticketsResult.error) throw ticketsResult.error;
+
+      const tickets = ticketsResult.data ?? [];
+      const paidSales = sales.filter((sale) => sale.status === 'pago').length;
+      const pendingOrReservedSales = sales.filter((sale) => ['pendente_pagamento', 'reservado'].includes(sale.status)).length;
+      const cancelledSales = sales.filter((sale) => sale.status === 'cancelado').length;
+      const totalPassengers = sales.reduce((total, sale) => total + (Number(sale.quantity) || 0), 0);
+      const generatedTickets = tickets.length;
+      // Status confirmados pelo fluxo de embarque do motorista; status desconhecido não vira embarque por fallback.
+      const boardedStatusSet = new Set(['checked_in', 'checked_out', 'reboarded']);
+      const boardedTickets = tickets.filter((ticket) => boardedStatusSet.has(ticket.boarding_status)).length;
+      const pendingBoardingTickets = Math.max(generatedTickets - boardedTickets, 0);
+      const saleIdsWithTickets = new Set(tickets.map((ticket) => ticket.sale_id).filter(Boolean));
+      const salesWithAsaasPaymentId = sales.filter((sale) => !!sale.asaas_payment_id).length;
+      const salesWithoutAsaasPaymentId = sales.length - salesWithAsaasPaymentId;
+      const salesWithAsaasStatus = sales.filter((sale) => !!sale.asaas_payment_status).length;
+      const paidSalesWithoutAsaasPaymentId = sales.filter((sale) => sale.status === 'pago' && !sale.asaas_payment_id).length;
+      const paidSalesWithoutTickets = sales.filter((sale) => sale.status === 'pago' && !saleIdsWithTickets.has(sale.id)).length;
+      const salesWithoutPaymentEnvironment = sales.filter((sale) => !sale.payment_environment).length;
+      const paymentEnvironments = Array.from(new Set(sales.map((sale) => sale.payment_environment).filter(Boolean)));
+      const latestSaleCreatedAt = sales
+        .map((sale) => sale.created_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+      const latestPaymentConfirmedAt = sales
+        .map((sale) => sale.payment_confirmed_at)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
+      const supportText = `SmartBus BR — Dados de suporte do evento
+
+Evento:
+- ID do evento: ${event.id}
+- Nome do evento: ${formatSupportValue(event.name)}
+- Empresa ID: ${event.company_id}
+- Status do evento: ${formatSupportValue(event.status)}
+- Data do evento: ${formatSupportValue(formatDateOnlyBR(event.date, "dd/MM/yyyy"))}
+- Local/cidade: ${formatSupportValue(event.city)}
+
+Resumo operacional:
+- Total de vendas: ${sales.length}
+- Vendas pagas: ${paidSales}
+- Vendas pendentes/reservadas: ${pendingOrReservedSales}
+- Vendas canceladas: ${cancelledSales}
+- Total de passageiros/tickets: ${totalPassengers}
+- Tickets/passagens gerados: ${generatedTickets}
+- Tickets/passagens embarcados: ${boardedTickets}
+- Tickets/passagens pendentes de embarque: ${pendingBoardingTickets}
+
+Pagamento:
+- Gateway: ${salesWithAsaasPaymentId > 0 ? 'Asaas' : 'Não informado'}
+- Ambiente de pagamento: ${paymentEnvironments.length > 0 ? paymentEnvironments.join(', ') : 'Não informado'}
+- Vendas com asaas_payment_id: ${salesWithAsaasPaymentId}
+- Vendas sem asaas_payment_id: ${salesWithoutAsaasPaymentId}
+- Última venda criada em: ${formatSupportDateTime(latestSaleCreatedAt)}
+- Última confirmação de pagamento em: ${formatSupportDateTime(latestPaymentConfirmedAt)}
+
+Saúde do pagamento:
+- Vendas com status Asaas preenchido: ${salesWithAsaasStatus}
+- Vendas pagas sem asaas_payment_id: ${paidSalesWithoutAsaasPaymentId}
+- Vendas pagas sem tickets/passagens gerados: ${paidSalesWithoutTickets}
+- Vendas sem payment_environment: ${salesWithoutPaymentEnvironment}
+
+Links internos:
+- Admin eventos: /admin/eventos
+- Diagnóstico de vendas: /admin/vendas/diagnostico`;
+
+      await navigator.clipboard.writeText(supportText);
+      toast.success('Dados de suporte copiados.');
+    } catch (error) {
+      console.error('Erro ao copiar dados de suporte do evento:', error);
+      toast.error('Não foi possível copiar os dados de suporte.');
     }
   };
 
@@ -2789,9 +2896,9 @@ export default function Events() {
     }
 
     actions.push({
-      label: 'Copiar ID do evento',
-      icon: Copy,
-      onClick: () => handleCopyEventId(event.id),
+      label: 'Copiar dados de suporte',
+      icon: ClipboardList,
+      onClick: () => handleCopyEventSupportData(event),
     });
 
     // Quick status transitions
