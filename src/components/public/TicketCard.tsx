@@ -316,34 +316,52 @@ export function TicketCard({
       <div className="rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] p-4">
         {/* 5. Empresa organizadora + plataforma SmartBus em blocos empilhados para reforçar a hierarquia visual. */}
         <div className="space-y-4">
-          <div className="flex items-start gap-3">
-            {ticket.companyLogoUrl ? (
-              <img
-                src={ticket.companyLogoUrl}
-                alt={ticket.companyName}
-                className="h-16 w-16 rounded-xl object-contain bg-white p-1.5 shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : null}
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--ticket-accent))]">Empresa organizadora</p>
-              <p className="text-base font-bold leading-tight break-words">{ticket.companyName}</p>
-              {formattedCnpj && (
-                <p className="text-[11px] text-[hsl(var(--ticket-muted))]">CNPJ: {formattedCnpj}</p>
-              )}
-              {companyLoc && (
-                <p className="text-[11px] text-[hsl(var(--ticket-muted))]">{companyLoc}</p>
-              )}
-              {ticket.companyPhone && (
-                <p className="text-[11px] text-[hsl(var(--ticket-muted))] flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-[hsl(var(--ticket-accent))]" /> {ticket.companyPhone}
-                </p>
-              )}
-              {ticket.companyWhatsapp && (
-                <p className="text-[11px] text-[hsl(var(--ticket-muted))] flex items-center gap-1.5">
-                  <WhatsAppIcon size={12} className="text-[hsl(var(--ticket-accent))]" /> {ticket.companyWhatsapp}
-                </p>
-              )}
+          <div className="rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface-2))]/35 p-4 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[hsl(var(--ticket-accent))]">Empresa organizadora</p>
+            <div className={ticket.companyLogoUrl ? "grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4" : "block"}>
+              {ticket.companyLogoUrl ? (
+                <img
+                  src={ticket.companyLogoUrl}
+                  alt={ticket.companyName}
+                  className="h-28 w-28 rounded-2xl object-contain bg-white p-2 shadow-sm shrink-0"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : null}
+              <div className={`min-w-0 space-y-2 ${ticket.companyLogoUrl ? 'border-l border-[hsl(var(--ticket-border))] pl-4' : ''}`}>
+                <p className="text-lg font-bold leading-tight break-words">{ticket.companyName}</p>
+                {formattedCnpj && (
+                  <p className="text-[11px] text-[hsl(var(--ticket-muted))]">CNPJ: {formattedCnpj}</p>
+                )}
+                {companyLoc && (
+                  <p className="text-[11px] text-[hsl(var(--ticket-muted))]">{companyLoc}</p>
+                )}
+                {ticket.companyPhone && (
+                  <p className="text-[12px] text-[hsl(var(--ticket-text))] flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-[hsl(var(--ticket-accent))]" /> {ticket.companyPhone}
+                  </p>
+                )}
+                {ticket.companyWhatsapp && (
+                  <p className="text-[12px] text-[hsl(var(--ticket-text))] flex items-center gap-2">
+                    <WhatsAppIcon size={15} className="text-[hsl(var(--ticket-accent))]" /> {ticket.companyWhatsapp}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px w-full bg-[hsl(var(--ticket-accent))]/40" />
+
+          <div className="rounded-xl bg-[hsl(var(--ticket-surface-2))]/45 px-3 py-4 text-center">
+            {/* Usa a marca oficial da passagem SmartBus em vez do SVG simplificado legado. */}
+            <img
+              src="/logo-branca2.png"
+              alt="SmartBus BR"
+              className="mx-auto h-16 w-auto max-w-[260px] object-contain"
+            />
+            <div className="mt-3 space-y-1 text-[11px] leading-5 text-[hsl(var(--ticket-muted))]">
+              <p>{TICKET_PLATFORM_SALES_TEXT}</p>
+              <p>www.smartbusbr.com.br</p>
+              <p>Contato: (31) 99207-4309</p>
             </div>
           </div>
 
