@@ -1,113 +1,72 @@
-## Objetivo
+## Refinamento Visual — Passagem Virtual SmartBus BR
 
-Substituir o visual atual de `TicketCard.tsx` por um layout mobile vertical, fundo azul-marinho escuro, acentos laranja SmartBus e verde apenas para status "Pago", fiel à imagem de referência. Em paralelo, parar de aplicar `ticket_color` / `primary_color` da empresa na passagem virtual e sinalizar isso na aba Identidade Visual.
+Refinamento puramente de UI sobre o redesign atual. Sem mudanças em pagamento, QR, PDF, webhook, schema, RLS ou edge functions.
 
-Nada de regra de negócio muda: QR, status, PDF, geração de tickets, RLS, fluxos de pagamento e dados vindos do banco permanecem idênticos. Só muda apresentação.
+### 1. Botão WhatsApp dentro da passagem (remover duplicidade externa)
 
-## Escopo de arquivos
+**`src/components/public/PassengerTicketList.tsx`**
+- Remover o bloco `Alert` "Grupo WhatsApp do evento" renderizado acima da lista (linhas que iteram `paidWhatsAppGroupLinks` com `<Alert>`).
+- Em todas as chamadas a `<TicketCard …>` trocar `showWhatsAppGroupCta={false}` por `showWhatsAppGroupCta={true}` (ou remover a prop — default já é `true`).
+- Manter import `Alert/MessageCircle/ExternalLink` somente se ainda usados; senão limpar.
 
-1. **`src/components/public/TicketCard.tsx`** — reescrita visual completa do card mantendo a mesma assinatura de props (`TicketCardData`, `TicketCardProps`), os mesmos refs (`qrRef`, `ticketContainerRef`) e os mesmos handlers (`handleDownloadPdf`, `handleDownloadImage`, `handleCopySaleId`, `onRefreshStatus`). Remover uso de `ticket.companyPrimaryColor` / `accentColor` dinâmico — passar a usar tokens fixos SmartBus.
+**`src/components/public/TicketCard.tsx`** (área dos botões de ação dentro do card escuro)
+- O botão de WhatsApp já existe (linha ~280). Refinar visual para casar com PDF / Salvar QR:
+  - Mesma altura/padding/raio dos demais.
+  - Fundo escuro (`bg-[hsl(var(--ticket-surface-2))]`) com borda verde (`border-[hsl(var(--ticket-success))]/60`) e texto/ícone verde (`text-[hsl(var(--ticket-success))]`); hover sutil.
+  - Texto em linha única "Entrar no grupo do WhatsApp" (sem `<br/>`).
+  - Layout dos 3 botões: `grid grid-cols-1 sm:grid-cols-3 gap-2` no mobile pode quebrar; manter dentro da largura máxima da passagem (420px).
+- Condicional: renderizar apenas se `ticket.whatsappGroupLink && isPaid`.
 
-2. **`src/components/admin/BrandIdentityTab.tsx`** — manter o campo "Cor principal da passagem" (continua salvando em `ticket_color`, pois `ticketVisualRenderer.ts` e outros lugares ainda consomem), mas adicionar aviso curto e não bloqueante explicando que essa cor **não é mais aplicada na nova passagem virtual SmartBus**, e segue valendo apenas para outros usos visuais legados (PDF antigo / renderer). Não remover o campo nem migration.
+### 2. Modal "Gerar Passagem" no padrão escuro SmartBus
 
-3. **`src/index.css`** — adicionar tokens fixos da passagem SmartBus (apenas escopados ao card), sem mexer em tokens globais:
-   - `--ticket-bg`, `--ticket-surface`, `--ticket-border`, `--ticket-text`, `--ticket-muted`, `--ticket-accent` (laranja SmartBus `#F97316`), `--ticket-success` (verde `#22C55E`).
+**`src/components/admin/NewSaleModal.tsx`** (apenas o estado de exibição de passagens — após geração)
+- No `DialogContent` desse estado (linhas 1288–1342) aplicar fundo escuro do tema da passagem: `bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))]` no container e header/footer com borda `border-[hsl(var(--ticket-border))]`.
+- DialogTitle e textos auxiliares em branco/cinza claro.
+- Botões do footer mantêm comportamento; ajustar variantes para boa leitura sobre fundo escuro.
+- Não tocar nas etapas anteriores do wizard (passos de cadastro continuam claros).
 
-4. **`docs/Analises/analise-redesign-passagem-virtual.md`** — relatório obrigatório (padrão do projeto) descrevendo a alteração visual, o porquê de descontinuar a cor personalizada na passagem, arquivos alterados, compatibilidade e testes.
+**`src/components/public/PassengerTicketList.tsx`** (cards do accordion por passageiro)
+- `PassengerCollapsibleCard` → trocar `bg-card` / `hover:bg-accent/50` / `border-primary/30 bg-accent/30` por classes no tema da passagem:
+  - card: `bg-[hsl(var(--ticket-surface))] border-[hsl(var(--ticket-border))] text-[hsl(var(--ticket-text))]`
+  - ícone passageiro: fundo `bg-[hsl(var(--ticket-accent))]/15` e ícone `text-[hsl(var(--ticket-accent))]`.
+  - subtítulo/CPF/assento: `text-[hsl(var(--ticket-muted))]`.
+  - badge "Ida e Volta" em laranja accent.
+- StatusBadge "Pago": forçar variante verde compatível com tema (passar `className` override se preciso, sem alterar lógica).
+- Manter largura máxima da passagem expandida (`max-w-[420px] mx-auto`) inclusive no desktop.
 
-Não tocar em: `ticketPdfGenerator.ts`, `ticketImageGenerator.ts`, `ticketVisualRenderer.ts`, edge functions, schema, RLS, ou lógica de QR.
+### 3. Logo SmartBus branca dentro da passagem
 
-## Estrutura visual (mobile vertical, largura máx ~420px, centralizado em desktop)
+**`src/components/Logo.tsx`**
+- Adicionar prop opcional `variant?: 'default' | 'white'`.
+- Quando `variant='white'`: renderizar SVG inline branco com o lockup "SmartBus BR / VIAGENS & PASSEIOS" (mesma proporção da landing), em vez do `logo.png`. Texto em `currentColor` para herdar branco.
 
-```text
-┌──────────────────────────────────────────┐
-│ 🎟 Passagem digital                      │  Cabeçalho (ícone laranja + título branco)
-│   Apresente este bilhete no embarque     │  Subtítulo cinza claro
-├──────────────────────────────────────────┤
-│ ┌──────────────────────────────────────┐ │
-│ │ 👤  Nome do passageiro principal     │ │  Card resumo
-│ │     CPF: ***.209.226-**              │ │  (fundo --ticket-surface,
-│ │ ──────────────────────────────────── │ │   borda --ticket-border)
-│ │  [💺 16]   [↔ Ida e Volta]  [✓ Pago] │ │  3 blocos: Assento / Tipo / Status
-│ └──────────────────────────────────────┘ │
-│                                          │
-│ [WhatsApp]  [Salvar PDF]  [Salvar QR]    │  3 botões (WhatsApp condicional)
-│                                          │
-│ ┌──────────────────────────────────────┐ │
-│ │ SmartBus BR        [LOGO EMPRESA]    │ │  Card principal:
-│ │ VIAGENS & PASSEIOS  7 FEST           │ │  identidade
-│ │                     CNPJ/Cidade/Tel  │ │
-│ │ ──── divisória laranja fina ──────── │ │
-│ │                                      │ │
-│ │            [ QR CODE ]               │ │  QR centralizado, fundo branco
-│ │       Apresente no embarque          │ │
-│ │ ──── divisória ───────────────────── │ │
-│ │ PASSAGEIRO       │ BILHETE           │ │  Grid 2 colunas (empilha < 360px)
-│ │ ──── divisória ───────────────────── │ │
-│ │ EVENTO                               │ │
-│ │ ──── divisória ───────────────────── │ │
-│ │ EMBARQUE                             │ │
-│ │ ──── divisória ───────────────────── │ │
-│ │ INFORMAÇÕES DO VEÍCULO (3 blocos)    │ │
-│ │ ──── divisória ───────────────────── │ │
-│ │ OBSERVAÇÕES OPERACIONAIS             │ │
-│ └──────────────────────────────────────┘ │
-│ ┌──────────────────────────────────────┐ │
-│ │ Rodapé: operado por / plataforma /   │ │
-│ │ texto legal / gerado por             │ │
-│ └──────────────────────────────────────┘ │
-└──────────────────────────────────────────┘
-```
+**`src/components/public/TicketCard.tsx`**
+- Substituir `<Logo size="sm" />` (linha ~321, dentro do header escuro do card) por `<Logo size="sm" variant="white" className="text-white" />`.
 
-Títulos de seção (`PASSAGEIRO`, `BILHETE`, `EVENTO`, `EMBARQUE`, `INFORMAÇÕES DO VEÍCULO`, `OBSERVAÇÕES OPERACIONAIS`) em laranja SmartBus, tipografia caixa alta tracking-wide.
+### 4. Identidade da empresa apenas como conteúdo
 
-## Detalhes técnicos
+Sem mudanças adicionais — `companyPrimaryColor` já está deprecado e não é mais aplicado. Apenas confirmar que nenhum estilo novo passe a usar `ticket.companyPrimaryColor`.
 
-- **Cor fixa**: ignorar `ticket.companyPrimaryColor` no JSX. Acento sempre `var(--ticket-accent)`. Status "Pago" sempre verde. Substituir todas as referências a `accentColor` no componente por tokens fixos.
-- **Container raiz**: `Card` substituído por `<div>` com `bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))] rounded-2xl max-w-[420px] mx-auto`. Mantém `ref={ticketContainerRef}` (PDF html2canvas continua funcionando).
-- **Reservado/cancelado/processando**: preservar exatamente os estados atuais (`isReservedReceipt`, `isCancelled`, `displayStatus`, `showRefreshButton`, alert de QR indisponível). Só re-skinar visualmente para o tema escuro.
-- **Botões**: usar `Button` shadcn com variantes adaptadas; WhatsApp só aparece quando `ticket.whatsappGroupLink && ticket.saleStatus === 'pago' && showWhatsAppGroupCta`. PDF e QR sempre quando `canDownload`.
-- **Ícones**: usar lucide-react já importado (`Ticket`, `User`, `Armchair`, `ArrowLeftRight`, `FileText`, `QrCode`, `Phone`, `MapPin`, `Calendar`, `Clock`, `Bus`, `Hash`, `Info`, `Star`). Adicionar `IdCard` para placa, ou caso indisponível, manter um SVG inline minimalista.
-- **WhatsApp**: usar `src/components/ui/WhatsAppIcon.tsx` que já existe (ícone oficial).
-- **Logo SmartBus**: usar `@/components/Logo` com variante apropriada (já existe). Logo da empresa permanece como `<img src={ticket.companyLogoUrl}>` em área controlada de ~48–56px.
-- **Responsividade**: passagem é sempre mobile-shape (`max-w-[420px]`). Em desktop, centraliza, sem expandir.
-- **Compatibilidade PDF**: `ticketPdfGenerator` usa html2canvas sobre `ticketContainerRef` → o novo visual será capturado automaticamente. `ticketVisualRenderer.ts` (canvas alternativo) não é alterado e continua usando `ticket_color` (uso legado, não impacta a tela).
+### 5. Guardrails
 
-## Política de cor da empresa
+- Não alterar `handleDownloadPdf`, `handleDownloadImage`, `qrRef`, `ticketContainerRef`, `onRefreshStatus`, props públicas de `TicketCard` (exceto default de `showWhatsAppGroupCta`, que continua `true`).
+- Não tocar em edge functions, schema, RLS, geração de QR/PDF.
+- Tokens `--ticket-*` em `index.css` permanecem fonte única de verdade — sem novas cores hardcoded.
 
-- Campo "Cor principal da passagem" em `BrandIdentityTab` continua salvando `companies.ticket_color` (não quebra dados existentes nem migration).
-- Adicionar aviso curto abaixo do campo: *"Esta cor não é mais aplicada na nova passagem virtual SmartBus. A passagem segue o padrão visual oficial da plataforma."*
-- Nenhum dado é apagado. Nenhum campo removido. Nenhuma migration.
-- `primary_color` e `accent_color` continuam intactos e seguem afetando vitrine pública e branding dinâmico — fora do escopo desta mudança.
+### Arquivos alterados
 
-## O que não muda
+1. `src/components/public/PassengerTicketList.tsx` — remove Alert externo de WhatsApp; cards escuros.
+2. `src/components/public/TicketCard.tsx` — botão WhatsApp refinado, logo white.
+3. `src/components/Logo.tsx` — variante white (SVG inline).
+4. `src/components/admin/NewSaleModal.tsx` — modal escuro no estado de passagens geradas.
 
-- `TicketCardData` (mesmas propriedades).
-- Geração de QR, validação, PDF, imagem PNG.
-- Fluxo de status (`pago`, `reservado`, `cancelado`, `processando`).
-- `onRefreshStatus`, polling, alerts de reserva e cancelamento.
-- Regras de WhatsApp condicional e exibição de número global da passagem.
-- Lista agrupada `PassengerTicketList.tsx` (apenas consome `TicketCard`, não precisa alteração).
-- Edge functions, RLS, schema, types.
+### Testes manuais
 
-## Testes manuais
-
-1. `/confirmacao/:id` com venda `pago` → ver a nova passagem escura no mobile (DevTools 390px) e desktop centralizada.
-2. Conferir QR escaneando com câmera real (validação via `/validador`).
-3. Salvar PDF → conferir layout do novo card no PDF gerado.
-4. Salvar só QR Code → arquivo PNG continua sendo só o QR.
-5. WhatsApp condicional: passagem com `whatsappGroupLink` → botão aparece em verde; sem link → some.
-6. Venda `reservado` (com pagamento pendente) → alerta amarelo de QR indisponível continua funcionando, botão "Atualizar status" presente.
-7. Venda `cancelado` → faixa CANCELADA aparece sobre QR e opacidade reduzida.
-8. `/admin/empresa` → aba Identidade Visual → aviso novo aparece em "Cor principal da passagem"; mudar a cor lá **não** afeta mais o card em `/confirmacao`.
-9. Empresa com `companyLogoUrl` ausente → área da logo não quebra layout.
-10. Smoke test em iOS PWA standalone e Android TWA via `/confirmacao/:id` real.
-
-## Critérios de aceite
-
-- Visual da passagem em `/confirmacao` corresponde à referência (cabeçalho, card passageiro, 3 botões, card principal com QR centralizado, seções, rodapé).
-- Largura máx ~420px, sempre vertical, fundo escuro fixo.
-- Nenhuma cor da empresa é aplicada como fundo/borda/destaque do card.
-- Botões salvar PDF e salvar QR continuam gerando os mesmos arquivos.
-- Build passa, nenhum teste existente quebra.
-- Relatório `docs/Analises/analise-redesign-passagem-virtual.md` criado.
+- Passagem com link de grupo: botão aparece dentro da passagem; card externo sumiu.
+- Passagem sem link: botão não aparece, PDF/QR continuam.
+- Salvar PDF e Salvar só QR Code funcionam (visual escuro capturado).
+- Modal "Gerar Passagem" com 1 e 2 passageiros em visual escuro consistente.
+- Expandir/recolher passageiro sem quebrar layout.
+- Logo branca visível na passagem; logo da empresa preservada à direita.
+- Mudar `ticket_color` na Identidade Visual não afeta a passagem.
+- Testar 390px mobile e desktop (passagem permanece centralizada em largura mobile).

@@ -276,40 +276,40 @@ export function TicketCard({
 
       {/* 3. Botões de ação */}
       {(canDownload || isReservedReceipt) && (
-        <div data-pdf-exclude="true" className="grid grid-cols-3 gap-2">
-          {showWhatsAppGroupCta && isPaid && ticket.whatsappGroupLink ? (
+        <div data-pdf-exclude="true" className="flex flex-col gap-2">
+          {showWhatsAppGroupCta && isPaid && ticket.whatsappGroupLink && (
             <a
               href={ticket.whatsappGroupLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[hsl(var(--ticket-success))]/60 bg-[hsl(var(--ticket-success-bg))]/40 px-2 py-3 text-[hsl(var(--ticket-success))] text-[11px] font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-success-bg))]/70 transition-colors"
+              className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--ticket-success))]/60 bg-[hsl(var(--ticket-surface-2))] px-3 py-3 text-[hsl(var(--ticket-success))] text-sm font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-success-bg))]/60 transition-colors min-h-[48px]"
             >
-              <WhatsAppIcon size={20} />
-              <span>Entrar no grupo<br />do WhatsApp</span>
+              <WhatsAppIcon size={18} />
+              <span>Entrar no grupo do WhatsApp</span>
             </a>
-          ) : (
-            <div className="hidden" aria-hidden="true" />
           )}
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-[11px] font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors"
-          >
-            <FileText className="h-5 w-5" />
-            <span>{isReservedReceipt ? 'Comprovante (PDF)' : 'Salvar PDF'}</span>
-          </button>
-          {canDownload && !isReservedReceipt ? (
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={handleDownloadImage}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-[11px] font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors"
+              onClick={handleDownloadPdf}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-xs font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors min-h-[48px]"
             >
-              <QrCode className="h-5 w-5" />
-              <span>Salvar só<br />QR Code</span>
+              <FileText className="h-4 w-4" />
+              <span>{isReservedReceipt ? 'Comprovante (PDF)' : 'Salvar PDF'}</span>
             </button>
-          ) : (
-            <div className="hidden" aria-hidden="true" />
-          )}
+            {canDownload && !isReservedReceipt ? (
+              <button
+                type="button"
+                onClick={handleDownloadImage}
+                className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-xs font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors min-h-[48px]"
+              >
+                <QrCode className="h-4 w-4" />
+                <span>Salvar só QR Code</span>
+              </button>
+            ) : (
+              <div className="hidden" aria-hidden="true" />
+            )}
+          </div>
         </div>
       )}
 
@@ -318,7 +318,7 @@ export function TicketCard({
         {/* 5. Identidade SmartBus + Empresa */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <Logo size="sm" className="!gap-1" />
+            <Logo size="sm" variant="white" className="!gap-1 text-white" />
             <p className="text-[9px] tracking-[0.18em] text-[hsl(var(--ticket-muted))] mt-1 uppercase">Viagens &amp; Passeios</p>
           </div>
           <div className="flex items-start gap-3 flex-1 min-w-0">

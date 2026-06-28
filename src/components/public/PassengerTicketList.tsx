@@ -15,11 +15,9 @@
 import { useState, useMemo } from 'react';
 import { TicketCard, TicketCardData } from '@/components/public/TicketCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { User, ChevronDown, Armchair, ArrowLeftRight, ArrowRight, MessageCircle, ExternalLink } from 'lucide-react';
+import { User, ChevronDown, Armchair, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TransportPolicy } from '@/types/database';
 
@@ -149,39 +147,17 @@ export function PassengerTicketList({
 
   // Se só tem 1 passageiro e 1 ticket, mostra direto sem collapsible
   const isSingleSimple = groups.length === 1 && !groups[0].hasRoundTrip;
-  const paidWhatsAppGroupLinks = Array.from(new Map(
-    tickets
-      .filter((ticket) => ticket.saleStatus === 'pago' && ticket.whatsappGroupLink)
-      .map((ticket) => [ticket.saleId ?? ticket.whatsappGroupLink!, ticket.whatsappGroupLink!]),
-  ).values());
+
+
 
   if (tickets.length === 0) return null;
 
   return (
     <div className="space-y-3">
 
-      {/* Exibe o convite uma única vez por venda/listagem, evitando repetição em cada passagem do passageiro. */}
-      {paidWhatsAppGroupLinks.map((paidWhatsAppGroupLink) => (
-        <Alert key={paidWhatsAppGroupLink} className="border-green-200 bg-green-50 text-green-900">
-          <MessageCircle className="h-4 w-4" />
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="space-y-0.5">
-              <span className="block font-semibold">Grupo WhatsApp do evento</span>
-              <span className="block">Entre no grupo oficial para acompanhar avisos e orientações da viagem.</span>
-            </span>
-            <Button asChild size="sm" variant="outline" className="border-green-300 bg-white text-green-800 hover:bg-green-100">
-              <a href={paidWhatsAppGroupLink} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Entrar no grupo
-              </a>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ))}
-
       {/* Resumo geral quando há múltiplos passageiros */}
       {groups.length > 1 && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+        <div className="flex items-center gap-2 text-sm text-[hsl(var(--ticket-muted))] mb-1">
           <User className="h-4 w-4" />
           <span>
             {groups.length} passageiro{groups.length > 1 ? 's' : ''}
@@ -199,7 +175,7 @@ export function PassengerTicketList({
           onRefreshStatus={onRefreshStatus}
           isRefreshing={!!(groups[0].idaTicket?.saleId && isRefreshingSaleIds?.has(groups[0].idaTicket.saleId))}
           reservedPresentation={reservedPresentation}
-          showWhatsAppGroupCta={false}
+          showWhatsAppGroupCta={true}
         />
       ) : (
         groups.map((group) => (
@@ -249,28 +225,29 @@ function PassengerCollapsibleCard({
   const isVoltaSeatPlaceholder = !!group.voltaTicket && voltaSeatDisplay === 'Retorno incluso';
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={setOpen} className="mx-auto w-full max-w-[440px]">
       <CollapsibleTrigger asChild>
         <button
           className={cn(
-            'w-full rounded-lg border bg-card p-4 text-left transition-colors',
-            'hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            open && 'border-primary/30 bg-accent/30'
+            'w-full rounded-xl border p-4 text-left transition-colors',
+            'border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] text-[hsl(var(--ticket-text))]',
+            'hover:bg-[hsl(var(--ticket-surface-2))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ticket-accent))]',
+            open && 'border-[hsl(var(--ticket-accent))]/50 bg-[hsl(var(--ticket-surface-2))]'
           )}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <User className="h-4 w-4 text-primary" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--ticket-accent))]/15">
+                <User className="h-4 w-4 text-[hsl(var(--ticket-accent))]" />
               </div>
               <div className="min-w-0 space-y-0.5">
-                <p className="font-semibold text-sm text-foreground truncate">
+                <p className="font-semibold text-sm truncate">
                   {group.name}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[hsl(var(--ticket-muted))]">
                   CPF: {group.cpfDisplay}
                 </p>
-                <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mt-1">
+                <div className="flex items-center gap-2 flex-wrap text-xs text-[hsl(var(--ticket-muted))] mt-1">
                   {idaSeatDisplay && (
                     <span className="inline-flex items-center gap-1">
                       <Armchair className="h-3 w-3" />
@@ -278,7 +255,7 @@ function PassengerCollapsibleCard({
                     </span>
                   )}
                   {group.hasRoundTrip ? (
-                    <span className="inline-flex items-center gap-1 text-primary font-medium">
+                    <span className="inline-flex items-center gap-1 text-[hsl(var(--ticket-accent))] font-medium">
                       <ArrowLeftRight className="h-3 w-3" />
                       Ida e Volta
                     </span>
@@ -295,7 +272,7 @@ function PassengerCollapsibleCard({
               {saleStatus && <StatusBadge status={saleStatus} className="text-[10px]" />}
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-muted-foreground transition-transform',
+                  'h-4 w-4 text-[hsl(var(--ticket-muted))] transition-transform',
                   open && 'rotate-180'
                 )}
               />
@@ -318,7 +295,7 @@ function PassengerCollapsibleCard({
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
               reservedPresentation={reservedPresentation}
-              showWhatsAppGroupCta={false}
+              showWhatsAppGroupCta={true}
             />
           )
         ) : group.hasRoundTrip ? (
@@ -336,7 +313,7 @@ function PassengerCollapsibleCard({
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
                   reservedPresentation={reservedPresentation}
-                  showWhatsAppGroupCta={false}
+                  showWhatsAppGroupCta={true}
                 />
               )}
             </TabsContent>
@@ -348,7 +325,7 @@ function PassengerCollapsibleCard({
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.voltaTicket.saleId && isRefreshingSaleIds?.has(group.voltaTicket.saleId))}
                   reservedPresentation={reservedPresentation}
-                  showWhatsAppGroupCta={false}
+                  showWhatsAppGroupCta={true}
                 />
               )}
             </TabsContent>
@@ -362,7 +339,7 @@ function PassengerCollapsibleCard({
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(displayTicket.saleId && isRefreshingSaleIds?.has(displayTicket.saleId))}
               reservedPresentation={reservedPresentation}
-              showWhatsAppGroupCta={false}
+              showWhatsAppGroupCta={true}
             />
           )
         )}
