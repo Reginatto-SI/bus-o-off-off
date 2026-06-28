@@ -19,20 +19,34 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       logging: false,
       scale: Math.max(2, window.devicePixelRatio || 1),
       onclone: (_document, clonedElement) => {
-        // Mantém a logo da empresa com o mesmo encaixe visual da passagem em tela no canvas do PDF.
+        // Mantém o box fixo e deixa a logo encaixar proporcionalmente, sem forçar dimensões na imagem.
+        clonedElement.querySelectorAll('[data-ticket-company-logo-box="true"]').forEach((box) => {
+          const boxEl = box as HTMLElement;
+          boxEl.style.width = '112px';
+          boxEl.style.height = '112px';
+          boxEl.style.minWidth = '112px';
+          boxEl.style.maxWidth = '112px';
+          boxEl.style.display = 'flex';
+          boxEl.style.alignItems = 'center';
+          boxEl.style.justifyContent = 'center';
+          boxEl.style.overflow = 'hidden';
+          boxEl.style.backgroundColor = '#ffffff';
+          boxEl.style.borderRadius = '16px';
+          boxEl.style.boxSizing = 'border-box';
+          boxEl.style.padding = '8px';
+          boxEl.style.flexShrink = '0';
+        });
+
         clonedElement.querySelectorAll('[data-ticket-company-logo="true"]').forEach((logo) => {
           const logoEl = logo as HTMLImageElement;
-          logoEl.style.width = '112px';
-          logoEl.style.height = '112px';
-          logoEl.style.maxWidth = '112px';
-          logoEl.style.minWidth = '112px';
+          logoEl.style.width = 'auto';
+          logoEl.style.height = 'auto';
+          logoEl.style.maxWidth = '100%';
+          logoEl.style.maxHeight = '100%';
           logoEl.style.objectFit = 'contain';
           logoEl.style.objectPosition = 'center';
-          logoEl.style.backgroundColor = '#ffffff';
-          logoEl.style.borderRadius = '16px';
+          logoEl.style.display = 'block';
           logoEl.style.boxSizing = 'border-box';
-          logoEl.style.padding = '8px';
-          logoEl.style.flexShrink = '0';
         });
 
         // O html2canvas pode comprimir fontes web no rodapé; no clone do PDF usamos estilos seguros.

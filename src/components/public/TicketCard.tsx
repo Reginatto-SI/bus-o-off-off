@@ -320,13 +320,18 @@ export function TicketCard({
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[hsl(var(--ticket-accent))]">Empresa organizadora</p>
             <div className={ticket.companyLogoUrl ? "grid grid-cols-[112px_minmax(0,1fr)] items-center gap-4" : "block"}>
               {ticket.companyLogoUrl ? (
-                <img
-                  src={ticket.companyLogoUrl}
-                  alt={ticket.companyName}
-                  data-ticket-company-logo="true"
-                  className="h-28 w-28 rounded-2xl object-contain bg-white p-2 shadow-sm shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+                <div
+                  data-ticket-company-logo-box="true"
+                  className="h-28 w-28 rounded-2xl bg-white p-2 shadow-sm shrink-0 flex items-center justify-center overflow-hidden"
+                >
+                  <img
+                    src={ticket.companyLogoUrl}
+                    alt={ticket.companyName}
+                    data-ticket-company-logo="true"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
               ) : null}
               <div className={`min-w-0 space-y-2 ${ticket.companyLogoUrl ? 'border-l border-[hsl(var(--ticket-border))] pl-4' : ''}`}>
                 <p className="text-lg font-bold leading-tight break-words">{ticket.companyName}</p>
