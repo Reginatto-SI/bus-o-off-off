@@ -34,7 +34,6 @@ import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
-import { Logo } from '@/components/Logo';
 import {
   getTicketTransportOperatedByText,
   TICKET_PDF_FOOTER_TEXT,
@@ -318,8 +317,12 @@ export function TicketCard({
         {/* 5. Identidade SmartBus + Empresa */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <Logo size="sm" variant="white" className="!gap-1 text-white" />
-            <p className="text-[9px] tracking-[0.18em] text-[hsl(var(--ticket-muted))] mt-1 uppercase">Viagens &amp; Passeios</p>
+            {/* Usa a marca oficial da passagem SmartBus em vez do SVG simplificado legado. */}
+            <img
+              src="/logo-branca2.png"
+              alt="SmartBus BR"
+              className="h-9 w-auto max-w-[160px] object-contain"
+            />
           </div>
           <div className="flex items-start gap-3 flex-1 min-w-0">
             {ticket.companyLogoUrl ? (
@@ -437,34 +440,7 @@ export function TicketCard({
                 <span>{purchaseConfirmedLabel}</span>
               </div>
             )}
-            {ticket.purchaseOriginLabel && (
-              <div className="flex items-start gap-2 text-xs">
-                <Phone className="h-3.5 w-3.5 mt-0.5 text-[hsl(var(--ticket-muted))]" />
-                <span className="text-[hsl(var(--ticket-muted))]">Origem</span>
-                <span className="break-words">{ticket.purchaseOriginLabel}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2 text-xs">
-              <ArrowLeftRight className="h-3.5 w-3.5 text-[hsl(var(--ticket-muted))]" />
-              <span className="text-[hsl(var(--ticket-muted))]">Tipo</span>
-              <span>{consolidatedRoundTrip ? 'Ida e Volta' : 'Somente Ida'}</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <Armchair className="h-3.5 w-3.5 text-[hsl(var(--ticket-muted))]" />
-              <span className="text-[hsl(var(--ticket-muted))]">Assento</span>
-              <span>{seatDisplayLabel}</span>
-            </div>
-            {consolidatedRoundTrip && (
-              <div className="flex items-center gap-2 text-xs">
-                <ArrowLeftRight className="h-3.5 w-3.5 text-[hsl(var(--ticket-muted))]" />
-                <span className="text-[hsl(var(--ticket-muted))]">Volta</span>
-                <span>
-                  {consolidatedRoundTrip.returnSeatIsPlaceholder
-                    ? 'Retorno incluso'
-                    : `Assento ${consolidatedRoundTrip.returnSeatLabel}`}
-                </span>
-              </div>
-            )}
+            {/* A seção Bilhete fica restrita a identificadores da compra; origem, tipo, assento e volta já aparecem no resumo/embarque. */}
             {ticket.vehicleFloors != null && ticket.vehicleFloors > 1 && ticket.seatFloor != null && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-[hsl(var(--ticket-muted))]">Pavimento</span>
@@ -666,11 +642,14 @@ export function TicketCard({
       )}
 
       {/* 12. Rodapé */}
-      <div className="rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface-2))] p-3 space-y-1 text-[11px] text-[hsl(var(--ticket-muted))] leading-relaxed">
+      <div
+        data-ticket-pdf-footer="true"
+        className="rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface-2))] p-3 space-y-2 text-[11px] text-[hsl(var(--ticket-muted))] leading-5 break-words [letter-spacing:normal] [word-spacing:normal] [font-stretch:normal] [white-space:normal] [word-break:normal] [overflow-wrap:break-word]"
+      >
         <p>{getTicketTransportOperatedByText(ticket.companyName || 'empresa organizadora')}</p>
         <p>{TICKET_PLATFORM_SALES_TEXT}</p>
         <p>{TICKET_PLATFORM_LIABILITY_TEXT}</p>
-        <p className="pt-1">{TICKET_PDF_FOOTER_TEXT}</p>
+        <p>{TICKET_PDF_FOOTER_TEXT}</p>
       </div>
 
       {/* Refresh status (oculto do PDF) */}
