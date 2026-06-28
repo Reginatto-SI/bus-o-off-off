@@ -318,7 +318,7 @@ export function TicketCard({
         {/* 5. Identidade SmartBus + Empresa */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <Logo size="sm" className="!gap-1" />
+            <Logo size="sm" variant="white" className="!gap-1 text-white" />
             <p className="text-[9px] tracking-[0.18em] text-[hsl(var(--ticket-muted))] mt-1 uppercase">Viagens &amp; Passeios</p>
           </div>
           <div className="flex items-start gap-3 flex-1 min-w-0">
