@@ -124,6 +124,30 @@ export function AdminHeader() {
   }, [companySearch, statusFilter, selectorCompanies]);
 
   const isDeveloper = userRole === 'developer';
+  const activeCompanyLogoUrl = activeCompany?.logo_url?.trim();
+  const activeCompanyName = activeCompany?.name || 'Selecionar empresa';
+  const [failedLogoUrls, setFailedLogoUrls] = useState<Set<string>>(() => new Set());
+
+  const renderCompanyIdentity = (companyName: string, logoUrl?: string | null) => {
+    const shouldShowLogo = Boolean(logoUrl && !failedLogoUrls.has(logoUrl));
+
+    return (
+      <>
+        {shouldShowLogo ? (
+          <img
+            src={logoUrl!}
+            alt={`Logo ${companyName}`}
+            className="max-h-8 max-w-[120px] shrink-0 object-contain"
+            // Se o arquivo remoto falhar, removemos apenas a imagem quebrada e preservamos o fallback padrão do header.
+            onError={() => setFailedLogoUrls((prev) => new Set(prev).add(logoUrl!))}
+          />
+        ) : (
+          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="truncate font-medium text-foreground">{companyName}</span>
+      </>
+    );
+  };
 
   const loadSelectorCompanies = async () => {
     // Fase 2: preservamos comportamento para perfis não-developer usando a mesma lista já resolvida no AuthContext.
@@ -189,10 +213,9 @@ export function AdminHeader() {
         {hasMultipleCompanies ? (
           <Dialog open={companySelectorOpen} onOpenChange={handleCompanySelectorOpenChange}>
             <DialogTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 h-auto py-1.5 px-3">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium text-foreground">{activeCompany?.name || 'Selecionar empresa'}</span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <Button variant="ghost" className="flex h-auto max-w-[360px] items-center gap-2 py-1.5 px-3">
+                {renderCompanyIdentity(activeCompanyName, activeCompanyLogoUrl)}
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-3xl">
@@ -316,9 +339,8 @@ export function AdminHeader() {
             </DialogContent>
           </Dialog>
         ) : activeCompany ? (
-          <div className="flex items-center gap-2 px-3 py-1.5">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-foreground">{activeCompany.name}</span>
+          <div className="flex max-w-[360px] items-center gap-2 px-3 py-1.5">
+            {renderCompanyIdentity(activeCompany.name, activeCompanyLogoUrl)}
           </div>
         ) : null}
 
