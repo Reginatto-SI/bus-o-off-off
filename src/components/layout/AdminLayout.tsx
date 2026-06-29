@@ -11,31 +11,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFoo
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
-import { getContrastTextColor } from '@/lib/colorContrast';
 
-/** Converte cor hex para string HSL (apenas valores, sem "hsl()") */
-function hexToHsl(hex: string): string | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return null;
-  const r = parseInt(result[1], 16) / 255;
-  const g = parseInt(result[2], 16) / 255;
-  const b = parseInt(result[3], 16) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
-      case g: h = ((b - r) / d + 2) / 6; break;
-      case b: h = ((r - g) / d + 4) / 6; break;
-    }
-  }
-  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
-}
-
-// Valores padrão do tema (do index.css)
+// Valores padrão fixos da identidade visual SmartBus BR (index.css).
 const DEFAULT_PRIMARY_HSL = '25 95% 53%';
 const DEFAULT_RING_HSL = '25 95% 53%';
 const DEFAULT_PRIMARY_FOREGROUND_HSL = '0 0% 100%';
@@ -50,42 +27,20 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const toastShownRef = useRef(false);
   const [hasNoActiveLinkedCompany, setHasNoActiveLinkedCompany] = useState(false);
 
-  // Aplica cores da empresa como CSS custom properties
-  const applyCompanyColors = useCallback(() => {
+  // A identidade visual por empresa foi desativada: cores legadas salvas no banco não devem mais alterar o tema global.
+  const applyDefaultSmartBusColors = useCallback(() => {
     const root = document.documentElement;
-    const primaryHex = activeCompany?.primary_color;
-    const primaryHsl = primaryHex ? hexToHsl(primaryHex) : null;
-
-    if (primaryHsl) {
-      root.style.setProperty('--primary', primaryHsl);
-      root.style.setProperty('--ring', primaryHsl);
-      root.style.setProperty('--sidebar-primary', primaryHsl);
-
-      // Comentário de manutenção: garante legibilidade automática quando a empresa escolhe cores muito claras no /admin/empresa.
-      const contrastText = getContrastTextColor(primaryHex);
-      root.style.setProperty('--primary-foreground', contrastText === '#111827' ? '222 47% 11%' : '0 0% 100%');
-      root.style.setProperty('--sidebar-primary-foreground', contrastText === '#111827' ? '222 47% 11%' : '0 0% 100%');
-    } else {
-      root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
-      root.style.setProperty('--ring', DEFAULT_RING_HSL);
-      root.style.setProperty('--sidebar-primary', DEFAULT_PRIMARY_HSL);
-      root.style.setProperty('--primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
-      root.style.setProperty('--sidebar-primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
-    }
-  }, [activeCompany?.primary_color]);
+    root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
+    root.style.setProperty('--ring', DEFAULT_RING_HSL);
+    root.style.setProperty('--sidebar-primary', DEFAULT_PRIMARY_HSL);
+    root.style.setProperty('--primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
+    root.style.setProperty('--sidebar-primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
+  }, []);
 
   useEffect(() => {
-    applyCompanyColors();
-    return () => {
-      // Restaurar padrões ao desmontar
-      const root = document.documentElement;
-      root.style.setProperty('--primary', DEFAULT_PRIMARY_HSL);
-      root.style.setProperty('--ring', DEFAULT_RING_HSL);
-      root.style.setProperty('--sidebar-primary', DEFAULT_PRIMARY_HSL);
-      root.style.setProperty('--primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
-      root.style.setProperty('--sidebar-primary-foreground', DEFAULT_PRIMARY_FOREGROUND_HSL);
-    };
-  }, [applyCompanyColors]);
+    applyDefaultSmartBusColors();
+    return applyDefaultSmartBusColors;
+  }, [applyDefaultSmartBusColors]);
 
   useEffect(() => {
     if (userRole === 'vendedor' && !toastShownRef.current) {

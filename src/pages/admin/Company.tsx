@@ -14,10 +14,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, CheckCircle2, AlertCircle, Eye, Palette, Link2, Copy, Download, QrCode, Store, Share2, AlertTriangle, ExternalLink, Settings } from 'lucide-react';
+import { FileText, IdCard, Loader2, MapPin, Phone, CreditCard, CheckCircle2, AlertCircle, Eye, Link2, Copy, Download, QrCode, Store, Share2, AlertTriangle, ExternalLink, Settings } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrandIdentityTab } from '@/components/admin/BrandIdentityTab';
 import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/admin/AsaasOnboardingWizard';
 import { AsaasDiagnosticPanel } from '@/components/admin/AsaasDiagnosticPanel';
 import { CompanyTermsTab } from '@/components/admin/CompanyTermsTab';
@@ -111,7 +110,7 @@ const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+x
 const COMPANY_LOGO_BUCKET = 'company-logos';
 
 const COMPANY_COVER_BUCKET = 'company-covers';
-const COMPANY_TAB_VALUES = ['dados', 'endereco', 'contato', 'observacoes', 'identidade', 'redes', 'configuracoes', 'termos', 'pagamentos', 'vitrine'] as const;
+const COMPANY_TAB_VALUES = ['dados', 'endereco', 'contato', 'observacoes', 'redes', 'configuracoes', 'termos', 'pagamentos', 'vitrine'] as const;
 type CompanyTabValue = typeof COMPANY_TAB_VALUES[number];
 const DEFAULT_COMPANY_TAB: CompanyTabValue = 'dados';
 const getCompanyTabStorageKey = (companyId: string | null) => `admin_company_active_tab:${companyId ?? 'new'}`;
@@ -270,11 +269,6 @@ export default function CompanyPage() {
     manual_reservation_ttl_hours: '72',
     manual_reservation_ttl_minutes: '0',
   });
-  const [brandColors, setBrandColors] = useState({
-    primary: '#F97316',
-    accent: '#2563EB',
-    ticket: '#F97316',
-  });
   const [slugCheckLoading, setSlugCheckLoading] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const showcaseQrRef = useRef<HTMLDivElement | null>(null);
@@ -422,12 +416,7 @@ export default function CompanyPage() {
       manual_reservation_ttl_hours: String(Math.floor((data?.manual_reservation_ttl_minutes ?? 4320) / 60)),
       manual_reservation_ttl_minutes: String((data?.manual_reservation_ttl_minutes ?? 4320) % 60),
     });
-    // Comentário: mantém as cores da identidade visual dentro do payload principal do formulário.
-    setBrandColors({
-      primary: data?.primary_color ?? '#F97316',
-      accent: data?.accent_color ?? '#2563EB',
-      ticket: data?.ticket_color ?? '#F97316',
-    });
+    // Cores legadas de identidade visual podem existir no banco, mas não são mais hidratadas nem aplicadas na interface.
   };
 
   const fetchCompany = async () => {
@@ -987,9 +976,7 @@ export default function CompanyPage() {
       notes: form.notes.trim() || null,
       logo_url: form.logo_url?.trim() || null,
       public_slug: normalizedPublicSlug || null,
-      primary_color: brandColors.primary || null,
-      accent_color: brandColors.accent || null,
-      ticket_color: brandColors.ticket || null,
+      // Campos legados de identidade visual não são mais gravados pelo cadastro da empresa.
       // Vitrine pública (Fase 1): novos campos persistidos
       cover_image_url: form.cover_image_url?.trim() || null,
       intro_text: form.intro_text?.trim() || null,
@@ -1339,13 +1326,6 @@ export default function CompanyPage() {
                     >
                       <FileText className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Observações</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="identidade"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
-                    >
-                      <Palette className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Identidade Visual</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="redes"
@@ -1832,14 +1812,6 @@ export default function CompanyPage() {
                         />
                       </div>
                     </div>
-                  </TabsContent>
-
-                  <TabsContent value="identidade" className="mt-0">
-                    <BrandIdentityTab
-                      company={company}
-                      colors={brandColors}
-                      onColorsChange={setBrandColors}
-                    />
                   </TabsContent>
 
                   <TabsContent value="redes" className="mt-0">

@@ -114,7 +114,8 @@ export async function renderTicketVisual(
     throw new Error('Falha ao criar contexto da passagem');
   }
 
-  const accentColor = ticket.companyPrimaryColor || '#F97316';
+  // Ignora cores legadas por empresa: imagem da passagem usa o laranja oficial SmartBus BR.
+  const accentColor = '#F97316';
   const backgroundColor = options.backgroundColor ?? '#f5f6f8';
   const cardX = padding;
   const cardY = padding;

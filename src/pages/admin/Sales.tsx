@@ -411,7 +411,7 @@ function buildTicketCardData(
     companyLogoUrl: company?.logo_url || null,
     companyCity: company?.city || null,
     companyState: company?.state || null,
-    companyPrimaryColor: company?.ticket_color || company?.primary_color || null,
+    companyPrimaryColor: null,
     companyCnpj: company?.cnpj || null,
     companyPhone: company?.phone || null,
     companyWhatsapp: company?.whatsapp || null,

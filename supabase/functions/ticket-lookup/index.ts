@@ -78,7 +78,7 @@ serve(async (req) => {
     if (companyIds.length > 0) {
       const { data: companyRows } = await supabaseAdmin
         .from("companies")
-.select("id, name, trade_name, logo_url, city, state, primary_color, cnpj, phone, whatsapp, address, slogan, platform_fee_percent")
+        .select("id, name, trade_name, logo_url, city, state, cnpj, phone, whatsapp, address, slogan, platform_fee_percent")
         .in("id", companyIds);
 
       for (const c of companyRows ?? []) {
@@ -186,7 +186,7 @@ serve(async (req) => {
         companyLogoUrl: company?.logo_url || null,
         companyCity: company?.city || null,
         companyState: company?.state || null,
-        companyPrimaryColor: company?.primary_color || null,
+        companyPrimaryColor: null,
         companyCnpj: company?.cnpj || null,
         companyPhone: company?.phone || null,
         companyWhatsapp: company?.whatsapp || null,
