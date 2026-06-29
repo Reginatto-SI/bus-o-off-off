@@ -1,4 +1,5 @@
 import { Lock, CreditCard, Smartphone } from 'lucide-react';
+import { FooterVersionInfo } from '@/components/system/FooterVersionInfo';
 
 export function TrustFooter() {
   return (
@@ -31,10 +32,11 @@ export function TrustFooter() {
       {/* Copyright */}
       <div className="border-t py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-muted-foreground">
             {/* Informação institucional obrigatória para transparência em páginas públicas. */}
-            © {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 59.461.123/0001-72
-          </p>
+            <span>© {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 59.461.123/0001-72</span>
+            <FooterVersionInfo />
+          </div>
         </div>
       </div>
     </footer>
