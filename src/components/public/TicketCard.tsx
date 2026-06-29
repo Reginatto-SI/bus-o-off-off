@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -165,6 +165,7 @@ export function TicketCard({
   const { toast } = useToast();
   const qrRef = useRef<HTMLCanvasElement>(null);
   const ticketContainerRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const isPaid = ticket.saleStatus === 'pago';
   const isReserved = ticket.saleStatus === 'reservado';
   const isReservedReceipt = isReserved && reservedPresentation === 'receipt';
@@ -206,10 +207,36 @@ export function TicketCard({
   };
 
   const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+
     const canvas = qrRef.current;
     if (!canvas) return;
-    const qrBase64 = canvas.toDataURL('image/png');
-    await generateTicketPdf({ ticket, qrBase64, ticketElement: ticketContainerRef.current });
+
+    setIsGeneratingPdf(true);
+    try {
+      const qrBase64 = canvas.toDataURL('image/png');
+      const deliveryResult = await generateTicketPdf({ ticket, qrBase64, ticketElement: ticketContainerRef.current });
+
+      if (deliveryResult === 'shared') {
+        toast({ title: 'PDF pronto para compartilhar ou salvar em Arquivos.' });
+      }
+
+      if (deliveryResult === 'preview') {
+        toast({
+          title: 'PDF aberto no iPhone',
+          description: 'Use Compartilhar para salvar em Arquivos ou enviar pelo WhatsApp.',
+        });
+      }
+    } catch (error) {
+      console.error('[ticket-pdf] Falha ao gerar PDF da passagem.', error);
+      toast({
+        title: 'Não foi possível abrir o PDF',
+        description: 'Tente novamente em instantes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleDownloadImage = async () => {
@@ -253,26 +280,29 @@ export function TicketCard({
           </div>
         </div>
         <div className="h-px bg-[hsl(var(--ticket-border))]" />
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="space-y-1">
-            <div className="flex items-center justify-center gap-1.5">
-              <Armchair className="h-4 w-4 text-[hsl(var(--ticket-accent))]" />
-              <span className="text-sm font-bold">{seatDisplayLabel}</span>
+        {/* Linha de resumo com alturas fixas para alinhar ícones, valores e rótulos. */}
+        <div className="grid grid-cols-3 gap-2 text-center items-start">
+          <div className="flex min-h-[38px] flex-col items-center justify-start gap-1">
+            <div className="flex h-6 items-center justify-center gap-1.5 leading-none">
+              <Armchair className="h-4 w-4 shrink-0 text-[hsl(var(--ticket-accent))]" />
+              <span className="text-sm font-bold leading-none">{seatDisplayLabel}</span>
             </div>
-            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--ticket-muted))]">Assento</p>
+            <p className="h-3 text-[10px] uppercase leading-none tracking-wide text-[hsl(var(--ticket-muted))]">Assento</p>
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-center gap-1.5">
-              <ArrowLeftRight className="h-4 w-4 text-[hsl(var(--ticket-accent))]" />
-              <span className="text-xs font-semibold">{consolidatedRoundTrip ? 'Ida e Volta' : 'Somente Ida'}</span>
+          <div className="flex min-h-[38px] flex-col items-center justify-start gap-1">
+            <div className="flex h-6 items-center justify-center gap-1.5 leading-none">
+              <ArrowLeftRight className="h-4 w-4 shrink-0 text-[hsl(var(--ticket-accent))]" />
+              <span className="text-xs font-semibold leading-none">{consolidatedRoundTrip ? 'Ida e Volta' : 'Somente Ida'}</span>
             </div>
-            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--ticket-muted))]">Tipo de viagem</p>
+            <p className="h-3 text-[10px] uppercase leading-none tracking-wide text-[hsl(var(--ticket-muted))]">Tipo de viagem</p>
           </div>
-          <div className="space-y-1">
-            <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-xs font-semibold ${statusClasses}`}>
-              {statusLabel}
-            </span>
-            <p className="text-[10px] uppercase tracking-wide text-[hsl(var(--ticket-muted))]">Status</p>
+          <div className="flex min-h-[38px] flex-col items-center justify-start gap-1">
+            <div className="flex h-6 items-center justify-center leading-none">
+              <span className={`inline-flex h-5 items-center justify-center rounded-full border px-2.5 text-xs font-semibold leading-none ${statusClasses}`}>
+                {statusLabel}
+              </span>
+            </div>
+            <p className="h-3 text-[10px] uppercase leading-none tracking-wide text-[hsl(var(--ticket-muted))]">Status</p>
           </div>
         </div>
       </div>
@@ -295,10 +325,12 @@ export function TicketCard({
             <button
               type="button"
               onClick={handleDownloadPdf}
-              className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-xs font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors min-h-[48px]"
+              disabled={isGeneratingPdf}
+              aria-busy={isGeneratingPdf}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[hsl(var(--ticket-border))] bg-[hsl(var(--ticket-surface))] px-2 py-3 text-[hsl(var(--ticket-text))] text-xs font-semibold leading-tight text-center hover:bg-[hsl(var(--ticket-surface-2))] transition-colors min-h-[48px] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <FileText className="h-4 w-4" />
-              <span>{isReservedReceipt ? 'Comprovante (PDF)' : 'Salvar PDF'}</span>
+              {isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              <span>{isGeneratingPdf ? 'Gerando PDF...' : isReservedReceipt ? 'Comprovante (PDF)' : 'Salvar PDF'}</span>
             </button>
             {canDownload && !isReservedReceipt ? (
               <button
