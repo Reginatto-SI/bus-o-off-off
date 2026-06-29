@@ -90,6 +90,15 @@ function applyTicketExportMode(clonedElement: HTMLElement, width: number) {
     (element as HTMLElement).style.display = 'none';
   });
 
+  // Compensa a diferença de medição de texto entre o DOM ao vivo e o <foreignObject> SVG
+  // usado pelo html-to-image — sem essa proteção, labels curtos como "Passagem Nº",
+  // "Compra em" e "Total pago" quebram em 2 linhas só no PDF, sobrepondo o valor.
+  clonedElement.querySelectorAll(
+    '.flex.items-center > span, .flex.items-start > span, .flex.justify-between > span'
+  ).forEach((span) => {
+    (span as HTMLElement).style.whiteSpace = 'nowrap';
+  });
+
   clonedElement.querySelectorAll('[data-ticket-company-logo-box="true"]').forEach((box) => {
     const boxEl = box as HTMLElement;
     boxEl.style.width = '112px';
