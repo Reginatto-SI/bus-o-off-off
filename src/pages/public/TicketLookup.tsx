@@ -135,7 +135,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       companyLogoUrl: ticket.companyLogoUrl,
       companyCity: ticket.companyCity,
       companyState: ticket.companyState,
-      companyPrimaryColor: ticket.companyPrimaryColor,
+      companyPrimaryColor: null,
       companyCnpj: ticket.companyCnpj,
       companyPhone: ticket.companyPhone,
       companyWhatsapp: ticket.companyWhatsapp,

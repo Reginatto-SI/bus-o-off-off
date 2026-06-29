@@ -49,14 +49,16 @@ export function formatDateTime(date: Date): string {
  * Obtém a cor primária da empresa com fallback para cor padrão
  */
 export function getCompanyPrimaryColor(company: Company | null): string {
-  return company?.primary_color || BRAND_ORANGE;
+  // Cores antigas por empresa são legado e não devem alterar a identidade oficial.
+  return BRAND_ORANGE;
 }
 
 /**
  * Obtém a cor do ticket da empresa com fallback para cor primária e depois padrão
  */
 export function getCompanyTicketColor(company: Company | null): string {
-  return company?.ticket_color || company?.primary_color || BRAND_ORANGE;
+  // Passagens/PDFs usam sempre a cor oficial SmartBus BR.
+  return BRAND_ORANGE;
 }
 
 /**
