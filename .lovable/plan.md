@@ -1,72 +1,64 @@
-## Refinamento Visual — Passagem Virtual SmartBus BR
 
-Refinamento puramente de UI sobre o redesign atual. Sem mudanças em pagamento, QR, PDF, webhook, schema, RLS ou edge functions.
+## Diagnóstico
 
-### 1. Botão WhatsApp dentro da passagem (remover duplicidade externa)
+O fluxo "Salvar PDF" já passa pelo caminho correto (`TicketCard.handleDownloadPdf` → `generateTicketPdf` com `ticketElement` do `ticketContainerRef`), e já faz clone offscreen com `ticket-export-mode` e exclusão de `data-pdf-exclude`. Portanto o problema **não** é fallback nem botão errado.
 
-**`src/components/public/PassengerTicketList.tsx`**
-- Remover o bloco `Alert` "Grupo WhatsApp do evento" renderizado acima da lista (linhas que iteram `paidWhatsAppGroupLinks` com `<Alert>`).
-- Em todas as chamadas a `<TicketCard …>` trocar `showWhatsAppGroupCta={false}` por `showWhatsAppGroupCta={true}` (ou remover a prop — default já é `true`).
-- Manter import `Alert/MessageCircle/ExternalLink` somente se ainda usados; senão limpar.
+A causa real é o motor de captura: **`html2canvas` não suporta bem o layout atual da passagem**. A passagem usa:
 
-**`src/components/public/TicketCard.tsx`** (área dos botões de ação dentro do card escuro)
-- O botão de WhatsApp já existe (linha ~280). Refinar visual para casar com PDF / Salvar QR:
-  - Mesma altura/padding/raio dos demais.
-  - Fundo escuro (`bg-[hsl(var(--ticket-surface-2))]`) com borda verde (`border-[hsl(var(--ticket-success))]/60`) e texto/ícone verde (`text-[hsl(var(--ticket-success))]`); hover sutil.
-  - Texto em linha única "Entrar no grupo do WhatsApp" (sem `<br/>`).
-  - Layout dos 3 botões: `grid grid-cols-1 sm:grid-cols-3 gap-2` no mobile pode quebrar; manter dentro da largura máxima da passagem (420px).
-- Condicional: renderizar apenas se `ticket.whatsappGroupLink && isPaid`.
+- variáveis CSS modernas (`hsl(var(--ticket-bg))`, `--ticket-accent`, etc.)
+- grids com `grid-cols-[112px_minmax(0,1fr)]`
+- ícones SVG do `lucide-react`
+- bordas/divisores com cor via `bg-[hsl(var(--ticket-accent))]/40`
+- `QRCodeCanvas` (canvas nativo)
+- logos remotos (logo da empresa)
 
-### 2. Modal "Gerar Passagem" no padrão escuro SmartBus
+`html2canvas` reimplementa o engine de layout em JS e tropeça em vários desses itens — daí o PDF "parecido mas diferente" (cores deslocadas, alturas erradas, logo distorcida, espaçamento estranho, conteúdo cortado). Uma extensão do Chrome funciona bem porque captura o DOM real renderizado.
 
-**`src/components/admin/NewSaleModal.tsx`** (apenas o estado de exibição de passagens — após geração)
-- No `DialogContent` desse estado (linhas 1288–1342) aplicar fundo escuro do tema da passagem: `bg-[hsl(var(--ticket-bg))] text-[hsl(var(--ticket-text))]` no container e header/footer com borda `border-[hsl(var(--ticket-border))]`.
-- DialogTitle e textos auxiliares em branco/cinza claro.
-- Botões do footer mantêm comportamento; ajustar variantes para boa leitura sobre fundo escuro.
-- Não tocar nas etapas anteriores do wizard (passos de cadastro continuam claros).
+A correção definitiva é **trocar o motor de captura** para `html-to-image`, que serializa o DOM dentro de um `<foreignObject>` SVG e deixa o próprio navegador renderizar — produzindo uma imagem fiel da passagem virtual, exatamente como uma extensão de "screenshot do elemento".
 
-**`src/components/public/PassengerTicketList.tsx`** (cards do accordion por passageiro)
-- `PassengerCollapsibleCard` → trocar `bg-card` / `hover:bg-accent/50` / `border-primary/30 bg-accent/30` por classes no tema da passagem:
-  - card: `bg-[hsl(var(--ticket-surface))] border-[hsl(var(--ticket-border))] text-[hsl(var(--ticket-text))]`
-  - ícone passageiro: fundo `bg-[hsl(var(--ticket-accent))]/15` e ícone `text-[hsl(var(--ticket-accent))]`.
-  - subtítulo/CPF/assento: `text-[hsl(var(--ticket-muted))]`.
-  - badge "Ida e Volta" em laranja accent.
-- StatusBadge "Pago": forçar variante verde compatível com tema (passar `className` override se preciso, sem alterar lógica).
-- Manter largura máxima da passagem expandida (`max-w-[420px] mx-auto`) inclusive no desktop.
+## Mudanças
 
-### 3. Logo SmartBus branca dentro da passagem
+### 1. `package.json`
+Adicionar dependência `html-to-image` (mantemos `jspdf`; `html2canvas` pode permanecer instalado e ser removido depois para não ampliar o escopo).
 
-**`src/components/Logo.tsx`**
-- Adicionar prop opcional `variant?: 'default' | 'white'`.
-- Quando `variant='white'`: renderizar SVG inline branco com o lockup "SmartBus BR / VIAGENS & PASSEIOS" (mesma proporção da landing), em vez do `logo.png`. Texto em `currentColor` para herdar branco.
+### 2. `src/lib/ticketPdfGenerator.ts` (reescrita do caminho com `ticketElement`)
+- Substituir `html2canvas` por `htmlToCanvas` do `html-to-image`.
+- Manter a estratégia atual de:
+  - `waitForTicketExportAssets` (fonts + imagens + QR canvas via `requestAnimationFrame` duplo).
+  - Clonar offscreen o `ticketElement`, copiar pixels do `<canvas>` do QR para o clone (`copyCanvasPixelsToClone`), aplicar `applyTicketExportMode` (esconder `data-pdf-exclude`/`data-export-hidden`, fixar caixa do logo 112×112 com `object-contain`, normalizar tipografia do rodapé).
+  - Anexar o clone em host offscreen com largura real do `ticketElement` em tela.
+- Capturar o clone com `htmlToImage.toCanvas(clone, { pixelRatio: Math.max(2, devicePixelRatio), cacheBust: true, backgroundColor: '#0b1220', skipFonts: false, filter: (n) => !(n instanceof HTMLElement) || n.dataset?.pdfExclude !== 'true' && n.dataset?.exportHidden !== 'true' })`.
+- Gerar `jsPDF` com `format: [canvas.width, canvas.height]` (px), `addImage` em tamanho 1:1 (já é como funciona hoje, sem reescala → não corta nem distorce).
+- Manter o nome do arquivo e o log opt-in.
+- Manter o fallback `renderTicketVisual` apenas quando `ticketElement` for `null` (não regredir uso fora da UI).
 
-**`src/components/public/TicketCard.tsx`**
-- Substituir `<Logo size="sm" />` (linha ~321, dentro do header escuro do card) por `<Logo size="sm" variant="white" className="text-white" />`.
+### 3. `src/components/public/TicketCard.tsx` (mínimo)
+- Adicionar `data-export-hidden="true"` / confirmar `data-pdf-exclude="true"` nos botões já existentes (Salvar PDF, Salvar só QR Code, Copiar código, Atualizar status). Hoje já estão; só revisar para garantir que **toda** ação interativa fique marcada.
+- Sem mudanças visuais na passagem em tela.
 
-### 4. Identidade da empresa apenas como conteúdo
+### 4. Sem mudanças em
+- Pagamento, Asaas, webhook, verify, status da venda, checkout, QR token, consulta por CPF, schema do banco, layout da passagem virtual.
 
-Sem mudanças adicionais — `companyPrimaryColor` já está deprecado e não é mais aplicado. Apenas confirmar que nenhum estilo novo passe a usar `ticket.companyPrimaryColor`.
+## Como isso atende o critério "fiel à passagem virtual"
 
-### 5. Guardrails
+`html-to-image` rasteriza o DOM clonado via SVG `<foreignObject>` no próprio navegador, então:
 
-- Não alterar `handleDownloadPdf`, `handleDownloadImage`, `qrRef`, `ticketContainerRef`, `onRefreshStatus`, props públicas de `TicketCard` (exceto default de `showWhatsAppGroupCta`, que continua `true`).
-- Não tocar em edge functions, schema, RLS, geração de QR/PDF.
-- Tokens `--ticket-*` em `index.css` permanecem fonte única de verdade — sem novas cores hardcoded.
+- Cores `hsl(var(--ticket-*))` resolvem normalmente.
+- Grids/flex modernos respeitam a engine real.
+- Ícones `lucide-react` (SVG inline) saem nítidos.
+- O QR Code é copiado pixel-a-pixel do canvas em tela para o clone antes da captura.
+- A logo da empresa é capturada com `object-contain` dentro da caixa 112×112 (sem distorção).
+- O PDF recebe a imagem em tamanho real do clone (largura do ticket em tela), sem reescala que corte rodapé.
 
-### Arquivos alterados
+## Verificação
 
-1. `src/components/public/PassengerTicketList.tsx` — remove Alert externo de WhatsApp; cards escuros.
-2. `src/components/public/TicketCard.tsx` — botão WhatsApp refinado, logo white.
-3. `src/components/Logo.tsx` — variante white (SVG inline).
-4. `src/components/admin/NewSaleModal.tsx` — modal escuro no estado de passagens geradas.
+- `bun add html-to-image` (instalação automática re-inicia o dev server).
+- Build do projeto (executado pelo harness).
+- Playwright contra `localhost`: abrir `/consultar-passagens`, restaurar sessão se necessário, abrir uma passagem paga, clicar "Salvar PDF", interceptar o download e renderizar o PDF para JPEG via `pdftoppm`, comparar visualmente com screenshot da passagem em tela. Repetir o teste em uma passagem aberta dentro do admin.
+- Confirmar via inspeção visual: botões ausentes no PDF, QR presente, logo sem distorção, rodapé inteiro, sem corte.
 
-### Testes manuais
+## Arquivos alterados
 
-- Passagem com link de grupo: botão aparece dentro da passagem; card externo sumiu.
-- Passagem sem link: botão não aparece, PDF/QR continuam.
-- Salvar PDF e Salvar só QR Code funcionam (visual escuro capturado).
-- Modal "Gerar Passagem" com 1 e 2 passageiros em visual escuro consistente.
-- Expandir/recolher passageiro sem quebrar layout.
-- Logo branca visível na passagem; logo da empresa preservada à direita.
-- Mudar `ticket_color` na Identidade Visual não afeta a passagem.
-- Testar 390px mobile e desktop (passagem permanece centralizada em largura mobile).
+- `package.json` (+ `bun.lockb` / `package-lock.json` automático)
+- `src/lib/ticketPdfGenerator.ts`
+- `src/components/public/TicketCard.tsx` (apenas marcação de exclusão, se faltar em algum botão)
