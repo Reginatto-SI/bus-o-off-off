@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toCanvas as htmlToCanvas } from 'html-to-image';
 import type { TicketCardData } from '@/components/public/TicketCard';
 import { renderTicketVisual } from '@/lib/ticketVisualRenderer';
 
