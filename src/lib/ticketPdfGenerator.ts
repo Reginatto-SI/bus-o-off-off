@@ -269,6 +269,101 @@ function copyCanvasPixelsToClone(sourceElement: HTMLElement, clonedElement: HTML
   });
 }
 
+
+function copyComputedBoxStyles(sourceElement: HTMLElement, targetElement: HTMLElement) {
+  const computedStyle = window.getComputedStyle(sourceElement);
+  targetElement.style.width = computedStyle.width;
+  targetElement.style.height = computedStyle.height;
+  targetElement.style.maxWidth = computedStyle.maxWidth;
+  targetElement.style.maxHeight = computedStyle.maxHeight;
+  targetElement.style.minWidth = computedStyle.minWidth;
+  targetElement.style.minHeight = computedStyle.minHeight;
+  targetElement.style.display = computedStyle.display === 'none' ? 'none' : 'block';
+  targetElement.style.objectFit = 'contain';
+  targetElement.style.objectPosition = 'center';
+}
+
+function replaceCanvasWithImagesForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
+  const sourceCanvases = Array.from(sourceElement.querySelectorAll('canvas'));
+  const clonedCanvases = Array.from(clonedElement.querySelectorAll('canvas'));
+
+  sourceCanvases.forEach((sourceCanvas, index) => {
+    const clonedCanvas = clonedCanvases[index];
+    if (!clonedCanvas || !sourceCanvas.width || !sourceCanvas.height) return;
+
+    try {
+      const canvasDataUrl = sourceCanvas.toDataURL('image/png');
+      const image = document.createElement('img');
+      image.src = canvasDataUrl;
+      image.alt = sourceCanvas.getAttribute('aria-label') || 'QR Code da passagem';
+      image.className = clonedCanvas.className;
+      image.setAttribute('data-ticket-export-canvas-image', 'true');
+      image.width = sourceCanvas.width;
+      image.height = sourceCanvas.height;
+      copyComputedBoxStyles(clonedCanvas, image);
+
+      // No clone exportado, a imagem dataURL evita que o QR Code em canvas saia branco no iOS.
+      clonedCanvas.replaceWith(image);
+    } catch (error) {
+      console.warn('[ticket-pdf] Não foi possível converter canvas da passagem para imagem.', error);
+    }
+  });
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function imageUrlToDataUrl(imageUrl: string) {
+  const response = await fetch(imageUrl, { mode: 'cors', cache: 'force-cache' });
+  if (!response.ok) throw new Error(`Falha ao buscar imagem para exportação: ${response.status}`);
+  const blob = await response.blob();
+  return blobToDataUrl(blob);
+}
+
+async function inlineImportantImagesForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
+  const sourceImages = Array.from(sourceElement.querySelectorAll('img'));
+  const clonedImages = Array.from(clonedElement.querySelectorAll('img'));
+
+  await Promise.all(
+    sourceImages.map(async (sourceImage, index) => {
+      const clonedImage = clonedImages[index];
+      if (!clonedImage) return;
+
+      const isImportant = sourceImage.dataset.ticketCompanyLogo === 'true' || sourceImage.closest('[data-smartbus-platform-card="true"]') !== null;
+      if (!isImportant || sourceImage.naturalWidth <= 0 || sourceImage.naturalHeight <= 0) return;
+
+      const imageUrl = sourceImage.currentSrc || sourceImage.src;
+      if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return;
+
+      try {
+        const dataUrl = await imageUrlToDataUrl(imageUrl);
+        clonedImage.src = dataUrl;
+        clonedImage.removeAttribute('srcset');
+        clonedImage.style.objectFit = 'contain';
+        clonedImage.style.objectPosition = 'center';
+        await waitForImageReady(clonedImage, true);
+      } catch (error) {
+        // CORS pode impedir inlining em alguns CDNs; nesse caso preservamos a URL original
+        // já carregada para não quebrar desktop/Android nem esconder a imagem no clone.
+        console.warn('[ticket-pdf] Não foi possível embutir imagem importante no clone do PDF.', error);
+      }
+    }),
+  );
+}
+
+async function prepareCloneVisualAssetsForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
+  // Atua somente no clone offscreen: QR em canvas vira <img> dataURL e logos importantes
+  // são embutidas quando possível para evitar elementos brancos no PDF do iOS/Safari.
+  replaceCanvasWithImagesForExport(sourceElement, clonedElement);
+  await inlineImportantImagesForExport(sourceElement, clonedElement);
+}
+
 function applyTicketExportMode(clonedElement: HTMLElement, width: number) {
   clonedElement.classList.add('ticket-export-mode');
   clonedElement.dataset.ticketExportMode = 'true';
@@ -384,6 +479,7 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
     const exportElement = ticketElement.cloneNode(true) as HTMLElement;
     copyCanvasPixelsToClone(ticketElement, exportElement);
     applyTicketExportMode(exportElement, ticketWidth);
+    await prepareCloneVisualAssetsForExport(ticketElement, exportElement);
 
     const exportHost = document.createElement('div');
     exportHost.style.position = 'fixed';
