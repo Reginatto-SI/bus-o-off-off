@@ -509,9 +509,9 @@ export function TicketCard({
               <span>{formatBoardingDateTime(ticket.boardingDepartureDate, ticket.boardingDepartureTime, ticket.eventDate)}</span>
             </div>
           )}
-          <div className="flex items-start gap-2 text-xs text-[hsl(var(--ticket-muted))]">
+          <div className="flex items-start gap-2 text-xs text-[hsl(var(--ticket-muted))]" data-ticket-tolerance-alert="true">
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>
+            <span className="break-words max-w-full">
               {ticket.boardingToleranceMinutes != null
                 ? `Tolerância máxima de embarque: ${ticket.boardingToleranceMinutes} minutos após o horário informado.`
                 : 'Embarque pontual no horário informado.'}
