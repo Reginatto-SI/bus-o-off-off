@@ -9,6 +9,8 @@ interface GenerateTicketPdfParams {
   ticketElement?: HTMLElement | null;
 }
 
+export type TicketPdfDeliveryResult = 'downloaded' | 'shared' | 'preview';
+
 function isTicketPdfDebugEnabled() {
   try {
     return (
@@ -27,35 +29,226 @@ function logTicketPdfDebug(message: string, data?: Record<string, unknown>) {
   console.info(`[ticket-pdf] ${message}`, data ?? {});
 }
 
+
+function isIOSLikeDevice() {
+  const userAgent = window.navigator.userAgent || '';
+  const platform = window.navigator.platform || '';
+
+  // iPadOS 13+ pode se identificar como Mac; touch points diferenciam iPad de desktop.
+  return /iPad|iPhone|iPod/i.test(userAgent) || (platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+}
+
+function getPdfBlob(doc: jsPDF) {
+  return doc.output('blob');
+}
+
+function supportsAutomaticDownload() {
+  return 'download' in HTMLAnchorElement.prototype;
+}
+
+async function sharePdfFile(file: File, title: string) {
+  const shareData: ShareData = {
+    files: [file],
+    title,
+    text: 'No iPhone, use Compartilhar para salvar em Arquivos ou enviar pelo WhatsApp.',
+  };
+
+  if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
+    return false;
+  }
+
+  if (typeof navigator.share !== 'function') return false;
+
+  await navigator.share(shareData);
+  return true;
+}
+
+function downloadPdfBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+}
+
+function openPdfPreview(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const previewWindow = window.open(url, '_blank', 'noopener,noreferrer');
+
+  if (!previewWindow) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function deliverTicketPdf(doc: jsPDF, fileName: string): Promise<TicketPdfDeliveryResult> {
+  const blob = getPdfBlob(doc);
+  const isiOS = isIOSLikeDevice();
+  const canUseAutomaticDownload = supportsAutomaticDownload();
+
+  if (isiOS) {
+    const file = new File([blob], fileName, { type: 'application/pdf' });
+
+    try {
+      if (await sharePdfFile(file, 'Passagem SmartBus BR')) {
+        logTicketPdfDebug('PDF entregue via Web Share API', { fileName });
+        return 'shared';
+      }
+    } catch (error) {
+      // Se o usuário cancelar o share sheet, não tratamos como falha técnica.
+      if (error instanceof DOMException && error.name === 'AbortError') return 'shared';
+      console.warn('[ticket-pdf] Web Share API indisponível/falhou para PDF; abrindo preview.', error);
+    }
+
+    openPdfPreview(blob);
+    logTicketPdfDebug('PDF aberto em preview no iOS/iPadOS', { fileName });
+    return 'preview';
+  }
+
+  if (canUseAutomaticDownload) {
+    downloadPdfBlob(blob, fileName);
+    logTicketPdfDebug('PDF entregue por download tradicional', { fileName });
+    return 'downloaded';
+  }
+
+  openPdfPreview(blob);
+  logTicketPdfDebug('PDF aberto em preview por falta de suporte ao download automático', { fileName });
+  return 'preview';
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function waitForStableFrames(totalFrames = 3) {
+  for (let frame = 0; frame < totalFrames; frame += 1) {
+    await waitForNextFrame();
+  }
+}
+
+async function waitWithTimeout<T>(promise: Promise<T>, timeoutMs: number, warningMessage: string): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeoutId = setTimeout(() => {
+          console.warn(`[ticket-pdf] ${warningMessage}`);
+          resolve(null);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function isCanvasPainted(canvas: HTMLCanvasElement) {
+  if (!canvas.width || !canvas.height) return false;
+
+  try {
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return true;
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    for (let index = 3; index < data.length; index += 4) {
+      if (data[index] !== 0) return true;
+    }
+    return false;
+  } catch (error) {
+    // Canvas com restrição de leitura não deve bloquear exportação; se há dimensões,
+    // seguimos com warning controlado e deixamos a captura visual tentar renderizar.
+    console.warn('[ticket-pdf] Não foi possível inspecionar pixels do canvas do QR Code.', error);
+    return true;
+  }
+}
+
+async function waitForCanvasPaint(canvas: HTMLCanvasElement) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (isCanvasPainted(canvas)) return;
+    await waitForNextFrame();
+  }
+
+  console.warn('[ticket-pdf] QR Code em canvas não confirmou pintura antes da captura.');
+}
+
+async function waitForImageReady(image: HTMLImageElement, isImportant: boolean) {
+  if (!image.complete) {
+    await waitWithTimeout(
+      new Promise<void>((resolve) => {
+        image.addEventListener('load', () => resolve(), { once: true });
+        image.addEventListener('error', () => resolve(), { once: true });
+      }),
+      isImportant ? 8000 : 5000,
+      isImportant ? 'Tempo limite aguardando logo/imagem importante da passagem.' : 'Tempo limite aguardando imagem da passagem.',
+    );
+  }
+
+  if (typeof image.decode === 'function' && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) {
+    await waitWithTimeout(
+      image.decode().catch((error) => {
+        console.warn('[ticket-pdf] Falha ao decodificar imagem antes do PDF.', error);
+      }),
+      isImportant ? 8000 : 5000,
+      isImportant ? 'Tempo limite decodificando logo/imagem importante da passagem.' : 'Tempo limite decodificando imagem da passagem.',
+    );
+  }
+
+  if (isImportant && (image.naturalWidth <= 0 || image.naturalHeight <= 0)) {
+    console.warn('[ticket-pdf] Logo/imagem importante sem dimensões naturais válidas antes do PDF.', {
+      src: image.currentSrc || image.src,
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+    });
+  }
+}
+
 async function waitForTicketExportAssets(ticketElement: HTMLElement) {
-  // Garante que fontes web e imagens reais da passagem estejam prontas antes da captura.
-  // Sem esta espera, o html2canvas pode rasterizar com fallback de fonte, logo ausente
-  // ou QR Code ainda não pintado no canvas.
-  await document.fonts?.ready;
+  // Garante que fontes web, imagens reais, logos e QR Code estejam prontos antes da captura.
+  // Sem esta preparação, o html-to-image pode rasterizar a passagem no meio do carregamento.
+  if (document.fonts?.ready) {
+    await waitWithTimeout(document.fonts.ready, 8000, 'Tempo limite aguardando fontes da passagem.');
+  }
 
   const images = Array.from(ticketElement.querySelectorAll('img'));
   await Promise.all(
-    images.map(async (image) => {
-      if (image.complete) return;
-
-      try {
-        if (typeof image.decode === 'function') {
-          await image.decode();
-          return;
-        }
-      } catch {
-        // Mantém a exportação possível mesmo se uma imagem remota falhar; o onError da UI
-        // continua responsável por esconder imagens inválidas sem reconstruir o layout.
-      }
-
-      await new Promise<void>((resolve) => {
-        image.addEventListener('load', () => resolve(), { once: true });
-        image.addEventListener('error', () => resolve(), { once: true });
-      });
+    images.map((image) => {
+      const isImportant = image.dataset.ticketCompanyLogo === 'true' || image.closest('[data-smartbus-platform-card="true"]') !== null;
+      return waitForImageReady(image, isImportant);
     }),
   );
 
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const canvases = Array.from(ticketElement.querySelectorAll('canvas'));
+  await Promise.all(canvases.map((canvas) => waitForCanvasPaint(canvas)));
+
+  await waitForStableFrames(3);
+
+  const rect = ticketElement.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    console.warn('[ticket-pdf] Container da passagem com dimensões inválidas antes da captura.', {
+      width: rect.width,
+      height: rect.height,
+      scrollWidth: ticketElement.scrollWidth,
+      scrollHeight: ticketElement.scrollHeight,
+    });
+  }
 }
 
 function copyCanvasPixelsToClone(sourceElement: HTMLElement, clonedElement: HTMLElement) {
@@ -246,11 +439,10 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       });
 
       doc.addImage(domImg, 'PNG', 0, 0, domCanvas.width, domCanvas.height, undefined, 'FAST');
-      doc.save(fileName);
+      return await deliverTicketPdf(doc, fileName);
     } finally {
       exportHost.remove();
     }
-    return;
   }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -288,5 +480,5 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
   const y = (pageH - renderH) / 2;
 
   doc.addImage(ticketImg, 'PNG', x, y, renderW, renderH, undefined, 'FAST');
-  doc.save(fileName);
+  return await deliverTicketPdf(doc, fileName);
 }
