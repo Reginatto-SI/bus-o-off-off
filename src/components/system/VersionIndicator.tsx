@@ -1,20 +1,10 @@
 import { Clock, CheckCircle2, Loader2 } from "lucide-react";
-import { useVersionCheck } from "@/hooks/use-version-check";
-import { APP_BUILD_TIME } from "@/generated/build-info";
+import { useBuildVersionDetails } from "@/hooks/use-build-version-details";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
 import { toast } from "sonner";
 
 export function VersionIndicator() {
-  const { currentVersion, hasUpdate, isChecking, checkForUpdates } = useVersionCheck();
-
-  const buildDate = (() => {
-    try {
-      return format(new Date(APP_BUILD_TIME), "dd/MM/yyyy, HH:mm");
-    } catch {
-      return "";
-    }
-  })();
+  const { currentVersion, hasUpdate, isChecking, checkForUpdates, buildDateWithTimezone } = useBuildVersionDetails();
 
   const handleManualVersionCheck = async () => {
     if (isChecking) return;
@@ -57,7 +47,7 @@ export function VersionIndicator() {
       <div className="flex flex-col gap-0.5">
         <span className="text-[11px] leading-tight text-muted-foreground">
           Build {currentVersion}
-          {buildDate && <> · {buildDate}</>}
+          {buildDateWithTimezone && <> · {buildDateWithTimezone}</>}
         </span>
 
         {isChecking ? (
