@@ -187,28 +187,30 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       await waitForTicketExportAssets(exportElement);
       const ticketHeight = Math.ceil(exportElement.scrollHeight || exportElement.getBoundingClientRect().height || 1);
 
-      logTicketPdfDebug('capturando clone offscreen com html2canvas', {
+      logTicketPdfDebug('capturando clone offscreen com html-to-image', {
         ticketWidth,
         ticketHeight,
         fileName,
       });
 
-      const domCanvas = await html2canvas(exportElement, {
-        backgroundColor: '#ffffff',
+      const pixelRatio = Math.max(2, window.devicePixelRatio || 1);
+      // html-to-image serializa o DOM dentro de um <foreignObject> SVG e deixa o próprio
+      // navegador renderizar — o resultado é fiel à passagem virtual em tela, incluindo
+      // variáveis CSS, grids modernos, SVGs do lucide-react e o canvas do QR Code.
+      const domCanvas = await htmlToCanvas(exportElement, {
+        backgroundColor: '#0b1220',
         width: ticketWidth,
         height: ticketHeight,
-        windowWidth: ticketWidth,
-        windowHeight: ticketHeight,
-        scrollX: 0,
-        scrollY: 0,
-        useCORS: true,
-        logging: false,
-        scale: Math.max(2, window.devicePixelRatio || 1),
-        onclone: (_document, clonedElement) => {
-          applyTicketExportMode(clonedElement as HTMLElement, ticketWidth);
+        pixelRatio,
+        cacheBust: true,
+        skipFonts: false,
+        // Garante que controles interativos nunca apareçam no PDF, mesmo que escapem do CSS de export-mode.
+        filter: (node) => {
+          if (!(node instanceof HTMLElement)) return true;
+          if (node.dataset?.pdfExclude === 'true') return false;
+          if (node.dataset?.exportHidden === 'true') return false;
+          return true;
         },
-        // Evita exportar ações interativas (ex.: botões "Salvar PDF"/"Salvar QR Code") no arquivo final.
-        ignoreElements: (element) => (element as HTMLElement).dataset?.pdfExclude === 'true',
       });
 
       logTicketPdfDebug('PDF gerado pelo clone offscreen', {
