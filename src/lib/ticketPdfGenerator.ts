@@ -319,12 +319,22 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
-async function imageUrlToDataUrl(imageUrl: string) {
-  const response = await fetch(imageUrl, { mode: 'cors', cache: 'force-cache' });
+async function imageUrlToDataUrl(imageUrl: string, cacheBust = false) {
+  // No iOS, `cache: 'force-cache'` pode reusar uma resposta opaca/PWA sem CORS válidos,
+  // fazendo o WebKit rasterizar o <foreignObject> com áreas brancas.
+  // Quando cacheBust=true forçamos um fetch novo com resposta CORS "fresca".
+  const url = cacheBust
+    ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_pdf=${Date.now()}`
+    : imageUrl;
+  const response = await fetch(url, {
+    mode: 'cors',
+    cache: cacheBust ? 'no-store' : 'force-cache',
+  });
   if (!response.ok) throw new Error(`Falha ao buscar imagem para exportação: ${response.status}`);
   const blob = await response.blob();
   return blobToDataUrl(blob);
 }
+
 
 async function inlineImportantImagesForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
   const sourceImages = Array.from(sourceElement.querySelectorAll('img'));
