@@ -434,13 +434,14 @@ export function TicketCard({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <div className="relative rounded-xl bg-white p-3">
+            <div data-ticket-qr-box="true" className="relative rounded-xl bg-white p-3">
               <QRCodeCanvas
                 ref={qrRef}
                 value={ticket.qrCodeToken}
                 size={200}
                 level="M"
                 includeMargin={false}
+                data-ticket-qr-canvas="true"
                 className={isCancelled ? 'opacity-40' : ''}
               />
               {isCancelled && (
