@@ -407,7 +407,7 @@ export function TicketCard({
             <div className="mt-3 space-y-1 text-[11px] leading-5 text-[hsl(var(--ticket-muted))]">
               <p>{TICKET_PLATFORM_SALES_TEXT}</p>
               <p>www.smartbusbr.com.br</p>
-              <p>Contato: (31) 99207-4309</p>
+              <p>Contato da plataforma: (31) 99207-4309</p>
             </div>
           </div>
         </div>

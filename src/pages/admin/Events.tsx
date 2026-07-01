@@ -115,6 +115,10 @@ import { AsaasOnboardingWizard, AsaasOnboardingCompanyData } from '@/components/
 import { getAsaasIntegrationSnapshot } from '@/lib/asaasIntegrationStatus';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { buildEventOperationalEndMap, isOperationallyVisible } from '@/lib/eventOperationalWindow';
+import {
+  REGULATORY_RESPONSIBILITY_ACCEPTANCE_TEXT,
+  REGULATORY_RESPONSIBILITY_TERMS_VERSION,
+} from '@/lib/intermediationPolicy';
 // Types
 interface EventFilters {
   search: string;
@@ -1499,6 +1503,50 @@ export default function Events() {
   };
 
   // Handlers
+  const registerRegulatoryResponsibilityAudit = async ({
+    eventId,
+    previousStatus,
+    targetStatus,
+    allowOnlineSale,
+  }: {
+    eventId: string;
+    previousStatus?: Event['status'] | null;
+    targetStatus: Event['status'];
+    allowOnlineSale: boolean;
+  }) => {
+    if (!activeCompanyId || targetStatus !== 'a_venda') return;
+
+    const acceptedAt = new Date().toISOString();
+    const { error } = await (supabase as any).from('company_term_audit_logs').insert({
+      company_id: activeCompanyId,
+      event_id: eventId,
+      performed_by: user?.id ?? null,
+      action: 'event_regulatory_responsibility_acceptance',
+      description: 'Aceite regulatório da empresa registrado na publicação do evento à venda.',
+      old_value: previousStatus ?? null,
+      new_value: targetStatus,
+      metadata: {
+        version: REGULATORY_RESPONSIBILITY_TERMS_VERSION,
+        accepted_text: REGULATORY_RESPONSIBILITY_ACCEPTANCE_TEXT,
+        previous_status: previousStatus ?? null,
+        target_status: targetStatus,
+        allow_online_sale: allowOnlineSale,
+        user_id: user?.id ?? null,
+        accepted_at: acceptedAt,
+        client_timestamp: acceptedAt,
+      },
+    });
+
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao registrar aceite regulatório do evento (company_term_audit_logs.insert)',
+        error,
+        context: { action: 'insert', table: 'company_term_audit_logs', companyId: activeCompanyId, eventId, userId: user?.id },
+      });
+      toast.warning('Evento publicado, mas o registro de auditoria regulatória não pôde ser salvo agora.');
+    }
+  };
+
   const persistEvent = async (targetStatus: 'rascunho' | 'a_venda' | 'encerrado') => {
     if (!activeCompanyId) {
       toast.error('Empresa não selecionada');
@@ -1681,6 +1729,19 @@ export default function Events() {
         })
       );
       return { error: true, eventId: newEventId, isNew: false };
+    }
+
+    const previousStatus = isCreating ? null : (currentEditingEvent?.status ?? null);
+    const isEffectivePublish = targetStatus === 'a_venda' && (isCreating || previousStatus !== 'a_venda');
+
+    // Evita auditoria duplicada ao editar um evento que já estava publicado.
+    if (!error && newEventId && isEffectivePublish) {
+      await registerRegulatoryResponsibilityAudit({
+        eventId: newEventId,
+        previousStatus,
+        targetStatus,
+        allowOnlineSale: form.allow_online_sale,
+      });
     }
 
     if (isCreating && newEventId) {
@@ -2654,6 +2715,14 @@ export default function Events() {
       toast.error('Erro ao alterar status do evento');
     } else {
       if (newStatus === 'a_venda') {
+        if (event.status !== 'a_venda') {
+          await registerRegulatoryResponsibilityAudit({
+            eventId: event.id,
+            previousStatus: event.status,
+            targetStatus: newStatus,
+            allowOnlineSale: event.allow_online_sale,
+          });
+        }
         toast.success('Evento publicado com sucesso! O evento já está visível no portal.', {
           duration: 4000,
           icon: '🚀',
@@ -4731,7 +4800,7 @@ Links internos:
                           />
                           <div className="text-sm leading-relaxed">
                             <label htmlFor="platform_fee_accepted" className="cursor-pointer">
-                              Li e aceito os termos da taxa da plataforma Smartbus BR, incluindo a regra de não devolução da taxa em cancelamentos ou reembolsos ao passageiro.
+                              Li e aceito os termos da taxa da plataforma Smartbus BR e a declaração de responsabilidade regulatória da empresa organizadora.
                             </label>{' '}
                             <Button
                               type="button"
@@ -5504,7 +5573,14 @@ Links internos:
               </div>
 
               <div>
-                <p className="font-semibold">7. Aceite e rastreabilidade</p>
+                <p className="font-semibold">7. Declaração de responsabilidade regulatória</p>
+                <p className="text-muted-foreground">
+                  {REGULATORY_RESPONSIBILITY_ACCEPTANCE_TEXT}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold">8. Aceite e rastreabilidade</p>
                 <p className="text-muted-foreground">
                   Ao publicar um evento utilizando o sistema de venda online da plataforma, o organizador declara estar ciente destes termos. O sistema registra data/hora, versão do termo e usuário responsável pelo aceite.
                 </p>

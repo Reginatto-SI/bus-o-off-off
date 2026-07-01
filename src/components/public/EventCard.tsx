@@ -71,7 +71,7 @@ export function EventCard({ event, sellerRef, isSoldOut = false }: EventCardProp
             {categoryLabel}
           </Badge>
           <span className="text-xs text-muted-foreground/90">
-            Compra online e embarque organizado
+            Compra pela plataforma • transporte pela empresa responsável
           </span>
         </div>
         {/* Nome, Data Badge e Preço */}
