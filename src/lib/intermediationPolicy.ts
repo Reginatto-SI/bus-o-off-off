@@ -4,7 +4,7 @@ export const SMARTBUS_PLATFORM_SHORT_NOTICE =
   'A SmartBus BR atua como plataforma intermediadora de venda de passagens. A execução do transporte, cancelamentos e reembolsos são de responsabilidade da empresa organizadora do evento.';
 
 export const getTransportResponsibilityIntro = (companyName: string) =>
-  `Este transporte é organizado e operado por ${companyName}. A SmartBus BR atua exclusivamente como plataforma intermediadora para divulgação, gestão e venda de passagens.`;
+  `Transporte realizado por: ${companyName}. SmartBus BR atua como plataforma tecnológica de venda, pagamento e controle de embarque.`;
 
 export const TRANSPORT_RESPONSIBILITY_DETAILS =
   'Questões relacionadas à execução do transporte, horários, embarque, atrasos, cancelamentos, alterações e reembolsos são de responsabilidade da empresa organizadora.';
@@ -31,4 +31,9 @@ export const TICKET_PLATFORM_LIABILITY_TEXT =
 
 // Rodapé obrigatório para materiais emitidos/exportados no contexto da passagem.
 export const TICKET_PDF_FOOTER_TEXT =
-  'Gerado por — www.smartbusbr.com.br — Contato: (31) 99207-4309';
+  'Gerado por — www.smartbusbr.com.br — Contato da plataforma: (31) 99207-4309';
+
+export const REGULATORY_RESPONSIBILITY_TERMS_VERSION = '2026-07-responsabilidade-regulatoria-evento-v1';
+
+export const REGULATORY_RESPONSIBILITY_ACCEPTANCE_TEXT =
+  'Declaro que a empresa organizadora é responsável pela execução física do transporte, incluindo autorizações, licenças, seguros, veículos regulares, motoristas habilitados, cumprimento das normas aplicáveis e atendimento operacional aos passageiros. Declaro ciência de que a SmartBus BR atua como plataforma tecnológica de venda, pagamento e controle de embarque, sem executar diretamente o transporte nem validar juridicamente a operação.';

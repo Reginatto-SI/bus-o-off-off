@@ -6,7 +6,7 @@ import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle, ExternalLink } from 'lucide-react';
+import { Loader2, Ticket, Bus, ArrowLeft, MessageCircle, ExternalLink, Phone, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EventSummaryCard } from '@/components/public/EventSummaryCard';
 import { VehicleCard } from '@/components/public/VehicleCard';
@@ -50,6 +50,7 @@ export default function PublicEventDetail() {
   const [isDescriptionDialogOpen, setIsDescriptionDialogOpen] = useState(false);
   const [supportWhatsapp, setSupportWhatsapp] = useState<string | null>(null);
   const [eventCompanyName, setEventCompanyName] = useState('empresa organizadora');
+  const [eventCompanyDetails, setEventCompanyDetails] = useState<{ cnpj?: string | null; phone?: string | null; whatsapp?: string | null }>({});
 
   const transportPolicy: TransportPolicy = event?.transport_policy ?? 'trecho_independente';
   const groupedPolicy = isGroupedPolicy(transportPolicy);
@@ -114,12 +115,17 @@ export default function PublicEventDetail() {
 
         const { data: companyData } = await supabase
           .from('companies')
-          .select('name, trade_name, whatsapp')
+          .select('name, trade_name, cnpj, phone, whatsapp')
           .eq('id', eventData.company_id)
           .single();
 
         // Transparência jurídica: resolvemos aqui o nome oficial exibido em todos os avisos públicos.
         setEventCompanyName(companyData?.trade_name || companyData?.name || 'empresa organizadora');
+        setEventCompanyDetails({
+          cnpj: companyData?.cnpj ?? null,
+          phone: companyData?.phone ?? null,
+          whatsapp: companyData?.whatsapp ?? null,
+        });
 
         // Prioridade de suporte: WhatsApp no evento (quando existir) e fallback para WhatsApp da empresa.
         const eventWhatsapp = eventData.whatsapp?.trim() || null;
@@ -127,6 +133,7 @@ export default function PublicEventDetail() {
       } else {
         setSupportWhatsapp(null);
         setEventCompanyName('empresa organizadora');
+        setEventCompanyDetails({});
       }
 
       const fetchedTrips = (tripsRes.data ?? []) as Trip[];
@@ -307,6 +314,28 @@ export default function PublicEventDetail() {
         <section className="rounded-lg border bg-card p-4 space-y-2">
           <h2 className="text-base font-semibold">Responsável pelo transporte</h2>
           <p className="text-sm text-muted-foreground">{getTransportResponsibilityIntro(eventCompanyName)}</p>
+          {(eventCompanyDetails.cnpj || eventCompanyDetails.phone || eventCompanyDetails.whatsapp) && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {eventCompanyDetails.cnpj && (
+                <span className="inline-flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5" />
+                  CNPJ: {eventCompanyDetails.cnpj}
+                </span>
+              )}
+              {eventCompanyDetails.phone && (
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="h-3.5 w-3.5" />
+                  Telefone: {eventCompanyDetails.phone}
+                </span>
+              )}
+              {eventCompanyDetails.whatsapp && (
+                <span className="inline-flex items-center gap-1">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  WhatsApp: {eventCompanyDetails.whatsapp}
+                </span>
+              )}
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">{TRANSPORT_RESPONSIBILITY_DETAILS}</p>
         </section>
 
