@@ -352,7 +352,8 @@ async function inlineImportantImagesForExport(sourceElement: HTMLElement, cloned
       if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return;
 
       try {
-        const dataUrl = await imageUrlToDataUrl(imageUrl);
+        const dataUrl = await imageUrlToDataUrl(imageUrl, isIOSLikeDevice());
+
         clonedImage.src = dataUrl;
         clonedImage.removeAttribute('srcset');
         clonedImage.style.objectFit = 'contain';
