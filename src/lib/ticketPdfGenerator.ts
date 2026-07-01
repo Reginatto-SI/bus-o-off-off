@@ -692,6 +692,7 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       });
 
       const pixelRatio = Math.max(2, window.devicePixelRatio || 1);
+      const cloneRectBeforeCapture = exportElement.getBoundingClientRect();
       // html-to-image serializa o DOM dentro de um <foreignObject> SVG e deixa o próprio
       // navegador renderizar — o resultado é fiel à passagem virtual em tela, incluindo
       // variáveis CSS, grids modernos, SVGs do lucide-react e o canvas do QR Code.
@@ -710,6 +711,18 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
           return true;
         },
       });
+
+      // Rede de segurança iOS: corrige regiões críticas (QR, logos) que às vezes saem
+      // brancas no WebKit sem afetar desktop/Android (função é no-op fora de iOS).
+      await patchCriticalRegionsForIOS(
+        domCanvas,
+        ticketElement,
+        exportElement,
+        cloneRectBeforeCapture,
+        pixelRatio,
+      );
+
+
 
       logTicketPdfDebug('PDF gerado pelo clone offscreen', {
         canvasWidth: domCanvas.width,
