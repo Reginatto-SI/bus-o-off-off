@@ -401,6 +401,7 @@ export function TicketCard({
             <img
               src="/logo-branca2.png"
               alt="SmartBus BR"
+              data-smartbus-logo="true"
               className="mx-auto h-16 w-auto max-w-[260px] object-contain"
             />
             <div className="mt-3 space-y-1 text-[11px] leading-5 text-[hsl(var(--ticket-muted))]">
