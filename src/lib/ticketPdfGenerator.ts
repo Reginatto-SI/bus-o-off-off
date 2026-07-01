@@ -319,12 +319,22 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
-async function imageUrlToDataUrl(imageUrl: string) {
-  const response = await fetch(imageUrl, { mode: 'cors', cache: 'force-cache' });
+async function imageUrlToDataUrl(imageUrl: string, cacheBust = false) {
+  // No iOS, `cache: 'force-cache'` pode reusar uma resposta opaca/PWA sem CORS válidos,
+  // fazendo o WebKit rasterizar o <foreignObject> com áreas brancas.
+  // Quando cacheBust=true forçamos um fetch novo com resposta CORS "fresca".
+  const url = cacheBust
+    ? `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}_pdf=${Date.now()}`
+    : imageUrl;
+  const response = await fetch(url, {
+    mode: 'cors',
+    cache: cacheBust ? 'no-store' : 'force-cache',
+  });
   if (!response.ok) throw new Error(`Falha ao buscar imagem para exportação: ${response.status}`);
   const blob = await response.blob();
   return blobToDataUrl(blob);
 }
+
 
 async function inlineImportantImagesForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
   const sourceImages = Array.from(sourceElement.querySelectorAll('img'));
@@ -342,7 +352,8 @@ async function inlineImportantImagesForExport(sourceElement: HTMLElement, cloned
       if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return;
 
       try {
-        const dataUrl = await imageUrlToDataUrl(imageUrl);
+        const dataUrl = await imageUrlToDataUrl(imageUrl, isIOSLikeDevice());
+
         clonedImage.src = dataUrl;
         clonedImage.removeAttribute('srcset');
         clonedImage.style.objectFit = 'contain';
@@ -356,6 +367,185 @@ async function inlineImportantImagesForExport(sourceElement: HTMLElement, cloned
     }),
   );
 }
+
+// ===== Rede de segurança iOS: valida regiões críticas do canvas final e redesenha
+// QR Code / logos quando a captura do html-to-image sai em branco no WebKit.
+
+interface CriticalRegionSpec {
+  name: 'qr' | 'company-logo' | 'smartbus-logo';
+  cloneSelector: string;
+  // Como reconstruir a imagem quando a região estiver branca.
+  buildImageSource: (
+    sourceElement: HTMLElement,
+    cloneElement: HTMLElement,
+  ) => Promise<string | null>;
+  // Se true, desenha ocupando toda a caixa. Se false, tenta ajustar com object-contain.
+  fillBox?: boolean;
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function isRegionMostlyBlank(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): boolean {
+  if (w <= 2 || h <= 2) return false;
+  try {
+    const { data } = ctx.getImageData(x, y, w, h);
+    let blankOrWhite = 0;
+    const total = data.length / 4;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
+      if (a < 8) {
+        blankOrWhite++;
+      } else {
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (lum > 245) blankOrWhite++;
+      }
+    }
+    return blankOrWhite / total > 0.92;
+  } catch (error) {
+    console.warn('[ticket-pdf] getImageData falhou na validação da região crítica.', error);
+    return false;
+  }
+}
+
+function drawContain(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  if (!img.naturalWidth || !img.naturalHeight) return;
+  const scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  const drawX = x + (w - drawW) / 2;
+  const drawY = y + (h - drawH) / 2;
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
+async function patchCriticalRegionsForIOS(
+  canvas: HTMLCanvasElement,
+  sourceElement: HTMLElement,
+  cloneElement: HTMLElement,
+  cloneRect: DOMRect,
+  pixelRatio: number,
+) {
+  if (!isIOSLikeDevice()) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const specs: CriticalRegionSpec[] = [
+    {
+      name: 'qr',
+      cloneSelector: '[data-ticket-qr-box="true"]',
+      fillBox: false,
+      buildImageSource: async (source) => {
+        const qr =
+          (source.querySelector('canvas[data-ticket-qr-canvas="true"]') as HTMLCanvasElement | null) ||
+          (source.querySelector('canvas') as HTMLCanvasElement | null);
+        if (!qr || !qr.width || !qr.height) return null;
+        try {
+          return qr.toDataURL('image/png');
+        } catch (error) {
+          console.warn('[ticket-pdf] Falha ao serializar QR Code para overlay iOS.', error);
+          return null;
+        }
+      },
+    },
+    {
+      name: 'company-logo',
+      cloneSelector: '[data-ticket-company-logo-box="true"]',
+      fillBox: false,
+      buildImageSource: async (source) => {
+        const logo = source.querySelector('[data-ticket-company-logo="true"]') as HTMLImageElement | null;
+        if (!logo) return null;
+        const url = logo.currentSrc || logo.src;
+        if (!url) return null;
+        if (url.startsWith('data:')) return url;
+        try {
+          return await imageUrlToDataUrl(url, true);
+        } catch (error) {
+          console.warn('[ticket-pdf] Falha ao rebaixar logo da empresa para overlay iOS.', error);
+          return null;
+        }
+      },
+    },
+    {
+      name: 'smartbus-logo',
+      cloneSelector: '[data-smartbus-logo="true"]',
+      fillBox: false,
+      buildImageSource: async (source) => {
+        const logo = source.querySelector('[data-smartbus-logo="true"]') as HTMLImageElement | null;
+        const url = logo?.currentSrc || logo?.src || '/logo-branca2.png';
+        try {
+          return await imageUrlToDataUrl(url, true);
+        } catch (error) {
+          console.warn('[ticket-pdf] Falha ao rebaixar logo SmartBus para overlay iOS.', error);
+          return null;
+        }
+      },
+    },
+  ];
+
+  for (const spec of specs) {
+    const target = cloneElement.querySelector(spec.cloneSelector) as HTMLElement | null;
+    if (!target) continue;
+
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+
+    const x = Math.round((rect.left - cloneRect.left) * pixelRatio);
+    const y = Math.round((rect.top - cloneRect.top) * pixelRatio);
+    const w = Math.round(rect.width * pixelRatio);
+    const h = Math.round(rect.height * pixelRatio);
+
+    if (x < 0 || y < 0 || x + w > canvas.width || y + h > canvas.height) continue;
+
+    if (!isRegionMostlyBlank(ctx, x, y, w, h)) continue;
+
+    logTicketPdfDebug('região crítica em branco detectada no iOS — aplicando overlay', {
+      name: spec.name,
+      x,
+      y,
+      w,
+      h,
+    });
+
+    const dataUrl = await spec.buildImageSource(sourceElement, cloneElement);
+    if (!dataUrl) continue;
+
+    const img = await loadImage(dataUrl);
+    if (!img) continue;
+
+    if (spec.fillBox) {
+      ctx.drawImage(img, x, y, w, h);
+    } else {
+      // Preserva possível padding/borda branca (ex.: QR em box branca com padding).
+      drawContain(ctx, img, x, y, w, h);
+    }
+  }
+}
+
+
 
 async function prepareCloneVisualAssetsForExport(sourceElement: HTMLElement, clonedElement: HTMLElement) {
   // Atua somente no clone offscreen: QR em canvas vira <img> dataURL e logos importantes
@@ -502,6 +692,7 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
       });
 
       const pixelRatio = Math.max(2, window.devicePixelRatio || 1);
+      const cloneRectBeforeCapture = exportElement.getBoundingClientRect();
       // html-to-image serializa o DOM dentro de um <foreignObject> SVG e deixa o próprio
       // navegador renderizar — o resultado é fiel à passagem virtual em tela, incluindo
       // variáveis CSS, grids modernos, SVGs do lucide-react e o canvas do QR Code.
@@ -520,6 +711,18 @@ export async function generateTicketPdf({ ticket, qrBase64, ticketElement }: Gen
           return true;
         },
       });
+
+      // Rede de segurança iOS: corrige regiões críticas (QR, logos) que às vezes saem
+      // brancas no WebKit sem afetar desktop/Android (função é no-op fora de iOS).
+      await patchCriticalRegionsForIOS(
+        domCanvas,
+        ticketElement,
+        exportElement,
+        cloneRectBeforeCapture,
+        pixelRatio,
+      );
+
+
 
       logTicketPdfDebug('PDF gerado pelo clone offscreen', {
         canvasWidth: domCanvas.width,

@@ -401,6 +401,7 @@ export function TicketCard({
             <img
               src="/logo-branca2.png"
               alt="SmartBus BR"
+              data-smartbus-logo="true"
               className="mx-auto h-16 w-auto max-w-[260px] object-contain"
             />
             <div className="mt-3 space-y-1 text-[11px] leading-5 text-[hsl(var(--ticket-muted))]">
@@ -433,13 +434,14 @@ export function TicketCard({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <div className="relative rounded-xl bg-white p-3">
+            <div data-ticket-qr-box="true" className="relative rounded-xl bg-white p-3">
               <QRCodeCanvas
                 ref={qrRef}
                 value={ticket.qrCodeToken}
                 size={200}
                 level="M"
                 includeMargin={false}
+                data-ticket-qr-canvas="true"
                 className={isCancelled ? 'opacity-40' : ''}
               />
               {isCancelled && (
