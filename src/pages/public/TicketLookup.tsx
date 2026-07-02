@@ -31,6 +31,8 @@ type TicketLookupResponseTicket = {
   eventCity: string;
   eventTransportPolicy?: TransportPolicy;
   whatsappGroupLink?: string | null;
+  // Compatibilidade defensiva com payloads legados/snake_case da edge function pública.
+  whatsapp_group_link?: string | null;
   eventId?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
@@ -120,7 +122,8 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
       eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
-      whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? null) : null,
+      eventId: ticket.eventId ?? null,
+      whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? ticket.whatsapp_group_link ?? null) : null,
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
       boardingLocationAddress: ticket.boardingLocationAddress,
@@ -172,6 +175,16 @@ export default function TicketLookup() {
   const [searching, setSearching] = useState(false);
   const [refreshingSaleIds, setRefreshingSaleIds] = useState<Set<string>>(new Set());
 
+  const reloadTicketsFromPublicLookup = useCallback(async (cpfDigits: string) => {
+    const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+      body: { cpf: cpfDigits },
+    });
+
+    if (error) throw error;
+
+    setTickets(normalizeCardsFromResponse((data || {}) as TicketLookupResponse));
+  }, []);
+
   const handleRefreshStatus = useCallback(async (saleId: string) => {
     setRefreshingSaleIds((prev) => new Set(prev).add(saleId));
     try {
@@ -182,9 +195,16 @@ export default function TicketLookup() {
 
       const newStatus = data?.paymentStatus;
       if (newStatus === 'pago') {
-        setTickets((prev) =>
-          prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: data?.paymentConfirmedAt ?? t.purchaseConfirmedAt ?? null } : t))
-        );
+        const cpfDigits = cpf.replace(/\D/g, '');
+        // Após pagamento confirmado manualmente, recarrega o lookup público oficial para
+        // trazer campos liberados somente para vendas pagas, como o grupo WhatsApp correto do evento.
+        if (cpfDigits.length === 11) {
+          await reloadTicketsFromPublicLookup(cpfDigits);
+        } else {
+          setTickets((prev) =>
+            prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: data?.paymentConfirmedAt ?? t.purchaseConfirmedAt ?? null } : t))
+          );
+        }
         toast({ title: 'Pagamento confirmado ✅' });
       } else if (newStatus === 'processando') {
         toast({ title: 'Pagamento ainda em processamento' });
@@ -200,7 +220,7 @@ export default function TicketLookup() {
         return next;
       });
     }
-  }, [toast]);
+  }, [cpf, reloadTicketsFromPublicLookup, toast]);
 
   const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[], cpfDigits: string) => {
     const pendingSaleIds = [...new Set(
@@ -236,16 +256,15 @@ export default function TicketLookup() {
 
       // Após confirmar pagamento no lookup público, recarrega a fonte oficial para trazer campos
       // liberados apenas para venda paga, como o link do grupo WhatsApp do evento.
-      const { data, error } = await supabase.functions.invoke('ticket-lookup', {
-        body: { cpf: cpfDigits },
-      });
-      if (!error) {
-        setTickets(normalizeCardsFromResponse((data || {}) as TicketLookupResponse));
+      try {
+        await reloadTicketsFromPublicLookup(cpfDigits);
+      } catch {
+        // Mantém o status visual atualizado mesmo se o reload dos dados completos falhar momentaneamente.
       }
 
       toast({ title: 'Status de pagamento atualizado ✅' });
     }
-  }, [toast]);
+  }, [reloadTicketsFromPublicLookup, toast]);
 
   const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
     // Fallback temporário para ambiente com edge function antiga exigindo event_id.

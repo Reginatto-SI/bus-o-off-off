@@ -86,14 +86,27 @@ serve(async (req) => {
       }
     }
 
-    // 4. Buscar taxas por todos os eventos retornados para suportar múltiplos resultados no mesmo CPF.
+    // 4. Buscar dados públicos mínimos dos eventos retornados para garantir campos
+    // condicionais da passagem paga sem expor dados administrativos no payload final.
     const eventIds = [
       ...new Set(
         filtered
-          .map((t: any) => t.trip?.event_id)
+          .map((t: any) => t.sale?.event_id || t.trip?.event_id)
           .filter(Boolean)
       ),
     ];
+
+    const eventPublicMap = new Map();
+    if (eventIds.length > 0) {
+      const { data: eventPublicRows } = await supabaseAdmin
+        .from("events")
+        .select("id, company_id, whatsapp_group_link")
+        .in("id", eventIds);
+
+      for (const event of eventPublicRows ?? []) {
+        eventPublicMap.set(event.id, event);
+      }
+    }
 
     const { data: feesData } = eventIds.length > 0
       ? await supabaseAdmin
@@ -147,8 +160,15 @@ serve(async (req) => {
         boardingDepartureDate = ebl?.departure_date ?? null;
       }
 
-      const companyId = t?.sale?.event?.company_id;
+      const eventId = t.sale?.event_id || t.trip?.event_id || null;
+      const eventPublic = eventId ? eventPublicMap.get(eventId) ?? null : null;
+      const companyId = t?.sale?.event?.company_id || eventPublic?.company_id;
+      const eventCompanyId = eventPublic?.company_id || t?.sale?.event?.company_id || null;
       const company = companyId ? companyMap.get(companyId) ?? null : null;
+      const eventWhatsappGroupLink = eventPublic?.whatsapp_group_link || t.sale?.event?.whatsapp_group_link || null;
+      const whatsappGroupLink = t.sale?.status === "pago" && eventCompanyId === companyId
+        ? eventWhatsappGroupLink
+        : null;
 
       const seatInfo = t.seat_id ? seatMap.get(t.seat_id) : null;
 
@@ -168,8 +188,8 @@ serve(async (req) => {
         // Mantém modelagem por trecho, mas informa política para a camada de apresentação consolidar quando obrigatório.
         eventTransportPolicy: t.sale?.event?.transport_policy || "trecho_independente",
         // Segurança: só retorna link do grupo para vendas confirmadas/pagas.
-        whatsappGroupLink: t.sale?.status === "pago" ? (t.sale?.event?.whatsapp_group_link || null) : null,
-        eventId: t.trip?.event_id || null,
+        whatsappGroupLink,
+        eventId,
         boardingToleranceMinutes: t.sale?.event?.boarding_tolerance_minutes ?? null,
         boardingLocationName: t.sale?.boarding_location?.name || "",
         boardingLocationAddress: t.sale?.boarding_location?.address || "",
