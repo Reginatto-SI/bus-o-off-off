@@ -205,6 +205,16 @@ export default function TicketLookup() {
   const [searching, setSearching] = useState(false);
   const [refreshingSaleIds, setRefreshingSaleIds] = useState<Set<string>>(new Set());
 
+  const reloadTicketsFromPublicLookup = useCallback(async (cpfDigits: string) => {
+    const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+      body: { cpf: cpfDigits },
+    });
+
+    if (error) throw error;
+
+    setTickets(normalizeCardsFromResponse((data || {}) as TicketLookupResponse));
+  }, []);
+
   const handleRefreshStatus = useCallback(async (saleId: string) => {
     setRefreshingSaleIds((prev) => new Set(prev).add(saleId));
     try {
@@ -215,9 +225,16 @@ export default function TicketLookup() {
 
       const newStatus = data?.paymentStatus;
       if (newStatus === 'pago') {
-        setTickets((prev) =>
-          prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: data?.paymentConfirmedAt ?? t.purchaseConfirmedAt ?? null } : t))
-        );
+        const cpfDigits = cpf.replace(/\D/g, '');
+        // Após pagamento confirmado manualmente, recarrega o lookup público oficial para
+        // trazer campos liberados somente para vendas pagas, como o grupo WhatsApp correto do evento.
+        if (cpfDigits.length === 11) {
+          await reloadTicketsFromPublicLookup(cpfDigits);
+        } else {
+          setTickets((prev) =>
+            prev.map((t) => (t.saleId === saleId ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: data?.paymentConfirmedAt ?? t.purchaseConfirmedAt ?? null } : t))
+          );
+        }
         toast({ title: 'Pagamento confirmado ✅' });
       } else if (newStatus === 'processando') {
         toast({ title: 'Pagamento ainda em processamento' });
@@ -233,7 +250,7 @@ export default function TicketLookup() {
         return next;
       });
     }
-  }, [toast]);
+  }, [cpf, reloadTicketsFromPublicLookup, toast]);
 
   const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[], cpfDigits: string): Promise<TicketCardData[]> => {
     const pendingSaleIds = [...new Set(
