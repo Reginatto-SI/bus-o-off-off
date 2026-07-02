@@ -16,6 +16,7 @@ import type { SaleStatus } from '@/types/database';
 import type { TransportPolicy } from '@/types/database';
 import { formatDateOnlyBR } from '@/lib/date';
 import { resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
+import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
 
 type TicketLookupResponseTicket = {
   ticketId: string;
@@ -65,6 +66,12 @@ type TicketLookupResponseTicket = {
   platformFeePercent?: number | null;
 };
 
+type TicketLookupBoardingRow = {
+  event_id: string;
+  departure_date: string | null;
+  departure_time: string | null;
+};
+
 type TicketLookupResponse = {
   tickets?: TicketLookupResponseTicket[];
   eventFeesByEvent?: Record<string, EventFeeInput[]>;
@@ -90,6 +97,31 @@ function formatCityState(city: string): string {
   return `${cityName}/${state.toUpperCase()}`;
 }
 
+function filterActivePublicTickets(cards: TicketCardData[]): TicketCardData[] {
+  const paidCards = cards.filter((ticket) => ticket.saleStatus === 'pago' && ticket.eventId);
+  const eventRows = Array.from(
+    new Map(
+      paidCards.map((ticket) => [
+        ticket.eventId!,
+        {
+          id: ticket.eventId!,
+          date: ticket.eventDate,
+        },
+      ]),
+    ).values(),
+  );
+  const boardingRows = paidCards.map((ticket) => ({
+    event_id: ticket.eventId!,
+    departure_date: ticket.boardingDepartureDate || ticket.eventDate,
+    departure_time: ticket.boardingDepartureTime,
+  }));
+  const operationalEndMap = buildEventOperationalEndMap(eventRows, boardingRows);
+  const visibleEventIds = new Set(filterOperationallyVisibleEvents(eventRows, operationalEndMap).map((event) => event.id));
+
+  // Consulta pública exibe somente passagens pagas de eventos ainda vigentes na mesma janela da vitrine.
+  return paidCards.filter((ticket) => visibleEventIds.has(ticket.eventId!));
+}
+
 function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardData[] {
   const ticketResults = response.tickets || [];
   const eventFeesByEvent = response.eventFeesByEvent || {};
@@ -112,6 +144,7 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       ticketId: ticket.ticketId,
       ticketNumber: ticket.ticketNumber ?? null,
       qrCodeToken: ticket.qrCodeToken,
+      eventId: ticket.eventId ?? null,
       passengerName: ticket.passengerName,
       passengerCpf: ticket.passengerCpf,
       seatLabel: ticket.seatLabel,
@@ -219,14 +252,14 @@ export default function TicketLookup() {
     }
   }, [cpf, reloadTicketsFromPublicLookup, toast]);
 
-  const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[], cpfDigits: string) => {
+  const autoVerifyPendingSales = useCallback(async (cards: TicketCardData[], cpfDigits: string): Promise<TicketCardData[]> => {
     const pendingSaleIds = [...new Set(
       cards
         .filter((t) => t.saleStatus !== 'pago' && t.saleStatus !== 'cancelado' && t.asaasPaymentId && t.saleId)
         .map((t) => t.saleId!)
     )].slice(0, 3);
 
-    if (pendingSaleIds.length === 0) return;
+    if (pendingSaleIds.length === 0) return cards;
 
     const results = await Promise.allSettled(
       pendingSaleIds.map(async (saleId) => {
@@ -244,41 +277,51 @@ export default function TicketLookup() {
       }
     }
 
-    if (paidSaleInfo.size > 0) {
-      setTickets((prev) =>
-        prev.map((t) => (t.saleId && paidSaleInfo.has(t.saleId)
-          ? { ...t, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(t.saleId) ?? t.purchaseConfirmedAt ?? null }
-          : t))
-      );
+    if (paidSaleInfo.size === 0) return cards;
 
-      // Após confirmar pagamento no lookup público, recarrega a fonte oficial para trazer campos
-      // liberados apenas para venda paga, como o link do grupo WhatsApp do evento.
-      try {
-        await reloadTicketsFromPublicLookup(cpfDigits);
-      } catch {
-        // Mantém o status visual atualizado mesmo se o reload dos dados completos falhar momentaneamente.
-      }
+    // Convergência de pagamento preservada antes do filtro final: recarrega a fonte oficial
+    // para trazer status pago e campos liberados, como o link do grupo WhatsApp do evento.
+    const { data, error } = await supabase.functions.invoke('ticket-lookup', {
+      body: { cpf: cpfDigits },
+    });
 
-      toast({ title: 'Status de pagamento atualizado ✅' });
+    toast({ title: 'Status de pagamento atualizado ✅' });
+
+    if (error) {
+      return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
+        ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
+        : ticket));
     }
-  }, [reloadTicketsFromPublicLookup, toast]);
+
+    return normalizeCardsFromResponse((data || {}) as TicketLookupResponse);
+  }, [toast]);
 
   const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
     // Fallback temporário para ambiente com edge function antiga exigindo event_id.
     const { data: events, error: eventsError } = await supabase
       .from('events')
-      .select('id')
+      .select('id, date')
       .eq('is_archived', false)
       .in('status', ['a_venda', 'encerrado']);
 
     if (eventsError) throw eventsError;
 
-    const eventIds = (events || []).map((event) => event.id);
+    const eventRows = events || [];
+    const eventIds = eventRows.map((event) => event.id);
     if (eventIds.length === 0) return [];
+
+    const { data: boardings } = await supabase
+      .from('event_boarding_locations')
+      .select('event_id, departure_date, departure_time')
+      .in('event_id', eventIds)
+      .not('departure_date', 'is', null);
+
+    const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as TicketLookupBoardingRow[]);
+    const visibleEventIds = filterOperationallyVisibleEvents(eventRows, operationalEndMap).map((event) => event.id);
 
     const cards: TicketCardData[] = [];
 
-    for (const eventId of eventIds) {
+    for (const eventId of visibleEventIds) {
       const { data, error } = await supabase.functions.invoke('ticket-lookup', {
         body: { cpf: cpfDigits, event_id: eventId },
       });
@@ -314,13 +357,13 @@ export default function TicketLookup() {
 
         // Compatibilidade: se backend ainda exigir event_id, executa fallback transparente no front.
         const legacyCards = await fetchLegacyTicketsByCpf(cpfDigits);
-        setTickets(legacyCards);
-        autoVerifyPendingSales(legacyCards, cpfDigits);
+        const verifiedCards = await autoVerifyPendingSales(legacyCards, cpfDigits);
+        setTickets(filterActivePublicTickets(verifiedCards));
       } else {
         const response = (data || {}) as TicketLookupResponse;
         const cards = normalizeCardsFromResponse(response);
-        setTickets(cards);
-        autoVerifyPendingSales(cards, cpfDigits);
+        const verifiedCards = await autoVerifyPendingSales(cards, cpfDigits);
+        setTickets(filterActivePublicTickets(verifiedCards));
       }
     } catch {
       setTickets([]);
@@ -408,8 +451,8 @@ export default function TicketLookup() {
 
             {tickets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground border rounded-lg bg-card">
-                <p className="font-medium">Nenhuma passagem encontrada para este CPF.</p>
-                <p className="text-sm mt-1">Verifique se o CPF informado é o mesmo usado na compra.</p>
+                <p className="font-medium">Nenhuma passagem ativa encontrada para este CPF.</p>
+                <p className="text-sm mt-1">Passagens de eventos encerrados há muito tempo não são exibidas nesta consulta pública.</p>
               </div>
             ) : (
               <div className="space-y-6">

@@ -52,6 +52,7 @@ export interface TicketCardData {
   passengerCpf: string;
   seatLabel: string;
   boardingStatus: string;
+  eventId?: string | null;
   eventName: string;
   eventDate: string;
   eventCity: string;
