@@ -81,30 +81,6 @@ async function safeJson(res: Response): Promise<unknown> {
   }
 }
 
-function resolvePublicAppBaseUrl(paymentEnvironment: PaymentEnvironment) {
-  // URL pública usada em callbacks externos (Asaas). Prioriza configuração explícita para manter sandbox/produção isolados.
-  const configuredUrl =
-    Deno.env.get("PUBLIC_APP_URL")?.trim() ||
-    Deno.env.get("VITE_PUBLIC_APP_URL")?.trim() ||
-    Deno.env.get("APP_BASE_URL")?.trim();
-
-  if (configuredUrl) return configuredUrl.replace(/\/+$/, "");
-
-  console.warn("[create-asaas-payment] public_app_url_not_configured", {
-    payment_environment: paymentEnvironment,
-  });
-
-  if (paymentEnvironment === "production") return "https://www.smartbusbr.com.br";
-
-  return null;
-}
-
-function buildAsaasSuccessUrl(saleId: string, paymentEnvironment: PaymentEnvironment) {
-  const publicAppBaseUrl = resolvePublicAppBaseUrl(paymentEnvironment);
-  if (!publicAppBaseUrl) return null;
-
-  return `${publicAppBaseUrl}/confirmacao/${encodeURIComponent(saleId)}?retorno=asaas`;
-}
 
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
@@ -1518,29 +1494,7 @@ serve(async (req) => {
       });
     }
 
-    const asaasSuccessUrl = buildAsaasSuccessUrl(sale.id, paymentEnv);
-    if (!asaasSuccessUrl) {
-      // Falha cedo para evitar criar/alterar dados no Asaas quando o callback público obrigatório está mal configurado.
-      await logSaleOperationalEvent({
-        supabaseAdmin,
-        saleId: sale.id,
-        companyId: sale.company_id,
-        action: "payment_create_blocked",
-        source: "create-asaas-payment",
-        result: "rejected",
-        paymentEnvironment: paymentEnv,
-        errorCode: "public_app_url_not_configured",
-        detail: "missing_public_app_url_for_asaas_callback",
-      });
-
-      return jsonResponse(
-        {
-          error: "URL pública do app não configurada para callback do Asaas",
-          error_code: "public_app_url_not_configured",
-        },
-        500,
-      );
-    }
+    // O retorno automático do Asaas é omitido para não exigir domínio SmartBus cadastrado na conta Asaas da empresa.
 
     // 7. Criar ou encontrar cliente no Asaas
     const customerCpf = (sale.customer_cpf || "").replace(/\D/g, "");
@@ -1809,10 +1763,8 @@ serve(async (req) => {
       description: paymentDescription,
       externalReference: sale.id,
       split: splitArray,
-      callback: {
-        successUrl: asaasSuccessUrl,
-        autoRedirect: true,
-      },
+      // Não enviamos callback.successUrl porque a cobrança usa a conta Asaas da empresa.
+      // O domínio SmartBus pode não estar cadastrado nessa conta e bloquear a criação da cobrança.
     };
 
     console.log("[create-asaas-payment] sending payment payload", {
@@ -1824,7 +1776,8 @@ serve(async (req) => {
       grossAmount,
       splitArray,
       environment: paymentEnv,
-      callback_success_url: asaasSuccessUrl,
+      callback_success_url: null,
+      callback_omitted_reason: "company_asaas_account_domain_not_required",
     });
 
     await insertIntegrationLog(

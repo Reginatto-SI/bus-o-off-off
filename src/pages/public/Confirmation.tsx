@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SaleStatus } from '@/types/database';
 import { getConfirmationResponsibilityText } from '@/lib/intermediationPolicy';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
-import { isInstalledAppPaymentContext, logAsaasInvoiceOpen, withAsaasAutoRedirect } from '@/lib/asaasInvoiceUrl';
+import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from '@/lib/asaasInvoiceUrl';
 
 interface CompanyInfo {
   name: string;
@@ -288,7 +288,7 @@ export default function Confirmation() {
         paymentStatus?: unknown;
         billingType?: unknown;
       } | null;
-      const invoiceUrl = typeof paymentLinkData?.url === 'string' ? withAsaasAutoRedirect(paymentLinkData.url) : null;
+      const invoiceUrl = typeof paymentLinkData?.url === 'string' ? paymentLinkData.url : null;
       if (!invoiceUrl) {
         console.warn('[confirmation] reopen-asaas-invoice:unavailable', {
           sale_id: id,
@@ -695,7 +695,10 @@ export default function Confirmation() {
                 Assim que o pagamento for confirmado, sua passagem digital aparecerá automaticamente aqui.
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Você pode fechar esta página — sua passagem será gerada mesmo assim.
+                Após concluir o pagamento no Asaas, volte para esta tela para acompanhar a confirmação.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Você também pode fechar esta página — sua passagem será gerada mesmo assim quando o pagamento for confirmado.
               </p>
               {isInstalledAppContext && (
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-sm text-blue-900">
