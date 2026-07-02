@@ -528,7 +528,7 @@ async function patchCriticalRegionsForIOS(
 
     if (x < 0 || y < 0 || x + w > canvas.width || y + h > canvas.height) continue;
 
-    if (!isRegionMostlyBlank(ctx, x, y, w, h)) continue;
+    if (!spec.forceOverlay && !isRegionMostlyBlank(ctx, x, y, w, h)) continue;
 
     logTicketPdfDebug('região crítica em branco detectada no iOS — aplicando overlay', {
       name: spec.name,
