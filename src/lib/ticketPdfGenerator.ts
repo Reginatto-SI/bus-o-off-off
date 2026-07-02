@@ -381,7 +381,12 @@ interface CriticalRegionSpec {
   ) => Promise<string | null>;
   // Se true, desenha ocupando toda a caixa. Se false, tenta ajustar com object-contain.
   fillBox?: boolean;
+  // Se true, aplica overlay sempre (sem checar se está em branco).
+  // Usado para logos no iOS, onde a captura pode sair deformada ou vazia sobre fundo escuro,
+  // casos que a heurística de "branco" não detecta.
+  forceOverlay?: boolean;
 }
+
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
