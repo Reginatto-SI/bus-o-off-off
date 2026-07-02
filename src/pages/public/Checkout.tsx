@@ -54,7 +54,7 @@ import {
   CHECKOUT_RESPONSIBILITY_VALIDATION_MESSAGE,
   getCheckoutResponsibilityAcceptanceLabel,
 } from "@/lib/intermediationPolicy";
-import { isInstalledAppPaymentContext, logAsaasInvoiceOpen, withAsaasAutoRedirect } from "@/lib/asaasInvoiceUrl";
+import { isInstalledAppPaymentContext, logAsaasInvoiceOpen } from "@/lib/asaasInvoiceUrl";
 
 // ---- CPF validation helpers ----
 function isValidCpf(cpf: string): boolean {
@@ -1762,8 +1762,8 @@ export default function Checkout() {
         });
 
       if (!checkoutError && checkoutData?.url) {
-        // Reforço de retorno automático: o Asaas aceita autoRedirect também como query da invoiceUrl.
-        const asaasInvoiceUrl = withAsaasAutoRedirect(checkoutData.url);
+        // Sem autoRedirect: a confirmação financeira segue por webhook/verify, sem depender de domínio cadastrado no Asaas da empresa.
+        const asaasInvoiceUrl = checkoutData.url;
         console.info(
           "Checkout público: cobrança Asaas gerada, iniciando abertura da fatura",
           {
