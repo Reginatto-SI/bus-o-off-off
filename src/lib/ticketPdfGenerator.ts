@@ -480,6 +480,7 @@ async function patchCriticalRegionsForIOS(
       name: 'company-logo',
       cloneSelector: '[data-ticket-company-logo-box="true"]',
       fillBox: false,
+      forceOverlay: true,
       buildImageSource: async (source) => {
         const logo = source.querySelector('[data-ticket-company-logo="true"]') as HTMLImageElement | null;
         if (!logo) return null;
@@ -498,6 +499,7 @@ async function patchCriticalRegionsForIOS(
       name: 'smartbus-logo',
       cloneSelector: '[data-smartbus-logo="true"]',
       fillBox: false,
+      forceOverlay: true,
       buildImageSource: async (source) => {
         const logo = source.querySelector('[data-smartbus-logo="true"]') as HTMLImageElement | null;
         const url = logo?.currentSrc || logo?.src || '/logo-branca2.png';
@@ -509,6 +511,7 @@ async function patchCriticalRegionsForIOS(
         }
       },
     },
+
   ];
 
   for (const spec of specs) {
