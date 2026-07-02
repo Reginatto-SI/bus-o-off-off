@@ -155,7 +155,6 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
       eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
-      eventId: ticket.eventId ?? null,
       whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? ticket.whatsapp_group_link ?? null) : null,
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
