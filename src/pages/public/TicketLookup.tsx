@@ -155,7 +155,6 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
       eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
-      eventId: ticket.eventId ?? null,
       whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? ticket.whatsapp_group_link ?? null) : null,
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
@@ -290,11 +289,10 @@ export default function TicketLookup() {
         // Mantém o status visual atualizado mesmo se o reload dos dados completos falhar momentaneamente.
       }
 
-    if (error) {
-      return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
-        ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
-        : ticket));
-    }
+    return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
+      ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
+      : ticket));
+
   }, [reloadTicketsFromPublicLookup, toast]);
 
   const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
