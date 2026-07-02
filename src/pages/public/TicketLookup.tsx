@@ -289,11 +289,10 @@ export default function TicketLookup() {
         // Mantém o status visual atualizado mesmo se o reload dos dados completos falhar momentaneamente.
       }
 
-    if (error) {
-      return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
-        ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
-        : ticket));
-    }
+    return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
+      ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
+      : ticket));
+
   }, [reloadTicketsFromPublicLookup, toast]);
 
   const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
