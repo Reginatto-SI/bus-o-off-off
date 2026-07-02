@@ -1,50 +1,45 @@
 ## Diagnóstico
 
-Testei a edge function `ticket-lookup` diretamente com o CPF do caso real (`70499466640`) e a passagem do evento `FORRÓ DE CURVELO - NATTAN`:
+A rede de segurança iOS já existe em `src/lib/ticketPdfGenerator.ts` (`patchCriticalRegionsForIOS`), mas ela só redesenha uma região quando `isRegionMostlyBlank` detecta >92% de pixels **brancos ou transparentes**. Comparando as duas imagens enviadas:
 
-- No banco, a venda está `pago` e o evento tem `whatsapp_group_link` preenchido.
-- A resposta atual da edge function em produção **não retorna o campo `whatsappGroupLink`** no payload (o campo simplesmente não aparece no JSON), enquanto retorna todos os outros campos normalmente.
-- O código fonte atual de `supabase/functions/ticket-lookup/index.ts` já contém a lógica correta (linhas 168–191) que monta e devolve `whatsappGroupLink`. Ou seja: a versão publicada da edge function está desatualizada em relação ao código do repositório — o build/deploy dessa função ficou para trás.
+- **Logo SmartBus (iPhone):** a área ficou totalmente vazia sobre o fundo azul-escuro (`#0b1220`) da passagem. Como esses pixels não são brancos nem transparentes, o detector atual não classifica a região como "em branco" e o overlay nunca dispara. Por isso a logo simplesmente some no iPhone.
+- **Logo da empresa (iPhone):** a imagem aparece, mas esticada/deformada. O detector também não dispara (a região não está branca), então o overlay não corrige a distorção causada pelo WebKit renderizando o `<img>` dentro do `<foreignObject>` do html-to-image com dimensões erradas.
 
-Do lado do frontend (`TicketLookup.tsx` → `normalizeCardsFromResponse` → `PassengerTicketList` → `TicketCard`) o fluxo já está pronto: se `whatsappGroupLink` vier populado na resposta pública, o botão "Entrar no grupo do WhatsApp" aparece exatamente igual ao da área logada. O único elo quebrado é a edge function pública devolvendo o campo ausente.
+QR Code segue funcionando porque a caixa dele é branca — quando falha, ela realmente fica branca e o detector funciona.
 
-## Correção proposta
+## Correção proposta (mínima, só afeta iOS)
 
-Escopo mínimo, sem tocar em layout, pagamento, Asaas, webhook ou split.
+Alterar apenas `src/lib/ticketPdfGenerator.ts`. Nenhuma mudança em componentes, layout, WhatsApp, QR, dados ou visual Android/desktop.
 
-### 1. `supabase/functions/ticket-lookup/index.ts`
+### 1. Ampliar `isRegionMostlyBlank` para detectar "região chapada"
 
-Reforçar e simplificar a geração de `whatsappGroupLink` para garantir que ele volte no payload público sempre que a passagem for paga e o evento tiver grupo configurado, e forçar novo deploy da função:
+Além de branco/transparente (>92%), considerar também região "uniforme" (baixíssima variância de cor) — isso cobre o caso da logo SmartBus sumindo sobre o fundo azul-escuro. Mantém o comportamento atual do QR (caixa branca continua sendo detectada) e não afeta desktop/Android porque a função só roda dentro de `patchCriticalRegionsForIOS`, que já tem guard `if (!isIOSLikeDevice()) return`.
 
-- Manter a busca já existente em `events` (`id, company_id, whatsapp_group_link`) por `eventPublicMap`.
-- Simplificar a regra para: `whatsappGroupLink = sale.status === 'pago' ? (eventPublic?.whatsapp_group_link ?? sale.event?.whatsapp_group_link ?? null) : null`.
-  - Remover a comparação redundante `eventCompanyId === companyId` (ambos vêm da mesma linha de `events`; a checagem só cria risco de eliminar o link quando um dos lados vem nulo).
-  - Multi-tenant continua garantido porque o link consultado é sempre do `event_id` da própria venda.
-- Garantir que o campo `whatsappGroupLink` seja sempre incluído no objeto `results.push({...})` (usar `?? null` explícito para nunca virar `undefined` e ser descartado pelo `JSON.stringify`).
-- Não mudar mais nada da função (colunas selecionadas, filtros, ordem, demais campos permanecem iguais).
+### 2. Forçar overlay incondicional das duas logos no iOS
 
-O redeploy da edge function é obrigatório — hoje a versão publicada está sem o campo no payload.
+Para `company-logo` e `smartbus-logo`, remover a dependência da detecção "em branco" no caminho iOS e sempre reaplicar o overlay a partir do elemento fonte via `imageUrlToDataUrl(url, true)` + `drawContain`. Isso:
 
-### 2. `src/pages/public/TicketLookup.tsx` (ajuste mínimo de robustez)
+- Corrige a logo da empresa deformada (redesenha respeitando `object-contain`).
+- Corrige a logo SmartBus ausente (redesenha por cima da área vazia).
+- Custo: dois `drawImage` extras somente em iPhone/iPad. Zero impacto Android/desktop (função é no-op fora de iOS).
+- Preserva padding/borda arredondada da caixa branca da logo da empresa porque `drawContain` só desenha dentro do retângulo do `[data-ticket-company-logo-box]`, sem tocar no fundo já capturado.
 
-- Corrigir a chave `eventId` duplicada dentro do objeto retornado por `normalizeCardsFromResponse` (linhas 149 e 158) — mantém apenas uma ocorrência. Não altera comportamento, apenas remove ruído.
-- Nenhuma outra mudança: a leitura de `ticket.whatsappGroupLink ?? ticket.whatsapp_group_link` já cobre variações de payload.
+QR Code continua sob detecção condicional (só overlay se estiver branco), porque a conversão canvas→img no clone já é confiável e não queremos re-renderizar QR desnecessariamente.
 
-### 3. Nada a mudar no frontend visual
+### 3. Não mexer em nada além disso
 
-- `TicketCard.tsx`: já renderiza o botão quando `showWhatsAppGroupCta && isPaid && ticket.whatsappGroupLink`. Sem alteração.
-- `PassengerTicketList.tsx`: `withGroupWhatsAppLink` já propaga o link entre ida/volta do mesmo `eventId`. Sem alteração.
+- Sem alterações em `TicketCard.tsx`.
+- Sem novo fluxo de PDF paralelo.
+- Fonte de verdade continua sendo a passagem virtual clonada.
+- `waitForTicketExportAssets`, `inlineImportantImagesForExport`, `replaceCanvasWithImagesForExport` permanecem como estão.
 
 ## Validação
 
-1. Redeploy da edge function `ticket-lookup`.
-2. Rechamar a função via `curl` com `{"cpf":"70499466640"}` e confirmar que cada ticket do evento `ec12e5c5-…` volta com `"whatsappGroupLink": "https://chat.whatsapp.com/Jqa3ixElUIU7Q3qwseLq9q"`.
-3. Abrir `/consultar-passagens` deslogado, informar o CPF `704.994.666-40` e confirmar que a passagem do FORRÓ DE CURVELO - NATTAN mostra o botão **Entrar no grupo do WhatsApp** e o link abre para o grupo correto.
-4. Confirmar que as outras passagens pagas do mesmo CPF que não têm grupo configurado continuam sem exibir o botão (evita botão vazio ou link cruzado entre eventos/empresas).
-5. Confirmar que uma venda `reservado`/`pendente_pagamento`/`cancelado` não exibe o botão (regra `saleStatus === 'pago'` mantida na edge e no `normalizeCardsFromResponse`).
-6. Conferir que a visualização logada em `/admin/vendas` continua idêntica (nenhuma mudança de componente).
+1. Typecheck.
+2. Testar geração de PDF em iPhone real (Safari) na página `/consultar-passagens` com uma passagem paga — confirmar que a logo da empresa aparece sem deformação e a logo SmartBus aparece igual ao Android.
+3. Confirmar em Android e desktop que o PDF continua idêntico (função de patch é no-op fora de iOS).
+4. Confirmar QR Code, botão WhatsApp e demais dados intactos.
 
-## Arquivos alterados
+## Arquivo alterado
 
-- `supabase/functions/ticket-lookup/index.ts` (lógica simplificada + garantia do campo no payload + redeploy).
-- `src/pages/public/TicketLookup.tsx` (remoção da chave `eventId` duplicada).
+- `src/lib/ticketPdfGenerator.ts` (único arquivo — mudanças isoladas em `patchCriticalRegionsForIOS` e sua estrutura de specs).

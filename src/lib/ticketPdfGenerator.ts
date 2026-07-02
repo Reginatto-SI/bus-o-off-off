@@ -381,7 +381,12 @@ interface CriticalRegionSpec {
   ) => Promise<string | null>;
   // Se true, desenha ocupando toda a caixa. Se false, tenta ajustar com object-contain.
   fillBox?: boolean;
+  // Se true, aplica overlay sempre (sem checar se está em branco).
+  // Usado para logos no iOS, onde a captura pode sair deformada ou vazia sobre fundo escuro,
+  // casos que a heurística de "branco" não detecta.
+  forceOverlay?: boolean;
 }
+
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -475,6 +480,7 @@ async function patchCriticalRegionsForIOS(
       name: 'company-logo',
       cloneSelector: '[data-ticket-company-logo-box="true"]',
       fillBox: false,
+      forceOverlay: true,
       buildImageSource: async (source) => {
         const logo = source.querySelector('[data-ticket-company-logo="true"]') as HTMLImageElement | null;
         if (!logo) return null;
@@ -493,6 +499,7 @@ async function patchCriticalRegionsForIOS(
       name: 'smartbus-logo',
       cloneSelector: '[data-smartbus-logo="true"]',
       fillBox: false,
+      forceOverlay: true,
       buildImageSource: async (source) => {
         const logo = source.querySelector('[data-smartbus-logo="true"]') as HTMLImageElement | null;
         const url = logo?.currentSrc || logo?.src || '/logo-branca2.png';
@@ -504,6 +511,7 @@ async function patchCriticalRegionsForIOS(
         }
       },
     },
+
   ];
 
   for (const spec of specs) {
@@ -520,7 +528,7 @@ async function patchCriticalRegionsForIOS(
 
     if (x < 0 || y < 0 || x + w > canvas.width || y + h > canvas.height) continue;
 
-    if (!isRegionMostlyBlank(ctx, x, y, w, h)) continue;
+    if (!spec.forceOverlay && !isRegionMostlyBlank(ctx, x, y, w, h)) continue;
 
     logTicketPdfDebug('região crítica em branco detectada no iOS — aplicando overlay', {
       name: spec.name,
