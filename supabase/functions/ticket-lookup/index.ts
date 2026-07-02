@@ -163,12 +163,12 @@ serve(async (req) => {
       const eventId = t.sale?.event_id || t.trip?.event_id || null;
       const eventPublic = eventId ? eventPublicMap.get(eventId) ?? null : null;
       const companyId = t?.sale?.event?.company_id || eventPublic?.company_id;
-      const eventCompanyId = eventPublic?.company_id || t?.sale?.event?.company_id || null;
       const company = companyId ? companyMap.get(companyId) ?? null : null;
+      // Regra pública: para venda paga, sempre expõe o link do grupo do evento (quando existir).
+      // O link consultado é sempre do event_id da própria venda, então o isolamento multi-tenant
+      // é intrínseco — não precisa de comparação extra de company_id que corria risco de zerar o link.
       const eventWhatsappGroupLink = eventPublic?.whatsapp_group_link || t.sale?.event?.whatsapp_group_link || null;
-      const whatsappGroupLink = t.sale?.status === "pago" && eventCompanyId === companyId
-        ? eventWhatsappGroupLink
-        : null;
+      const whatsappGroupLink = t.sale?.status === "pago" ? (eventWhatsappGroupLink ?? null) : null;
 
       const seatInfo = t.seat_id ? seatMap.get(t.seat_id) : null;
 
@@ -187,8 +187,10 @@ serve(async (req) => {
         eventCity: t.sale?.event?.city || "",
         // Mantém modelagem por trecho, mas informa política para a camada de apresentação consolidar quando obrigatório.
         eventTransportPolicy: t.sale?.event?.transport_policy || "trecho_independente",
-        // Segurança: só retorna link do grupo para vendas confirmadas/pagas.
-        whatsappGroupLink,
+        // Segurança: só retorna link do grupo para vendas confirmadas/pagas. `?? null` garante que o
+        // campo nunca seja `undefined` (JSON.stringify descartaria a chave silenciosamente).
+        whatsappGroupLink: whatsappGroupLink ?? null,
+
         eventId,
         boardingToleranceMinutes: t.sale?.event?.boarding_tolerance_minutes ?? null,
         boardingLocationName: t.sale?.boarding_location?.name || "",
