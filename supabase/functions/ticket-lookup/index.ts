@@ -163,9 +163,11 @@ serve(async (req) => {
       const eventId = t.sale?.event_id || t.trip?.event_id || null;
       const eventPublic = eventId ? eventPublicMap.get(eventId) ?? null : null;
       const companyId = t?.sale?.event?.company_id || eventPublic?.company_id;
+      const eventCompanyId = eventPublic?.company_id || t?.sale?.event?.company_id || null;
       const company = companyId ? companyMap.get(companyId) ?? null : null;
-      const whatsappGroupLink = t.sale?.status === "pago" && eventPublic?.company_id === companyId
-        ? (eventPublic?.whatsapp_group_link || null)
+      const eventWhatsappGroupLink = eventPublic?.whatsapp_group_link || t.sale?.event?.whatsapp_group_link || null;
+      const whatsappGroupLink = t.sale?.status === "pago" && eventCompanyId === companyId
+        ? eventWhatsappGroupLink
         : null;
 
       const seatInfo = t.seat_id ? seatMap.get(t.seat_id) : null;

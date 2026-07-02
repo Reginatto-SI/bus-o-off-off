@@ -57,6 +57,7 @@ export interface TicketCardData {
   eventDate: string;
   eventCity: string;
   eventTransportPolicy?: TransportPolicy;
+  eventId?: string | null;
   whatsappGroupLink?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;

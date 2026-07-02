@@ -81,6 +81,24 @@ function friendlySeatLabel(ticket: TicketCardData): string {
   return ticket.seatLabel;
 }
 
+
+function withGroupWhatsAppLink(ticket: TicketCardData, group: PassengerGroup): TicketCardData {
+  if (ticket.whatsappGroupLink || ticket.saleStatus !== 'pago' || !ticket.eventId) return ticket;
+
+  const groupWhatsAppLink = [group.idaTicket, group.voltaTicket]
+    .find((groupTicket) => (
+      groupTicket?.saleStatus === 'pago'
+      && Boolean(groupTicket.whatsappGroupLink)
+      && Boolean(groupTicket.eventId)
+      && groupTicket.eventId === ticket.eventId
+    ))
+    ?.whatsappGroupLink;
+
+  // Defesa para ida/volta consolidada: só reaproveita o link quando os dois trechos
+  // informam o mesmo eventId, evitando CTA de WhatsApp de outro evento no agrupamento.
+  return groupWhatsAppLink ? { ...ticket, whatsappGroupLink: groupWhatsAppLink } : ticket;
+}
+
 // ── Component ──
 
 export function PassengerTicketList({
@@ -147,8 +165,7 @@ export function PassengerTicketList({
 
   // Se só tem 1 passageiro e 1 ticket, mostra direto sem collapsible
   const isSingleSimple = groups.length === 1 && !groups[0].hasRoundTrip;
-
-
+  const singleSimpleTicket = isSingleSimple ? (groups[0].idaTicket || groups[0].voltaTicket) : null;
 
   if (tickets.length === 0) return null;
 
@@ -170,10 +187,10 @@ export function PassengerTicketList({
       {isSingleSimple ? (
         // Caso simples: 1 passageiro, somente ida — mostra TicketCard direto
         <TicketCard
-          ticket={groups[0].idaTicket!}
+          ticket={withGroupWhatsAppLink(singleSimpleTicket!, groups[0])}
           allowReservedDownloads={allowReservedDownloads}
           onRefreshStatus={onRefreshStatus}
-          isRefreshing={!!(groups[0].idaTicket?.saleId && isRefreshingSaleIds?.has(groups[0].idaTicket.saleId))}
+          isRefreshing={!!(singleSimpleTicket?.saleId && isRefreshingSaleIds?.has(singleSimpleTicket.saleId))}
           reservedPresentation={reservedPresentation}
           showWhatsAppGroupCta={true}
         />
@@ -286,7 +303,7 @@ function PassengerCollapsibleCard({
           // Consolidação visual apenas para ida_volta_obrigatorio: mantém modelagem interna por trecho.
           group.idaTicket && group.voltaTicket && (
             <TicketCard
-              ticket={group.idaTicket}
+              ticket={withGroupWhatsAppLink(group.idaTicket, group)}
               consolidatedRoundTrip={{
                 returnSeatLabel: voltaSeatDisplay ?? 'Retorno incluso',
                 returnSeatIsPlaceholder: isVoltaSeatPlaceholder,
@@ -308,7 +325,7 @@ function PassengerCollapsibleCard({
             <TabsContent value="ida">
               {group.idaTicket && (
                 <TicketCard
-                  ticket={group.idaTicket}
+                  ticket={withGroupWhatsAppLink(group.idaTicket, group)}
                   allowReservedDownloads={allowReservedDownloads}
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.idaTicket.saleId && isRefreshingSaleIds?.has(group.idaTicket.saleId))}
@@ -320,7 +337,7 @@ function PassengerCollapsibleCard({
             <TabsContent value="volta">
               {group.voltaTicket && (
                 <TicketCard
-                  ticket={group.voltaTicket}
+                  ticket={withGroupWhatsAppLink(group.voltaTicket, group)}
                   allowReservedDownloads={allowReservedDownloads}
                   onRefreshStatus={onRefreshStatus}
                   isRefreshing={!!(group.voltaTicket.saleId && isRefreshingSaleIds?.has(group.voltaTicket.saleId))}
@@ -334,7 +351,7 @@ function PassengerCollapsibleCard({
           // Somente ida — renderiza TicketCard direto
           displayTicket && (
             <TicketCard
-              ticket={displayTicket}
+              ticket={withGroupWhatsAppLink(displayTicket, group)}
               allowReservedDownloads={allowReservedDownloads}
               onRefreshStatus={onRefreshStatus}
               isRefreshing={!!(displayTicket.saleId && isRefreshingSaleIds?.has(displayTicket.saleId))}

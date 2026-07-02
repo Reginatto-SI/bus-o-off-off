@@ -32,6 +32,8 @@ type TicketLookupResponseTicket = {
   eventCity: string;
   eventTransportPolicy?: TransportPolicy;
   whatsappGroupLink?: string | null;
+  // Compatibilidade defensiva com payloads legados/snake_case da edge function pública.
+  whatsapp_group_link?: string | null;
   eventId?: string | null;
   boardingToleranceMinutes?: number | null;
   boardingLocationName: string;
@@ -153,7 +155,8 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
       eventDate: ticket.eventDate,
       eventCity: ticket.eventCity,
       eventTransportPolicy: ticket.eventTransportPolicy ?? 'trecho_independente',
-      whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? null) : null,
+      eventId: ticket.eventId ?? null,
+      whatsappGroupLink: ticket.saleStatus === 'pago' ? (ticket.whatsappGroupLink ?? ticket.whatsapp_group_link ?? null) : null,
       boardingToleranceMinutes: ticket.boardingToleranceMinutes ?? null,
       boardingLocationName: ticket.boardingLocationName,
       boardingLocationAddress: ticket.boardingLocationAddress,
@@ -279,22 +282,20 @@ export default function TicketLookup() {
 
     if (paidSaleInfo.size === 0) return cards;
 
-    // Convergência de pagamento preservada antes do filtro final: recarrega a fonte oficial
-    // para trazer status pago e campos liberados, como o link do grupo WhatsApp do evento.
-    const { data, error } = await supabase.functions.invoke('ticket-lookup', {
-      body: { cpf: cpfDigits },
-    });
-
-    toast({ title: 'Status de pagamento atualizado ✅' });
+      // Após confirmar pagamento no lookup público, recarrega a fonte oficial para trazer campos
+      // liberados apenas para venda paga, como o link do grupo WhatsApp do evento.
+      try {
+        await reloadTicketsFromPublicLookup(cpfDigits);
+      } catch {
+        // Mantém o status visual atualizado mesmo se o reload dos dados completos falhar momentaneamente.
+      }
 
     if (error) {
       return cards.map((ticket) => (ticket.saleId && paidSaleInfo.has(ticket.saleId)
         ? { ...ticket, saleStatus: 'pago' as SaleStatus, purchaseConfirmedAt: paidSaleInfo.get(ticket.saleId) ?? ticket.purchaseConfirmedAt ?? null }
         : ticket));
     }
-
-    return normalizeCardsFromResponse((data || {}) as TicketLookupResponse);
-  }, [toast]);
+  }, [reloadTicketsFromPublicLookup, toast]);
 
   const fetchLegacyTicketsByCpf = useCallback(async (cpfDigits: string): Promise<TicketCardData[]> => {
     // Fallback temporário para ambiente com edge function antiga exigindo event_id.
