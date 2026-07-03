@@ -1,45 +1,102 @@
-## Diagnóstico
+# Diagnóstico — Falha ao gerar fatura Asaas no checkout público
 
-A rede de segurança iOS já existe em `src/lib/ticketPdfGenerator.ts` (`patchCriticalRegionsForIOS`), mas ela só redesenha uma região quando `isRegionMostlyBlank` detecta >92% de pixels **brancos ou transparentes**. Comparando as duas imagens enviadas:
+## 1. Resumo executivo
+A Edge Function `create-asaas-payment` publicada em produção **ainda envia `callback.successUrl` + `autoRedirect: true`** no payload do `POST /payments`, apesar de o código-fonte local já ter sido corrigido para não enviar. O Asaas rejeita a criação da cobrança com `invalid_object` — "Não há nenhum domínio configurado em sua conta. Cadastre um site em Minha Conta na aba Informações." — porque a conta Asaas da empresa vendedora não tem o domínio SmartBus cadastrado como site permitido para redirect.
 
-- **Logo SmartBus (iPhone):** a área ficou totalmente vazia sobre o fundo azul-escuro (`#0b1220`) da passagem. Como esses pixels não são brancos nem transparentes, o detector atual não classifica a região como "em branco" e o overlay nunca dispara. Por isso a logo simplesmente some no iPhone.
-- **Logo da empresa (iPhone):** a imagem aparece, mas esticada/deformada. O detector também não dispara (a região não está branca), então o overlay não corrige a distorção causada pelo WebKit renderizando o `<img>` dentro do `<foreignObject>` do html-to-image com dimensões erradas.
+## 2. Causa raiz provável
+**Hipótese A confirmada**: o build/deploy da última versão de `create-asaas-payment` não subiu para produção. O código local (linhas 1758–1768) monta o payload **sem** `callback`, mas os logs de integração em `sale_integration_logs` mostram claramente o `callback.successUrl` sendo enviado em vendas de 02/07 (últimas ocorrências às 21:33Z). Ou seja: runtime ≠ repositório.
 
-QR Code segue funcionando porque a caixa dele é branca — quando falha, ela realmente fica branca e o detector funciona.
+## 3. Evidências encontradas em produção/runtime
+- Consulta em `sale_integration_logs` (event_type=`create_payment`) para as últimas 5 falhas retornou `response_json`:
+  `{"errors":[{"code":"invalid_object","description":"Não há nenhum domínio configurado em sua conta. Cadastre um site em Minha Conta na aba Informações."}]}`
+- Duas empresas afetadas: `f860269d-…` e `02a7485c-…` — sinal de que **não é config isolada de uma empresa**, é comportamento do payload.
+- Erro é retornado pelo Asaas antes de qualquer `asaas_payment_id` ser persistido.
 
-## Correção proposta (mínima, só afeta iOS)
+## 4. Payload real enviado ao Asaas (log da venda `4c7ccdba…`)
+```json
+{
+  "split":[{"walletId":"54b2bcad-…","percentualValue":4.76}],
+  "value":189,
+  "dueDate":"2026-07-03",
+  "callback":{"successUrl":"https://www.smartbusbr.com.br/confirmacao/4c7ccdba-…?retorno=asaas","autoRedirect":true},
+  "customer":"cus_000180490547",
+  "billingType":"PIX",
+  "description":"SmartBus | … ",
+  "externalReference":"4c7ccdba-…"
+}
+```
+Confirmado: **o payload em produção ainda tem `callback.successUrl` + `autoRedirect`**.
 
-Alterar apenas `src/lib/ticketPdfGenerator.ts`. Nenhuma mudança em componentes, layout, WhatsApp, QR, dados ou visual Android/desktop.
+## 5. Resposta real do Asaas
+HTTP não-ok, body `{"errors":[{"code":"invalid_object","description":"Não há nenhum domínio configurado em sua conta…"}]}`. O bloco `if (!paymentRes.ok)` já propaga a descrição para o frontend em `toast.error`.
 
-### 1. Ampliar `isRegionMostlyBlank` para detectar "região chapada"
+## 6. Empresa, ambiente e conta Asaas usada
+- Ocorre em ≥ 2 empresas distintas com wallets diferentes.
+- Ambiente = produção (URL `www.smartbusbr.com.br`).
+- Chave e wallet usadas pertencem à empresa dona da venda (não à SmartBus).
 
-Além de branco/transparente (>92%), considerar também região "uniforme" (baixíssima variância de cor) — isso cobre o caso da logo SmartBus sumindo sobre o fundo azul-escuro. Mantém o comportamento atual do QR (caixa branca continua sendo detectada) e não afeta desktop/Android porque a função só roda dentro de `patchCriticalRegionsForIOS`, que já tem guard `if (!isIOSLikeDevice()) return`.
+## 7. Verificação de callback/URL/domínio
+- Fonte-única no repositório: `supabase/functions/create-asaas-payment/index.ts`. Já limpa: sem `callback`, sem `successUrl`, sem `autoRedirect` no `paymentPayload`.
+- Log de produção contradiz o código-fonte → deploy defasado.
 
-### 2. Forçar overlay incondicional das duas logos no iOS
+## 8. Verificação de deploy da Edge Function
+Os logs de request/erro em `sale_integration_logs` provam que a build em runtime é anterior à remoção do `callback`. Necessário forçar redeploy.
 
-Para `company-logo` e `smartbus-logo`, remover a dependência da detecção "em branco" no caminho iOS e sempre reaplicar o overlay a partir do elemento fonte via `imageUrlToDataUrl(url, true)` + `drawContain`. Isso:
+## 9. Verificação de sandbox/produção
+Correto: `payment_environment=production`, chamando `api.asaas.com/v3` com chave produção. Sem mismatch.
 
-- Corrige a logo da empresa deformada (redesenha respeitando `object-contain`).
-- Corrige a logo SmartBus ausente (redesenha por cima da área vazia).
-- Custo: dois `drawImage` extras somente em iPhone/iPad. Zero impacto Android/desktop (função é no-op fora de iOS).
-- Preserva padding/borda arredondada da caixa branca da logo da empresa porque `drawContain` só desenha dentro do retângulo do `[data-ticket-company-logo-box]`, sem tocar no fundo já capturado.
+## 10. Verificação de split/onboarding
+Split enviado corretamente (walletId da SmartBus, `percentualValue`). Onboarding das empresas não é a causa — o Asaas está rejeitando por causa do `callback.successUrl` cujo domínio precisa estar cadastrado em "Minha Conta" da subconta que emite a cobrança. Removido o callback, essa exigência desaparece.
 
-QR Code continua sob detecção condicional (só overlay se estiver branco), porque a conversão canvas→img no clone já é confiável e não queremos re-renderizar QR desnecessariamente.
+## 11. Hipóteses analisadas
+| Hipótese | Status | Evidência | Próximo passo |
+|---|---|---|---|
+| A. Deploy antigo da Edge Function | **Confirmada** | Payload real em log contém `callback.successUrl` que não existe mais no código | Redeploy |
+| B. Asaas exige domínio mesmo sem callback | Descartada nesta ocorrência | Erro é sobre "domínio configurado" — mensagem específica do validador de callback URL | — |
+| C. Split inválido | Descartada | Split idêntico ao das vendas OK anteriores | — |
+| D. Chave/ambiente cruzado | Descartada | Ambiente produção com chave produção | — |
+| E. Cache/build frontend | Descartada | Frontend não envia URL diretamente ao Asaas | — |
 
-### 3. Não mexer em nada além disso
+## 12. Respostas objetivas
+1. Não — a função **publicada** ainda envia `callback.successUrl`. O arquivo local não.
+2. Sim, contém `callback.successUrl` + `autoRedirect`.
+3. Sim, no `POST /payments`.
+4. Body: `{"errors":[{"code":"invalid_object","description":"Não há nenhum domínio…"}]}`.
+5. Sim, antes de salvar `asaas_payment_id`.
+6. Sim, Pix e cartão pelo mesmo ponto (montagem do payload é comum).
+7. Em todas que passam pelo checkout público após a mudança.
+8. Conta Asaas da empresa (correto).
+9. Sim.
+10. Sim (não é a causa).
+11. Não.
+12. Sim — exigência do Asaas quando `callback.successUrl` aponta para domínio não cadastrado.
+13. **Sim — causa raiz.**
+14. Não.
+15. `asaasInvoiceUrl.withAsaasAutoRedirect` ainda existe, mas só é usada em URL do lado do cliente para abrir a fatura (não altera payload de criação).
+16. Deploy defasado de `create-asaas-payment`.
+17. Redeploy da função (correção mínima).
+18. Split, webhook, verify, passagem/PDF, RLS, schema, `asaasInvoiceUrl` (usado fora do payload).
 
-- Sem alterações em `TicketCard.tsx`.
-- Sem novo fluxo de PDF paralelo.
-- Fonte de verdade continua sendo a passagem virtual clonada.
-- `waitForTicketExportAssets`, `inlineImportantImagesForExport`, `replaceCanvasWithImagesForExport` permanecem como estão.
+## 13. Correção mínima recomendada
+1. **Redeploy imediato de `create-asaas-payment`** para publicar a versão sem `callback`.
+2. Após deploy, validar em `sale_integration_logs` que novas requests não contêm mais o campo `callback`.
+3. Fazer 1 venda-piloto Pix e 1 cartão para confirmar sucesso.
 
-## Validação
+Nenhuma alteração de código é necessária — apenas deploy.
 
-1. Typecheck.
-2. Testar geração de PDF em iPhone real (Safari) na página `/consultar-passagens` com uma passagem paga — confirmar que a logo da empresa aparece sem deformação e a logo SmartBus aparece igual ao Android.
-3. Confirmar em Android e desktop que o PDF continua idêntico (função de patch é no-op fora de iOS).
-4. Confirmar QR Code, botão WhatsApp e demais dados intactos.
+## 14. Riscos da correção
+- Nenhum novo. O código-alvo já está mergeado e testado. O retorno pós-pagamento em PWA continua sendo tratado pelo caminho `window.location.assign` + `retorno=asaas` no `Confirmation.tsx` (não depende do callback do Asaas).
 
-## Arquivo alterado
+## 15. O que NÃO deve ser alterado
+- Split, wallets, motor de taxa, webhook, `verify-payment-status`, finalização de venda, geração de ticket/PDF, RLS, schema, `asaasInvoiceUrl.ts`, `Confirmation.tsx`.
 
-- `src/lib/ticketPdfGenerator.ts` (único arquivo — mudanças isoladas em `patchCriticalRegionsForIOS` e sua estrutura de specs).
+## 16. Logs e arquivos analisados
+- Consulta em `public.sale_integration_logs` (últimos erros `create_payment`).
+- `supabase/functions/create-asaas-payment/index.ts` (linhas 1744–1820).
+- `src/pages/public/Checkout.tsx` (linhas 1760–1780).
+- `src/lib/asaasInvoiceUrl.ts` (uso pós-criação).
+
+---
+
+## Ação proposta (build mode)
+Executar `deploy_edge_functions(["create-asaas-payment"])` e conferir 1 novo log de `create_payment` em `sale_integration_logs` para confirmar que `payload_json` não contém mais `callback`.
