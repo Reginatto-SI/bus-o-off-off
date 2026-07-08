@@ -107,6 +107,7 @@ export const REASON_MESSAGES: Record<string, string> = {
   already_checked_out: 'Desembarque já registrado',
   checkout_disabled: 'Desembarque desabilitado para este evento',
   not_allowed_company: 'Esta passagem não pertence à sua empresa.',
+  not_allowed_role: 'Seu perfil não tem permissão para validar passagens.',
   invalid_action: 'Ação inválida',
   already_reboarded: 'Já reembarcado',
   reboard_without_checkout: 'Reembarque sem desembarque',

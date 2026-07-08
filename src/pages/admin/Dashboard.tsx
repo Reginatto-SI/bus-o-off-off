@@ -19,6 +19,7 @@ import {
   ArrowRight,
   ImageIcon,
   Sparkles,
+  QrCode,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
@@ -269,6 +270,7 @@ export default function Dashboard() {
   const canViewSmartbusTips =
     Boolean(activeCompanyId) &&
     SMARTBUS_TIPS_ADMIN_ROLES.includes(userRole as (typeof SMARTBUS_TIPS_ADMIN_ROLES)[number]);
+  const canAccessDriverValidatorShortcut = userRole === 'gerente' || userRole === 'developer';
 
   const smartbusTipsDismissKey = useMemo(
     () => (
@@ -1049,6 +1051,16 @@ export default function Dashboard() {
                 + Novo Evento
               </Link>
             </Button>
+
+            {canAccessDriverValidatorShortcut && (
+              <Button asChild variant="outline" size="lg" className="gap-2">
+                {/* Comentário: gerente acessa o validador sem cadastro duplicado de motorista; a auditoria fica no usuário autenticado. */}
+                <Link to="/validador">
+                  <QrCode className="h-4 w-4" />
+                  Validador de Passagens
+                </Link>
+              </Button>
+            )}
           </div>
         </section>
 
