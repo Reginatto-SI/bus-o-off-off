@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +62,7 @@ import {
   AlertTriangle,
   Power,
   Ellipsis,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
@@ -88,6 +90,11 @@ export default function Drivers() {
   const [filters, setFilters] = useState<DriverFilters>(initialFilters);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [sellerLinkDriver, setSellerLinkDriver] = useState<Driver | null>(null);
+  const [sellerLinkCommission, setSellerLinkCommission] = useState('');
+  const [sellerLinkSaving, setSellerLinkSaving] = useState(false);
+  const [sellerLinkMode, setSellerLinkMode] = useState<'create' | 'reactivate'>('create');
+  const [existingSellerNotice, setExistingSellerNotice] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -97,6 +104,8 @@ export default function Drivers() {
     cnh_expires_at: '',
     notes: '',
     status: 'ativo' as Driver['status'],
+    also_seller: false,
+    seller_commission_percent: '',
   });
 
   // Máscara simples para CPF (000.000.000-00)
@@ -218,6 +227,155 @@ export default function Drivers() {
     if (activeCompanyId) fetchDrivers();
   }, [activeCompanyId]);
 
+
+  const normalizeCpfDigits = (value: string | null | undefined) => (value ?? '').replace(/\D/g, '');
+
+  const findSellerByCpf = async (normalizedCpf: string) => {
+    if (!activeCompanyId) return { seller: null, error: null };
+
+    const { data, error } = await supabase
+      .from('sellers')
+      .select('id, name, status, cpf')
+      .eq('company_id', activeCompanyId);
+
+    if (error) return { seller: null, error };
+
+    return {
+      seller: (data ?? []).find((seller) => normalizeCpfDigits(seller.cpf) === normalizedCpf) ?? null,
+      error: null,
+    };
+  };
+
+
+  const parseSellerCommission = (value: string) => {
+    if (value.trim() === '') return null;
+    const commission = Number(value);
+    if (Number.isNaN(commission) || commission < 0 || commission > 100) return null;
+    return commission;
+  };
+
+  const loadExistingSellerNotice = async (driver: Driver) => {
+    const normalizedCpf = normalizeCpfDigits(driver.cpf);
+    if (!activeCompanyId || normalizedCpf.length !== 11) {
+      setExistingSellerNotice(null);
+      return;
+    }
+
+    const { seller, error } = await findSellerByCpf(normalizedCpf);
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao verificar vínculo vendedor no formulário de motorista (sellers.select)',
+        error,
+        context: { action: 'select', table: 'sellers', companyId: activeCompanyId, userId: user?.id, driverId: driver.id },
+      });
+      setExistingSellerNotice(null);
+      return;
+    }
+
+    if (seller?.status === 'ativo') {
+      setExistingSellerNotice('Esta pessoa já atua como vendedora nesta empresa.');
+    } else if (seller?.status === 'inativo') {
+      setExistingSellerNotice('Já existe um cadastro de vendedor inativo para este CPF. Ao confirmar, ele será reativado com a comissão informada.');
+    } else {
+      setExistingSellerNotice(null);
+    }
+  };
+
+  const upsertSellerFromDriver = async (params: {
+    driver: Pick<Driver, 'id' | 'name' | 'phone' | 'cpf'>;
+    commissionPercent: number;
+    reactivateInactive?: boolean;
+  }) => {
+    if (!activeCompanyId) {
+      const context = { action: 'insert', table: 'sellers', companyId: null, userId: user?.id, driverId: params.driver.id };
+      console.error('active_company_id ausente ao vincular motorista como vendedor.', context);
+      toast.error(buildDebugToastMessage({ title: 'active_company_id ausente', context }));
+      return false;
+    }
+
+    const normalizedCpf = normalizeCpfDigits(params.driver.cpf);
+    if (normalizedCpf.length !== 11) {
+      toast.error('Motorista sem CPF válido para vincular como vendedor');
+      return false;
+    }
+
+    // Comparação por CPF normalizado evita duplicidade quando registros antigos têm máscara.
+    const { seller: existingSeller, error: lookupError } = await findSellerByCpf(normalizedCpf);
+
+    if (lookupError) {
+      logSupabaseError({
+        label: 'Erro ao verificar vendedor existente (sellers.select)',
+        error: lookupError,
+        context: { action: 'select', table: 'sellers', companyId: activeCompanyId, userId: user?.id, driverId: params.driver.id },
+      });
+      toast.error(buildDebugToastMessage({ title: 'Erro ao verificar vendedor existente', error: lookupError }));
+      return false;
+    }
+
+    if (existingSeller?.status === 'ativo') {
+      toast.info(`${params.driver.name} já atua como vendedor nesta empresa.`);
+      return true;
+    }
+
+    if (existingSeller?.status === 'inativo') {
+      if (!params.reactivateInactive) {
+        toast.info('Já existe vendedor inativo com este CPF. Confirme a reativação para liberar o vínculo.');
+        return false;
+      }
+
+      const { error } = await supabase
+        .from('sellers')
+        .update({
+          status: 'ativo',
+          commission_percent: params.commissionPercent,
+          cpf: normalizedCpf,
+          phone: params.driver.phone || null,
+          notes: `Reativado a partir do cadastro de motorista em ${new Date().toLocaleDateString('pt-BR')}.`,
+        })
+        .eq('id', existingSeller.id)
+        .eq('company_id', activeCompanyId);
+
+      if (error) {
+        logSupabaseError({
+          label: 'Erro ao reativar vendedor existente (sellers.update)',
+          error,
+          context: { action: 'update', table: 'sellers', companyId: activeCompanyId, userId: user?.id, sellerId: existingSeller.id },
+        });
+        toast.error(buildDebugToastMessage({ title: 'Erro ao reativar vendedor', error }));
+        return false;
+      }
+
+      toast.success(`${params.driver.name} foi reativado como vendedor`);
+      return true;
+    }
+
+    const { error } = await supabase.from('sellers').insert([
+      {
+        company_id: activeCompanyId,
+        name: params.driver.name,
+        cpf: normalizedCpf,
+        phone: params.driver.phone || null,
+        commission_percent: params.commissionPercent,
+        status: 'ativo',
+        notes: `Vinculado a partir do cadastro de motorista em ${new Date().toLocaleDateString('pt-BR')}.`,
+      },
+    ]);
+
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao vincular motorista como vendedor (sellers.insert)',
+        error,
+        context: { action: 'insert', table: 'sellers', companyId: activeCompanyId, userId: user?.id, driverId: params.driver.id },
+      });
+      const isDuplicateCpf = error.message.includes('unique') || error.message.includes('duplicate key');
+      toast.error(buildDebugToastMessage({ title: isDuplicateCpf ? 'CPF já vinculado como vendedor nesta empresa' : 'Erro ao vincular como vendedor', error }));
+      return false;
+    }
+
+    toast.success(`${params.driver.name} também foi vinculado como vendedor`);
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -258,6 +416,13 @@ export default function Drivers() {
 
     if (!normalizedPhone) {
       toast.error('Telefone é obrigatório');
+      setSaving(false);
+      return;
+    }
+
+    const sellerCommissionValue = parseSellerCommission(form.seller_commission_percent);
+    if (form.also_seller && sellerCommissionValue === null) {
+      toast.error('Informe a comissão que será usada para este vendedor. A comissão deve estar entre 0 e 100.');
       setSaving(false);
       return;
     }
@@ -312,6 +477,25 @@ export default function Drivers() {
         })
       );
     } else {
+      const savedDriver = {
+        id: editingId ?? '',
+        name: driverData.name,
+        phone: driverData.phone,
+        cpf: driverData.cpf,
+      } as Pick<Driver, 'id' | 'name' | 'phone' | 'cpf'>;
+
+      if (form.also_seller) {
+        const linked = await upsertSellerFromDriver({
+          driver: savedDriver,
+          commissionPercent: sellerCommissionValue ?? 0,
+          reactivateInactive: true,
+        });
+        if (!linked) {
+          setSaving(false);
+          return;
+        }
+      }
+
       toast.success(editingId ? 'Motorista atualizado' : 'Motorista cadastrado');
       setDialogOpen(false);
       resetForm();
@@ -331,8 +515,63 @@ export default function Drivers() {
       cnh_expires_at: driver.cnh_expires_at ?? '',
       notes: driver.notes ?? '',
       status: driver.status ?? 'ativo',
+      also_seller: false,
+      seller_commission_percent: '',
     });
     setDialogOpen(true);
+    void loadExistingSellerNotice(driver);
+  };
+
+
+  const handleAddAsSeller = async (driver: Driver) => {
+    const normalizedCpf = normalizeCpfDigits(driver.cpf);
+    if (normalizedCpf.length !== 11) {
+      toast.error('Motorista sem CPF válido para vincular como vendedor');
+      return;
+    }
+
+    const { seller, error } = await findSellerByCpf(normalizedCpf);
+    if (error) {
+      logSupabaseError({
+        label: 'Erro ao verificar vendedor antes de abrir vínculo (sellers.select)',
+        error,
+        context: { action: 'select', table: 'sellers', companyId: activeCompanyId, userId: user?.id, driverId: driver.id },
+      });
+      toast.error(buildDebugToastMessage({ title: 'Erro ao verificar vendedor existente', error }));
+      return;
+    }
+
+    if (seller?.status === 'ativo') {
+      toast.info(`${driver.name} já atua como vendedor nesta empresa.`);
+      return;
+    }
+
+    setSellerLinkMode(seller?.status === 'inativo' ? 'reactivate' : 'create');
+    setSellerLinkDriver(driver);
+    setSellerLinkCommission('');
+  };
+
+  const handleConfirmSellerLink = async () => {
+    if (!sellerLinkDriver) return;
+
+    const commissionValue = parseSellerCommission(sellerLinkCommission);
+    if (commissionValue === null) {
+      toast.error('Informe a comissão que será usada para este vendedor. A comissão deve estar entre 0 e 100.');
+      return;
+    }
+
+    setSellerLinkSaving(true);
+    const linked = await upsertSellerFromDriver({
+      driver: sellerLinkDriver,
+      commissionPercent: commissionValue,
+      reactivateInactive: true,
+    });
+    setSellerLinkSaving(false);
+
+    if (linked) {
+      setSellerLinkDriver(null);
+      setSellerLinkCommission('');
+    }
   };
 
   const handleToggleStatus = async (driver: Driver) => {
@@ -371,7 +610,10 @@ export default function Drivers() {
       cnh_expires_at: '',
       notes: '',
       status: 'ativo',
+      also_seller: false,
+      seller_commission_percent: '',
     });
+    setExistingSellerNotice(null);
   };
 
   // Menu de ações por motorista
@@ -380,6 +622,11 @@ export default function Drivers() {
       label: 'Editar',
       icon: Pencil,
       onClick: () => handleEdit(driver),
+    },
+    {
+      label: 'Adicionar também como vendedora',
+      icon: UserCheck,
+      onClick: () => handleAddAsSeller(driver),
     },
     {
       label: driver.status === 'ativo' ? 'Desativar' : 'Ativar',
@@ -506,6 +753,45 @@ export default function Drivers() {
                                   <SelectItem value="inativo">Inativo</SelectItem>
                                 </SelectContent>
                               </Select>
+                            </div>
+                            <div className="space-y-3 rounded-lg border p-3 sm:col-span-2">
+                              {existingSellerNotice && (
+                                <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                                  {existingSellerNotice}
+                                </p>
+                              )}
+                              <div className="flex items-start gap-3">
+                                <Checkbox
+                                  id="also_seller"
+                                  checked={form.also_seller}
+                                  onCheckedChange={(checked) =>
+                                    setForm({ ...form, also_seller: checked === true })
+                                  }
+                                />
+                                <div className="space-y-1 leading-none">
+                                  <Label htmlFor="also_seller">Também atua como vendedor</Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    Informe a comissão que será usada para este vendedor. O vínculo respeita a mesma empresa e não duplica o motorista.
+                                  </p>
+                                </div>
+                              </div>
+                              {form.also_seller && (
+                                <div className="space-y-2">
+                                  <Label htmlFor="seller_commission_percent">Comissão da vendedora (%)</Label>
+                                  <p className="text-xs text-muted-foreground">Informe a comissão que será usada para este vendedor.</p>
+                                  <Input
+                                    id="seller_commission_percent"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="100"
+                                    placeholder="Ex: 10"
+                                    value={form.seller_commission_percent}
+                                    onChange={(e) => setForm({ ...form, seller_commission_percent: e.target.value })}
+                                    required={form.also_seller}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </TabsContent>
@@ -767,6 +1053,44 @@ export default function Drivers() {
           </Card>
         )}
       </div>
+
+
+      <Dialog open={!!sellerLinkDriver} onOpenChange={(open) => !open && setSellerLinkDriver(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar também como vendedora</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {sellerLinkMode === 'reactivate'
+                ? 'Já existe um cadastro de vendedor inativo para este CPF. Ao confirmar, ele será reativado com a comissão informada.'
+                : `Informe a comissão que será usada para este vendedor ao vincular ${sellerLinkDriver?.name ?? 'esta pessoa'} como vendedora nesta empresa.`}
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="seller-link-commission">Comissão da vendedora (%)</Label>
+              <p className="text-xs text-muted-foreground">Informe a comissão que será usada para este vendedor.</p>
+              <Input
+                id="seller-link-commission"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder="Ex: 10"
+                value={sellerLinkCommission}
+                onChange={(e) => setSellerLinkCommission(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setSellerLinkDriver(null)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={handleConfirmSellerLink} disabled={sellerLinkSaving}>
+                {sellerLinkSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar vínculo'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modais de Exportação */}
       <ExportExcelModal
