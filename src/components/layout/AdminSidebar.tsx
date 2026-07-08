@@ -33,6 +33,7 @@ import {
   UserRoundCheck,
   Gift,
   Sparkles,
+  QrCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -96,6 +97,12 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Venda de Serviços',
     href: '/vendas/servicos',
     icon: Sparkles
+  }, {
+    // Gerentes acessam o validador com seu próprio usuário; o backend audita user_id/role sem exigir driver_id.
+    name: 'Validador de Passagens',
+    href: '/validador',
+    icon: QrCode,
+    roles: ['gerente', 'developer']
   }]
 }, {
   id: 'cadastros',
