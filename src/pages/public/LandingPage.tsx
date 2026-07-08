@@ -2085,7 +2085,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <p className="text-center text-xs text-white/70">
               © {new Date().getFullYear()} Smartbus BR. Todos os direitos
-              reservados • CNPJ 59.461.123/0001-72
+              reservados • CNPJ 67.871.644/0001-26
             </p>
           </div>
         </div>
