@@ -184,6 +184,8 @@ export default function UsersPage() {
   const [authActionLoadingUserId, setAuthActionLoadingUserId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingUserRoleId, setEditingUserRoleId] = useState<string | null>(null);
+  const [editingOriginalRole, setEditingOriginalRole] = useState<UserRole | null>(null);
+  const [editingOriginalDriverId, setEditingOriginalDriverId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'acesso' | 'vinculos' | 'observacoes'>('acesso');
   const [filters, setFilters] = useState<UserFilters>(initialFilters);
   const [authStatusDialogOpen, setAuthStatusDialogOpen] = useState(false);
@@ -205,6 +207,18 @@ export default function UsersPage() {
     notes: '',
   });
 
+  const isChangingDriverAccessToSeller = Boolean(
+    editingId &&
+    editingOriginalRole === 'motorista' &&
+    editingOriginalDriverId &&
+    form.role === 'vendedor'
+  );
+
+  const driverToSellerRoleWarning =
+    'Este usuário possui acesso operacional de motorista. Alterar o papel para vendedor pode remover o acesso ao validador de QR Code.';
+  const driverToSellerRoleConfirmation =
+    'Este usuário possui acesso operacional de motorista. Ao alterar para vendedor, ele poderá perder acesso ao validador de QR Code. Deseja continuar?';
+
   const handleAccessProfileChange = (value: AccessProfileOption) => {
     // O select exibe "Auxiliar de Embarque", mas a role técnica permanece motorista.
     if (value === 'auxiliar_embarque') {
@@ -216,6 +230,15 @@ export default function UsersPage() {
         operational_role: 'auxiliar_embarque',
       });
       return;
+    }
+
+    if (
+      value === 'vendedor' &&
+      editingId &&
+      editingOriginalRole === 'motorista' &&
+      editingOriginalDriverId
+    ) {
+      toast.warning(driverToSellerRoleWarning);
     }
 
     setForm({
@@ -475,6 +498,16 @@ export default function UsersPage() {
       return;
     }
 
+    if (isChangingDriverAccessToSeller) {
+      // Confirmação explícita obrigatória: evita remover acesso ao validador por engano
+      // quando o admin troca manualmente um usuário motorista para vendedor.
+      if (!window.confirm(driverToSellerRoleConfirmation)) {
+        setSaving(false);
+        return;
+      }
+      toast.warning(driverToSellerRoleWarning);
+    }
+
     try {
       if (editingId) {
         // Update existing user
@@ -674,6 +707,8 @@ export default function UsersPage() {
 
     setEditingId(userToEdit.id);
     setEditingUserRoleId(userToEdit.user_role_id ?? null);
+    setEditingOriginalRole(baseForm.role);
+    setEditingOriginalDriverId(baseForm.driver_id || null);
     setForm(baseForm);
     setActiveTab('acesso');
     setDialogOpen(true);
@@ -702,6 +737,8 @@ export default function UsersPage() {
   const resetForm = () => {
     setEditingId(null);
     setEditingUserRoleId(null);
+    setEditingOriginalRole(null);
+    setEditingOriginalDriverId(null);
     setActiveTab('acesso');
     setForm({
       name: '',
@@ -981,6 +1018,11 @@ export default function UsersPage() {
                                 <p className="text-xs text-muted-foreground">
                                   A role técnica permanece <strong>motorista</strong>; o perfil escolhido acima define a identificação exibida no sistema.
                                 </p>
+                              )}
+                              {isChangingDriverAccessToSeller && (
+                                <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+                                  {driverToSellerRoleWarning}
+                                </div>
                               )}
                             </div>
                             <div className="space-y-2">
