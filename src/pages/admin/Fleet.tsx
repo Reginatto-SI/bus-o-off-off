@@ -103,6 +103,9 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
   van: 'Van',
 };
 
+// Comentário: a placa é única por empresa; normalizamos máscara/espaços/case para validar igual ao índice do banco.
+const normalizePlateForUniqueness = (plate: string) => plate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
 type TemplatePreviewItem = {
   floor_number: number;
   row_number: number;
@@ -500,6 +503,20 @@ export default function Fleet() {
       return;
     }
 
+    const normalizedPlateKey = normalizePlateForUniqueness(normalizedPlate);
+    const duplicateVehicleInCompany = vehicles.find(
+      (vehicle) =>
+        vehicle.id !== editingId &&
+        vehicle.company_id === activeCompanyId &&
+        normalizePlateForUniqueness(vehicle.plate) === normalizedPlateKey,
+    );
+    if (duplicateVehicleInCompany) {
+      // Comentário: bloqueio local evita expor erro técnico de constraint e preserva edição do próprio veículo.
+      toast.error('Esta placa já está cadastrada na sua frota.');
+      setSaving(false);
+      return;
+    }
+
     if (Number.isNaN(capacity)) {
       console.warn('Validação de veículo: capacidade inválida (NaN) no modal de frota.');
       toast.error('Informe uma capacidade válida');
@@ -532,7 +549,7 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      layout_snapshot: null as any,
+      layout_snapshot: null as { items?: unknown } | null,
       template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
@@ -600,12 +617,20 @@ export default function Fleet() {
         error.message.includes('row-level security') ||
         error.message.includes('permission denied') ||
         error.code === '42501';
-      const isDuplicatePlate = error.message.includes('unique') || error.message.includes('duplicate key');
+      const isDuplicatePlate =
+        error.message.includes('vehicles_plate_key') ||
+        error.message.includes('vehicles_company_plate_normalized_key') ||
+        error.message.includes('unique') ||
+        error.message.includes('duplicate key');
+      if (isDuplicatePlate) {
+        toast.error('Esta placa já está cadastrada na sua frota.');
+        setSaving(false);
+        return;
+      }
+
       const fallbackMessage = isRlsError
         ? 'Sem permissão para salvar veículos'
-        : isDuplicatePlate
-          ? 'Placa já cadastrada'
-          : 'Erro ao salvar veículo';
+        : 'Erro ao salvar veículo';
       toast.error(
         buildDebugToastMessage({
           title: fallbackMessage,
