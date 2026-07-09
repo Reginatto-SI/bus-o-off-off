@@ -11,6 +11,13 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Logo } from "@/components/Logo";
@@ -31,6 +38,9 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -211,6 +221,37 @@ export default function Login() {
     return <Navigate to={getRedirectByRole(userRole, isRepresentative)} replace />;
   }
 
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setForgotPasswordLoading(true);
+
+    const genericMessage =
+      "Se este e-mail estiver cadastrado, enviaremos as instruções para redefinir sua senha.";
+
+    try {
+      // Comentário: usamos a origem atual para manter compatibilidade com produção, previews/staging e domínio customizado.
+      // A URL final precisa estar permitida em Supabase Auth Redirect URLs para o link de recovery ser aceito.
+      const recoveryRedirectTo = new URL("/login?flow=recovery", window.location.origin).toString();
+
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
+        redirectTo: recoveryRedirectTo,
+      });
+
+      if (resetError) {
+        console.error("Erro ao solicitar recuperação de senha", resetError);
+      }
+    } catch (unexpectedError) {
+      console.error("Erro inesperado ao solicitar recuperação de senha", unexpectedError);
+    } finally {
+      setRecoverySuccessMessage(genericMessage);
+      toast.success(genericMessage);
+      setForgotPasswordLoading(false);
+      setForgotPasswordOpen(false);
+      setForgotPasswordEmail("");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -302,6 +343,16 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary hover:underline"
+                  onClick={() => {
+                    setForgotPasswordEmail(email);
+                    setForgotPasswordOpen(true);
+                  }}
+                >
+                  Esqueci minha senha
+                </button>
               </div>
               <div className="space-y-2">
                 <div className="flex items-start space-x-2">
@@ -338,6 +389,42 @@ export default function Login() {
             </form>
           </CardContent>
         </Card>
+        <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Recuperar senha</DialogTitle>
+              <DialogDescription>
+                Informe seu e-mail para receber as instruções de redefinição de senha.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="forgot-password-email">Email</Label>
+                <Input
+                  id="forgot-password-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Se este e-mail estiver cadastrado, enviaremos as instruções para redefinir sua senha.
+              </p>
+              <Button type="submit" className="w-full" disabled={forgotPasswordLoading}>
+                {forgotPasswordLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  "Enviar instruções"
+                )}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
