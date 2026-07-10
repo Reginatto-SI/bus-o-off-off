@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PageHeader } from '@/components/admin/PageHeader';
@@ -128,7 +129,7 @@ const formatRemainingRewardText = (remainingAmount: number, rewardAmount: number
 };
 
 export default function Referrals() {
-  const { activeCompanyId, activeCompany, user } = useAuth();
+  const { activeCompanyId, activeCompany, user, isDeveloper, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ReferralFilters>(initialFilters);
   const [companySummary, setCompanySummary] = useState<CompanySummary | null>(null);
@@ -143,6 +144,15 @@ export default function Referrals() {
     : '';
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!isDeveloper) {
+      setCompanySummary(null);
+      setReferrals([]);
+      setLoading(false);
+      return;
+    }
+
     if (!activeCompanyId) {
       setCompanySummary(null);
       setReferrals([]);
@@ -211,7 +221,7 @@ export default function Referrals() {
     };
 
     fetchReferralData();
-  }, [activeCompanyId, user?.id]);
+  }, [activeCompanyId, authLoading, isDeveloper, user?.id]);
 
   const filteredReferrals = useMemo(() => {
     const normalizedSearch = filters.search.trim().toLowerCase();
@@ -294,6 +304,20 @@ export default function Referrals() {
       onClick: () => handleCopyReferralCode(referral.referral_code),
     },
   ];
+
+  // Proteção de rota: aguarda o AuthContext resolver sessão/perfil para evitar redirect prematuro.
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Ocultação do menu não é suficiente; acesso direto fica restrito ao perfil developer.
+  if (!isDeveloper) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
 
   return (
     <AdminLayout>

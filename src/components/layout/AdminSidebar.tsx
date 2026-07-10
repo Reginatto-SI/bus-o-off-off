@@ -204,7 +204,9 @@ const navigationGroups: NavigationGroup[] = [{
   }, {
     name: 'Indicações',
     href: '/admin/indicacoes',
-    icon: Share2
+    icon: Share2,
+    // Tela técnica: somente developer visualiza o item no menu administrativo.
+    roles: ['developer']
   }]
 }, {
   id: 'sistema',
