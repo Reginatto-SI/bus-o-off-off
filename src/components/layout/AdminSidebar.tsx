@@ -204,9 +204,12 @@ const navigationGroups: NavigationGroup[] = [{
   }, {
     name: 'Indicações',
     href: '/admin/indicacoes',
-    icon: Share2,
-    // Tela técnica: somente developer visualiza o item no menu administrativo.
-    roles: ['developer']
+    icon: Share2
+  }, {
+    name: 'Representante Comercial',
+    href: '/admin/representante',
+    icon: BadgePercent,
+    roles: ['gerente', 'developer']
   }]
 }, {
   id: 'sistema',
@@ -305,7 +308,7 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany, isRepresentative } = useAuth();
+  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -329,21 +332,6 @@ export function AdminSidebar() {
             openInNewTab: Boolean(publicShowcaseUrl),
             statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
           },
-        ],
-      };
-    }
-
-    // Item condicional: link para o Painel Representante visível apenas se o usuário também é representante.
-    if (group.id === 'conta' && isRepresentative) {
-      return {
-        ...group,
-        items: [
-          {
-            name: 'Painel Representante',
-            href: '/representante/painel',
-            icon: BadgePercent,
-          },
-          ...group.items,
         ],
       };
     }

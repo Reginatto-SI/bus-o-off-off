@@ -33,6 +33,7 @@ import BoardingManifestReport from "./pages/admin/BoardingManifestReport";
 import EventReport from "./pages/admin/EventReport";
 import CompanyActivationReport from "./pages/admin/CompanyActivationReport";
 import Referrals from "./pages/admin/Referrals";
+import RepresentativeAdmin from "./pages/admin/Representative";
 import BenefitPrograms from "./pages/admin/BenefitPrograms";
 import BenefitProgramEditor from "./pages/admin/BenefitProgramEditor";
 import Services from "./pages/admin/Services";
@@ -137,6 +138,7 @@ const App = () => (
             <Route path="/admin/usuarios" element={<UsersPage />} />
             <Route path="/admin/empresa" element={<CompanyPage />} />
             <Route path="/admin/indicacoes" element={<Referrals />} />
+            <Route path="/admin/representante" element={<RepresentativeAdmin />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
             <Route path="/admin/socios" element={<SociosSplit />} />

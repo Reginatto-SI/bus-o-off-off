@@ -162,6 +162,7 @@ export interface Profile {
 
 export interface Representative {
   id: string;
+  company_id: string | null;
   user_id: string | null;
   name: string;
   email: string | null;

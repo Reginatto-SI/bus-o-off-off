@@ -372,14 +372,12 @@ export default function RepresentativeDashboard() {
     }
 
     setWalletSaving(true);
-    // Persistimos a wallet nos dois ambientes para evitar pendência operacional entre sandbox/produção.
-    const { error } = await supabase
-      .from('representatives' as never)
-      .update({
-        asaas_wallet_id_production: normalizedWallet,
-        asaas_wallet_id_sandbox: normalizedWallet,
-      } as never)
-      .eq('id', representativeProfile.id);
+    // Atualização de wallet deve passar pela RPC para não abrir UPDATE amplo em representatives.
+    const { error } = await supabase.rpc('update_representative_wallet', {
+      p_representative_id: representativeProfile.id,
+      p_asaas_wallet_id_production: normalizedWallet,
+      p_asaas_wallet_id_sandbox: normalizedWallet,
+    });
 
     if (error) {
       console.error('representatives.update wallet failed', error);
