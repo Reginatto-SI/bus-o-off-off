@@ -382,6 +382,28 @@ serve(async (req) => {
       });
     }
 
+    // Toda empresa também nasce como representante comercial própria.
+    // Importante: isso NÃO altera representative_company_links, que continua sendo
+    // a fonte de verdade de quem indicou a empresa recém-cadastrada.
+    const { data: ownRepresentative, error: ownRepresentativeError } = await supabaseAdmin
+      .rpc("ensure_company_representative", {
+        p_company_id: companyId,
+      });
+
+    if (ownRepresentativeError) {
+      console.error("[register-company] Error ensuring company representative profile:", {
+        company_id: companyId,
+        error: ownRepresentativeError,
+      });
+    } else {
+      console.log("[register-company] Company representative profile ensured", {
+        company_id: companyId,
+        representative_id: Array.isArray(ownRepresentative)
+          ? ownRepresentative[0]?.id
+          : ownRepresentative?.id,
+      });
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

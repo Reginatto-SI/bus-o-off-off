@@ -1,0 +1,525 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { AlertTriangle, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+import { AdminLayout } from '@/components/layout/AdminLayout';
+import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
+import { formatCurrencyBRL } from '@/lib/currency';
+import { supabase } from '@/integrations/supabase/client';
+
+type RepresentativeStatus = 'ativo' | 'inativo' | 'bloqueado' | 'pendente_validacao';
+type CommissionStatus = 'pendente' | 'disponivel' | 'bloqueada' | 'paga';
+
+type RepresentativeDashboardRow = {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  status: RepresentativeStatus;
+  representative_code: string;
+  referral_link: string | null;
+  asaas_wallet_id_production: string | null;
+  asaas_wallet_id_sandbox: string | null;
+  commission_percent: number;
+  linked_companies_count: number;
+  active_linked_companies_count: number;
+  commission_total: number;
+  commission_paid: number;
+  commission_pending: number;
+  commission_blocked: number;
+  blocked_count: number;
+};
+
+type RepresentativeLinkRow = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  company_trade_name: string | null;
+  company_is_active: boolean;
+  linked_at: string;
+  source_code: string;
+  link_source: 'url_ref' | 'codigo_manual' | 'admin_ajuste';
+  sales_count: number;
+  commission_total: number;
+};
+
+type RepresentativeCommissionRow = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  company_trade_name: string | null;
+  sale_id: string;
+  payment_environment: string;
+  base_amount: number;
+  commission_percent: number;
+  commission_amount: number;
+  status: CommissionStatus;
+  available_at: string | null;
+  paid_at: string | null;
+  blocked_reason: string | null;
+  created_at: string;
+};
+
+function resolveOfficialLink(referralLink: string | null) {
+  if (!referralLink) return '';
+  if (referralLink.startsWith('http')) return referralLink;
+  return `${window.location.origin}${referralLink}`;
+}
+
+function getCommissionStatusLabel(status: CommissionStatus) {
+  if (status === 'paga') return 'Paga';
+  if (status === 'disponivel') return 'Disponível';
+  if (status === 'pendente') return 'Pendente';
+  return 'Bloqueada';
+}
+
+function getCommissionStatusVariant(status: CommissionStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (status === 'paga') return 'default';
+  if (status === 'disponivel') return 'secondary';
+  if (status === 'pendente') return 'outline';
+  return 'destructive';
+}
+
+export default function RepresentativeAdmin() {
+  const { loading: authLoading, activeCompanyId, activeCompany, userRole, isGerente, isDeveloper } = useAuth();
+  const { environment: paymentEnvironment, isReady: paymentEnvironmentReady } = useRuntimePaymentEnvironment();
+  const [loading, setLoading] = useState(true);
+  const [dashboard, setDashboard] = useState<RepresentativeDashboardRow | null>(null);
+  const [links, setLinks] = useState<RepresentativeLinkRow[]>([]);
+  const [commissions, setCommissions] = useState<RepresentativeCommissionRow[]>([]);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletInput, setWalletInput] = useState('');
+  const [walletSaving, setWalletSaving] = useState(false);
+
+  const canViewFullPanel = isGerente || isDeveloper;
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!activeCompanyId || !canViewFullPanel) {
+      setLoading(false);
+      return;
+    }
+
+    const loadRepresentativePanel = async () => {
+      setLoading(true);
+
+      // RPCs security definer validam empresa ativa/papel e evitam queries abertas de financeiro no frontend.
+      const [dashboardResponse, linksResponse, commissionsResponse] = await Promise.all([
+        supabase.rpc('get_company_representative_dashboard', { p_company_id: activeCompanyId }),
+        supabase.rpc('get_company_representative_links', { p_company_id: activeCompanyId }),
+        supabase.rpc('get_company_representative_commissions', { p_company_id: activeCompanyId }),
+      ]);
+
+      if (dashboardResponse.error) {
+        console.error('[admin/representante] dashboard RPC failed', dashboardResponse.error);
+        toast.error('Não foi possível carregar o painel de representante.');
+        setDashboard(null);
+      } else {
+        const row = Array.isArray(dashboardResponse.data) ? dashboardResponse.data[0] : dashboardResponse.data;
+        setDashboard((row ?? null) as RepresentativeDashboardRow | null);
+      }
+
+      if (linksResponse.error) {
+        console.error('[admin/representante] links RPC failed', linksResponse.error);
+        toast.error('Não foi possível carregar as empresas indicadas.');
+        setLinks([]);
+      } else {
+        setLinks((linksResponse.data ?? []) as RepresentativeLinkRow[]);
+      }
+
+      if (commissionsResponse.error) {
+        console.error('[admin/representante] commissions RPC failed', commissionsResponse.error);
+        toast.error('Não foi possível carregar o ledger de comissões.');
+        setCommissions([]);
+      } else {
+        setCommissions((commissionsResponse.data ?? []) as RepresentativeCommissionRow[]);
+      }
+
+      setLoading(false);
+    };
+
+    void loadRepresentativePanel();
+  }, [activeCompanyId, authLoading, canViewFullPanel]);
+
+  const officialLink = useMemo(() => resolveOfficialLink(dashboard?.referral_link ?? null), [dashboard?.referral_link]);
+  const walletId = paymentEnvironment === 'production'
+    ? dashboard?.asaas_wallet_id_production ?? ''
+    : paymentEnvironment === 'sandbox'
+      ? dashboard?.asaas_wallet_id_sandbox ?? ''
+      : '';
+  const paymentEnvironmentLabel = paymentEnvironment === 'production'
+    ? 'Produção'
+    : paymentEnvironment === 'sandbox'
+      ? 'Sandbox'
+      : 'Não resolvido';
+  const walletActionLabel = walletId ? 'Alterar wallet' : 'Configurar wallet';
+
+  const copyOfficialLink = async () => {
+    if (!officialLink) {
+      toast.error('Link oficial indisponível.');
+      return;
+    }
+
+    await navigator.clipboard.writeText(officialLink);
+    toast.success('Link de representante copiado.');
+  };
+
+  const openWalletModal = () => {
+    setWalletInput(walletId);
+    setWalletModalOpen(true);
+  };
+
+  const saveWallet = async () => {
+    if (!dashboard?.id || !paymentEnvironmentReady) return;
+
+    const normalizedWallet = walletInput.trim();
+    const isProduction = paymentEnvironment === 'production';
+    const isSandbox = paymentEnvironment === 'sandbox';
+
+    if (!isProduction && !isSandbox) {
+      toast.error('Ambiente de pagamento não resolvido.');
+      return;
+    }
+
+    setWalletSaving(true);
+
+    // Enviamos NULL para o outro ambiente para a RPC preservar o valor existente.
+    const { data, error } = await supabase.rpc('update_representative_wallet', {
+      p_representative_id: dashboard.id,
+      p_asaas_wallet_id_production: isProduction ? normalizedWallet : null,
+      p_asaas_wallet_id_sandbox: isSandbox ? normalizedWallet : null,
+    });
+
+    setWalletSaving(false);
+
+    if (error) {
+      console.error('[admin/representante] update wallet RPC failed', error);
+      toast.error('Não foi possível salvar a wallet do representante.');
+      return;
+    }
+
+    const updatedRepresentative = data as Pick<RepresentativeDashboardRow, 'asaas_wallet_id_production' | 'asaas_wallet_id_sandbox'> | null;
+    setDashboard((current) => current
+      ? {
+          ...current,
+          asaas_wallet_id_production: updatedRepresentative
+            ? updatedRepresentative.asaas_wallet_id_production
+            : current.asaas_wallet_id_production,
+          asaas_wallet_id_sandbox: updatedRepresentative
+            ? updatedRepresentative.asaas_wallet_id_sandbox
+            : current.asaas_wallet_id_sandbox,
+        }
+      : current);
+    setWalletModalOpen(false);
+    toast.success('Wallet do representante atualizada.');
+  };
+
+  if (authLoading || loading) {
+    return (
+      <AdminLayout>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (userRole === 'vendedor' || userRole === 'motorista') {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  if (!canViewFullPanel) {
+    return (
+      <AdminLayout>
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
+            <p className="text-muted-foreground">Acesso restrito ao gerente da empresa.</p>
+          </div>
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Permissão insuficiente</AlertTitle>
+            <AlertDescription>
+              Para proteger wallet, comissões e ledger, esta área está disponível apenas para gerente ou developer.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!activeCompanyId) {
+    return (
+      <AdminLayout>
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Empresa ativa não encontrada</AlertTitle>
+          <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
+        </Alert>
+      </AdminLayout>
+    );
+  }
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
+            <p className="text-muted-foreground">
+              Link próprio da empresa {activeCompany?.trade_name || activeCompany?.name || 'ativa'} para indicar novas empresas.
+            </p>
+          </div>
+          {dashboard && (
+            <Badge variant={dashboard.status === 'ativo' ? 'default' : 'secondary'} className="w-fit">
+              {dashboard.status}
+            </Badge>
+          )}
+        </div>
+
+        {!paymentEnvironmentReady && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Ambiente de pagamento não resolvido</AlertTitle>
+            <AlertDescription>
+              Não foi possível determinar o ambiente operacional para exibir a carteira correta do representante.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {paymentEnvironmentReady && !walletId && (
+          <Alert>
+            <Wallet className="h-4 w-4" />
+            <AlertTitle>Carteira de recebimento ausente</AlertTitle>
+            <AlertDescription>
+              Seu link já está ativo. Para receber comissões automaticamente, configure sua carteira de recebimento.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Link oficial da empresa</CardTitle>
+              <CardDescription>Código e link público usados para cadastrar empresas indicadas.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Código oficial</p>
+                  <p className="mt-1 font-mono text-lg font-semibold">{dashboard?.representative_code || '—'}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Wallet de recebimento</p>
+                  <p className="mt-1 truncate font-mono text-sm font-medium">{walletId || 'Não configurada'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Ambiente: {paymentEnvironmentLabel}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={openWalletModal}
+                    disabled={!dashboard?.id || !paymentEnvironmentReady}
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    {walletActionLabel}
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">Link público</p>
+                <p className="mt-1 break-all font-mono text-sm">{officialLink || 'Link indisponível'}</p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={copyOfficialLink} disabled={!officialLink}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar link
+                </Button>
+                <Button variant="outline" onClick={() => setQrModalOpen(true)} disabled={!officialLink}>
+                  <QrCode className="mr-2 h-4 w-4" />
+                  Ver QR Code
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo</CardTitle>
+              <CardDescription>Indicadores diretos deste representante.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-sm text-muted-foreground">Empresas indicadas</span>
+                <strong>{dashboard?.linked_companies_count ?? 0}</strong>
+              </div>
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-sm text-muted-foreground">Empresas ativas</span>
+                <strong>{dashboard?.active_linked_companies_count ?? 0}</strong>
+              </div>
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-sm text-muted-foreground">Comissão paga</span>
+                <strong>{formatCurrencyBRL(Number(dashboard?.commission_paid ?? 0))}</strong>
+              </div>
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-sm text-muted-foreground">Pendente</span>
+                <strong>{formatCurrencyBRL(Number(dashboard?.commission_pending ?? 0))}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Bloqueada</span>
+                <strong>{formatCurrencyBRL(Number(dashboard?.commission_blocked ?? 0))}</strong>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Building2 className="h-4 w-4" />
+                Empresas indicadas
+              </CardTitle>
+              <CardDescription>Empresas cadastradas pelo link deste representante.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Vínculo</TableHead>
+                    <TableHead className="text-right">Comissão</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {links.map((link) => (
+                    <TableRow key={link.id}>
+                      <TableCell>{link.company_trade_name || link.company_name}</TableCell>
+                      <TableCell>
+                        <Badge variant={link.company_is_active ? 'default' : 'secondary'}>
+                          {link.company_is_active ? 'Ativa' : 'Inativa'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{format(new Date(link.linked_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                      <TableCell className="text-right">{formatCurrencyBRL(Number(link.commission_total ?? 0))}</TableCell>
+                    </TableRow>
+                  ))}
+                  {links.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-6 text-muted-foreground">
+                        Nenhuma empresa indicada por este link até o momento.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardList className="h-4 w-4" />
+                Ledger de comissões
+              </CardTitle>
+              <CardDescription>Últimos lançamentos diretos deste representante.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead>Comissão</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Data</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {commissions.map((commission) => (
+                    <TableRow key={commission.id}>
+                      <TableCell>{commission.company_trade_name || commission.company_name}</TableCell>
+                      <TableCell>{formatCurrencyBRL(Number(commission.commission_amount ?? 0))}</TableCell>
+                      <TableCell>
+                        <Badge variant={getCommissionStatusVariant(commission.status)}>
+                          {getCommissionStatusLabel(commission.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{format(new Date(commission.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                    </TableRow>
+                  ))}
+                  {commissions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="py-6 text-muted-foreground">
+                        Nenhum lançamento de comissão encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+
+      <SellerQRCodeModal
+        sellerName={dashboard?.name || activeCompany?.name || 'representante'}
+        qrLinkOverride={officialLink}
+        open={qrModalOpen}
+        onOpenChange={setQrModalOpen}
+      />
+
+      <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{walletActionLabel}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+              <p className="text-muted-foreground">Ambiente atual</p>
+              <p className="font-medium">{paymentEnvironmentLabel}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="representative-wallet-id">Wallet ID do Asaas</Label>
+              <Input
+                id="representative-wallet-id"
+                value={walletInput}
+                onChange={(event) => setWalletInput(event.target.value)}
+                placeholder="Ex.: wallet_0000000000000000"
+              />
+              <p className="text-xs text-muted-foreground">
+                Este valor será salvo somente no ambiente {paymentEnvironmentLabel.toLowerCase()}.
+                Deixe em branco apenas se precisar limpar a wallet deste ambiente.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={saveWallet} disabled={walletSaving || !paymentEnvironmentReady}>
+              {walletSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar wallet
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AdminLayout>
+  );
+}
