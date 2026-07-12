@@ -168,7 +168,7 @@ export default function RepresentativeAdmin() {
     : paymentEnvironment === 'sandbox'
       ? 'Sandbox'
       : 'Não resolvido';
-  const walletActionLabel = walletId ? 'Alterar wallet' : 'Configurar wallet';
+  const walletActionLabel = walletId ? 'Alterar carteira' : 'Configurar carteira';
 
   const copyOfficialLink = async () => {
     if (!officialLink) {
