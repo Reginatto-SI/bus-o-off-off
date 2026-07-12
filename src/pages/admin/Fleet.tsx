@@ -549,7 +549,7 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      layout_snapshot: null as { items?: unknown } | null,
+      layout_snapshot: null as any,
       template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
@@ -574,7 +574,7 @@ export default function Fleet() {
           grid_rows: selectedTemplate.grid_rows,
           grid_columns: selectedTemplate.grid_columns,
           items: snapshotItems ?? [],
-        };
+        } as never;
         vehicleData.template_layout_version = selectedTemplate.current_version;
       }
     }
