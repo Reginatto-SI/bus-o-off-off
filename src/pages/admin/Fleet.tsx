@@ -574,7 +574,7 @@ export default function Fleet() {
           grid_rows: selectedTemplate.grid_rows,
           grid_columns: selectedTemplate.grid_columns,
           items: snapshotItems ?? [],
-        };
+        } as never;
         vehicleData.template_layout_version = selectedTemplate.current_version;
       }
     }
