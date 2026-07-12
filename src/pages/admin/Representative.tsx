@@ -247,7 +247,7 @@ export default function RepresentativeAdmin() {
   if (!canViewFullPanel) {
     return (
       <AdminLayout>
-        <div className="space-y-4">
+        <div className="page-container space-y-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
             <p className="text-muted-foreground">Acesso restrito ao gerente da empresa.</p>
