@@ -328,7 +328,7 @@ export default function RepresentativeAdmin() {
                   <p className="mt-1 font-mono text-lg font-semibold">{dashboard?.representative_code || '—'}</p>
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Wallet de recebimento</p>
+                  <p className="text-xs text-muted-foreground">Carteira de recebimento</p>
                   <p className="mt-1 truncate font-mono text-sm font-medium">{walletId || 'Não configurada'}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Ambiente: {paymentEnvironmentLabel}</p>
                   <Button
