@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AlertTriangle, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
