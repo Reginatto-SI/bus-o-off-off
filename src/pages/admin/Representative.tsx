@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AlertTriangle, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -168,7 +168,7 @@ export default function RepresentativeAdmin() {
     : paymentEnvironment === 'sandbox'
       ? 'Sandbox'
       : 'Não resolvido';
-  const walletActionLabel = walletId ? 'Alterar wallet' : 'Configurar wallet';
+  const walletActionLabel = walletId ? 'Alterar carteira' : 'Configurar carteira';
 
   const copyOfficialLink = async () => {
     if (!officialLink) {
@@ -328,7 +328,7 @@ export default function RepresentativeAdmin() {
                   <p className="mt-1 font-mono text-lg font-semibold">{dashboard?.representative_code || '—'}</p>
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Wallet de recebimento</p>
+                  <p className="text-xs text-muted-foreground">Carteira de recebimento</p>
                   <p className="mt-1 truncate font-mono text-sm font-medium">{walletId || 'Não configurada'}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Ambiente: {paymentEnvironmentLabel}</p>
                   <Button
@@ -490,7 +490,7 @@ export default function RepresentativeAdmin() {
       <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{walletActionLabel}</DialogTitle>
+            <DialogTitle>Configurar carteira de recebimento</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="rounded-lg border bg-muted/20 p-3 text-sm">
@@ -498,7 +498,7 @@ export default function RepresentativeAdmin() {
               <p className="font-medium">{paymentEnvironmentLabel}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="representative-wallet-id">Wallet ID do Asaas</Label>
+              <Label htmlFor="representative-wallet-id">ID da carteira no Asaas (Wallet ID)</Label>
               <Input
                 id="representative-wallet-id"
                 value={walletInput}
@@ -506,10 +506,31 @@ export default function RepresentativeAdmin() {
                 placeholder="Ex.: wallet_0000000000000000"
               />
               <p className="text-xs text-muted-foreground">
-                Este valor será salvo somente no ambiente {paymentEnvironmentLabel.toLowerCase()}.
-                Deixe em branco apenas se precisar limpar a wallet deste ambiente.
+                Este é o código que identifica a carteira do Asaas que receberá suas comissões.
+                A configuração será salva somente no ambiente {paymentEnvironmentLabel.toLowerCase()}.
+                Deixe em branco apenas se precisar limpar a carteira deste ambiente.
               </p>
             </div>
+            <a
+              href="https://youtu.be/BrZxrenzjAE?si=8tQzJgr0sRVdu8xr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative block w-full rounded-lg border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Abrir tutorial em vídeo para localizar o ID da carteira no Asaas"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-destructive/10 transition-colors group-hover:bg-destructive/20">
+                  <Youtube className="h-7 w-7 text-destructive" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Não sabe onde encontrar o ID da carteira?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Assista ao tutorial rápido para localizar sua carteira de recebimento no Asaas.
+                  </p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </div>
+            </a>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
@@ -517,7 +538,7 @@ export default function RepresentativeAdmin() {
             </Button>
             <Button type="button" onClick={saveWallet} disabled={walletSaving || !paymentEnvironmentReady}>
               {walletSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar wallet
+              Salvar carteira
             </Button>
           </DialogFooter>
         </DialogContent>
