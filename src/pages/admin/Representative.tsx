@@ -247,7 +247,7 @@ export default function RepresentativeAdmin() {
   if (!canViewFullPanel) {
     return (
       <AdminLayout>
-        <div className="space-y-4">
+        <div className="page-container space-y-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
             <p className="text-muted-foreground">Acesso restrito ao gerente da empresa.</p>
@@ -267,18 +267,20 @@ export default function RepresentativeAdmin() {
   if (!activeCompanyId) {
     return (
       <AdminLayout>
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Empresa ativa não encontrada</AlertTitle>
-          <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
-        </Alert>
+        <div className="page-container">
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Empresa ativa não encontrada</AlertTitle>
+            <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
+          </Alert>
+        </div>
       </AdminLayout>
     );
   }
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="page-container space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
