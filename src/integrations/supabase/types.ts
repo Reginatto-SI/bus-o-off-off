@@ -1827,12 +1827,12 @@ export type Database = {
           },
         ]
       }
-	      representatives: {
-	        Row: {
-	          asaas_wallet_id_production: string | null
-	          asaas_wallet_id_sandbox: string | null
-	          company_id: string | null
-	          commission_percent: number
+      representatives: {
+        Row: {
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          commission_percent: number
+          company_id: string | null
           created_at: string
           document_number: string | null
           email: string | null
@@ -1845,11 +1845,11 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
-	        Insert: {
-	          asaas_wallet_id_production?: string | null
-	          asaas_wallet_id_sandbox?: string | null
-	          company_id?: string | null
-	          commission_percent?: number
+        Insert: {
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          company_id?: string | null
           created_at?: string
           document_number?: string | null
           email?: string | null
@@ -1862,11 +1862,11 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-	        Update: {
-	          asaas_wallet_id_production?: string | null
-	          asaas_wallet_id_sandbox?: string | null
-	          company_id?: string | null
-	          commission_percent?: number
+        Update: {
+          asaas_wallet_id_production?: string | null
+          asaas_wallet_id_sandbox?: string | null
+          commission_percent?: number
+          company_id?: string | null
           created_at?: string
           document_number?: string | null
           email?: string | null
@@ -1879,16 +1879,16 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-	        Relationships: [
-	          {
-	            foreignKeyName: "representatives_company_id_fkey"
-	            columns: ["company_id"]
-	            isOneToOne: true
-	            referencedRelation: "companies"
-	            referencedColumns: ["id"]
-	          },
-	        ]
-	      }
+        Relationships: [
+          {
+            foreignKeyName: "representatives_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sale_integration_logs: {
         Row: {
           asaas_event_id: string | null
@@ -3100,6 +3100,7 @@ export type Database = {
           trip_id: string | null
           validated_at: string
           validated_by_driver_id: string | null
+          validated_by_role: Database["public"]["Enums"]["user_role"] | null
           validated_by_user_id: string | null
           validation_source: string
         }
@@ -3118,6 +3119,7 @@ export type Database = {
           trip_id?: string | null
           validated_at?: string
           validated_by_driver_id?: string | null
+          validated_by_role?: Database["public"]["Enums"]["user_role"] | null
           validated_by_user_id?: string | null
           validation_source?: string
         }
@@ -3136,6 +3138,7 @@ export type Database = {
           trip_id?: string | null
           validated_at?: string
           validated_by_driver_id?: string | null
+          validated_by_role?: Database["public"]["Enums"]["user_role"] | null
           validated_by_user_id?: string | null
           validation_source?: string
         }
@@ -3616,84 +3619,41 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      ensure_company_representative: {
+        Args: { p_company_id: string }
+        Returns: {
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          commission_percent: number
+          company_id: string | null
+          created_at: string
+          document_number: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          referral_link: string | null
+          representative_code: string
+          status: Database["public"]["Enums"]["representative_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "representatives"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       generate_event_starting_soon_notifications: {
         Args: { p_company_id: string; p_window_hours?: number }
         Returns: number
       }
-	      generate_representative_code: { Args: never; Returns: string }
-	      ensure_company_representative: {
-	        Args: { p_company_id: string }
-	        Returns: Database["public"]["Tables"]["representatives"]["Row"]
-	      }
-	      get_company_representative_dashboard: {
-	        Args: { p_company_id: string }
-	        Returns: {
-	          id: string
-	          company_id: string
-	          name: string
-	          email: string | null
-	          phone: string | null
-	          status: Database["public"]["Enums"]["representative_status"]
-	          representative_code: string
-	          referral_link: string | null
-	          asaas_wallet_id_production: string | null
-	          asaas_wallet_id_sandbox: string | null
-	          commission_percent: number
-	          linked_companies_count: number
-	          active_linked_companies_count: number
-	          commission_total: number
-	          commission_paid: number
-	          commission_pending: number
-	          commission_blocked: number
-	          blocked_count: number
-	        }[]
-	      }
-	      get_company_representative_links: {
-	        Args: { p_company_id: string }
-	        Returns: {
-	          id: string
-	          company_id: string
-	          company_name: string
-	          company_trade_name: string | null
-	          company_is_active: boolean
-	          linked_at: string
-	          source_code: string
-	          link_source: Database["public"]["Enums"]["representative_link_source"]
-	          sales_count: number
-	          commission_total: number
-	        }[]
-	      }
-	      get_company_representative_commissions: {
-	        Args: { p_company_id: string }
-	        Returns: {
-	          id: string
-	          company_id: string
-	          company_name: string
-	          company_trade_name: string | null
-	          sale_id: string
-	          payment_environment: string
-	          base_amount: number
-	          commission_percent: number
-	          commission_amount: number
-	          status: Database["public"]["Enums"]["representative_commission_status"]
-	          available_at: string | null
-	          paid_at: string | null
-	          blocked_reason: string | null
-	          created_at: string
-	        }[]
-	      }
-	      update_representative_wallet: {
-	        Args: {
-	          p_representative_id: string
-	          p_asaas_wallet_id_production?: string | null
-	          p_asaas_wallet_id_sandbox?: string | null
-	        }
-	        Returns: Database["public"]["Tables"]["representatives"]["Row"]
-	      }
-	      generate_unique_company_public_slug: {
-	        Args: { base_input: string; exclude_company_id?: string }
-	        Returns: string
-	      }
+      generate_representative_code: { Args: never; Returns: string }
+      generate_unique_company_public_slug: {
+        Args: { base_input: string; exclude_company_id?: string }
+        Returns: string
+      }
       get_benefit_eligibility_matches: {
         Args: {
           p_company_id: string
@@ -3784,6 +3744,63 @@ export type Database = {
           updated_at: string
           vehicle_count: number
           whatsapp: string
+        }[]
+      }
+      get_company_representative_commissions: {
+        Args: { p_company_id: string }
+        Returns: {
+          available_at: string
+          base_amount: number
+          blocked_reason: string
+          commission_amount: number
+          commission_percent: number
+          company_id: string
+          company_name: string
+          company_trade_name: string
+          created_at: string
+          id: string
+          paid_at: string
+          payment_environment: string
+          sale_id: string
+          status: Database["public"]["Enums"]["representative_commission_status"]
+        }[]
+      }
+      get_company_representative_dashboard: {
+        Args: { p_company_id: string }
+        Returns: {
+          active_linked_companies_count: number
+          asaas_wallet_id_production: string
+          asaas_wallet_id_sandbox: string
+          blocked_count: number
+          commission_blocked: number
+          commission_paid: number
+          commission_pending: number
+          commission_percent: number
+          commission_total: number
+          company_id: string
+          email: string
+          id: string
+          linked_companies_count: number
+          name: string
+          phone: string
+          referral_link: string
+          representative_code: string
+          status: Database["public"]["Enums"]["representative_status"]
+        }[]
+      }
+      get_company_representative_links: {
+        Args: { p_company_id: string }
+        Returns: {
+          commission_total: number
+          company_id: string
+          company_is_active: boolean
+          company_name: string
+          company_trade_name: string
+          id: string
+          link_source: Database["public"]["Enums"]["representative_link_source"]
+          linked_at: string
+          sales_count: number
+          source_code: string
         }[]
       }
       get_sales_report_kpis: {
@@ -3980,6 +3997,36 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unaccent: { Args: { "": string }; Returns: string }
+      update_representative_wallet: {
+        Args: {
+          p_asaas_wallet_id_production?: string
+          p_asaas_wallet_id_sandbox?: string
+          p_representative_id: string
+        }
+        Returns: {
+          asaas_wallet_id_production: string | null
+          asaas_wallet_id_sandbox: string | null
+          commission_percent: number
+          company_id: string | null
+          created_at: string
+          document_number: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          referral_link: string | null
+          representative_code: string
+          status: Database["public"]["Enums"]["representative_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "representatives"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       upsert_representative_commission_for_sale: {
         Args: { p_sale_id: string; p_source?: string }
         Returns: {
