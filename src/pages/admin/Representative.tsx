@@ -267,11 +267,13 @@ export default function RepresentativeAdmin() {
   if (!activeCompanyId) {
     return (
       <AdminLayout>
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Empresa ativa não encontrada</AlertTitle>
-          <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
-        </Alert>
+        <div className="page-container">
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Empresa ativa não encontrada</AlertTitle>
+            <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
+          </Alert>
+        </div>
       </AdminLayout>
     );
   }
