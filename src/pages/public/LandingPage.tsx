@@ -7,6 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import {
   MapPin,
   Calendar,
+  CalendarCheck,
   Bus,
   Users,
   Shield,
@@ -47,7 +48,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
+import {
+  DEFAULT_LANDING_COMMERCIAL_WHATSAPP_URL,
+  LANDING_COMMERCIAL_WHATSAPP_MESSAGE,
+  LANDING_COMMERCIAL_WHATSAPP_PHONE,
+  buildWhatsappWaMeLink,
+} from "@/lib/whatsapp";
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg, type QrDownloadResult } from "@/lib/showcaseShare";
 import { toast } from "sonner";
 import { LandingHeader } from "@/components/public/LandingHeader";
@@ -614,15 +620,41 @@ interface LandingContactFormState {
   phone: string;
   message: string;
 }
+interface DemoRequestFormState {
+  name: string;
+  company: string;
+  date: string;
+  time: string;
+}
 const INITIAL_CONTACT_FORM: LandingContactFormState = {
   name: "",
   email: "",
   phone: "",
   message: "",
 };
+const INITIAL_DEMO_REQUEST_FORM: DemoRequestFormState = {
+  name: "",
+  company: "",
+  date: "",
+  time: "",
+};
 const OFFICIAL_SMARTBUS_URL = "https://www.smartbusbr.com.br/";
 const OFFICIAL_QR_FILE_BASE_NAME = "qrcode-oficial-smartbus-br";
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+const formatDemoDate = (value: string) => {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+};
+const formatDemoTime = (value: string) => (value ? `${value}h` : "");
+const getTodayDateInputValue = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 const FloatingWhatsAppIcon = () => (
   <span className="inline-flex scale-[0.7] items-center justify-center">
     <span className="sr-only">WhatsApp</span>
@@ -642,17 +674,20 @@ export default function LandingPage() {
     path: "/",
   });
   const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [demoRequestModalOpen, setDemoRequestModalOpen] = useState(false);
   const [officialQrModalOpen, setOfficialQrModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState<LandingContactFormState>(INITIAL_CONTACT_FORM);
+  const [demoRequestForm, setDemoRequestForm] = useState<DemoRequestFormState>(INITIAL_DEMO_REQUEST_FORM);
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof LandingContactFormState, string>>>({});
+  const [demoRequestErrors, setDemoRequestErrors] = useState<Partial<Record<keyof DemoRequestFormState, string>>>({});
   const officialQrRef = useRef<HTMLDivElement>(null);
+  const todayDateInputValue = getTodayDateInputValue();
   // CTA comercial unificado para a landing e para o botão flutuante, evitando números divergentes.
   const salesWhatsappUrl =
     buildWhatsappWaMeLink({
-      phone: "(31) 99207-4309",
-      message: "Quero começar a vender passagens com o Smartbus BR",
-    }) ??
-    "https://wa.me/5531992074309?text=Quero%20come%C3%A7ar%20a%20vender%20passagens%20com%20o%20Smartbus%20BR";
+      phone: LANDING_COMMERCIAL_WHATSAPP_PHONE,
+      message: LANDING_COMMERCIAL_WHATSAPP_MESSAGE,
+    }) ?? DEFAULT_LANDING_COMMERCIAL_WHATSAPP_URL;
   // Mantemos os links sociais centralizados e discretos para reaproveitar a mesma configuração no CTA final e no footer.
   const landingSocialLinks = [
     ...LANDING_SOCIAL_LINKS,
@@ -663,10 +698,28 @@ export default function LandingPage() {
       icon: <FloatingWhatsAppIcon />,
     },
   ];
+  const demoRequestWhatsappUrl = useMemo(
+    () =>
+      buildWhatsappWaMeLink({
+        phone: LANDING_COMMERCIAL_WHATSAPP_PHONE,
+        message: [
+          "Olá, equipe SmartBus BR!",
+          "",
+          `Meu nome é ${demoRequestForm.name.trim()} e gostaria de solicitar uma demonstração da plataforma.`,
+          "",
+          `Empresa ou atividade: ${demoRequestForm.company.trim()}`,
+          `Data desejada: ${formatDemoDate(demoRequestForm.date)}`,
+          `Horário desejado: ${formatDemoTime(demoRequestForm.time)}`,
+          "",
+          "Aguardo a confirmação da disponibilidade.",
+        ].join("\n"),
+      }) ?? salesWhatsappUrl,
+    [demoRequestForm.company, demoRequestForm.date, demoRequestForm.name, demoRequestForm.time, salesWhatsappUrl],
+  );
   const contactWhatsappUrl = useMemo(
     () =>
       buildWhatsappWaMeLink({
-        phone: "(31) 99207-4309",
+        phone: LANDING_COMMERCIAL_WHATSAPP_PHONE,
         message: [
           "Olá! Quero falar com a equipe da Smartbus BR.",
           "",
@@ -679,6 +732,19 @@ export default function LandingPage() {
       }) ?? salesWhatsappUrl,
     [contactForm.email, contactForm.message, contactForm.name, contactForm.phone, salesWhatsappUrl],
   );
+  const updateDemoRequestField = (field: keyof DemoRequestFormState, value: string) => {
+    setDemoRequestForm((current) => ({ ...current, [field]: value }));
+    setDemoRequestErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+  const handleDemoRequestModalOpenChange = (open: boolean) => {
+    setDemoRequestModalOpen(open);
+    if (!open) setDemoRequestErrors({});
+  };
   const updateContactField = (field: keyof LandingContactFormState, value: string) => {
     setContactForm((current) => ({ ...current, [field]: value }));
     setContactErrors((current) => {
@@ -688,6 +754,22 @@ export default function LandingPage() {
       return next;
     });
   };
+  const handleDemoRequestSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextErrors: Partial<Record<keyof DemoRequestFormState, string>> = {};
+    if (!demoRequestForm.name.trim()) nextErrors.name = "Informe seu nome.";
+    if (!demoRequestForm.company.trim()) nextErrors.company = "Informe a empresa ou atividade.";
+    if (!demoRequestForm.date) nextErrors.date = "Informe a data desejada.";
+    else if (demoRequestForm.date < todayDateInputValue) nextErrors.date = "Escolha uma data a partir de hoje.";
+    if (!demoRequestForm.time) nextErrors.time = "Informe o horário desejado.";
+    setDemoRequestErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    window.open(demoRequestWhatsappUrl, "_blank", "noopener,noreferrer");
+    setDemoRequestModalOpen(false);
+    setDemoRequestForm(INITIAL_DEMO_REQUEST_FORM);
+    setDemoRequestErrors({});
+  };
+
   const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors: Partial<Record<keyof LandingContactFormState, string>> = {};
@@ -804,29 +886,105 @@ export default function LandingPage() {
                   ))}
                 </div>
               </div>
-              {/* CTA direto: removemos a busca simulada para deixar claro que a jornada principal é criar o evento e começar a vender. */}
+              {/* CTA direto: mantém cadastro como ação principal e adiciona demonstração sem alterar o fluxo existente. */}
               <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-5">
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
-                      Comece agora
-                    </p>
-                    <p className="text-sm text-white/70 sm:text-base">
-                      Crie seu evento, publique seu link de vendas e coloque a
-                      operação para rodar sem fricção.
+                    <h2 className="text-2xl font-bold text-white sm:text-3xl">
+                      Como você prefere começar?
+                    </h2>
+                    <p className="max-w-2xl text-sm text-white/70 sm:text-base">
+                      Comece a vender agora ou conheça a plataforma em uma demonstração rápida com nossa equipe.
                     </p>
                   </div>
-                  <div className="flex w-full flex-col items-start gap-2 lg:w-auto lg:items-center">
-                    <Link
-                      to="/cadastro"
-                      className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30 lg:min-w-[320px]"
-                    >
-                      Criar evento e começar a vender
-                      <ArrowRight className="h-5 w-5" />
-                    </Link>
-                    <p className="text-sm text-white/80">
-                      Leva menos de 2 minutos. Sem complicação.
-                    </p>
+                  <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+                    <div className="flex flex-col justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg shadow-primary/10">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                          Quero começar agora
+                        </p>
+                        <p className="text-sm text-white/75 sm:text-base">
+                          Crie seu primeiro evento e comece a vender em poucos minutos.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Link
+                          to="/cadastro"
+                          className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
+                        >
+                          Criar evento e começar a vender
+                          <ArrowRight className="h-5 w-5" />
+                        </Link>
+                        <p className="text-center text-sm text-white/80">
+                          Leva menos de 2 minutos. Sem complicação.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col justify-between gap-4 rounded-2xl border border-primary/35 bg-slate-950/45 p-4">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
+                          Quero conhecer primeiro
+                        </p>
+                        <p className="text-sm text-white/75 sm:text-base">
+                          Veja como o SmartBus BR pode ajudar sua operação antes de começar.
+                        </p>
+                      </div>
+                      <Dialog open={demoRequestModalOpen} onOpenChange={handleDemoRequestModalOpenChange}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-primary/70 bg-slate-950/70 px-6 py-4 text-base font-semibold text-white shadow-lg shadow-black/20 transition-all hover:-translate-y-0.5 hover:bg-primary/10 hover:text-primary"
+                          >
+                            <CalendarCheck className="h-5 w-5" />
+                            Solicitar uma demonstração
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-lg">
+                          <DialogHeader>
+                            <DialogTitle>Solicitar uma demonstração</DialogTitle>
+                            <DialogDescription>
+                              Preencha os dados para continuar pelo WhatsApp comercial do SmartBus BR.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <form className="space-y-4" onSubmit={handleDemoRequestSubmit}>
+                            <div className="space-y-2">
+                              <Label htmlFor="landing-demo-name">Nome</Label>
+                              <Input id="landing-demo-name" value={demoRequestForm.name} onChange={(event) => updateDemoRequestField("name", event.target.value)} placeholder="Seu nome" required />
+                              {demoRequestErrors.name && <p className="text-sm text-destructive">{demoRequestErrors.name}</p>}
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="landing-demo-company">Nome da empresa ou atividade</Label>
+                              <Input id="landing-demo-company" value={demoRequestForm.company} onChange={(event) => updateDemoRequestField("company", event.target.value)} placeholder="Ex.: excursões, turismo, eventos" required />
+                              {demoRequestErrors.company && <p className="text-sm text-destructive">{demoRequestErrors.company}</p>}
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label htmlFor="landing-demo-date">Data desejada</Label>
+                                <Input id="landing-demo-date" type="date" min={todayDateInputValue} value={demoRequestForm.date} onChange={(event) => updateDemoRequestField("date", event.target.value)} required />
+                                {demoRequestErrors.date && <p className="text-sm text-destructive">{demoRequestErrors.date}</p>}
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="landing-demo-time">Horário desejado</Label>
+                                <Input id="landing-demo-time" type="time" value={demoRequestForm.time} onChange={(event) => updateDemoRequestField("time", event.target.value)} required />
+                                {demoRequestErrors.time && <p className="text-sm text-destructive">{demoRequestErrors.time}</p>}
+                              </div>
+                            </div>
+                            <div className="rounded-2xl border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
+                              A data e o horário serão confirmados pela equipe no WhatsApp.
+                            </div>
+                            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                              <Button type="button" variant="outline" onClick={() => handleDemoRequestModalOpenChange(false)}>
+                                Fechar
+                              </Button>
+                              <Button type="submit" className="gap-2">
+                                <CalendarCheck className="h-4 w-4" />
+                                Continuar pelo WhatsApp
+                              </Button>
+                            </div>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                 </div>
               </div>
