@@ -19,9 +19,10 @@ interface PublicLayoutProps {
   children: ReactNode;
   hideMyTicketsButton?: boolean;
   floatingWhatsappHref?: string | null;
+  footerCompanyName?: string | null;
 }
 
-export function PublicLayout({ children, hideMyTicketsButton = false, floatingWhatsappHref }: PublicLayoutProps) {
+export function PublicLayout({ children, hideMyTicketsButton = false, floatingWhatsappHref, footerCompanyName }: PublicLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -220,7 +221,7 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
       </main>
 
       {!shouldHideFloatingWhatsApp && <FloatingWhatsApp href={floatingWhatsappHref} />}
-      <TrustFooter />
+      <TrustFooter companyName={footerCompanyName} />
     </div>
   );
 }

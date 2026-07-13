@@ -1,7 +1,11 @@
 import { Lock, CreditCard, Smartphone } from 'lucide-react';
 import { FooterVersionInfo } from '@/components/system/FooterVersionInfo';
 
-export function TrustFooter() {
+interface TrustFooterProps {
+  companyName?: string | null;
+}
+
+export function TrustFooter({ companyName }: TrustFooterProps) {
   return (
     <footer className="bg-card border-t">
       {/* Elementos de confiança */}
@@ -32,11 +36,24 @@ export function TrustFooter() {
       {/* Copyright */}
       <div className="border-t py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-muted-foreground">
-            {/* Informação institucional obrigatória para transparência em páginas públicas. */}
-            <span>© {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 67.871.644/0001-26</span>
-            <FooterVersionInfo />
-          </div>
+          {companyName ? (
+            <div className="flex flex-col items-center justify-center gap-2 text-center text-xs text-muted-foreground">
+              {/* Informação institucional exclusiva da vitrine /empresa: mantém as demais páginas com o rodapé legado. */}
+              <p className="max-w-3xl leading-relaxed">
+                Esta vitrine é operada por <strong className="font-semibold text-foreground">{companyName}</strong>, responsável pela oferta e organização das viagens apresentadas nesta vitrine.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-x-1">
+                <span>Venda intermediada pela SmartBus BR — CNPJ 67.871.644/0001-26.</span>
+                <FooterVersionInfo />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-muted-foreground">
+              {/* Rodapé legado: não alterar páginas públicas sem empresa da vitrine. */}
+              <span>© {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 67.871.644/0001-26</span>
+              <FooterVersionInfo />
+            </div>
+          )}
         </div>
       </div>
     </footer>
