@@ -3,10 +3,11 @@ import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { Bus, CalendarDays, ChevronDown, ClipboardCheck, Copy, Download, ExternalLink, Eye, HeadsetIcon, MessageCircle, QrCode, MapPin, Pencil, Search, Settings, ShieldCheck, Ticket, UserCheck, X } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui/WhatsAppIcon';
 import { supabase } from '@/integrations/supabase/client';
-import { Company, CommercialPartner, EventWithCompany } from '@/types/database';
+import { Company, CommercialPartner, EventBoardingLocation, EventWithCompany } from '@/types/database';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { EventCard, EventCardSkeletonGrid, EventsCarousel } from '@/components/public';
@@ -20,6 +21,7 @@ import { toast } from 'sonner';
 import { downloadShowcaseQrPng, downloadShowcaseQrSvg } from '@/lib/showcaseShare';
 import { filterEventsByTerm } from '@/lib/eventSearch';
 import { buildEventOperationalEndMap, filterOperationallyVisibleEvents } from '@/lib/eventOperationalWindow';
+import { formatCnpj } from '@/lib/pdfUtils';
 
 const HERO_BADGE_FALLBACKS = [
   'Passagens para eventos',
@@ -43,6 +45,7 @@ interface PublicSponsor {
 type PublicCompanyData = Pick<
   Company,
   'id' | 'name' | 'trade_name' | 'logo_url' | 'public_slug' | 'cover_image_url' | 'use_default_cover' | 'intro_text' | 'background_style' | 'whatsapp'
+  | 'legal_name' | 'cnpj' | 'document_number' | 'city' | 'state'
   | 'social_instagram' | 'social_facebook' | 'social_tiktok' | 'social_youtube' | 'social_telegram' | 'social_twitter' | 'social_website' | 'hero_badge_labels'
 >;
 
@@ -69,6 +72,7 @@ export default function PublicCompanyShowcase() {
   // Modais
   const [heroModalOpen, setHeroModalOpen] = useState(false);
   const [introModalOpen, setIntroModalOpen] = useState(false);
+  const [companyDetailsOpen, setCompanyDetailsOpen] = useState(false);
 
   useEffect(() => {
     const fetchShowcase = async () => {
@@ -77,7 +81,7 @@ export default function PublicCompanyShowcase() {
       // Query estrita: somente campos necessários para a vitrine (sem select('*'))
       const { data: companyData } = await supabase
         .from('companies')
-        .select('id, name, trade_name, logo_url, public_slug, cover_image_url, use_default_cover, intro_text, background_style, whatsapp, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website, hero_badge_labels')
+        .select('id, name, trade_name, legal_name, cnpj, document_number, city, state, logo_url, public_slug, cover_image_url, use_default_cover, intro_text, background_style, whatsapp, social_instagram, social_facebook, social_tiktok, social_youtube, social_telegram, social_twitter, social_website, hero_badge_labels')
         .eq('public_slug', normalizedNick)
         .maybeSingle();
 
@@ -133,7 +137,10 @@ export default function PublicCompanyShowcase() {
           .eq('company_id', companyData.id)
           .not('departure_date', 'is', null);
 
-        const operationalEndMap = buildEventOperationalEndMap(eventRows, (boardings ?? []) as any[]);
+        const operationalEndMap = buildEventOperationalEndMap(
+          eventRows,
+          (boardings ?? []) as Pick<EventBoardingLocation, 'event_id' | 'departure_date' | 'departure_time'>[],
+        );
         setEvents(filterOperationallyVisibleEvents(eventRows, operationalEndMap) as EventWithCompany[]);
       } else {
         setEvents([]);
@@ -147,6 +154,19 @@ export default function PublicCompanyShowcase() {
   }, [normalizedNick]);
 
   const companyDisplayName = company?.trade_name || company?.name;
+  const companyDocument = formatCnpj(company?.cnpj || company?.document_number || null);
+  const companyLocation = [company?.city, company?.state].filter(Boolean).join(' - ') || null;
+  const companyInstitutionalItems = [
+    { label: 'Nome público', value: companyDisplayName },
+    { label: 'Razão social', value: company?.legal_name },
+    { label: 'CNPJ', value: companyDocument },
+    { label: 'Cidade/UF', value: companyLocation },
+    { label: 'WhatsApp', value: company?.whatsapp },
+  ].filter((item): item is { label: string; value: string } => Boolean(item.value));
+  // Comentário de privacidade: sem configuração pública específica para telefone, e-mail ou endereço completo,
+  // o modal reutiliza somente os mesmos dados institucionais já seguros para exibição na vitrine.
+  const fullCompanyDetails = [...companyInstitutionalItems];
+  const hasAdditionalCompanyDetails = fullCompanyDetails.length > companyInstitutionalItems.length;
   const filteredEvents = useMemo(() => filterEventsByTerm(events, searchTerm), [events, searchTerm]);
   const featuredEvent = filteredEvents[0] ?? null;
   const showcaseSlug = normalizePublicSlug(company?.public_slug || normalizedNick);
@@ -296,7 +316,7 @@ export default function PublicCompanyShowcase() {
   };
 
   return (
-    <PublicLayout hideMyTicketsButton={showEditUI} floatingWhatsappHref={companyWhatsappLink}>
+    <PublicLayout hideMyTicketsButton={showEditUI} floatingWhatsappHref={companyWhatsappLink} footerCompanyName={companyDisplayName}>
       <div className="space-y-0">
         {!loading && !company ? (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -746,6 +766,45 @@ export default function PublicCompanyShowcase() {
                  </section>
                )}
 
+              {/* Área institucional: usa somente dados públicos da empresa carregada pela vitrine atual. */}
+              {!loading && company && companyInstitutionalItems.length > 0 && (
+                <section className="rounded-2xl border bg-card/70 p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                        Sobre a empresa responsável
+                      </span>
+                      <h2 className="text-base sm:text-lg font-semibold text-foreground">
+                        {companyDisplayName || 'Empresa responsável'}
+                      </h2>
+                      <p className="text-sm text-muted-foreground max-w-2xl">
+                        Esta é a empresa responsável pela oferta e organização das viagens apresentadas nesta vitrine.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {companyInstitutionalItems.map(({ label, value }) => (
+                      <div key={label} className="rounded-lg border bg-background/70 px-3 py-2.5">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                        <p className="mt-1 text-sm font-medium text-foreground break-words">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {hasAdditionalCompanyDetails && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="mt-3 h-auto px-0 text-sm"
+                      onClick={() => setCompanyDetailsOpen(true)}
+                    >
+                      Ver dados completos da empresa
+                    </Button>
+                  )}
+                </section>
+              )}
+
               {/* Patrocinadores: seção oculta se não houver ativos */}
               {!loading && (sponsors.length > 0 || showEditUI) && (
                 <section className="space-y-3">
@@ -819,6 +878,25 @@ export default function PublicCompanyShowcase() {
           </>
         )}
       </div>
+
+      <Dialog open={companyDetailsOpen} onOpenChange={setCompanyDetailsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Dados completos da empresa</DialogTitle>
+            <DialogDescription>
+              Informações institucionais disponíveis no cadastro público desta vitrine.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {fullCompanyDetails.map(({ label, value }) => (
+              <div key={label} className="rounded-lg border bg-muted/30 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                <p className="mt-1 text-sm font-medium text-foreground break-words">{value}</p>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Fase 2: Modais de edição — renderizados apenas quando gerente pode editar */}
       {canEdit && company && (
