@@ -3,6 +3,7 @@ import { AsaasAddressModal, AsaasAddressData } from './AsaasAddressModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AsaasTutorialVideoDialog } from './AsaasTutorialVideoDialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -541,29 +542,14 @@ export function AsaasOnboardingWizard({
         </DialogFooter>
       </DialogContent>
 
-      <Dialog open={showApiKeyTutorialModal} onOpenChange={setShowApiKeyTutorialModal}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Como gerar a API Key no Asaas</DialogTitle>
-          </DialogHeader>
-          {/* Comentário de manutenção: embed centralizado no wizard para manter o mesmo comportamento em /admin/empresa e /admin/eventos. */}
-          <div className="overflow-hidden rounded-md border bg-black">
-            <div className="aspect-video w-full">
-              <iframe
-                src={asaasApiKeyTutorialEmbedUrl}
-                title="Tutorial para gerar API Key no Asaas"
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Dica: confirme no topo do painel do Asaas se você está no ambiente correto antes de copiar a chave.
-          </p>
-        </DialogContent>
-      </Dialog>
+      <AsaasTutorialVideoDialog
+        open={showApiKeyTutorialModal}
+        onOpenChange={setShowApiKeyTutorialModal}
+        title="Como gerar a API Key no Asaas"
+        videoUrl={asaasApiKeyTutorialEmbedUrl}
+        iframeTitle="Tutorial para gerar API Key no Asaas"
+        description="Dica: confirme no topo do painel do Asaas se você está no ambiente correto antes de copiar a chave."
+      />
 
       {localCompanyData && (
         <AsaasAddressModal
