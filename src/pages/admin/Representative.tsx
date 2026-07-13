@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
+import { AsaasTutorialVideoDialog } from '@/components/admin/AsaasTutorialVideoDialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -103,10 +104,25 @@ export default function RepresentativeAdmin() {
   const [commissions, setCommissions] = useState<RepresentativeCommissionRow[]>([]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletTutorialModalOpen, setWalletTutorialModalOpen] = useState(false);
   const [walletInput, setWalletInput] = useState('');
   const [walletSaving, setWalletSaving] = useState(false);
 
   const canViewFullPanel = isGerente || isDeveloper;
+
+  useEffect(() => {
+    if (!walletModalOpen) {
+      // Comentário de manutenção: o tutorial é complementar ao modal da carteira;
+      // se o modal principal fechar por qualquer caminho, o vídeo não deve ficar aberto sozinho.
+      setWalletTutorialModalOpen(false);
+    }
+  }, [walletModalOpen]);
+
+  useEffect(() => {
+    // Comentário de manutenção: em troca de empresa/contexto, evita manter um tutorial
+    // associado à carteira anterior sem interferir no valor digitado enquanto o modal segue aberto.
+    setWalletTutorialModalOpen(false);
+  }, [activeCompanyId]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -511,10 +527,9 @@ export default function RepresentativeAdmin() {
                 Deixe em branco apenas se precisar limpar a carteira deste ambiente.
               </p>
             </div>
-            <a
-              href="https://youtu.be/BrZxrenzjAE?si=8tQzJgr0sRVdu8xr"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => setWalletTutorialModalOpen(true)}
               className="group relative block w-full rounded-lg border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Abrir tutorial em vídeo para localizar o ID da carteira no Asaas"
             >
@@ -530,7 +545,7 @@ export default function RepresentativeAdmin() {
                 </div>
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
-            </a>
+            </button>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
@@ -543,6 +558,16 @@ export default function RepresentativeAdmin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AsaasTutorialVideoDialog
+        open={walletTutorialModalOpen}
+        onOpenChange={setWalletTutorialModalOpen}
+        title="Como encontrar o ID da carteira no Asaas"
+        videoUrl="https://www.youtube.com/embed/BrZxrenzjAE"
+        iframeTitle="Tutorial para encontrar o ID da carteira no Asaas"
+        description="O vídeo inicia sem som quando o navegador permitir. Use os controles do player para ativar o áudio."
+        autoplay
+      />
+
     </AdminLayout>
   );
 }
