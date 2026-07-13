@@ -897,8 +897,8 @@ export default function LandingPage() {
                       Comece a vender agora ou conheça a plataforma em uma demonstração rápida com nossa equipe.
                     </p>
                   </div>
-                  <div className="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-                    <div className="flex flex-col justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg shadow-primary/10">
+                  <div className="grid items-stretch gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+                    <div className="flex h-full flex-col justify-between gap-4 rounded-2xl border border-primary/30 bg-primary/10 p-4 shadow-lg shadow-primary/10">
                       <div className="space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
                           Quero começar agora
@@ -907,20 +907,15 @@ export default function LandingPage() {
                           Crie seu primeiro evento e comece a vender em poucos minutos.
                         </p>
                       </div>
-                      <div className="space-y-2">
-                        <Link
-                          to="/cadastro"
-                          className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
-                        >
-                          Criar evento e começar a vender
-                          <ArrowRight className="h-5 w-5" />
-                        </Link>
-                        <p className="text-center text-sm text-white/80">
-                          Leva menos de 2 minutos. Sem complicação.
-                        </p>
-                      </div>
+                      <Link
+                        to="/cadastro"
+                        className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/30"
+                      >
+                        Criar evento e começar a vender
+                        <ArrowRight className="h-5 w-5" />
+                      </Link>
                     </div>
-                    <div className="flex flex-col justify-between gap-4 rounded-2xl border border-primary/35 bg-slate-950/45 p-4">
+                    <div className="flex h-full flex-col justify-between gap-4 rounded-2xl border border-primary/35 bg-slate-950/45 p-4">
                       <div className="space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                           Quero conhecer primeiro
