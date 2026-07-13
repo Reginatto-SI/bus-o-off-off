@@ -1,35 +1,41 @@
-## Objetivo
-Padronizar o espaçamento da página `/admin/representante` para seguir o mesmo padrão visual (recuo lateral, respiro superior, largura de conteúdo) já usado nas demais telas administrativas (ex.: `Sellers.tsx`, `BoardingLocations.tsx`).
 
-## Diagnóstico
-A tela `src/pages/admin/Representative.tsx` renderiza o conteúdo dentro de `<AdminLayout>` usando apenas `<div className="space-y-6">` (e variantes `space-y-4` nos estados de permissão/empresa). As demais telas admin envolvem o conteúdo em `<div className="page-container">`, classe utilitária que define o padding horizontal, o padding superior abaixo do header e a largura máxima do conteúdo. A ausência desse contêiner é o que faz o conteúdo encostar no menu lateral e no header.
+## Validação prévia (já executada em leitura no banco)
 
-Além disso, o título/subtítulo estão implementados manualmente, enquanto o padrão do admin usa o componente `PageHeader` (`src/components/admin/PageHeader.tsx`) — porém, para manter a alteração mínima e não mexer no badge de status atual, basta trocar o wrapper e preservar o cabeçalho local.
+- **Representante 7 FEST**: encontrado com código `REP8AD8856` (id `f6deb040-083e-4e4d-b399-0f7f04ba67c4`, status `ativo`, CNPJ 25.029.744/0001-60).
+- **JD Turismos e Viagens** (JD Viagens excursões, CNPJ 46.195.166/0001-01): encontrada (id `c75a342f-9eca-437a-a785-e5920c0fe616`, ativa). Sem vínculo atual em `representative_company_links`.
+- **Jefferson Rodrigo de Oliveira Santos** (JG Excursões e Turismo, CNPJ 67.661.882/0001-07): encontrada (id `b371d5a9-f181-438a-9a8a-669504c68201`, ativa). Sem vínculo atual em `representative_company_links`.
+- Nenhum conflito com outro representante.
 
-## Alteração
-Arquivo único: `src/pages/admin/Representative.tsx`.
+## Ação
 
-Substituir os wrappers dos três retornos que renderizam conteúdo dentro do `AdminLayout`:
+Inserir dois registros em `representative_company_links` seguindo exatamente o mesmo padrão da edge function `register-company` (fluxo atual da Fase 1):
 
-1. Bloco "Permissão insuficiente" (linha ~250):
-   - de: `<div className="space-y-4">`
-   - para: `<div className="page-container space-y-4">`
+```sql
+INSERT INTO public.representative_company_links
+  (company_id, representative_id, link_source, source_code, source_context, linked_at, locked)
+VALUES
+  ('c75a342f-9eca-437a-a785-e5920c0fe616',
+   'f6deb040-083e-4e4d-b399-0f7f04ba67c4',
+   'url_ref', 'REP8AD8856',
+   jsonb_build_object('reason','backfill_manual','note','Vínculo retroativo anterior ao fix do fluxo de representantes'),
+   now(), true),
+  ('b371d5a9-f181-438a-9a8a-669504c68201',
+   'f6deb040-083e-4e4d-b399-0f7f04ba67c4',
+   'url_ref', 'REP8AD8856',
+   jsonb_build_object('reason','backfill_manual','note','Vínculo retroativo anterior ao fix do fluxo de representantes'),
+   now(), true);
+```
 
-2. Bloco "Empresa ativa não encontrada" (linha ~269):
-   - envolver o `<Alert>` em `<div className="page-container">`
+## Garantias
 
-3. Bloco principal (linha ~281):
-   - de: `<div className="space-y-6">`
-   - para: `<div className="page-container space-y-6">`
+- Apenas duas linhas novas em `representative_company_links`.
+- **Nada** em `sales`, `representative_commissions`, wallets, splits ou percentuais é tocado — sem comissão retroativa.
+- Sem alteração de schema, RLS, código de frontend, edge functions ou dados cadastrais das empresas.
+- Sem duplicidade: as duas empresas não possuem vínculo hoje.
 
-O estado de loading permanece como está (spinner centralizado com `min-h-[50vh]`, mesmo padrão de outras telas).
+## Resultado esperado em `/admin/representante` (7 FEST)
 
-## Fora de escopo
-- Não alterar textos, cores, ícones, badge ou qualquer lógica.
-- Não trocar o cabeçalho local pelo componente `PageHeader` (mudança visual maior).
-- Não alterar links, QR Code, wallet, indicadores, empresas ou comissões.
-- Não introduzir novo padrão — apenas reutiliza `page-container` já usado no admin.
-
-## Validação
-- Abrir `/admin/representante` em desktop e conferir que o conteúdo respeita o mesmo recuo lateral e respiro superior de `/admin/vendedores`.
-- Confirmar que rolagem, cards, tabela, modais de wallet e QR Code continuam funcionando normalmente.
+- 2 empresas indicadas.
+- Empresas ativas = 2 (ambas estão `is_active = true`).
+- Listagem mostrando JD Viagens excursões e JG Excursões e Turismo.
+- Ledger de comissões inalterado.
