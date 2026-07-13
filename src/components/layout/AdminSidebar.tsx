@@ -205,12 +205,24 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Indicações',
     href: '/admin/indicacoes',
     icon: Share2
-  }, {
-    name: 'Representante Comercial',
-    href: '/admin/representante',
-    icon: BadgePercent,
-    roles: ['gerente', 'developer']
-  }]
+  }
+  // ============================================================
+  // Item "Representante Comercial" temporariamente OCULTO do menu.
+  // Motivo: a rota /admin/representante e todo o backend do módulo
+  // de representantes continuam funcionando normalmente (vínculos,
+  // ledger de comissões, tela em si), mas o acesso pelo menu lateral
+  // foi desativado para não ficar visível a nenhum usuário até
+  // conclusão das próximas fases (split automático + wallet).
+  // Para reativar, basta descomentar o bloco abaixo.
+  // ============================================================
+  // , {
+  //   name: 'Representante Comercial',
+  //   href: '/admin/representante',
+  //   icon: BadgePercent,
+  //   roles: ['gerente', 'developer']
+  // }
+  ]
+
 }, {
   id: 'sistema',
   label: 'Sistema',
