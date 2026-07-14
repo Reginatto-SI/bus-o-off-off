@@ -98,7 +98,7 @@ function getCommissionStatusVariant(status: CommissionStatus): 'default' | 'seco
 }
 
 export default function RepresentativeAdmin() {
-  const { loading: authLoading, activeCompanyId, activeCompany, userRole, isGerente, isDeveloper } = useAuth();
+  const { loading: authLoading, activeCompanyId, activeCompany } = useAuth();
   const { environment: paymentEnvironment, isReady: paymentEnvironmentReady } = useRuntimePaymentEnvironment();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<RepresentativeDashboardRow | null>(null);
@@ -111,7 +111,6 @@ export default function RepresentativeAdmin() {
   const [walletSaving, setWalletSaving] = useState(false);
   const [walletTextHelpOpen, setWalletTextHelpOpen] = useState(false);
 
-  const canViewFullPanel = isGerente || isDeveloper;
 
   useEffect(() => {
     if (!walletModalOpen) {
