@@ -29,7 +29,6 @@ import {
   Wrench,
   Activity,
   ClipboardList,
-  Share2,
   UserRoundCheck,
   Gift,
   Sparkles,
@@ -201,11 +200,20 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Building2
-  }, {
-    name: 'Indicações',
-    href: '/admin/indicacoes',
-    icon: Share2
   }
+  // ============================================================
+  // Item "Indicações" temporariamente OCULTO do menu.
+  // Motivo: a funcionalidade de indicações ficará em standby por
+  // enquanto e não deve aparecer no cliente do usuário. A rota
+  // /admin/indicacoes e o restante do módulo permanecem no código
+  // para reativação futura sem alterar o fluxo existente.
+  // Para reativar, basta descomentar o bloco abaixo.
+  // ============================================================
+  // , {
+  //   name: 'Indicações',
+  //   href: '/admin/indicacoes',
+  //   icon: Share2
+  // }
   // ============================================================
   // Item "Representante Comercial" temporariamente OCULTO do menu.
   // Motivo: a rota /admin/representante e todo o backend do módulo
