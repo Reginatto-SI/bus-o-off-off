@@ -175,7 +175,7 @@ export default function RepresentativeAdmin() {
     };
 
     void loadRepresentativePanel();
-  }, [activeCompanyId, authLoading, canViewFullPanel]);
+  }, [activeCompanyId, authLoading]);
 
   const officialLink = useMemo(() => resolveOfficialLink(dashboard?.referral_link ?? null), [dashboard?.referral_link]);
   const walletId = paymentEnvironment === 'production'
