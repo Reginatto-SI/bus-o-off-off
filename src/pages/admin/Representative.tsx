@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Building2, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Building2, ChevronDown, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,12 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRuntimePaymentEnvironment } from '@/hooks/use-runtime-payment-environment';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
 type RepresentativeStatus = 'ativo' | 'inativo' | 'bloqueado' | 'pendente_validacao';
@@ -107,6 +109,7 @@ export default function RepresentativeAdmin() {
   const [walletTutorialModalOpen, setWalletTutorialModalOpen] = useState(false);
   const [walletInput, setWalletInput] = useState('');
   const [walletSaving, setWalletSaving] = useState(false);
+  const [walletTextHelpOpen, setWalletTextHelpOpen] = useState(false);
 
   const canViewFullPanel = isGerente || isDeveloper;
 
@@ -115,6 +118,7 @@ export default function RepresentativeAdmin() {
       // Comentário de manutenção: o tutorial é complementar ao modal da carteira;
       // se o modal principal fechar por qualquer caminho, o vídeo não deve ficar aberto sozinho.
       setWalletTutorialModalOpen(false);
+      setWalletTextHelpOpen(false);
     }
   }, [walletModalOpen]);
 
@@ -122,6 +126,7 @@ export default function RepresentativeAdmin() {
     // Comentário de manutenção: em troca de empresa/contexto, evita manter um tutorial
     // associado à carteira anterior sem interferir no valor digitado enquanto o modal segue aberto.
     setWalletTutorialModalOpen(false);
+    setWalletTextHelpOpen(false);
   }, [activeCompanyId]);
 
   useEffect(() => {
@@ -504,7 +509,7 @@ export default function RepresentativeAdmin() {
       />
 
       <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Configurar carteira de recebimento</DialogTitle>
           </DialogHeader>
@@ -546,6 +551,38 @@ export default function RepresentativeAdmin() {
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
               </div>
             </button>
+            <Collapsible open={walletTextHelpOpen} onOpenChange={setWalletTextHelpOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span>Prefere seguir por texto? Veja o passo a passo</span>
+                  <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', walletTextHelpOpen && 'rotate-180')} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <div className="space-y-3 rounded-lg border bg-muted/10 p-3 text-sm">
+                  <div className="space-y-2">
+                    <p className="font-medium">Como encontrar sua Wallet ID</p>
+                    <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+                      <li>Acesse sua conta no <strong className="text-foreground">Asaas</strong>.</li>
+                      <li>No menu principal, entre em <strong className="text-foreground">Integrações</strong>.</li>
+                      <li>Localize o campo <strong className="text-foreground">Wallet ID</strong> ou <strong className="text-foreground">Identificador da carteira</strong>.</li>
+                      <li>Copie o código completo e cole no campo acima.</li>
+                    </ol>
+                  </div>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">
+                      Confira se você está acessando a conta Asaas do mesmo ambiente indicado neste formulário: <strong>{paymentEnvironmentLabel}</strong>.
+                    </p>
+                    <p className="rounded-md border border-destructive/20 bg-destructive/5 p-2 text-destructive">
+                      Não informe sua chave de API, senha ou chave Pix. Para esta configuração, precisamos apenas da Wallet ID.
+                    </p>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
