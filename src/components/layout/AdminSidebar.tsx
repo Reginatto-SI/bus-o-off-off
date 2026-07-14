@@ -200,6 +200,12 @@ const navigationGroups: NavigationGroup[] = [{
     name: 'Empresa',
     href: '/admin/empresa',
     icon: Building2
+  }, {
+    // Representante Comercial: disponível para todos os perfis autenticados do painel admin.
+    // Qualquer empresa pode atuar como representante e indicar novas empresas.
+    name: 'Representante Comercial',
+    href: '/admin/representante',
+    icon: BadgePercent,
   }
   // ============================================================
   // Item "Indicações" temporariamente OCULTO do menu.
@@ -207,28 +213,7 @@ const navigationGroups: NavigationGroup[] = [{
   // enquanto e não deve aparecer no cliente do usuário. A rota
   // /admin/indicacoes e o restante do módulo permanecem no código
   // para reativação futura sem alterar o fluxo existente.
-  // Para reativar, basta descomentar o bloco abaixo.
   // ============================================================
-  // , {
-  //   name: 'Indicações',
-  //   href: '/admin/indicacoes',
-  //   icon: Share2
-  // }
-  // ============================================================
-  // Item "Representante Comercial" temporariamente OCULTO do menu.
-  // Motivo: a rota /admin/representante e todo o backend do módulo
-  // de representantes continuam funcionando normalmente (vínculos,
-  // ledger de comissões, tela em si), mas o acesso pelo menu lateral
-  // foi desativado para não ficar visível a nenhum usuário até
-  // conclusão das próximas fases (split automático + wallet).
-  // Para reativar, basta descomentar o bloco abaixo.
-  // ============================================================
-  // , {
-  //   name: 'Representante Comercial',
-  //   href: '/admin/representante',
-  //   icon: BadgePercent,
-  //   roles: ['gerente', 'developer']
-  // }
   ]
 
 }, {

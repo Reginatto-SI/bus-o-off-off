@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+// Comentário: Navigate removido — o acesso é aberto a todos os perfis autenticados do painel admin.
 import { AlertTriangle, ArrowRight, Building2, ChevronDown, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -98,7 +98,7 @@ function getCommissionStatusVariant(status: CommissionStatus): 'default' | 'seco
 }
 
 export default function RepresentativeAdmin() {
-  const { loading: authLoading, activeCompanyId, activeCompany, userRole, isGerente, isDeveloper } = useAuth();
+  const { loading: authLoading, activeCompanyId, activeCompany } = useAuth();
   const { environment: paymentEnvironment, isReady: paymentEnvironmentReady } = useRuntimePaymentEnvironment();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<RepresentativeDashboardRow | null>(null);
@@ -111,7 +111,6 @@ export default function RepresentativeAdmin() {
   const [walletSaving, setWalletSaving] = useState(false);
   const [walletTextHelpOpen, setWalletTextHelpOpen] = useState(false);
 
-  const canViewFullPanel = isGerente || isDeveloper;
 
   useEffect(() => {
     if (!walletModalOpen) {
@@ -132,7 +131,7 @@ export default function RepresentativeAdmin() {
   useEffect(() => {
     if (authLoading) return;
 
-    if (!activeCompanyId || !canViewFullPanel) {
+    if (!activeCompanyId) {
       setLoading(false);
       return;
     }
@@ -176,7 +175,7 @@ export default function RepresentativeAdmin() {
     };
 
     void loadRepresentativePanel();
-  }, [activeCompanyId, authLoading, canViewFullPanel]);
+  }, [activeCompanyId, authLoading]);
 
   const officialLink = useMemo(() => resolveOfficialLink(dashboard?.referral_link ?? null), [dashboard?.referral_link]);
   const walletId = paymentEnvironment === 'production'
@@ -261,29 +260,11 @@ export default function RepresentativeAdmin() {
     );
   }
 
-  if (userRole === 'vendedor' || userRole === 'motorista') {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  // Acesso liberado para todos os perfis autenticados do painel admin:
+  // qualquer empresa pode atuar como representante e indicar novas empresas.
+  // O isolamento por empresa continua garantido pelo activeCompanyId + RLS.
 
-  if (!canViewFullPanel) {
-    return (
-      <AdminLayout>
-        <div className="page-container space-y-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
-            <p className="text-muted-foreground">Acesso restrito ao gerente da empresa.</p>
-          </div>
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Permissão insuficiente</AlertTitle>
-            <AlertDescription>
-              Para proteger wallet, comissões e ledger, esta área está disponível apenas para gerente ou developer.
-            </AlertDescription>
-          </Alert>
-        </div>
-      </AdminLayout>
-    );
-  }
+
 
   if (!activeCompanyId) {
     return (
