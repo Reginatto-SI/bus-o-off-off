@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+// Comentário: Navigate removido — o acesso é aberto a todos os perfis autenticados do painel admin.
 import { AlertTriangle, ArrowRight, Building2, ChevronDown, ClipboardList, Copy, Loader2, QrCode, Wallet, Youtube } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
