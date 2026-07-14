@@ -261,29 +261,11 @@ export default function RepresentativeAdmin() {
     );
   }
 
-  if (userRole === 'vendedor' || userRole === 'motorista') {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  // Acesso liberado para todos os perfis autenticados do painel admin:
+  // qualquer empresa pode atuar como representante e indicar novas empresas.
+  // O isolamento por empresa continua garantido pelo activeCompanyId + RLS.
 
-  if (!canViewFullPanel) {
-    return (
-      <AdminLayout>
-        <div className="page-container space-y-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
-            <p className="text-muted-foreground">Acesso restrito ao gerente da empresa.</p>
-          </div>
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Permissão insuficiente</AlertTitle>
-            <AlertDescription>
-              Para proteger wallet, comissões e ledger, esta área está disponível apenas para gerente ou developer.
-            </AlertDescription>
-          </Alert>
-        </div>
-      </AdminLayout>
-    );
-  }
+
 
   if (!activeCompanyId) {
     return (
