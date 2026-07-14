@@ -131,7 +131,7 @@ export default function RepresentativeAdmin() {
   useEffect(() => {
     if (authLoading) return;
 
-    if (!activeCompanyId || !canViewFullPanel) {
+    if (!activeCompanyId) {
       setLoading(false);
       return;
     }
