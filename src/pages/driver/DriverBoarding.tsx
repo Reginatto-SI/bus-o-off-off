@@ -278,6 +278,7 @@ export default function DriverBoarding() {
         return {
           ticketId: t.id,
           passengerName: t.passenger_name,
+          passengerCpf: t.passenger_cpf ?? null,
           seatLabel: t.seat_label,
           boardingStatus: t.boarding_status,
           qrCodeToken: t.qr_code_token,
