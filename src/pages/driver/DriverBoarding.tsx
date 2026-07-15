@@ -95,6 +95,14 @@ function getContactDigits(phone?: string | null) {
   return phone?.replace(/\D/g, '') ?? '';
 }
 
+function normalizeText(value?: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function getBrazilWhatsappDigits(phone?: string | null) {
   const digits = getContactDigits(phone);
   if (!digits) return '';
