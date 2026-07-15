@@ -41,6 +41,7 @@ import { useToast } from '@/hooks/use-toast';
 interface PassengerRow {
   ticketId: string;
   passengerName: string;
+  passengerCpf: string | null;
   seatLabel: string;
   boardingStatus: string;
   qrCodeToken: string;
@@ -92,6 +93,14 @@ function getDisplayStatus(status: string) {
 
 function getContactDigits(phone?: string | null) {
   return phone?.replace(/\D/g, '') ?? '';
+}
+
+function normalizeText(value?: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function getBrazilWhatsappDigits(phone?: string | null) {
@@ -238,7 +247,7 @@ export default function DriverBoarding() {
 
     const { data: tickets } = await supabase
       .from('tickets')
-      .select('id, passenger_name, passenger_phone, seat_label, boarding_status, qr_code_token, sale_id, ticket_number, ticket_type_name, final_price')
+      .select('id, passenger_name, passenger_cpf, passenger_phone, seat_label, boarding_status, qr_code_token, sale_id, ticket_number, ticket_type_name, final_price')
       .eq('trip_id', tripId)
       .eq('company_id', activeCompanyId);
 
@@ -277,6 +286,7 @@ export default function DriverBoarding() {
         return {
           ticketId: t.id,
           passengerName: t.passenger_name,
+          passengerCpf: t.passenger_cpf ?? null,
           seatLabel: t.seat_label,
           boardingStatus: t.boarding_status,
           qrCodeToken: t.qr_code_token,
@@ -332,19 +342,30 @@ export default function DriverBoarding() {
       list = list.filter(p => p.boardingLocationId === selectedLocation);
     }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(
-        p =>
-          p.passengerName.toLowerCase().includes(q) ||
-          p.seatLabel.toLowerCase().includes(q) ||
-          p.boardingLocationName.toLowerCase().includes(q) ||
-          (p.passengerPhone?.toLowerCase().includes(q) ?? false) ||
-          getContactDigits(p.passengerPhone).includes(getContactDigits(q)) ||
-          (p.saleCustomerPhone?.toLowerCase().includes(q) ?? false) ||
-          getContactDigits(p.saleCustomerPhone).includes(getContactDigits(q)) ||
-          (p.saleCustomerName?.toLowerCase().includes(q) ?? false) ||
-          (p.ticketNumber?.toLowerCase().includes(q) ?? false)
-      );
+      const q = normalizeText(searchQuery);
+      const qDigits = getContactDigits(searchQuery);
+      list = list.filter(p => {
+        const nameMatch = normalizeText(p.passengerName).includes(q);
+        const customerNameMatch = normalizeText(p.saleCustomerName).includes(q);
+        const locationMatch = normalizeText(p.boardingLocationName).includes(q);
+        const seatMatch = normalizeText(p.seatLabel).includes(q);
+        const ticketMatch = normalizeText(p.ticketNumber).includes(q);
+        const cpfMatch =
+          qDigits.length > 0 && getContactDigits(p.passengerCpf).includes(qDigits);
+        const phoneMatch =
+          qDigits.length > 0 &&
+          (getContactDigits(p.passengerPhone).includes(qDigits) ||
+            getContactDigits(p.saleCustomerPhone).includes(qDigits));
+        return (
+          nameMatch ||
+          customerNameMatch ||
+          locationMatch ||
+          seatMatch ||
+          ticketMatch ||
+          cpfMatch ||
+          phoneMatch
+        );
+      });
     }
     return list;
   }, [passengers, selectedLocation, searchQuery]);
