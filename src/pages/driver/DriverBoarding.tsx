@@ -239,7 +239,7 @@ export default function DriverBoarding() {
 
     const { data: tickets } = await supabase
       .from('tickets')
-      .select('id, passenger_name, passenger_phone, seat_label, boarding_status, qr_code_token, sale_id, ticket_number, ticket_type_name, final_price')
+      .select('id, passenger_name, passenger_cpf, passenger_phone, seat_label, boarding_status, qr_code_token, sale_id, ticket_number, ticket_type_name, final_price')
       .eq('trip_id', tripId)
       .eq('company_id', activeCompanyId);
 
