@@ -41,6 +41,7 @@ import { useToast } from '@/hooks/use-toast';
 interface PassengerRow {
   ticketId: string;
   passengerName: string;
+  passengerCpf: string | null;
   seatLabel: string;
   boardingStatus: string;
   qrCodeToken: string;
