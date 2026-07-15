@@ -14,16 +14,16 @@ const corsHeaders = {
 }
 
 // ── Configuration ──────────────────────────────────────────────────────
-const SITE_NAME = 'SmartBus BR'
-const FROM_EMAIL = 'SmartBus BR <noreply@smartbusbr.com.br>'
+const SITE_NAME = 'SmartBus'
+const FROM_EMAIL = 'SmartBus <noreply@smartbusbr.com.br>'
 
 const EMAIL_SUBJECTS: Record<string, string> = {
-  signup: 'Confirme seu e-mail — SmartBus BR',
-  invite: 'Você foi convidado — SmartBus BR',
-  magiclink: 'Seu link de acesso — SmartBus BR',
-  recovery: 'Criar nova senha — SmartBus BR',
-  email_change: 'Confirmação de alteração de e-mail — SmartBus BR',
-  reauthentication: 'Seu código de verificação — SmartBus BR',
+  signup: 'Confirme seu e-mail — SmartBus',
+  invite: 'Você foi convidado — SmartBus',
+  magiclink: 'Seu link de acesso — SmartBus',
+  recovery: 'Criar nova senha — SmartBus',
+  email_change: 'Confirmação de alteração de e-mail — SmartBus',
+  reauthentication: 'Seu código de verificação — SmartBus',
 }
 
 const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       plainText: true,
     })
 
-    const subject = EMAIL_SUBJECTS[emailType] || 'SmartBus BR — Notificação'
+    const subject = EMAIL_SUBJECTS[emailType] || 'SmartBus — Notificação'
 
     // Send via Resend
     const result = await sendViaResend(recipientEmail, subject, html, text)

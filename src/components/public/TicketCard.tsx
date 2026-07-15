@@ -401,7 +401,7 @@ export function TicketCard({
             {/* Único bloco visual da plataforma SmartBus na identidade da passagem. */}
             <img
               src="/logo-branca2.png"
-              alt="SmartBus BR"
+              alt="SmartBus"
               data-smartbus-logo="true"
               className="mx-auto h-16 w-auto max-w-[260px] object-contain"
             />

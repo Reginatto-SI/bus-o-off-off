@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
 
-const SITE_NAME = 'SmartBus BR'
-const FROM_EMAIL = 'SmartBus BR <noreply@smartbusbr.com.br>'
+const SITE_NAME = 'SmartBus'
+const FROM_EMAIL = 'SmartBus <noreply@smartbusbr.com.br>'
 const SITE_URL = 'https://www.smartbusbr.com.br'
 
 export type AuthEmailType = 'signup' | 'recovery' | 'magiclink'
@@ -20,15 +20,15 @@ export interface SendAuthEmailResult {
 }
 
 const EMAIL_SUBJECTS: Record<AuthEmailType, string> = {
-  signup: 'Ative sua conta — SmartBus BR',
-  recovery: 'Criar nova senha — SmartBus BR',
-  magiclink: 'Seu link de acesso — SmartBus BR',
+  signup: 'Ative sua conta — SmartBus',
+  recovery: 'Criar nova senha — SmartBus',
+  magiclink: 'Seu link de acesso — SmartBus',
 }
 
 function buildEmailHtml(type: AuthEmailType, actionLink: string, _userName?: string): string {
   const configs: Record<AuthEmailType, { title: string; description: string; buttonText: string }> = {
     signup: {
-      title: 'Bem-vindo ao SmartBus BR!',
+      title: 'Bem-vindo ao SmartBus!',
       description: 'Sua conta foi criada. Clique no botão abaixo para ativar seu acesso e definir sua senha.',
       buttonText: 'Ativar minha conta',
     },
@@ -97,9 +97,9 @@ function buildEmailHtml(type: AuthEmailType, actionLink: string, _userName?: str
 
 function buildPlainText(type: AuthEmailType, actionLink: string): string {
   const configs: Record<AuthEmailType, string> = {
-    signup: `Bem-vindo ao SmartBus BR!\n\nSua conta foi criada. Acesse o link abaixo para ativar seu acesso:\n\n${actionLink}\n\nSe você não reconhece esta ação, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
-    recovery: `Redefinição de senha — SmartBus BR\n\nVocê solicitou a redefinição da sua senha. Acesse o link abaixo para criar uma nova senha:\n\n${actionLink}\n\nSe você não solicitou isso, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
-    magiclink: `Seu link de acesso — SmartBus BR\n\nAcesse o link abaixo para entrar no sistema:\n\n${actionLink}\n\nSe você não solicitou isso, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
+    signup: `Bem-vindo ao SmartBus!\n\nSua conta foi criada. Acesse o link abaixo para ativar seu acesso:\n\n${actionLink}\n\nSe você não reconhece esta ação, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
+    recovery: `Redefinição de senha — SmartBus\n\nVocê solicitou a redefinição da sua senha. Acesse o link abaixo para criar uma nova senha:\n\n${actionLink}\n\nSe você não solicitou isso, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
+    magiclink: `Seu link de acesso — SmartBus\n\nAcesse o link abaixo para entrar no sistema:\n\n${actionLink}\n\nSe você não solicitou isso, ignore este e-mail.\n\n${SITE_NAME} — ${SITE_URL}`,
   }
   return configs[type]
 }
@@ -121,7 +121,7 @@ export async function sendAuthEmailViaResend(
   try {
     const html = buildEmailHtml(type, actionLink, userName)
     const text = buildPlainText(type, actionLink)
-    const subject = EMAIL_SUBJECTS[type] || 'SmartBus BR — Notificação'
+    const subject = EMAIL_SUBJECTS[type] || 'SmartBus — Notificação'
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

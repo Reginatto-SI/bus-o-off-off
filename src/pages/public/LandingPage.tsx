@@ -668,7 +668,7 @@ const FloatingWhatsAppIcon = () => (
 );
 export default function LandingPage() {
   usePageMeta({
-    title: "Smartbus BR | Venda passagens e organize excursões",
+    title: "SmartBus | Venda passagens e organize excursões",
     description:
       "Plataforma para vender passagens online, organizar excursões e controlar embarque com pagamento integrado. Sem mensalidade.",
     path: "/",
@@ -703,7 +703,7 @@ export default function LandingPage() {
       buildWhatsappWaMeLink({
         phone: LANDING_COMMERCIAL_WHATSAPP_PHONE,
         message: [
-          "Olá, equipe SmartBus BR!",
+          "Olá, equipe SmartBus!",
           "",
           `Meu nome é ${demoRequestForm.name.trim()} e gostaria de solicitar uma demonstração da plataforma.`,
           "",
@@ -721,7 +721,7 @@ export default function LandingPage() {
       buildWhatsappWaMeLink({
         phone: LANDING_COMMERCIAL_WHATSAPP_PHONE,
         message: [
-          "Olá! Quero falar com a equipe da Smartbus BR.",
+          "Olá! Quero falar com a equipe da SmartBus.",
           "",
           `Nome: ${contactForm.name.trim()}`,
           `E-mail: ${contactForm.email.trim()}`,
@@ -825,7 +825,7 @@ export default function LandingPage() {
           <div className="grid items-center gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-12">
             <div className="space-y-8">
               <div className="space-y-5">
-                {/* Reforço de posicionamento: o hero agora vende o Smartbus BR como solução para empresas,
+                {/* Reforço de posicionamento: o hero agora vende o SmartBus como solução para empresas,
                     sem perder o caminho rápido do passageiro que já chega pronto para comprar. */}
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/75">
                   <Star className="h-3.5 w-3.5 text-primary" />
@@ -842,7 +842,7 @@ export default function LandingPage() {
                     </span>
                   </h1>
                   <p className="max-w-3xl text-lg text-white/70 sm:text-xl">
-                    O Smartbus BR ajuda empresas e vendedores independentes a
+                    O SmartBus ajuda empresas e vendedores independentes a
                     vender mais, compartilhar link próprio, acompanhar
                     resultados e garantir um embarque mais organizado sem
                     estrutura complexa.
@@ -921,7 +921,7 @@ export default function LandingPage() {
                           Quero conhecer primeiro
                         </p>
                         <p className="text-sm text-white/75 sm:text-base">
-                          Veja como o SmartBus BR pode ajudar sua operação antes de começar.
+                          Veja como o SmartBus pode ajudar sua operação antes de começar.
                         </p>
                       </div>
                       <Dialog open={demoRequestModalOpen} onOpenChange={handleDemoRequestModalOpenChange}>
@@ -938,7 +938,7 @@ export default function LandingPage() {
                           <DialogHeader>
                             <DialogTitle>Solicitar uma demonstração</DialogTitle>
                             <DialogDescription>
-                              Preencha os dados para continuar pelo WhatsApp comercial do SmartBus BR.
+                              Preencha os dados para continuar pelo WhatsApp comercial do SmartBus.
                             </DialogDescription>
                           </DialogHeader>
                           <form className="space-y-4" onSubmit={handleDemoRequestSubmit}>
@@ -1061,7 +1061,7 @@ export default function LandingPage() {
                 presença profissional
               </h2>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                O Smartbus BR foi feito para quem vende passagens — seja uma
+                O SmartBus foi feito para quem vende passagens — seja uma
                 empresa estruturada ou alguém que vende por conta própria.
                 Divulgue suas viagens, acompanhe vendas, organize embarques e
                 tenha controle total para crescer com mais profissionalismo.
@@ -1176,7 +1176,7 @@ export default function LandingPage() {
                 Quanto custa usar o Smartbus?
               </h2>
               <p className="max-w-2xl text-muted-foreground sm:text-lg">
-                O Smartbus BR foi desenhado para tirar o peso do custo fixo e facilitar a decisão de começar.
+                O SmartBus foi desenhado para tirar o peso do custo fixo e facilitar a decisão de começar.
               </p>
             </div>
             {/*
@@ -1219,19 +1219,19 @@ export default function LandingPage() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                 <Building2 className="h-3.5 w-3.5" />
-                Sobre a Smartbus BR
+                Sobre a SmartBus
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
                 Uma plataforma criada para simplificar a venda de passagens e a gestão de embarques em eventos e
                 viagens.
               </h2>
               <p className="text-muted-foreground sm:text-lg">
-                A Smartbus BR foi criada para organizar vendas, passageiros e embarques de forma simples, prática e
+                A SmartBus foi criada para organizar vendas, passageiros e embarques de forma simples, prática e
                 confiável.
               </p>
               <p className="text-muted-foreground">
                 Hoje, muitas operações ainda dependem de planilhas, anotações e processos manuais que geram erros,
-                retrabalho e perda de controle. A proposta da Smartbus BR é centralizar essa operação em um único
+                retrabalho e perda de controle. A proposta da SmartBus é centralizar essa operação em um único
                 sistema, pensado para uso real no dia a dia.
               </p>
             </div>
@@ -1259,7 +1259,7 @@ export default function LandingPage() {
                 to="/sobre-smartbus-br"
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Conhecer a Smartbus BR
+                Conhecer a SmartBus
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
@@ -1280,7 +1280,7 @@ export default function LandingPage() {
             <p className="mt-3 text-muted-foreground sm:text-lg">
               {/* Ajuste estratégico de copy: deixamos explícita a dualidade empresa + autônomo sem criar nova arquitetura visual. */}
               Seja para profissionalizar uma operação completa ou começar com um
-              link de venda no celular, o Smartbus BR ajuda a divulgar melhor,
+              link de venda no celular, o SmartBus ajuda a divulgar melhor,
               vender com mais controle e garantir um embarque mais organizado.
             </p>
           </div>
@@ -1484,7 +1484,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Como o Smartbus BR ajuda a vender mais e embarcar com menos
+              Como o SmartBus ajuda a vender mais e embarcar com menos
               confusão
             </h2>
             <p className="mt-2 text-muted-foreground">
@@ -1611,7 +1611,7 @@ export default function LandingPage() {
                 Venda passagens e abra novas fontes de receita
               </h2>
               <p className="max-w-2xl text-muted-foreground sm:text-lg">
-                No Smartbus BR, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
+                No SmartBus, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
               </p>
               <div className="rounded-[1.5rem] border border-primary/15 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-[0_20px_45px_-36px_rgba(249,115,22,0.4)]">
                 <p className="text-sm font-semibold text-foreground sm:text-base">
@@ -1644,7 +1644,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Escolha como você quer usar o Smartbus BR
+              Escolha como você quer usar o SmartBus
             </h2>
             <p className="mt-2 text-muted-foreground">
               Em poucos segundos, fica claro se você quer comprar sua passagem
@@ -1765,7 +1765,7 @@ export default function LandingPage() {
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
               {/* CTA final com menos objeção: reforça facilidade para empresa e autônomo sem prometer funcionalidades novas. */}
-              Com o Smartbus BR, sua empresa ou operação independente pode
+              Com o SmartBus, sua empresa ou operação independente pode
               divulgar melhor, vender online, acompanhar resultados e organizar
               o embarque sem depender de uma estrutura complexa.
             </p>
@@ -1814,7 +1814,7 @@ export default function LandingPage() {
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-xl">
                   <DialogHeader>
-                    <DialogTitle>Fale com a equipe da Smartbus BR</DialogTitle>
+                    <DialogTitle>Fale com a equipe da SmartBus</DialogTitle>
                     <DialogDescription>
                       Fale com a nossa equipe para tirar dúvidas sobre implantação, uso do sistema ou parceria comercial.
                     </DialogDescription>
@@ -2023,14 +2023,14 @@ export default function LandingPage() {
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {/* Nova seção inserida imediatamente antes da FAQ para reduzir objeção inicial
-              e mostrar que começar a vender no Smartbus BR é rápido e organizado. */}
+              e mostrar que começar a vender no SmartBus é rápido e organizado. */}
           <div className="mb-10 text-center">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Comece com clareza e sem complicação
             </div>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Como começar a vender com a Smartbus BR
+              Como começar a vender com a SmartBus
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
               Configure sua operação, publique seu evento e compartilhe o link de vendas.
@@ -2079,7 +2079,7 @@ export default function LandingPage() {
               Perguntas frequentes
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Tire suas principais dúvidas sobre o Smartbus BR
+              Tire suas principais dúvidas sobre o SmartBus
             </p>
           </div>
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
@@ -2105,7 +2105,7 @@ export default function LandingPage() {
             <div className="space-y-4 sm:col-span-2 lg:col-span-1">
               <img
                 src={logo}
-                alt="Smartbus BR"
+                alt="SmartBus"
                 className="h-10 object-contain brightness-0 invert"
               />
               <p className="text-sm leading-relaxed text-white/80">
@@ -2200,7 +2200,7 @@ export default function LandingPage() {
                     to="/sobre-smartbus-br"
                     className="text-sm text-white/80 transition-colors hover:text-white"
                   >
-                    Sobre a Smartbus BR
+                    Sobre a SmartBus
                   </Link>
                 </li>
                 <li>
@@ -2217,7 +2217,7 @@ export default function LandingPage() {
                     onClick={() => setOfficialQrModalOpen(true)}
                     className="text-sm text-white/80 transition-colors hover:text-white"
                   >
-                    Baixar QR Code SmartBus BR
+                    Baixar QR Code SmartBus
                   </button>
                 </li>
                 <li>
@@ -2237,7 +2237,7 @@ export default function LandingPage() {
         <div className="border-t border-white/5 py-5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <p className="text-center text-xs text-white/70">
-              © {new Date().getFullYear()} Smartbus BR. Todos os direitos
+              © {new Date().getFullYear()} SmartBus. Todos os direitos
               reservados • CNPJ 67.871.644/0001-26
             </p>
           </div>
@@ -2246,7 +2246,7 @@ export default function LandingPage() {
       <Dialog open={officialQrModalOpen} onOpenChange={setOfficialQrModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>QR Code oficial da SmartBus BR</DialogTitle>
+            <DialogTitle>QR Code oficial da SmartBus</DialogTitle>
             <DialogDescription>
               Baixe o QR Code oficial que direciona para {OFFICIAL_SMARTBUS_URL}
             </DialogDescription>

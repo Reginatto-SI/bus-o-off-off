@@ -150,7 +150,7 @@ function buildAsaasWebhookPayload(params: {
   webhookToken: string;
 }) {
   return {
-    name: `Smartbus BR - ${params.companyName}`.slice(0, 100),
+    name: `SmartBus - ${params.companyName}`.slice(0, 100),
     url: params.webhookUrl,
     email: params.accountEmail,
     enabled: true,

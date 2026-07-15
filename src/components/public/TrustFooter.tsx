@@ -43,14 +43,14 @@ export function TrustFooter({ companyName }: TrustFooterProps) {
                 Esta vitrine é operada por <strong className="font-semibold text-foreground">{companyName}</strong>, responsável pela oferta e organização das viagens apresentadas nesta vitrine.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-x-1">
-                <span>Venda intermediada pela SmartBus BR — CNPJ 67.871.644/0001-26.</span>
+                <span>Venda intermediada pela SmartBus — CNPJ 67.871.644/0001-26.</span>
                 <FooterVersionInfo />
               </div>
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-muted-foreground">
               {/* Rodapé legado: não alterar páginas públicas sem empresa da vitrine. */}
-              <span>© {new Date().getFullYear()} Smartbus BR. Todos os direitos reservados • CNPJ 67.871.644/0001-26</span>
+              <span>© {new Date().getFullYear()} SmartBus. Todos os direitos reservados • CNPJ 67.871.644/0001-26</span>
               <FooterVersionInfo />
             </div>
           )}

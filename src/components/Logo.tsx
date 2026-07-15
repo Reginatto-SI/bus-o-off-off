@@ -39,7 +39,7 @@ export function Logo({ size = "md", showText = false, className = "", variant = 
         </svg>
         <div className="flex flex-col leading-none">
           <span className="font-extrabold tracking-tight" style={{ fontSize: h * 0.42 }}>
-            SmartBus <span className="text-[hsl(var(--ticket-accent))]">BR</span>
+            SmartBus
           </span>
           <span className="font-medium tracking-[0.18em] opacity-80" style={{ fontSize: h * 0.2 }}>
             VIAGENS &amp; PASSEIOS
@@ -51,8 +51,8 @@ export function Logo({ size = "md", showText = false, className = "", variant = 
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <img src={logo} alt="Smartbus BR" className={`${sizes[size]} object-contain`} />
-      {showText && <span className="font-bold text-inherit">Smartbus BR</span>}
+      <img src={logo} alt="SmartBus" className={`${sizes[size]} object-contain`} />
+      {showText && <span className="font-bold text-inherit">SmartBus</span>}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
 
-// Valores padrão fixos da identidade visual SmartBus BR (index.css).
+// Valores padrão fixos da identidade visual SmartBus (index.css).
 const DEFAULT_PRIMARY_HSL = '25 95% 53%';
 const DEFAULT_RING_HSL = '25 95% 53%';
 const DEFAULT_PRIMARY_FOREGROUND_HSL = '0 0% 100%';
@@ -96,7 +96,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const supportContactUrl = useMemo(() => {
     return buildWhatsappWaMeLink({
       phone: '(31) 99207-4309',
-      message: 'Minha empresa está inativa no SmartBus BR e preciso de suporte para reativação.',
+      message: 'Minha empresa está inativa no SmartBus e preciso de suporte para reativação.',
     }) ?? 'https://wa.me/5531992074309?text=Minha%20empresa%20est%C3%A1%20inativa%20no%20SmartBus%20BR%20e%20preciso%20de%20suporte%20para%20reativa%C3%A7%C3%A3o.';
   }, []);
 
@@ -140,7 +140,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <AlertDialog open={shouldBlockInactiveCompany}>
         <AlertDialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sua empresa está inativa no SmartBus BR.</AlertDialogTitle>
+            <AlertDialogTitle>Sua empresa está inativa no SmartBus.</AlertDialogTitle>
             <AlertDialogDescription>
               Para voltar a utilizar os serviços, entre em contato com o suporte ou solicite a reativação.
             </AlertDialogDescription>

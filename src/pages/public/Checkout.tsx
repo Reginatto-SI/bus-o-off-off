@@ -315,7 +315,7 @@ export default function Checkout() {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   // Comentário de suporte: mantemos o método escolhido explícito para evitar cobrança UNDEFINED no Asaas.
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
-  // Aceite jurídico obrigatório no passo final para registrar ciência da intermediação da Smartbus BR.
+  // Aceite jurídico obrigatório no passo final para registrar ciência da intermediação da SmartBus.
   const [intermediationAccepted, setIntermediationAccepted] = useState(false);
   const mandatoryRoundTrip =
     event?.transport_policy === "ida_volta_obrigatorio";

@@ -398,7 +398,7 @@ export default function RepresentativeDashboard() {
    */
   const readyToShareMessage = useMemo(() => {
     if (!officialLink) return '';
-    return `Olá! Sou representante da Smartbus BR.\nA plataforma ajuda empresas de transporte a vender passagens e organizar operações com mais controle.\nSe fizer sentido para você, conheça por este link oficial: ${officialLink}`;
+    return `Olá! Sou representante da SmartBus.\nA plataforma ajuda empresas de transporte a vender passagens e organizar operações com mais controle.\nSe fizer sentido para você, conheça por este link oficial: ${officialLink}`;
   }, [officialLink]);
 
   const copyOfficialLink = async () => {

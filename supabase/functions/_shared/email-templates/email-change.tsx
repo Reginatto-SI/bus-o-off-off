@@ -28,14 +28,14 @@ export const EmailChangeEmail = ({
 }: EmailChangeEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Confirmação de alteração de e-mail — SmartBus BR</Preview>
+    <Preview>Confirmação de alteração de e-mail — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Confirme a alteração de e-mail</Heading>
           <Text style={text}>
-            Você solicitou a alteração do seu e-mail no SmartBus BR de{' '}
+            Você solicitou a alteração do seu e-mail no SmartBus de{' '}
             <Link href={`mailto:${email}`} style={emailLink}>{email}</Link>{' '}
             para{' '}
             <Link href={`mailto:${newEmail}`} style={emailLink}>{newEmail}</Link>.
@@ -53,8 +53,8 @@ export const EmailChangeEmail = ({
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
-        <Text style={footerText}>Site oficial SmartBus BR.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>Site oficial SmartBus.</Text>
         <Text style={footerText}>E-mail automático. Não responda esta mensagem.</Text>
       </Container>
     </Body>

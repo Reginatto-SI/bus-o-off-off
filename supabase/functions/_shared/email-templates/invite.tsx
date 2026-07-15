@@ -26,14 +26,14 @@ export const InviteEmail = ({
 }: InviteEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Você foi convidado — SmartBus BR</Preview>
+    <Preview>Você foi convidado — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Você foi convidado</Heading>
           <Text style={text}>
-            Você recebeu um convite para acessar o SmartBus BR. Clique no botão abaixo para aceitar o convite e configurar sua conta.
+            Você recebeu um convite para acessar o SmartBus. Clique no botão abaixo para aceitar o convite e configurar sua conta.
           </Text>
           <Container style={ctaWrapper}>
             <Button style={button} href={confirmationUrl}>
@@ -48,7 +48,7 @@ export const InviteEmail = ({
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
         <Text style={footerText}>
           Site oficial:{' '}
           <Link style={footerLink} href={siteUrl}>{siteUrl}</Link>

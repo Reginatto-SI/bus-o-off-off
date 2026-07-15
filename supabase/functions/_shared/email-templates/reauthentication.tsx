@@ -19,13 +19,13 @@ interface ReauthenticationEmailProps {
 export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Seu código de verificação — SmartBus BR</Preview>
+    <Preview>Seu código de verificação — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Confirme sua identidade</Heading>
-          <Text style={text}>Use o código abaixo para confirmar sua identidade no SmartBus BR.</Text>
+          <Text style={text}>Use o código abaixo para confirmar sua identidade no SmartBus.</Text>
           <Container style={codeBox}>
             <Text style={codeStyle}>{token}</Text>
           </Container>
@@ -34,8 +34,8 @@ export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => 
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
-        <Text style={footerText}>Site oficial SmartBus BR.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>Site oficial SmartBus.</Text>
         <Text style={footerText}>E-mail automático. Não responda esta mensagem.</Text>
       </Container>
     </Body>

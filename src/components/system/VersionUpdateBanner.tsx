@@ -28,7 +28,7 @@ export function VersionUpdateBanner() {
     <div className="fixed bottom-4 left-4 right-4 z-[100] mx-auto max-w-3xl rounded-lg border border-primary/30 bg-background/95 p-4 shadow-lg backdrop-blur">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">🚀 Tem atualização nova no Smartbus BR!</p>
+          <p className="text-sm font-semibold text-foreground">🚀 Tem atualização nova no SmartBus!</p>
           <p className="text-xs text-muted-foreground">
             Carregue a versão mais recente para aproveitar as melhorias.
           </p>

@@ -17,7 +17,7 @@ export function LandingHeader() {
         <Link to="/" className="flex items-center gap-2 py-1 pr-2 sm:pr-4">
           <img
             src={logo}
-            alt="Smartbus BR"
+            alt="SmartBus"
             className="h-14 w-auto max-w-[185px] object-contain brightness-0 invert sm:h-[3.9rem] sm:max-w-[220px]"
           />
         </Link>
@@ -39,7 +39,7 @@ export function LandingHeader() {
             <Button asChild variant="ghost" className={desktopNavLinkClass}>
               <Link to="/sobre-smartbus-br">
                 <Building2 className="h-4 w-4" aria-hidden="true" />
-                <span>Sobre a Smartbus BR</span>
+                <span>Sobre a SmartBus</span>
               </Link>
             </Button>
           </div>
@@ -94,7 +94,7 @@ export function LandingHeader() {
             onClick={() => setMobileMenu(false)}
           >
             <Building2 className="h-4 w-4 shrink-0 text-primary" />
-            Sobre a Smartbus BR
+            Sobre a SmartBus
           </Link>
           <div className="mt-2 space-y-2">
             <Link

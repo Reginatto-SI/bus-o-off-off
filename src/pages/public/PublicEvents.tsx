@@ -38,9 +38,9 @@ function interleaveEventCards<T>(items: T[]): T[] {
 
 export default function PublicEvents() {
   usePageMeta({
-    title: "Passagens disponíveis | Smartbus BR",
+    title: "Passagens disponíveis | SmartBus",
     description:
-      "Veja todas as passagens e excursões disponíveis no Smartbus BR. Compre online com pagamento seguro e escolha do assento.",
+      "Veja todas as passagens e excursões disponíveis no SmartBus. Compre online com pagamento seguro e escolha do assento.",
     path: "/eventos",
   });
   const [events, setEvents] = useState<EventWithCompany[]>([]);
