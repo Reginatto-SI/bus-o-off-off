@@ -342,19 +342,30 @@ export default function DriverBoarding() {
       list = list.filter(p => p.boardingLocationId === selectedLocation);
     }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(
-        p =>
-          p.passengerName.toLowerCase().includes(q) ||
-          p.seatLabel.toLowerCase().includes(q) ||
-          p.boardingLocationName.toLowerCase().includes(q) ||
-          (p.passengerPhone?.toLowerCase().includes(q) ?? false) ||
-          getContactDigits(p.passengerPhone).includes(getContactDigits(q)) ||
-          (p.saleCustomerPhone?.toLowerCase().includes(q) ?? false) ||
-          getContactDigits(p.saleCustomerPhone).includes(getContactDigits(q)) ||
-          (p.saleCustomerName?.toLowerCase().includes(q) ?? false) ||
-          (p.ticketNumber?.toLowerCase().includes(q) ?? false)
-      );
+      const q = normalizeText(searchQuery);
+      const qDigits = getContactDigits(searchQuery);
+      list = list.filter(p => {
+        const nameMatch = normalizeText(p.passengerName).includes(q);
+        const customerNameMatch = normalizeText(p.saleCustomerName).includes(q);
+        const locationMatch = normalizeText(p.boardingLocationName).includes(q);
+        const seatMatch = normalizeText(p.seatLabel).includes(q);
+        const ticketMatch = normalizeText(p.ticketNumber).includes(q);
+        const cpfMatch =
+          qDigits.length > 0 && getContactDigits(p.passengerCpf).includes(qDigits);
+        const phoneMatch =
+          qDigits.length > 0 &&
+          (getContactDigits(p.passengerPhone).includes(qDigits) ||
+            getContactDigits(p.saleCustomerPhone).includes(qDigits));
+        return (
+          nameMatch ||
+          customerNameMatch ||
+          locationMatch ||
+          seatMatch ||
+          ticketMatch ||
+          cpfMatch ||
+          phoneMatch
+        );
+      });
     }
     return list;
   }, [passengers, selectedLocation, searchQuery]);
