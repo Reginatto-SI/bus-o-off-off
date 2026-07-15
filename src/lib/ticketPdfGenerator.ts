@@ -107,7 +107,7 @@ async function deliverTicketPdf(doc: jsPDF, fileName: string): Promise<TicketPdf
     const file = new File([blob], fileName, { type: 'application/pdf' });
 
     try {
-      if (await sharePdfFile(file, 'Passagem SmartBus BR')) {
+      if (await sharePdfFile(file, 'Passagem SmartBus')) {
         logTicketPdfDebug('PDF entregue via Web Share API', { fileName });
         return 'shared';
       }

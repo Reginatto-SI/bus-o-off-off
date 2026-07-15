@@ -1,8 +1,8 @@
-# SmartBus BR
+# SmartBus
 
 > Plataforma multiempresa para venda de passagens e gestão de eventos de transporte (excursões, caravanas e fretamentos), com checkout online, controle de embarque e relatórios operacionais.
 
-O SmartBus BR ajuda organizadores a vender passagens online, controlar passageiros, gerenciar pagamentos via Pix e cartão, e operar o embarque com validação por QR Code. Cada empresa tem sua vitrine pública, eventos e identidade visual próprias.
+O SmartBus ajuda organizadores a vender passagens online, controlar passageiros, gerenciar pagamentos via Pix e cartão, e operar o embarque com validação por QR Code. Cada empresa tem sua vitrine pública, eventos e identidade visual próprias.
 
 ## Pages
 
@@ -11,10 +11,10 @@ O SmartBus BR ajuda organizadores a vender passagens online, controlar passageir
 - [Consultar passagens](/consultar-passagens): Busca de passagens já compradas via CPF.
 - [Cadastro de empresa](/cadastro): Criação de conta para organizadores de excursões e caravanas.
 - [Seja representante](/seja-representante): Cadastro para representantes comerciais da plataforma.
-- [Sobre o SmartBus BR](/sobre-smartbus-br): Apresentação institucional da plataforma.
+- [Sobre o SmartBus](/sobre-smartbus-br): Apresentação institucional da plataforma.
 - [Política de intermediação](/politica-de-intermediacao): Termos de intermediação de pagamentos.
 
 ## SEO
 
-- [Sistema para excursões](/sistema-para-excursoes): Como o SmartBus BR ajuda a organizar e vender excursões.
+- [Sistema para excursões](/sistema-para-excursoes): Como o SmartBus ajuda a organizar e vender excursões.
 - [Como organizar uma excursão](/como-organizar-excursao): Guia prático para organizar excursões do zero.

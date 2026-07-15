@@ -374,9 +374,9 @@ function isSplitRelatedLog(log: SaleIntegrationLog): boolean {
 }
 
 function identifySplitRecipientByWallet(walletId: string | null, companyWalletId?: string | null): { type: SplitRecipientType; label: string } {
-  // A wallet fixa abaixo identifica visualmente a carteira da marketplace SmartBus BR nesta tela restrita.
+  // A wallet fixa abaixo identifica visualmente a carteira da marketplace SmartBus nesta tela restrita.
   if (walletId && walletId === SMARTBUS_MARKETPLACE_WALLET_ID) {
-    return { type: 'Marketplace', label: 'Marketplace SmartBus BR' };
+    return { type: 'Marketplace', label: 'Marketplace SmartBus' };
   }
 
   if (walletId && companyWalletId && walletId === companyWalletId) {
@@ -452,7 +452,7 @@ function buildSplitDiagnosticSummary(params: {
       recipients.push({
         id: 'snapshot-marketplace',
         recipientType: 'Marketplace',
-        recipientLabel: 'Marketplace SmartBus BR',
+        recipientLabel: 'Marketplace SmartBus',
         walletId: SMARTBUS_MARKETPLACE_WALLET_ID,
         amount: params.sale.split_snapshot_platform_net_amount,
         percent: null,

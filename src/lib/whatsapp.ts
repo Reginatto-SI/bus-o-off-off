@@ -41,7 +41,7 @@ export const buildWhatsappWaMeLink = ({
 
 // Configuração comercial única da landing para manter botão flutuante, CTAs e formulários sem números divergentes.
 export const LANDING_COMMERCIAL_WHATSAPP_PHONE = '(31) 99207-4309';
-export const LANDING_COMMERCIAL_WHATSAPP_MESSAGE = 'Quero começar a vender passagens com o Smartbus BR';
+export const LANDING_COMMERCIAL_WHATSAPP_MESSAGE = 'Quero começar a vender passagens com o SmartBus';
 const LANDING_COMMERCIAL_WHATSAPP_WA_ME_PHONE = `55${LANDING_COMMERCIAL_WHATSAPP_PHONE.replace(/\D/g, '')}`;
 export const DEFAULT_LANDING_COMMERCIAL_WHATSAPP_URL =
   buildWhatsappWaMeLink({

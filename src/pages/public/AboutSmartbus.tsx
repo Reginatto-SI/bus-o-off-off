@@ -29,9 +29,9 @@ const TRUST_POINTS = [
 
 export default function AboutSmartbus() {
   usePageMeta({
-    title: "Sobre o Smartbus BR",
+    title: "Sobre o SmartBus",
     description:
-      "Conheça o Smartbus BR: plataforma de venda de passagens e gestão de excursões. Saiba como funciona e o papel da plataforma na intermediação.",
+      "Conheça o SmartBus: plataforma de venda de passagens e gestão de excursões. Saiba como funciona e o papel da plataforma na intermediação.",
     path: "/sobre-smartbus-br",
   });
   return (
@@ -50,13 +50,13 @@ export default function AboutSmartbus() {
 
         <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-card via-card to-primary/[0.05] p-6 sm:p-8">
           <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            Sobre a Smartbus BR
+            Sobre a SmartBus
           </p>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Simplificando a venda de passagens e a gestão de embarques
           </h1>
           <p className="mt-4 max-w-3xl text-muted-foreground sm:text-lg">
-            A Smartbus BR é uma plataforma criada para organizar vendas, passageiros e embarques de forma simples,
+            A SmartBus é uma plataforma criada para organizar vendas, passageiros e embarques de forma simples,
             segura e prática.
           </p>
         </section>
@@ -98,7 +98,7 @@ export default function AboutSmartbus() {
         <section className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
           <h2 className="text-2xl font-bold text-foreground">Pensado para operação real</h2>
           <p className="mt-2 text-muted-foreground">
-            A proposta da Smartbus BR é entregar uma estrutura clara e funcional para uso no dia a dia.
+            A proposta da SmartBus é entregar uma estrutura clara e funcional para uso no dia a dia.
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {TRUST_POINTS.map((point) => (

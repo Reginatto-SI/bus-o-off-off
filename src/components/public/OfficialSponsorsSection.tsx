@@ -45,7 +45,7 @@ type OfficialSponsorsSectionProps = {
 //   type: "sponsor",
 //   sponsorName: "Nome da Empresa",
 //   headline: "Nome da Empresa",
-//   text: "Patrocinador oficial SmartBus BR.",
+//   text: "Patrocinador oficial SmartBus.",
 //   cta: "Conhecer patrocinador",
 //   imageSrc: "/sponsors/patrocinador-01-mobile.webp",
 //   desktopImageSrc: "/sponsors/patrocinador-01-desktop.webp",
@@ -61,7 +61,7 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
     type: "placeholder",
     icon: Star,
     headline: "Anuncie aqui",
-    text: "Sua marca pode aparecer em uma área de destaque dentro do SmartBus BR.",
+    text: "Sua marca pode aparecer em uma área de destaque dentro do SmartBus.",
     cta: "Quero ser patrocinador",
     accent: "from-primary/20 via-white to-orange-50",
   },
@@ -84,7 +84,7 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
 ];
 
 export function OfficialSponsorsSection({
-  title = "Patrocinadores Oficiais SmartBus BR",
+  title = "Patrocinadores Oficiais SmartBus",
   subtitle = "Sua marca pode aparecer em uma vitrine digital em crescimento, vista por empresas, organizadores e passageiros.",
   // Landing padrão mais compacta para integrar a seção ao fluxo sem afetar o modo compact de /eventos.
   className = "bg-gradient-to-b from-background to-muted/30 py-8 sm:py-10",
@@ -98,7 +98,7 @@ export function OfficialSponsorsSection({
   const sponsorWhatsappUrl =
     buildWhatsappWaMeLink({
       phone: "(31) 99207-4309",
-      message: "Olá! Quero conhecer os espaços de Patrocinadores Oficiais do SmartBus BR.",
+      message: "Olá! Quero conhecer os espaços de Patrocinadores Oficiais do SmartBus.",
     }) ??
     "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
 
@@ -207,7 +207,7 @@ export function OfficialSponsorsSection({
             </div>
             {!compact && (
               <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 text-sm text-muted-foreground lg:max-w-sm">
-                <p className="font-semibold text-foreground">Destaque sua marca em uma área oficial do SmartBus BR.</p>
+                <p className="font-semibold text-foreground">Destaque sua marca em uma área oficial do SmartBus.</p>
                 <p className="mt-1">Espaços pensados para marcas que querem estar próximas de empresas, organizadores e passageiros em uma vitrine digital de viagens e excursões.</p>
               </div>
             )}
@@ -291,7 +291,7 @@ export function OfficialSponsorsSection({
                         {/* Desktop valoriza o espaço comercial com banner amplo e sem ícones grandes. */}
                         <div className="space-y-3">
                           <p className="text-2xl font-bold uppercase tracking-[0.42em] text-slate-900">Anuncie aqui</p>
-                          <p className="text-sm font-medium text-slate-600">Espaço reservado para patrocinador oficial SmartBus BR</p>
+                          <p className="text-sm font-medium text-slate-600">Espaço reservado para patrocinador oficial SmartBus</p>
                           <span className="inline-flex rounded-full border border-primary/20 bg-background/75 px-4 py-2 text-sm font-semibold text-primary shadow-sm">Quero ser patrocinador</span>
                         </div>
                       </a>

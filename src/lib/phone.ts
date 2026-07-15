@@ -1,5 +1,5 @@
 /**
- * Padrão oficial de telefone/WhatsApp no sistema SmartBus BR
+ * Padrão oficial de telefone/WhatsApp no sistema SmartBus
  *
  * ┌──────────────────────────────────────────────────────────────────┐
  * │ EXIBIÇÃO (máscara visual no input)                              │

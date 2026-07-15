@@ -28,14 +28,14 @@ export const SignupEmail = ({
 }: SignupEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Confirme seu e-mail — SmartBus BR</Preview>
+    <Preview>Confirme seu e-mail — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Confirme seu e-mail</Heading>
           <Text style={text}>
-            Sua conta foi criada no SmartBus BR. Para ativá-la, confirme seu endereço de e-mail ({recipient}) clicando no botão abaixo.
+            Sua conta foi criada no SmartBus. Para ativá-la, confirme seu endereço de e-mail ({recipient}) clicando no botão abaixo.
           </Text>
           <Container style={ctaWrapper}>
             <Button style={button} href={confirmationUrl}>
@@ -50,7 +50,7 @@ export const SignupEmail = ({
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
         <Text style={footerText}>
           Site oficial:{' '}
           <Link style={footerLink} href={siteUrl}>{siteUrl}</Link>

@@ -209,7 +209,7 @@ export function ExportPDFModal({
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(128, 128, 128);
-        doc.text('Sistema: Smartbus BR', rightBlockX, leftY + 4, { align: 'right' });
+        doc.text('Sistema: SmartBus', rightBlockX, leftY + 4, { align: 'right' });
 
         // Título do documento (cor primária)
         doc.setFontSize(14);
@@ -344,7 +344,7 @@ export function ExportPDFModal({
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(128, 128, 128);
 
-          doc.text('Documento gerado pelo sistema Smartbus BR', margin, pageHeight - 10);
+          doc.text('Documento gerado pelo sistema SmartBus', margin, pageHeight - 10);
 
           doc.text(
             `Página ${pageData.pageNumber} de ${pageCount}`,

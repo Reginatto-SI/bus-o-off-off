@@ -1664,7 +1664,7 @@ serve(async (req) => {
           cpfCnpj: customerCpf,
           phone: sale.customer_phone || undefined,
           externalReference: sale.id,
-          // Regra de custo Smartbus BR: novos customers devem nascer sem notificações pagas.
+          // Regra de custo SmartBus: novos customers devem nascer sem notificações pagas.
           notificationDisabled: true,
         }),
       });

@@ -87,9 +87,9 @@ const isValidCnpj = (value: string) => {
 
 export default function CompanyRegistration() {
   usePageMeta({
-    title: "Cadastrar empresa grátis | Smartbus BR",
+    title: "Cadastrar empresa grátis | SmartBus",
     description:
-      "Crie sua conta no Smartbus BR e comece a vender passagens online em minutos. Sem mensalidade, com pagamento integrado.",
+      "Crie sua conta no SmartBus e comece a vender passagens online em minutos. Sem mensalidade, com pagamento integrado.",
     path: "/cadastro",
   });
   const navigate = useNavigate();
@@ -282,7 +282,7 @@ export default function CompanyRegistration() {
               <div className="flex h-full flex-col gap-6">
                 <div className="space-y-4">
                   <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/95">
-                    SmartBus BR para empresas e vendedores
+                    SmartBus para empresas e vendedores
                   </span>
                   <div className="space-y-3">
                     <h1 className="text-2xl font-semibold leading-tight text-white md:text-[2rem]">

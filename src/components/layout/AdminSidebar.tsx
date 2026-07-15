@@ -243,12 +243,12 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
       <div className={cn('flex items-center justify-center rounded-lg', compact ? 'h-8 w-8' : 'h-10 w-10')}>
         <img
           src={busaoIcon}
-          alt="Ícone do sistema Smartbus BR"
+          alt="Ícone do sistema SmartBus"
           className="h-full w-full rounded-lg object-contain"
         />
       </div>
       <span className={cn('font-semibold tracking-tight text-sidebar-foreground', compact ? 'text-sm' : 'text-base')}>
-        Smartbus BR
+        SmartBus
       </span>
     </div>
   );
@@ -259,7 +259,7 @@ function ExpandedBrandHeader() {
     <div className="flex h-12 w-full items-center">
       <img
         src={logoAdmin}
-        alt="Smartbus BR Admin"
+        alt="SmartBus Admin"
         className="h-full w-full object-contain object-left"
       />
     </div>
@@ -617,7 +617,7 @@ export function AdminSidebar() {
       <div className="flex flex-col items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 py-4">
         <div className="h-8 w-8 flex items-center justify-center rounded-lg">
           {/* Atualização intencional: estado colapsado usa o novo ícone oficial da marca sem alterar o logo do menu expandido. */}
-          <img src={collapsedSidebarOfficialIcon} alt="Smartbus BR" className="h-full w-full rounded-lg object-contain" />
+          <img src={collapsedSidebarOfficialIcon} alt="SmartBus" className="h-full w-full rounded-lg object-contain" />
         </div>
         <Button variant="ghost" size="icon" className="text-sidebar-foreground hover:bg-[#1E293B] h-7 w-7" onClick={toggleCollapsed}>
           <PanelLeftOpen className="h-4 w-4" />

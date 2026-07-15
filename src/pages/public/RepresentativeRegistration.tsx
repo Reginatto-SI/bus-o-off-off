@@ -22,9 +22,9 @@ interface RegisterRepresentativeResponse {
 
 export default function RepresentativeRegistration() {
   usePageMeta({
-    title: "Seja representante Smartbus BR",
+    title: "Seja representante SmartBus",
     description:
-      "Cadastre-se como representante comercial Smartbus BR e ganhe comissão indicando empresas que vendem passagens pela plataforma.",
+      "Cadastre-se como representante comercial SmartBus e ganhe comissão indicando empresas que vendem passagens pela plataforma.",
     path: "/seja-representante",
   });
   const navigate = useNavigate();
@@ -147,7 +147,7 @@ export default function RepresentativeRegistration() {
         <div className="relative mx-auto grid w-full max-w-6xl gap-6 px-4 md:grid-cols-2 md:gap-8 sm:px-6 lg:px-8">
           <Card className="border-primary/20 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-2xl md:text-3xl">Seja um representante Smartbus BR</CardTitle>
+              <CardTitle className="text-2xl md:text-3xl">Seja um representante SmartBus</CardTitle>
               <CardDescription className="text-base">
                 Indique empresas, compartilhe seu link oficial e acompanhe comissões no seu painel.
               </CardDescription>

@@ -110,9 +110,9 @@ const CLUSTER_LINKS = [
 export default function HowToOrganizeExcursionPage() {
   useEffect(() => {
     // SEO básico por rota pública: mantém título/meta/canonical/OG específicos desta página sem alterar arquitetura global.
-    const pageTitle = "Como organizar uma excursão do zero | SmartBus BR";
+    const pageTitle = "Como organizar uma excursão do zero | SmartBus";
     const pageDescription =
-      "Aprenda como organizar uma excursão do zero com controle de passageiros, pagamentos e embarque, e veja como simplificar essa operação com o SmartBus BR.";
+      "Aprenda como organizar uma excursão do zero com controle de passageiros, pagamentos e embarque, e veja como simplificar essa operação com o SmartBus.";
     const canonicalUrl = "https://www.smartbusbr.com.br/como-organizar-excursao";
 
     const previousTitle = document.title;

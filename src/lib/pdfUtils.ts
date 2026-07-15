@@ -57,7 +57,7 @@ export function getCompanyPrimaryColor(company: Company | null): string {
  * Obtém a cor do ticket da empresa com fallback para cor primária e depois padrão
  */
 export function getCompanyTicketColor(company: Company | null): string {
-  // Passagens/PDFs usam sempre a cor oficial SmartBus BR.
+  // Passagens/PDFs usam sempre a cor oficial SmartBus.
   return BRAND_ORANGE;
 }
 

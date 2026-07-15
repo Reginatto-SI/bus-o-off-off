@@ -24,14 +24,14 @@ export const RecoveryEmail = ({
 }: RecoveryEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Criar nova senha — SmartBus BR</Preview>
+    <Preview>Criar nova senha — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Criar nova senha</Heading>
           <Text style={text}>
-            Recebemos uma solicitação para redefinir a senha da sua conta no SmartBus BR. Clique no botão abaixo para criar uma nova senha.
+            Recebemos uma solicitação para redefinir a senha da sua conta no SmartBus. Clique no botão abaixo para criar uma nova senha.
           </Text>
           <Container style={ctaWrapper}>
             <Button style={button} href={confirmationUrl}>
@@ -46,8 +46,8 @@ export const RecoveryEmail = ({
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
-        <Text style={footerText}>Site oficial SmartBus BR.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>Site oficial SmartBus.</Text>
         <Text style={footerText}>E-mail automático. Não responda esta mensagem.</Text>
       </Container>
     </Body>

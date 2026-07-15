@@ -338,7 +338,7 @@ export default function CompanyActivationReport() {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(249, 115, 22);
-      doc.text('SmartBus BR', margin, 10);
+      doc.text('SmartBus', margin, 10);
 
       doc.setTextColor(30, 41, 59);
       doc.setFontSize(11);

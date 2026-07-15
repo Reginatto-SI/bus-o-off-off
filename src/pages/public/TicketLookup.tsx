@@ -195,9 +195,9 @@ function normalizeCardsFromResponse(response: TicketLookupResponse): TicketCardD
 
 export default function TicketLookup() {
   usePageMeta({
-    title: "Consultar minhas passagens | Smartbus BR",
+    title: "Consultar minhas passagens | SmartBus",
     description:
-      "Consulte suas passagens compradas no Smartbus BR informando o CPF. Acompanhe status do pagamento e baixe seus bilhetes.",
+      "Consulte suas passagens compradas no SmartBus informando o CPF. Acompanhe status do pagamento e baixe seus bilhetes.",
     path: "/consultar-passagens",
   });
   const { toast } = useToast();

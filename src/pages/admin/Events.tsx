@@ -2874,7 +2874,7 @@ export default function Events() {
         .filter(Boolean)
         .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
 
-      const supportText = `SmartBus BR — Dados de suporte do evento
+      const supportText = `SmartBus — Dados de suporte do evento
 
 Evento:
 - ID do evento: ${event.id}
@@ -4800,7 +4800,7 @@ Links internos:
                           />
                           <div className="text-sm leading-relaxed">
                             <label htmlFor="platform_fee_accepted" className="cursor-pointer">
-                              Li e aceito os termos da taxa da plataforma Smartbus BR e a declaração de responsabilidade regulatória da empresa organizadora.
+                              Li e aceito os termos da taxa da plataforma SmartBus e a declaração de responsabilidade regulatória da empresa organizadora.
                             </label>{' '}
                             <Button
                               type="button"
@@ -5294,7 +5294,7 @@ Links internos:
                           {/* Reforço operacional: cancelar venda/reembolsar passageiro não devolve taxa da plataforma. */}
                           <Alert className="mt-3 border-blue-500/30 bg-blue-500/5">
                             <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                              Importante: em caso de cancelamento ou reembolso ao passageiro, a taxa da plataforma Smartbus BR permanece devida e não é devolvida à empresa organizadora.
+                              Importante: em caso de cancelamento ou reembolso ao passageiro, a taxa da plataforma SmartBus permanece devida e não é devolvida à empresa organizadora.
                             </AlertDescription>
                           </Alert>
                         </Card>
@@ -5533,14 +5533,14 @@ Links internos:
               <div>
                 <p className="font-semibold">1. Cobrança da taxa</p>
                 <p className="text-muted-foreground">
-                  Ao ativar a venda de passagens neste evento, a empresa organizadora declara ciência e concordância com a cobrança da taxa da plataforma Smartbus BR sobre as vendas realizadas pelos canais digitais do sistema, conforme configuração comercial vigente da conta.
+                  Ao ativar a venda de passagens neste evento, a empresa organizadora declara ciência e concordância com a cobrança da taxa da plataforma SmartBus sobre as vendas realizadas pelos canais digitais do sistema, conforme configuração comercial vigente da conta.
                 </p>
               </div>
 
               <div>
                 <p className="font-semibold">2. Natureza da taxa</p>
                 <p className="text-muted-foreground">
-                  A taxa da plataforma Smartbus BR remunera a intermediação da venda, a disponibilização do sistema, a estrutura tecnológica e os custos operacionais da plataforma.
+                  A taxa da plataforma SmartBus remunera a intermediação da venda, a disponibilização do sistema, a estrutura tecnológica e os custos operacionais da plataforma.
                 </p>
               </div>
 
@@ -5561,7 +5561,7 @@ Links internos:
               <div>
                 <p className="font-semibold">5. Cancelamento, reembolso e taxa da plataforma</p>
                 <p className="text-muted-foreground">
-                  Em caso de cancelamento da venda, cancelamento da passagem ou reembolso ao passageiro, a taxa da plataforma Smartbus BR não será devolvida à empresa organizadora.
+                  Em caso de cancelamento da venda, cancelamento da passagem ou reembolso ao passageiro, a taxa da plataforma SmartBus não será devolvida à empresa organizadora.
                 </p>
               </div>
 

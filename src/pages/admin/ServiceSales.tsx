@@ -781,8 +781,8 @@ export default function ServiceSales() {
         {latestReceipt && (
           <Card className="service-receipt-print">
             <CardHeader>
-              <CardTitle>Comprovante de Serviço SmartBus BR</CardTitle>
-              <p className="text-sm text-muted-foreground">SmartBus BR · Operação de Serviços</p>
+              <CardTitle>Comprovante de Serviço SmartBus</CardTitle>
+              <p className="text-sm text-muted-foreground">SmartBus · Operação de Serviços</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-lg border p-4 grid gap-2 md:grid-cols-2">
@@ -854,7 +854,7 @@ export default function ServiceSales() {
               </div>
 
               <div className="border-t pt-3 text-xs text-muted-foreground text-center">
-                Gerado por SmartBus BR — www.smartbusbr.com.br — Contato: (31) 99207-4309
+                Gerado por SmartBus — www.smartbusbr.com.br — Contato: (31) 99207-4309
               </div>
             </CardContent>
           </Card>

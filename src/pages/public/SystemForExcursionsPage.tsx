@@ -94,7 +94,7 @@ const EXCURSION_TYPES = [
 // Descrições orientadas por cenário para aumentar clareza de valor em cada rota satélite.
 const NAV_LINKS = [
   {
-    title: "Landing principal SmartBus BR",
+    title: "Landing principal SmartBus",
     href: "/",
     description: "Conheça a visão geral da plataforma e como começar",
   },
@@ -117,7 +117,7 @@ const NAV_LINKS = [
 
 const FAQ_ITEMS = [
   {
-    question: "Preciso de CNPJ para usar o SmartBus BR?",
+    question: "Preciso de CNPJ para usar o SmartBus?",
     answer:
       "Você pode começar sua operação para organizar excursões sem travar o processo. Se precisar, nossa equipe orienta o melhor formato para o seu cenário.",
   },
@@ -193,7 +193,7 @@ const TRUST_ELEMENTS = [
 
 export default function SystemForExcursionsPage() {
   usePageMeta({
-    title: "Sistema para excursões | Smartbus BR",
+    title: "Sistema para excursões | SmartBus",
     description:
       "Sistema completo para excursões: venda de passagens online, controle de passageiros, pagamento integrado e embarque organizado.",
     path: "/sistema-para-excursoes",
@@ -329,7 +329,7 @@ export default function SystemForExcursionsPage() {
 
             <article className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm sm:p-8">
               <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                Solução SmartBus BR
+                Solução SmartBus
               </p>
               <h2 className="mt-4 text-2xl font-bold text-foreground sm:text-3xl">
                 Um sistema simples para organizar excursões de ponta a ponta
@@ -405,7 +405,7 @@ export default function SystemForExcursionsPage() {
               <article className="rounded-3xl border border-primary/20 bg-card p-6 shadow-sm sm:p-8">
                 <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                   <Coins className="h-3.5 w-3.5" />
-                  Diferenciais SmartBus BR
+                  Diferenciais SmartBus
                 </div>
                 <h2 className="mt-4 text-2xl font-bold text-foreground sm:text-3xl">Sistema para excursões com vantagem prática no dia a dia</h2>
                 <ul className="mt-5 space-y-3 text-muted-foreground">
@@ -429,7 +429,7 @@ export default function SystemForExcursionsPage() {
                     <p className="mt-2 text-sm text-muted-foreground">Planilhas, controle manual de passageiros da excursão e mensagens perdidas.</p>
                   </div>
                   <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-primary">Com SmartBus BR</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-primary">Com SmartBus</p>
                     <p className="mt-2 text-sm text-foreground">Venda online, link próprio, passageiros e embarque organizados no mesmo fluxo.</p>
                   </div>
                 </div>
@@ -459,7 +459,7 @@ export default function SystemForExcursionsPage() {
                 Um sistema completo para organizar excursões de verdade
               </h2>
               <p className="mt-3 max-w-3xl text-muted-foreground">
-                O SmartBus BR é um sistema real para organizar excursões com fluxo completo, do pagamento ao embarque,
+                O SmartBus é um sistema real para organizar excursões com fluxo completo, do pagamento ao embarque,
                 mantendo operação prática para equipes que precisam vender excursão com controle de lotação e saída.
               </p>
               <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">

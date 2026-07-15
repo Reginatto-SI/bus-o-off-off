@@ -24,14 +24,14 @@ export const MagicLinkEmail = ({
 }: MagicLinkEmailProps) => (
   <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Seu link de acesso — SmartBus BR</Preview>
+    <Preview>Seu link de acesso — SmartBus</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={brand}>SmartBus BR</Text>
+        <Text style={brand}>SmartBus</Text>
         <Container style={card}>
           <Heading style={h1}>Seu link de acesso</Heading>
           <Text style={text}>
-            Use o botão abaixo para acessar sua conta no SmartBus BR. Este link expira em alguns minutos.
+            Use o botão abaixo para acessar sua conta no SmartBus. Este link expira em alguns minutos.
           </Text>
           <Container style={ctaWrapper}>
             <Button style={button} href={confirmationUrl}>
@@ -46,8 +46,8 @@ export const MagicLinkEmail = ({
             <Text style={securityText}>Se você não solicitou esta ação, ignore este e-mail.</Text>
           </Container>
         </Container>
-        <Text style={footerText}>SmartBus BR • Plataforma de venda de passagens e gestão de viagens.</Text>
-        <Text style={footerText}>Site oficial SmartBus BR.</Text>
+        <Text style={footerText}>SmartBus • Plataforma de venda de passagens e gestão de viagens.</Text>
+        <Text style={footerText}>Site oficial SmartBus.</Text>
         <Text style={footerText}>E-mail automático. Não responda esta mensagem.</Text>
       </Container>
     </Body>
