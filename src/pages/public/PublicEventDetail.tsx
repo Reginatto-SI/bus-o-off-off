@@ -84,7 +84,7 @@ export default function PublicEventDetail() {
             '@type': 'Organization',
             name: eventCompanyName,
           },
-          url: `https://www.smartbusbr.com.br/eventos/${event.id}`,
+          url: `https://www.smartbus.com.br/eventos/${event.id}`,
         }
       : null,
   );

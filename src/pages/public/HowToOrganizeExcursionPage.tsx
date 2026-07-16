@@ -113,7 +113,7 @@ export default function HowToOrganizeExcursionPage() {
     const pageTitle = "Como organizar uma excursão do zero | SmartBus";
     const pageDescription =
       "Aprenda como organizar uma excursão do zero com controle de passageiros, pagamentos e embarque, e veja como simplificar essa operação com o SmartBus.";
-    const canonicalUrl = "https://www.smartbusbr.com.br/como-organizar-excursao";
+    const canonicalUrl = "https://www.smartbus.com.br/como-organizar-excursao";
 
     const previousTitle = document.title;
     document.title = pageTitle;

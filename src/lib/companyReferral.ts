@@ -14,7 +14,7 @@ export const resolveCompanyReferralOrigin = () => {
   const envOrigin = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim();
   if (envOrigin) return envOrigin.replace(/\/$/, '');
   if (typeof window !== 'undefined' && window.location.origin) return window.location.origin.replace(/\/$/, '');
-  return 'https://www.smartbusbr.com.br';
+  return 'https://www.smartbus.com.br';
 };
 
 export const buildCompanyReferralLink = (origin: string, code: string) => {
