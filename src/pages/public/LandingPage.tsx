@@ -638,7 +638,7 @@ const INITIAL_DEMO_REQUEST_FORM: DemoRequestFormState = {
   date: "",
   time: "",
 };
-const OFFICIAL_SMARTBUS_URL = "https://www.smartbusbr.com.br/";
+const OFFICIAL_SMARTBUS_URL = "https://www.smartbus.com.br/";
 const OFFICIAL_QR_FILE_BASE_NAME = "qrcode-oficial-smartbus-br";
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const formatDemoDate = (value: string) => {

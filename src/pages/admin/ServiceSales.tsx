@@ -854,7 +854,7 @@ export default function ServiceSales() {
               </div>
 
               <div className="border-t pt-3 text-xs text-muted-foreground text-center">
-                Gerado por SmartBus — www.smartbusbr.com.br — Contato: (31) 99207-4309
+                Gerado por SmartBus — www.smartbus.com.br — Contato: (31) 99207-4309
               </div>
             </CardContent>
           </Card>

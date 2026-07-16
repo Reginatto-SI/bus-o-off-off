@@ -275,8 +275,8 @@ export default function CompanyPage() {
 
   const normalizedPublicSlug = normalizePublicSlug(form.public_slug);
   const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
-  const shortLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/{nick}';
-  const canonicalLink = normalizedPublicSlug ? `https://www.smartbusbr.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbusbr.com.br/empresa/{nick}';
+  const shortLink = normalizedPublicSlug ? `https://www.smartbus.com.br/${normalizedPublicSlug}` : 'https://www.smartbus.com.br/{nick}';
+  const canonicalLink = normalizedPublicSlug ? `https://www.smartbus.com.br/empresa/${normalizedPublicSlug}` : 'https://www.smartbus.com.br/empresa/{nick}';
   const referralLink = company?.referral_code
     ? buildCompanyReferralLink(resolveCompanyReferralOrigin(), company.referral_code)
     : '';

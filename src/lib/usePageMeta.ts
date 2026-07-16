@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 // SITE_URL é fixo para garantir canonicals consistentes apontando para o domínio oficial,
 // independente do host (preview, lovable.app, smartbusbr.com.br).
-const SITE_URL = "https://www.smartbusbr.com.br";
+const SITE_URL = "https://www.smartbus.com.br";
 
 export interface PageMetaOptions {
   /** Título da aba e og:title — manter < 60 caracteres. */

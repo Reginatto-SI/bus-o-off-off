@@ -31,7 +31,7 @@ export const TICKET_PLATFORM_LIABILITY_TEXT =
 
 // Rodapé obrigatório para materiais emitidos/exportados no contexto da passagem.
 export const TICKET_PDF_FOOTER_TEXT =
-  'Gerado por — www.smartbusbr.com.br — Contato da plataforma: (31) 99207-4309';
+  'Gerado por — www.smartbus.com.br — Contato da plataforma: (31) 99207-4309';
 
 export const REGULATORY_RESPONSIBILITY_TERMS_VERSION = '2026-07-responsabilidade-regulatoria-evento-v1';
 
