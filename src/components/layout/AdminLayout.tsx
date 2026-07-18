@@ -95,6 +95,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }, [user, userRole]);
 
   const isMobileDashboardHome = location.pathname === '/admin/dashboard';
+  const usesCustomMobileAdminChrome = isMobileDashboardHome || location.pathname === '/admin/vendas';
 
   const supportContactUrl = useMemo(() => {
     return buildWhatsappWaMeLink({
@@ -134,8 +135,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar />
       <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <AdminHeader />
-        {/* No mobile preservamos espaço para a barra fixa, exceto na home mobile que já possui header próprio. */}
-        <main className={cn(isMobileDashboardHome ? 'pt-0' : 'pt-14', 'lg:pt-0')}>
+        {/* No mobile preservamos espaço para a barra fixa, exceto em telas com chrome mobile próprio. */}
+        <main className={cn(usesCustomMobileAdminChrome ? 'pt-0' : 'pt-14', 'lg:pt-0')}>
           {children}
         </main>
       </div>

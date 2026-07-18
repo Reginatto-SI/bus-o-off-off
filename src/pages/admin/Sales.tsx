@@ -96,10 +96,15 @@ import { cn, formatBoardingLocationLabel } from '@/lib/utils';
 import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { type TicketCardData } from '@/components/public/TicketCard';
 import { PassengerTicketList } from '@/components/public/PassengerTicketList';
 import { formatCurrencyBRL } from '@/lib/currency';
+import { formatPaymentMethodLabel } from '@/lib/paymentMethodLabels';
 import { startPlatformFeeCheckout } from '@/lib/platformFeeCheckout';
 import { resolveTicketPurchaseConfirmedAt, resolveTicketPurchaseOriginLabel } from '@/lib/ticketPurchaseMetadata';
 
@@ -243,6 +248,14 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado',
   bloqueado: 'Bloqueado',
 };
+
+
+function getSalePaymentDisplayLabel(sale: Sale): string {
+  // Mobile não simplifica estados: reaproveita os labels oficiais de status e o formatter central de forma de pagamento.
+  const statusLabel = statusLabels[sale.status] ?? sale.status;
+  const methodLabel = formatPaymentMethodLabel(sale.payment_method);
+  return methodLabel ? `${methodLabel} • ${statusLabel}` : statusLabel;
+}
 
 const blockReasonLabels: Record<string, string> = {
   manutencao: 'Manutenção',
@@ -433,7 +446,7 @@ function buildTicketCardData(
 // ── Component ──
 export default function Sales() {
   const location = useLocation();
-  const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user } = useAuth();
+  const { isGerente, canViewFinancials, activeCompanyId, activeCompany, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const activeCompanyPlatformFeePercent = Number(activeCompany?.platform_fee_percent ?? 0);
   const hasConfiguredPlatformFee = Number.isFinite(activeCompanyPlatformFeePercent) && activeCompanyPlatformFeePercent > 0;
@@ -1741,10 +1754,135 @@ export default function Sales() {
 
 
 
+  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Comentário: a rota visual vai direto para o embarque, mas a permissão oficial continua sendo o item /validador.
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole]
+  );
+
+
+  const mobileSalesList = (
+    <Card className="overflow-hidden rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+      <CardContent className="p-0">
+        <div className="divide-y divide-slate-100">
+          {sales.map((sale) => {
+            const vehicle = (sale.trip as any)?.vehicle;
+            const seatLabels = seatLabelsMap[sale.id];
+            const ticketNumbers = ticketNumbersMap[sale.id] ?? [];
+            const { display: seatsDisplay } = formatSeatLabels(seatLabels ?? []);
+            const isBlock = sale.status === 'bloqueado';
+            const reservationVisibility = sale.status === 'reservado'
+              ? getReservationVisibility(sale.reservation_expires_at)
+              : null;
+            return (
+              <article key={sale.id} className={cn('p-4', isBlock && 'bg-slate-50')}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-950">{isBlock ? 'Bloqueio Operacional' : getSaleCustomerDisplayName(sale)}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{formatEventDisplayName(sale.event) || '-'}</p>
+                  </div>
+                  <ActionsDropdown actions={getSaleActions(sale)} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={sale.status} />
+                  {reservationVisibility && (
+                    <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', reservationVisibility.expired ? 'bg-destructive/10 text-destructive' : reservationVisibility.nearExpiry ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground')}>
+                      {reservationVisibility.riskLabel}
+                    </span>
+                  )}
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <dt className="font-semibold text-slate-500">Data</dt>
+                    <dd className="mt-0.5 text-slate-900">{format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}</dd>
+                  </div>
+                  {canViewFinancials && (
+                    <div>
+                      <dt className="font-semibold text-slate-500">Valor</dt>
+                      <dd className="mt-0.5 font-bold text-slate-950">{isBlock ? '—' : formatCurrencyBRL(sale.quantity * sale.unit_price)}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="font-semibold text-slate-500">Pagamento</dt>
+                    <dd className="mt-0.5 text-slate-900">{getSalePaymentDisplayLabel(sale)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-500">Passagem</dt>
+                    <dd className="mt-0.5 text-slate-900">{sale.quantity} {sale.quantity === 1 ? (isStandaloneServiceSale(sale) ? 'serviço' : 'passagem') : (isStandaloneServiceSale(sale) ? 'serviços' : 'passagens')}</dd>
+                  </div>
+                </dl>
+                <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <p className="font-medium text-slate-800">{isStandaloneServiceSale(sale) ? 'Venda de serviço avulsa' : vehicle ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}` : 'Embarque não informado'}</p>
+                  <p className="mt-0.5">{getSaleBoardingLabel(sale)}</p>
+                  {!isStandaloneServiceSale(sale) && <p className="mt-0.5">Poltr. {seatsDisplay}</p>}
+                  {!isBlock && ticketNumbers.length > 0 && <p className="mt-0.5">Nº {ticketNumbers[0]}{ticketNumbers.length > 1 ? ` +${ticketNumbers.length - 1}` : ''}</p>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   // ── Render ──
   return (
     <AdminLayout>
-      <div className="page-container">
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+          <AdminMobileHeader
+            title="Vendas"
+            subtitle="SmartBus"
+            onMenuClick={openAdminMobileMenu}
+            rightAction={<Button size="icon" variant="ghost" className="h-11 w-11 rounded-xl" onClick={() => { setLoading(true); fetchSales(); }} aria-label="Atualizar vendas"><RefreshCw className="h-5 w-5" /></Button>}
+          />
+
+          <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
+            <section className="space-y-3">
+              <p className="text-sm text-slate-600">Gerenciamento de vendas e suporte ao cliente</p>
+              <div className="grid grid-cols-3 gap-2">
+                <Button className="col-span-3 h-11 justify-center rounded-xl" onClick={() => setNewSaleModalOpen(true)}>+ Nova venda</Button>
+                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setExportModalOpen(true)}><FileSpreadsheet className="mr-1.5 h-4 w-4" />Excel</Button>
+                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setPdfModalOpen(true)}><FileText className="mr-1.5 h-4 w-4" />PDF</Button>
+                <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => { setLoading(true); fetchSales(); }}><RefreshCw className="mr-1.5 h-4 w-4" />Atualizar</Button>
+              </div>
+            </section>
+
+            <section className="space-y-3"><div><h2 className="text-sm font-bold text-slate-950">Operação</h2><p className="mt-1 text-sm text-slate-600">Leitura rápida do pipeline comercial e do status atual das vendas.</p></div><div className="grid grid-cols-2 gap-3"><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Vendas registradas" value={stats.total} icon={ShoppingCart} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pagas" value={stats.pagas} icon={CheckCircle} variant="success" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Pendentes de pagamento" value={stats.pendentesPagamento} icon={Clock} variant="warning" /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Reservas em aberto" value={stats.reservasEmAberto} icon={AlertCircle} /><StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Canceladas" value={stats.canceladas} icon={XCircle} variant="destructive" /></div></section>
+
+          <Alert className="rounded-2xl border-slate-200/70 bg-white text-slate-700 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><AlertCircle className="h-4 w-4" /><AlertDescription>Monitoramento global de reservas: <strong>{globalReservationRiskSummary.nearExpiry}</strong> próxima(s) do vencimento e <strong>{globalReservationRiskSummary.expired}</strong> vencida(s). <span className="text-xs text-muted-foreground">{cleanupHealthLabel}</span></AlertDescription></Alert>
+
+            <div className="mb-0">
+              {/* Comentário: os mesmos filtros da tela desktop são reutilizados no mobile para preservar a lógica de busca. */}
+              <FilterCard
+                searchValue={filters.search}
+                onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+                searchPlaceholder="Buscar venda..."
+                searchLabel="Busca geral"
+                selects={[{ id: 'status', label: 'Status', placeholder: 'Todos', value: filters.status, onChange: (v) => setFilters((f) => ({ ...f, status: v as any })), options: [{ value: 'all', label: 'Todos' }, { value: 'pendente', label: 'Pendente' }, { value: 'pendente_taxa', label: 'Pendente de taxa' }, { value: 'pendente_pagamento', label: 'Pendente pagamento' }, { value: 'reservado', label: 'Reservado' }, { value: 'pago', label: 'Pago' }, { value: 'cancelado', label: 'Cancelado' }, { value: 'bloqueado', label: 'Bloqueado' }] }, { id: 'reservationRisk', label: 'Risco da Reserva', placeholder: 'Todos', value: filters.reservationRisk, onChange: (v) => setFilters((f) => ({ ...f, reservationRisk: v as SalesFilters['reservationRisk'] })), options: [{ value: 'all', label: 'Todos' }, { value: 'ativa', label: 'Reserva ativa' }, { value: 'proxima', label: 'Próxima do vencimento' }, { value: 'vencida', label: 'Vencida' }] }]}
+                mainFilters={(<><div className="space-y-1.5"><label className="text-sm font-medium text-muted-foreground">Evento</label><Popover open={eventFilterOpen} onOpenChange={setEventFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" className={cn('w-full justify-between font-normal', filters.eventId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedEventFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar evento..." value={eventFilterSearch} onValueChange={setEventFilterSearch} /><CommandList><CommandEmpty>Nenhum evento encontrado.</CommandEmpty><CommandGroup>{filteredEventFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, eventId: option.value })); setEventFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.eventId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div><div className="space-y-1.5"><label className="text-sm font-medium text-muted-foreground">Vendedor</label><Popover open={sellerFilterOpen} onOpenChange={setSellerFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" className={cn('w-full justify-between font-normal', filters.sellerId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedSellerFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar vendedor..." value={sellerFilterSearch} onValueChange={setSellerFilterSearch} /><CommandList><CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty><CommandGroup>{filteredSellerFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, sellerId: option.value })); setSellerFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.sellerId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div></>)}
+                advancedFilters={<div className="grid grid-cols-1 gap-4"><FilterInput id="dateFrom" label="Data Inicial" placeholder="" value={filters.dateFrom} onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))} type="date" icon={Calendar} /><FilterInput id="dateTo" label="Data Final" placeholder="" value={filters.dateTo} onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))} type="date" icon={Calendar} /></div>}
+                onClearFilters={() => setFilters(initialFilters)}
+                hasActiveFilters={hasActiveFilters}
+              />
+            </div>
+
+            {loading ? <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : sales.length === 0 ? <EmptyState icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />} title="Nenhuma venda encontrada" description={hasActiveFilters ? 'Tente ajustar os filtros' : 'As vendas aparecerão aqui quando forem realizadas'} /> : <>{mobileSalesList}<div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-600 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><span>Exibindo {rangeStart}–{rangeEnd} de {totalSalesCount} resultados</span><div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || loading}>Anterior</Button><span>Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage >= totalPages || loading}>Próxima</Button></div></div></>}
+          </main>
+
+          <AdminMobileBottomNav activeItem="vendas" items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+        </div>
+      <div className="page-container hidden lg:block">
         {/* Header */}
         <PageHeader
           title="Vendas"
@@ -2108,7 +2246,7 @@ export default function Sales() {
                         </TableCell>
                         {canViewFinancials && (
                           <TableCell className="font-medium whitespace-nowrap text-sm">
-                            {isBlock ? '—' : formatCurrencyBRL((sale.quantity * sale.unit_price))}
+                            {isBlock ? '—' : formatCurrencyBRL(sale.quantity * sale.unit_price)}
                           </TableCell>
                         )}
                         <TableCell>
