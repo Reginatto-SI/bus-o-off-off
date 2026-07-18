@@ -1,38 +1,13 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Calendar,
-  Bus,
-  Users,
-  MapPin,
   Globe,
-  Ticket,
-  Database,
-  ShoppingCart,
-  UserCheck,
   LogOut,
   Menu,
   X,
-  BadgePercent,
-  FileText,
-  BarChart3,
-  Settings,
-  User,
-  Image,
-  Handshake,
-  Briefcase,
-  LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
-  LayoutDashboard,
-  Building2,
-  Wrench,
-  Activity,
-  ClipboardList,
-  UserRoundCheck,
-  Gift,
-  Sparkles,
-  QrCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,196 +21,13 @@ import collapsedSidebarOfficialIcon from '@/assets/brand/sidebar-collapsed-offic
 import logoAdmin from '@/assets/logo_admin.png';
 import { toast } from 'sonner';
 
-type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
-
-type NavigationItem = {
-  id?: string;
-  name: string;
-  icon: typeof Calendar;
-  href?: string;
-  roles?: UserRole[];
-  disabled?: boolean;
-  statusLabel?: string;
-  openInNewTab?: boolean;
-};
-
-type NavigationGroup = {
-  id: string;
-  label: string;
-  icon: typeof Calendar;
-  items: NavigationItem[];
-  standalone?: boolean;
-};
-
-const navigationGroups: NavigationGroup[] = [{
-  id: 'dashboard',
-  label: 'Painel',
-  icon: LayoutDashboard,
-  // O Dashboard é tratado como entrada principal isolada na navegação.
-  standalone: true,
-  items: [{
-    name: 'Painel',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard,
-  }],
-}, {
-  id: 'eventos',
-  label: 'Eventos',
-  // Ícone de ticket evita repetição de calendário e diferencia o agrupamento dos itens internos.
-  icon: Ticket,
-  items: [{
-    name: 'Eventos',
-    href: '/admin/eventos',
-    icon: Calendar
-  }, {
-    name: 'Vendas',
-    href: '/admin/vendas',
-    icon: ShoppingCart
-  }, {
-    // Atalho operacional para venda avulsa em campo (ônibus/destino) sem navegar por telas de cadastro.
-    name: 'Venda de Serviços',
-    href: '/vendas/servicos',
-    icon: Sparkles
-  }, {
-    // Gerentes acessam o validador com seu próprio usuário; o backend audita user_id/role sem exigir driver_id.
-    name: 'Validador de Passagens',
-    href: '/validador',
-    icon: QrCode,
-    roles: ['gerente', 'developer']
-  }]
-}, {
-  id: 'cadastros',
-  label: 'Cadastros',
-  icon: Database,
-  items: [{
-    name: 'Frota (Veículos)',
-    href: '/admin/frota',
-    icon: Bus
-  }, {
-    name: 'Motoristas',
-    href: '/admin/motoristas',
-    icon: Users
-  }, {
-    name: 'Auxiliares de Embarque',
-    href: '/admin/auxiliares-embarque',
-    icon: UserRoundCheck
-  }, {
-    name: 'Locais de Embarque',
-    href: '/admin/locais',
-    icon: MapPin
-  }, {
-    name: 'Vendedores',
-    href: '/admin/vendedores',
-    icon: UserCheck
-  }, {
-    name: 'Patrocinadores',
-    href: '/admin/patrocinadores',
-    icon: Image,
-    roles: ['gerente']
-  }, {
-    name: 'Parceiros',
-    href: '/admin/parceiros',
-    icon: Briefcase,
-    roles: ['gerente']
-  }, {
-    name: 'Programas de Benefício',
-    href: '/admin/programas-beneficio',
-    icon: Gift,
-    roles: ['gerente', 'developer']
-  }, {
-    // Módulo Passeios & Serviços (base inicial). Acesso restrito ao gerente, igual aos demais cadastros sensíveis.
-    name: 'Serviços',
-    href: '/admin/servicos',
-    icon: Sparkles,
-    roles: ['gerente']
-  }, {
-    name: 'Sócios',
-    href: '/admin/socios',
-    icon: Handshake,
-    // Tela restrita: somente usuários developer podem visualizar o menu de Sócios.
-    roles: ['developer']
-  }, {
-    name: 'Templates de Layout',
-    href: '/admin/templates-layout',
-    icon: LayoutTemplate,
-    // Catálogo oficial também é exclusivo de developer.
-    roles: ['developer']
-  }]
-}, {
-  id: 'relatorios',
-  label: 'Relatórios',
-  icon: BarChart3,
-  items: [{
-    name: 'Relatório de Vendas',
-    href: '/admin/relatorios/vendas',
-    icon: FileText
-  }, {
-    name: 'Relatório por Evento',
-    href: '/admin/relatorios/eventos',
-    icon: Calendar,
-  }, {
-    name: 'Lista de Embarque',
-    href: '/admin/relatorios/lista-embarque',
-    icon: ClipboardList
-  }, {
-    name: 'Empresas e Ativação',
-    href: '/admin/relatorios/empresas-ativacao',
-    icon: Building2,
-    roles: ['developer']
-  }, {
-    name: 'Comissão de Vendedores',
-    href: '/admin/relatorios/comissao-vendedores',
-    icon: BadgePercent
-  }]
-}, {
-  id: 'administracao',
-  label: 'Administração',
-  icon: Settings,
-  items: [{
-    name: 'Usuários',
-    href: '/admin/usuarios',
-    icon: Users,
-    roles: ['gerente']
-  }, {
-    name: 'Empresa',
-    href: '/admin/empresa',
-    icon: Building2
-  }, {
-    // Representante Comercial: disponível para todos os perfis autenticados do painel admin.
-    // Qualquer empresa pode atuar como representante e indicar novas empresas.
-    name: 'Representante Comercial',
-    href: '/admin/representante',
-    icon: BadgePercent,
-  }
-  // ============================================================
-  // Item "Indicações" temporariamente OCULTO do menu.
-  // Motivo: a funcionalidade de indicações ficará em standby por
-  // enquanto e não deve aparecer no cliente do usuário. A rota
-  // /admin/indicacoes e o restante do módulo permanecem no código
-  // para reativação futura sem alterar o fluxo existente.
-  // ============================================================
-  ]
-
-}, {
-  id: 'sistema',
-  label: 'Sistema',
-  icon: Wrench,
-  items: [{
-    name: 'Diagnóstico de Vendas',
-    href: '/admin/diagnostico-vendas',
-    icon: Activity,
-    roles: ['developer'] as UserRole[],
-  }]
-}, {
-  id: 'conta',
-  label: 'Conta',
-  icon: User,
-  items: [{
-    name: 'Minha Conta',
-    href: '/admin/minha-conta',
-    icon: Settings
-  }]
-}] as NavigationGroup[];
+import {
+  canViewAdminNavigationItem,
+  findAdminNavigationItemByHref,
+  navigationGroups,
+  type NavigationItem,
+  type UserRole,
+} from './adminNavigation';
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
   return (
@@ -316,11 +108,20 @@ export function AdminSidebar() {
   const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobileDashboardHome = location.pathname === '/admin/dashboard';
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
 
   const normalizedPublicSlug = normalizePublicSlug(activeCompany?.public_slug ?? '');
   const publicShowcaseUrl = normalizedPublicSlug ? `${window.location.origin}/${normalizedPublicSlug}` : null;
+
+  useEffect(() => {
+    // Comentário: permite que atalhos mobile do dashboard abram o menu administrativo existente sem duplicar navegação.
+    const handleOpenMobileMenu = () => setMobileOpen(true);
+    window.addEventListener('smartbus:open-admin-mobile-menu', handleOpenMobileMenu);
+
+    return () => window.removeEventListener('smartbus:open-admin-mobile-menu', handleOpenMobileMenu);
+  }, []);
 
   // Comentário: item dinâmico usa somente o nick público da empresa ativa, sem expor identificadores internos.
   const groupsWithDynamicItems = navigationGroups.map((group) => {
@@ -336,7 +137,7 @@ export function AdminSidebar() {
             icon: Globe,
             openInNewTab: Boolean(publicShowcaseUrl),
             statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
-          },
+          } satisfies NavigationItem,
         ],
       };
     }
@@ -346,11 +147,12 @@ export function AdminSidebar() {
 
   const visibleGroups = groupsWithDynamicItems.map(group => ({
     ...group,
-    items: group.items.filter(item => {
-      // Exceção pontual: mantém item "Templates de Layout" acessível ao sócio autorizado sem abrir outras áreas de developer.
-      if (item.href === '/admin/templates-layout') return canAccessTemplatesLayout;
-      return isDeveloper || !item.roles || (userRole && item.roles.includes(userRole));
-    })
+    items: group.items.filter(item => canViewAdminNavigationItem({
+      item,
+      userRole,
+      isDeveloper,
+      canAccessTemplatesLayout,
+    }))
   })).filter(group => group.items.length > 0);
 
   // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
@@ -666,7 +468,7 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={200}>
       {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b flex items-center px-3">
+      <div className={cn('lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b items-center px-3', isMobileDashboardHome ? 'hidden' : 'flex')}>
         <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
           <Menu className="h-5 w-5" />
         </Button>
