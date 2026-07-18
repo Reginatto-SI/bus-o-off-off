@@ -14,6 +14,13 @@ import {
   Award,
   Users,
   BarChart3,
+  Building2,
+  Bus,
+  ClipboardList,
+  FileText,
+  Home,
+  LayoutGrid,
+  MoreHorizontal,
   Circle,
   CheckCircle2,
   ArrowRight,
@@ -21,8 +28,7 @@ import {
   Sparkles,
   QrCode,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -37,6 +43,7 @@ import {
 } from 'recharts';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,6 +60,7 @@ import type { Database } from '@/integrations/supabase/types';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { normalizePublicSlug } from '@/lib/publicSlug';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 /* ═══════════════════════════════════════════════════
    Tipos auxiliares
@@ -146,6 +154,166 @@ const STATUS_LABELS: Record<string, string> = {
 const CHART_LINE_COLOR = 'hsl(var(--primary))';
 const SMARTBUS_TIPS_ADMIN_ROLES = ['developer', 'gerente', 'operador'] as const;
 
+type MobileHomeLinkItem = {
+  title: string;
+  description?: string;
+  href: string;
+  icon: typeof Calendar;
+};
+
+const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
+  {
+    title: 'Vendas',
+    description: 'Acompanhe seu desempenho',
+    href: '/admin/vendas',
+    icon: BarChart3,
+  },
+  {
+    title: 'Eventos',
+    description: 'Gerencie seus eventos',
+    href: '/admin/eventos',
+    icon: Calendar,
+  },
+  {
+    // Comentário: visibilidade herdada do item Validador de Passagens do menu administrativo.
+    title: 'Embarque',
+    description: 'Controle validações',
+    href: '/validador',
+    icon: Bus,
+  },
+  {
+    // Comentário: usa a rota real de lista de embarque para não duplicar o card de Vendas.
+    title: 'Lista de embarque',
+    description: 'Consulte passageiros',
+    href: '/admin/relatorios/lista-embarque',
+    icon: ClipboardList,
+  },
+  {
+    title: 'Relatórios',
+    description: 'Dados e indicadores',
+    href: '/admin/relatorios/vendas',
+    icon: FileText,
+  },
+  {
+    // Comentário: fallback real autorizado pelo menu para manter a grade com 6 cards quando Embarque não puder aparecer.
+    title: 'Empresa',
+    description: 'Dados da operação',
+    href: '/admin/empresa',
+    icon: Building2,
+  },
+];
+
+const mobileBottomNavCandidates: MobileHomeLinkItem[] = [
+  { title: 'Início', href: '/admin/dashboard', icon: Home },
+  { title: 'Vendas', href: '/admin/vendas', icon: BarChart3 },
+  { title: 'Embarque', href: '/validador', icon: Bus },
+  { title: 'Relatórios', href: '/admin/relatorios/vendas', icon: FileText },
+];
+
+function openAdminMobileMenu() {
+  window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+}
+
+function isActiveMobilePath(currentPath: string, href: string) {
+  return currentPath === href || currentPath.startsWith(`${href}/`);
+}
+
+function MobileDashboardHome({
+  activePath,
+  cards,
+  bottomNavItems,
+  companyName,
+}: {
+  activePath: string;
+  cards: MobileHomeLinkItem[];
+  bottomNavItems: MobileHomeLinkItem[];
+  companyName: string;
+}) {
+  return (
+    <div className="min-h-[calc(100vh-3.5rem)] bg-[#f8fafc] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:hidden">
+      {/* Comentário: home mobile exclusiva; o dashboard desktop continua renderizado apenas em telas grandes. */}
+      <section className="relative overflow-hidden rounded-b-[2rem] bg-[hsl(var(--primary))] px-6 pb-12 pt-8 text-primary-foreground shadow-[0_16px_36px_rgba(249,115,22,0.28)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.24),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.12),transparent_45%)]" />
+        <div className="relative mx-auto flex max-w-sm justify-center">
+          <img src="/logo-branca2.png" alt="SmartBus" className="h-20 w-auto object-contain drop-shadow-sm" />
+        </div>
+        <div className="absolute -bottom-4 left-0 h-10 w-full rounded-[50%] bg-[#f8fafc]" />
+      </section>
+
+      <main className="mx-auto -mt-4 w-full max-w-md px-5">
+        <section className="relative z-10 mb-6 flex items-center justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Olá, gestor! 👋</h1>
+            <p className="max-w-[11rem] text-lg leading-snug text-slate-600">Acompanhe tudo o que importa em tempo real.</p>
+          </div>
+          <div
+            className="flex w-32 shrink-0 items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
+            aria-label={`Empresa ativa: ${companyName}`}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[hsl(var(--primary))]">
+              <Building2 className="h-5 w-5" strokeWidth={2.4} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Empresa</span>
+              <span className="block truncate text-xs font-bold leading-tight text-slate-950">{companyName}</span>
+            </span>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-4" aria-label="Acessos rápidos do gestor">
+          {cards.map((item) => (
+            <Link
+              key={item.title}
+              to={item.href}
+              className="group flex min-h-[9rem] flex-col items-center justify-center rounded-[1.35rem] border border-slate-100 bg-white px-3 py-5 text-center shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition active:scale-[0.98]"
+            >
+              <item.icon className="mb-4 h-12 w-12 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={2.5} />
+              <span className="text-xl font-extrabold leading-tight text-slate-950">{item.title}</span>
+              <span className="mt-2 text-sm leading-snug text-slate-600">{item.description}</span>
+            </Link>
+          ))}
+
+          <button
+            type="button"
+            onClick={openAdminMobileMenu}
+            className="group flex min-h-[9rem] flex-col items-center justify-center rounded-[1.35rem] border border-slate-100 bg-white px-3 py-5 text-center shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition active:scale-[0.98]"
+          >
+            <LayoutGrid className="mb-4 h-12 w-12 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={2.5} />
+            <span className="text-xl font-extrabold leading-tight text-slate-950">Mais</span>
+            <span className="mt-2 text-sm leading-snug text-slate-600">Outras funcionalidades</span>
+          </button>
+        </section>
+      </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-100 bg-white/95 px-5 pb-[calc(0.7rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden" aria-label="Navegação principal mobile">
+        <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
+          {bottomNavItems.map((item) => (
+            <Link
+              key={item.title}
+              to={item.href}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium transition active:scale-95',
+                isActiveMobilePath(activePath, item.href) ? 'text-[hsl(var(--primary))]' : 'text-slate-500'
+              )}
+            >
+              <item.icon className="h-6 w-6" fill={isActiveMobilePath(activePath, item.href) ? 'currentColor' : 'none'} strokeWidth={2.4} />
+              <span>{item.title}</span>
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={openAdminMobileMenu}
+            className="flex flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium text-slate-500 transition active:scale-95"
+          >
+            <MoreHorizontal className="h-6 w-6" strokeWidth={2.4} />
+            <span>Mais</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
 const smartbusTips = [
   {
     title: 'Venda passeios e experiências',
@@ -228,8 +396,9 @@ function SmartbusTipImage({ src, alt }: { src: string; alt: string }) {
    ═══════════════════════════════════════════════════ */
 
 export default function Dashboard() {
-  const { user, activeCompanyId, activeCompany, canViewFinancials, userRole } = useAuth();
+  const { user, activeCompanyId, activeCompany, canViewFinancials, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [period, setPeriod] = useState<Period>(30);
   const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
   const [smartbusTipsOpen, setSmartbusTipsOpen] = useState(false);
@@ -270,7 +439,28 @@ export default function Dashboard() {
   const canViewSmartbusTips =
     Boolean(activeCompanyId) &&
     SMARTBUS_TIPS_ADMIN_ROLES.includes(userRole as (typeof SMARTBUS_TIPS_ADMIN_ROLES)[number]);
-  const canAccessDriverValidatorShortcut = userRole === 'gerente' || userRole === 'developer';
+  const canViewMobileRoute = useMemo(() => {
+    // Comentário: cards e menu inferior reutilizam a regra real do menu administrativo por href, sem segunda matriz de permissões.
+    return (href: string) => {
+      if (href === '/admin/dashboard') return true;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(href),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    };
+  }, [canAccessTemplatesLayout, isDeveloper, userRole]);
+  const canAccessDriverValidatorShortcut = canViewMobileRoute('/validador');
+  const mobileHomeCards = useMemo(
+    () => mobileHomeCardCandidates.filter((item) => canViewMobileRoute(item.href)).slice(0, 5),
+    [canViewMobileRoute]
+  );
+  const mobileBottomNavItems = useMemo(
+    () => mobileBottomNavCandidates.filter((item) => canViewMobileRoute(item.href)).slice(0, 3),
+    [canViewMobileRoute]
+  );
+  const mobileCompanyName = activeCompany?.trade_name || activeCompany?.name || 'empresa atual';
 
   const smartbusTipsDismissKey = useMemo(
     () => (
@@ -806,7 +996,13 @@ export default function Dashboard() {
 
   return (
     <AdminLayout>
-      <div className="p-4 md:p-6 space-y-6">
+      <MobileDashboardHome
+        activePath={location.pathname}
+        cards={mobileHomeCards}
+        bottomNavItems={mobileBottomNavItems}
+        companyName={mobileCompanyName}
+      />
+      <div className="hidden p-4 md:p-6 lg:block lg:space-y-6">
         {/* ── Header + Filtro ─────────────────────────── */}
         <PageHeader
           title="Painel"

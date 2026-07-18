@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminSidebar } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
@@ -24,6 +24,7 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, userRole, loading, activeCompany, signOut } = useAuth();
   const { collapsed } = useSidebarCollapsed();
+  const location = useLocation();
   const toastShownRef = useRef(false);
   const [hasNoActiveLinkedCompany, setHasNoActiveLinkedCompany] = useState(false);
 
@@ -93,6 +94,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     void checkInactiveLinkedCompany();
   }, [user, userRole]);
 
+  const isMobileDashboardHome = location.pathname === '/admin/dashboard';
+
   const supportContactUrl = useMemo(() => {
     return buildWhatsappWaMeLink({
       phone: '(31) 99207-4309',
@@ -131,8 +134,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <AdminSidebar />
       <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <AdminHeader />
-        {/* No mobile preservamos espaço para a barra fixa do menu sem alterar o espaçamento do desktop. */}
-        <main className="pt-14 lg:pt-0">
+        {/* No mobile preservamos espaço para a barra fixa, exceto na home mobile que já possui header próprio. */}
+        <main className={cn(isMobileDashboardHome ? 'pt-0' : 'pt-14', 'lg:pt-0')}>
           {children}
         </main>
       </div>
