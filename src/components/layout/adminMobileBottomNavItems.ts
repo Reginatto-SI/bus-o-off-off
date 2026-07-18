@@ -1,4 +1,5 @@
-import { BarChart3, Bus, Home, type LucideIcon } from 'lucide-react';
+import { BarChart3, Bus, Home } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 export type AdminMobileBottomNavActiveItem = 'inicio' | 'vendas' | 'embarque';
 
