@@ -54,6 +54,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -230,82 +231,81 @@ function MobileDashboardHome({
   companyName: string;
 }) {
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-[#f8fafc] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:hidden">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
       {/* Comentário: home mobile exclusiva; o dashboard desktop continua renderizado apenas em telas grandes. */}
-      <section className="relative overflow-hidden rounded-b-[2rem] bg-[hsl(var(--primary))] px-6 pb-12 pt-8 text-primary-foreground shadow-[0_16px_36px_rgba(249,115,22,0.28)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.24),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.12),transparent_45%)]" />
+      <section className="relative overflow-hidden rounded-b-[1.15rem] bg-[hsl(var(--primary))] px-6 pb-7 pt-[calc(1.15rem+env(safe-area-inset-top))] text-primary-foreground shadow-[0_10px_22px_rgba(249,115,22,0.18)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.1),transparent_46%)]" />
         <div className="relative mx-auto flex max-w-sm justify-center">
-          <img src="/logo-branca2.png" alt="SmartBus" className="h-20 w-auto object-contain drop-shadow-sm" />
+          <img src="/logo-branca2.png" alt="SmartBus" className="h-12 w-auto object-contain drop-shadow-sm" />
         </div>
-        <div className="absolute -bottom-4 left-0 h-10 w-full rounded-[50%] bg-[#f8fafc]" />
       </section>
 
-      <main className="mx-auto -mt-4 w-full max-w-md px-5">
-        <section className="relative z-10 mb-6 flex items-center justify-between gap-3">
-          <div className="min-w-0 space-y-2">
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Olá, gestor! 👋</h1>
-            <p className="max-w-[11rem] text-lg leading-snug text-slate-600">Acompanhe tudo o que importa em tempo real.</p>
+      <main className="mx-auto w-full max-w-md px-4 pt-5">
+        <section className="mb-5 flex flex-col gap-3 min-[390px]:flex-row min-[390px]:items-center min-[390px]:justify-between">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <h1 className="whitespace-nowrap text-[1.65rem] font-bold leading-tight tracking-tight text-slate-950">Olá, gestor! <span aria-hidden="true">👋</span></h1>
+            <p className="text-[0.95rem] leading-snug text-slate-600">Acompanhe tudo o que importa em tempo real.</p>
           </div>
           <div
-            className="flex w-32 shrink-0 items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 text-left text-slate-900 shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
+            className="flex w-full items-center gap-2.5 rounded-2xl border border-slate-200/70 bg-white px-3 py-2.5 text-left text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,0.06)] min-[390px]:w-[10.75rem] min-[390px]:shrink-0 min-[430px]:w-48"
             aria-label={`Empresa ativa: ${companyName}`}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[hsl(var(--primary))]">
-              <Building2 className="h-5 w-5" strokeWidth={2.4} />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[hsl(var(--primary))]">
+              <Building2 className="h-[1.05rem] w-[1.05rem]" strokeWidth={2} />
             </span>
-            <span className="min-w-0">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Empresa</span>
-              <span className="block truncate text-xs font-bold leading-tight text-slate-950">{companyName}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.62rem] font-semibold uppercase tracking-wide text-slate-500">Empresa ativa</span>
+              <span className="block truncate text-[0.82rem] font-semibold leading-tight text-slate-950">{companyName}</span>
             </span>
           </div>
         </section>
 
-        <section className="grid grid-cols-2 gap-4" aria-label="Acessos rápidos do gestor">
+        <section className="grid grid-cols-2 gap-3 min-[390px]:gap-3.5" aria-label="Acessos rápidos do gestor">
           {cards.map((item) => (
             <Link
               key={item.title}
               to={item.href}
-              className="group flex min-h-[9rem] flex-col items-center justify-center rounded-[1.35rem] border border-slate-100 bg-white px-3 py-5 text-center shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition active:scale-[0.98]"
+              className="group flex min-h-[6.9rem] flex-col items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white px-3 py-3.5 text-center shadow-[0_7px_18px_rgba(15,23,42,0.055)] transition active:scale-[0.98] min-[390px]:min-h-[7.25rem] min-[430px]:min-h-[7.5rem]"
             >
-              <item.icon className="mb-4 h-12 w-12 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={2.5} />
-              <span className="text-xl font-extrabold leading-tight text-slate-950">{item.title}</span>
-              <span className="mt-2 text-sm leading-snug text-slate-600">{item.description}</span>
+              <item.icon className="mb-2.5 h-9 w-9 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={1.9} />
+              <span className="text-[1.02rem] font-semibold leading-tight text-slate-950">{item.title}</span>
+              <span className="mt-1.5 text-[0.78rem] leading-snug text-slate-500">{item.description}</span>
             </Link>
           ))}
 
           <button
             type="button"
             onClick={openAdminMobileMenu}
-            className="group flex min-h-[9rem] flex-col items-center justify-center rounded-[1.35rem] border border-slate-100 bg-white px-3 py-5 text-center shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition active:scale-[0.98]"
+            className="group flex min-h-[6.9rem] flex-col items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white px-3 py-3.5 text-center shadow-[0_7px_18px_rgba(15,23,42,0.055)] transition active:scale-[0.98] min-[390px]:min-h-[7.25rem] min-[430px]:min-h-[7.5rem]"
           >
-            <LayoutGrid className="mb-4 h-12 w-12 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={2.5} />
-            <span className="text-xl font-extrabold leading-tight text-slate-950">Mais</span>
-            <span className="mt-2 text-sm leading-snug text-slate-600">Outras funcionalidades</span>
+            <LayoutGrid className="mb-2.5 h-9 w-9 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={1.9} />
+            <span className="text-[1.02rem] font-semibold leading-tight text-slate-950">Mais</span>
+            <span className="mt-1.5 text-[0.78rem] leading-snug text-slate-500">Outras funcionalidades</span>
           </button>
         </section>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-100 bg-white/95 px-5 pb-[calc(0.7rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden" aria-label="Navegação principal mobile">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/95 px-4 pb-[calc(0.45rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-6px_18px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden" aria-label="Navegação principal mobile">
+        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
           {bottomNavItems.map((item) => (
             <Link
               key={item.title}
               to={item.href}
               className={cn(
-                'flex flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium transition active:scale-95',
+                'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1 text-[0.68rem] font-medium transition active:scale-95',
                 isActiveMobilePath(activePath, item.href) ? 'text-[hsl(var(--primary))]' : 'text-slate-500'
               )}
             >
-              <item.icon className="h-6 w-6" fill={isActiveMobilePath(activePath, item.href) ? 'currentColor' : 'none'} strokeWidth={2.4} />
+              <item.icon className="h-5 w-5" fill={isActiveMobilePath(activePath, item.href) ? 'currentColor' : 'none'} strokeWidth={2} />
               <span>{item.title}</span>
             </Link>
           ))}
           <button
             type="button"
             onClick={openAdminMobileMenu}
-            className="flex flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-medium text-slate-500 transition active:scale-95"
+            className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1 text-[0.68rem] font-medium text-slate-500 transition active:scale-95"
           >
-            <MoreHorizontal className="h-6 w-6" strokeWidth={2.4} />
+            <MoreHorizontal className="h-5 w-5" strokeWidth={2} />
             <span>Mais</span>
           </button>
         </div>
@@ -369,7 +369,7 @@ function formatPercent(value: number | null) {
   return `${value.toFixed(1)}%`;
 }
 
-function SmartbusTipImage({ src, alt }: { src: string; alt: string }) {
+function SmartbusTipImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [hasError, setHasError] = useState(false);
 
   if (hasError) {
@@ -384,7 +384,7 @@ function SmartbusTipImage({ src, alt }: { src: string; alt: string }) {
     <img
       src={src}
       alt={alt}
-      className="h-32 w-full rounded-xl border bg-muted/20 object-cover"
+      className={cn('h-32 w-full rounded-xl border bg-muted/20 object-cover', className)}
       loading="lazy"
       onError={() => setHasError(true)}
     />
@@ -403,6 +403,8 @@ export default function Dashboard() {
   const [onboardingPopupOpen, setOnboardingPopupOpen] = useState(false);
   const [smartbusTipsOpen, setSmartbusTipsOpen] = useState(false);
   const [doNotShowSmartbusTips, setDoNotShowSmartbusTips] = useState(false);
+  const [smartbusTipsCarouselApi, setSmartbusTipsCarouselApi] = useState<CarouselApi>();
+  const [smartbusTipsCarouselIndex, setSmartbusTipsCarouselIndex] = useState(0);
   const lastPopupModeRef = useRef<OnboardingPopupMode | null>(null);
   const onboardingWelcomeDismissKey = useMemo(
     () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
@@ -763,6 +765,31 @@ export default function Dashboard() {
     setSmartbusTipsOpen(window.localStorage.getItem(smartbusTipsDismissKey) !== '1');
   }, [canViewSmartbusTips, onboardingPopupOpen, shouldShowOnboardingCard, smartbusTipsDismissKey]);
 
+  useEffect(() => {
+    if (!smartbusTipsCarouselApi) return;
+
+    const updateSmartbusTipsCarouselIndex = () => {
+      setSmartbusTipsCarouselIndex(smartbusTipsCarouselApi.selectedScrollSnap());
+    };
+
+    updateSmartbusTipsCarouselIndex();
+    smartbusTipsCarouselApi.on('select', updateSmartbusTipsCarouselIndex);
+    smartbusTipsCarouselApi.on('reInit', updateSmartbusTipsCarouselIndex);
+
+    return () => {
+      smartbusTipsCarouselApi.off('select', updateSmartbusTipsCarouselIndex);
+      smartbusTipsCarouselApi.off('reInit', updateSmartbusTipsCarouselIndex);
+    };
+  }, [smartbusTipsCarouselApi]);
+
+  useEffect(() => {
+    if (!smartbusTipsOpen) return;
+
+    // Comentário: ao reabrir o popup mobile, o carrossel volta ao primeiro conteúdo em vez de manter o último slide visto.
+    setSmartbusTipsCarouselIndex(0);
+    smartbusTipsCarouselApi?.scrollTo(0);
+  }, [smartbusTipsCarouselApi, smartbusTipsOpen]);
+
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
     queryKey: ['dashboard-op', activeCompanyId, period],
@@ -1093,47 +1120,123 @@ export default function Dashboard() {
 
         {canViewSmartbusTips && (
           <Dialog open={smartbusTipsOpen} onOpenChange={handleSmartbusTipsOpenChange}>
-            <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="max-lg:grid max-lg:h-[calc(100dvh-1rem)] max-lg:max-h-[calc(100dvh-1rem)] max-lg:w-[calc(100%-1rem)] max-lg:max-w-md max-lg:grid-rows-[auto_minmax(0,1fr)_auto] max-lg:gap-0 max-lg:overflow-hidden max-lg:rounded-2xl max-lg:p-0 max-lg:[&>button]:right-3 max-lg:[&>button]:top-[calc(0.75rem+env(safe-area-inset-top))] max-lg:[&>button]:flex max-lg:[&>button]:h-10 max-lg:[&>button]:w-10 max-lg:[&>button]:items-center max-lg:[&>button]:justify-center lg:max-h-[90vh] lg:max-w-5xl lg:overflow-y-auto">
+              <DialogHeader className="hidden lg:flex">
                 <DialogTitle>Explore mais possibilidades com o SmartBus</DialogTitle>
                 <DialogDescription>
                   Além de passagens, você também pode vender passeios, serviços, pacotes e experiências.
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {smartbusTips.map((tip) => (
-                  <Card key={tip.title} className="overflow-hidden">
-                    <CardContent className="flex h-full flex-col gap-4 p-4">
-                      <SmartbusTipImage src={tip.image} alt={tip.title} />
-                      <div className="space-y-2">
-                        <h3 className="text-sm font-semibold">{tip.title}</h3>
-                        <p className="text-sm text-muted-foreground">{tip.description}</p>
-                      </div>
-                      <Button
-                        className="mt-auto w-full"
-                        variant={tip.href ? 'outline' : 'default'}
-                        onClick={() => {
-                          if (tip.href) {
-                            handleSmartbusTipsOpenChange(false);
-                            if ('openInNewTab' in tip && tip.openInNewTab) {
-                              window.open(tip.href, '_blank', 'noopener,noreferrer');
+              <DialogHeader className="border-b bg-background px-4 pb-3 pt-[calc(1rem+env(safe-area-inset-top))] pr-14 text-left lg:hidden">
+                <DialogTitle className="text-base leading-tight">Explore o SmartBus</DialogTitle>
+                <DialogDescription className="text-xs leading-snug">
+                  Conheça outras formas de vender e organizar sua operação.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="min-h-0 overflow-y-auto px-4 py-3 lg:overflow-visible lg:p-0">
+                {/* Comentário: no mobile, o mesmo conteúdo vira carrossel para evitar uma coluna longa de cards desktop comprimidos. */}
+                <Carousel setApi={setSmartbusTipsCarouselApi} opts={{ align: 'start' }} className="lg:hidden">
+                  <CarouselContent className="-ml-3">
+                    {smartbusTips.map((tip) => (
+                      <CarouselItem key={tip.title} className="pl-3">
+                        <Card className="overflow-hidden rounded-2xl border-border/70 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
+                          <CardContent className="flex min-h-[19.5rem] flex-col gap-3 p-3.5">
+                            <SmartbusTipImage src={tip.image} alt={tip.title} className="h-28 rounded-xl" />
+                            <div className="space-y-1.5">
+                              <h3 className="text-sm font-semibold leading-snug">{tip.title}</h3>
+                              <p className="text-[0.82rem] leading-relaxed text-muted-foreground">{tip.description}</p>
+                            </div>
+                            <Button
+                              className="mt-auto h-10 w-full"
+                              variant={tip.href ? 'outline' : 'default'}
+                              onClick={() => {
+                                if (tip.href) {
+                                  handleSmartbusTipsOpenChange(false);
+                                  if ('openInNewTab' in tip && tip.openInNewTab) {
+                                    window.open(tip.href, '_blank', 'noopener,noreferrer');
+                                    return;
+                                  }
+                                  navigate(tip.href);
+                                  return;
+                                }
+                                handleOpenPublicShowcaseFromSmartbusTips();
+                              }}
+                            >
+                              {tip.buttonLabel}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                  <div className="mt-3 flex flex-col items-center gap-1.5" aria-label="Conteúdos disponíveis">
+                    <span className="text-[0.68rem] font-medium text-muted-foreground">
+                      {smartbusTipsCarouselIndex + 1} de {smartbusTips.length}
+                    </span>
+                    <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
+                      {smartbusTips.map((tip, index) => (
+                        <button
+                          key={tip.title}
+                          type="button"
+                          className={cn(
+                            'h-2 rounded-full transition-all',
+                            smartbusTipsCarouselIndex === index ? 'w-6 bg-[hsl(var(--primary))]' : 'w-2 bg-muted-foreground/30'
+                          )}
+                          aria-label={`Ir para ${tip.title}`}
+                          aria-current={smartbusTipsCarouselIndex === index ? 'true' : undefined}
+                          onClick={() => smartbusTipsCarouselApi?.scrollTo(index)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </Carousel>
+
+                <div className="hidden gap-4 lg:grid lg:grid-cols-3">
+                  {smartbusTips.map((tip) => (
+                    <Card key={tip.title} className="overflow-hidden">
+                      <CardContent className="flex h-full flex-col gap-4 p-4">
+                        <SmartbusTipImage src={tip.image} alt={tip.title} />
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-semibold">{tip.title}</h3>
+                          <p className="text-sm text-muted-foreground">{tip.description}</p>
+                        </div>
+                        <Button
+                          className="mt-auto w-full"
+                          variant={tip.href ? 'outline' : 'default'}
+                          onClick={() => {
+                            if (tip.href) {
+                              handleSmartbusTipsOpenChange(false);
+                              if ('openInNewTab' in tip && tip.openInNewTab) {
+                                window.open(tip.href, '_blank', 'noopener,noreferrer');
+                                return;
+                              }
+                              navigate(tip.href);
                               return;
                             }
-                            navigate(tip.href);
-                            return;
-                          }
-                          handleOpenPublicShowcaseFromSmartbusTips();
-                        }}
-                      >
-                        {tip.buttonLabel}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
+                            handleOpenPublicShowcaseFromSmartbusTips();
+                          }}
+                        >
+                          {tip.buttonLabel}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
 
-              <DialogFooter className="items-center justify-between gap-3 sm:justify-between">
+              <DialogFooter className="border-t bg-background px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3 lg:hidden">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={doNotShowSmartbusTips}
+                    onCheckedChange={(checked) => setDoNotShowSmartbusTips(checked === true)}
+                  />
+                  Não mostrar novamente
+                </label>
+              </DialogFooter>
+
+              <DialogFooter className="hidden items-center justify-between gap-3 sm:justify-between lg:flex">
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Checkbox
                     checked={doNotShowSmartbusTips}
