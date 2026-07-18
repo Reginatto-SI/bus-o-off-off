@@ -109,6 +109,7 @@ export function AdminSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobileDashboardHome = location.pathname === '/admin/dashboard';
+  const usesCustomMobileAdminChrome = isMobileDashboardHome || location.pathname === '/admin/vendas';
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
 
@@ -468,7 +469,7 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={200}>
       {/* Mobile menu button */}
-      <div className={cn('lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b items-center px-3', isMobileDashboardHome ? 'hidden' : 'flex')}>
+      <div className={cn('lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-card border-b items-center px-3', usesCustomMobileAdminChrome ? 'hidden' : 'flex')}>
         <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
           <Menu className="h-5 w-5" />
         </Button>
