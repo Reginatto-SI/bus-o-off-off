@@ -15,7 +15,6 @@ import {
   Users,
   BarChart3,
   Building2,
-  Bus,
   ClipboardList,
   FileText,
   Home,
@@ -223,10 +222,10 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
   },
   {
     // Comentário: visibilidade herdada do item Validador de Passagens do menu administrativo.
-    title: 'Embarque',
-    description: 'Controle validações',
+    title: 'Validar passagens',
+    description: 'Escaneie o QR Code',
     href: '/validador',
-    icon: Bus,
+    icon: QrCode,
   },
   {
     // Comentário: usa a rota real de lista de embarque para não duplicar o card de Vendas.
@@ -253,7 +252,7 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
 const mobileBottomNavCandidates: MobileHomeLinkItem[] = [
   { title: 'Início', href: '/admin/dashboard', icon: Home },
   { title: 'Vendas', href: '/admin/vendas', icon: BarChart3 },
-  { title: 'Embarque', href: '/validador', icon: Bus },
+  { title: 'Validar', href: '/validador', icon: QrCode },
   { title: 'Relatórios', href: '/admin/relatorios/vendas', icon: FileText },
 ];
 
@@ -339,7 +338,7 @@ function MobileDashboardHome({
               className="group flex min-h-[6.9rem] flex-col items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white px-3 py-3.5 text-center shadow-[0_7px_18px_rgba(15,23,42,0.055)] transition active:scale-[0.98] min-[390px]:min-h-[7.25rem] min-[430px]:min-h-[7.5rem]"
             >
               <item.icon className="mb-2.5 h-9 w-9 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={1.9} />
-              <span className="text-[1.02rem] font-semibold leading-tight text-slate-950">{item.title}</span>
+              <span className="text-[0.98rem] font-semibold leading-tight text-slate-950 min-[390px]:text-[1.02rem]">{item.title}</span>
               <span className="mt-1.5 text-[0.78rem] leading-snug text-slate-500">{item.description}</span>
             </Link>
           ))}
