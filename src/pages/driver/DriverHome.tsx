@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Logo } from '@/components/Logo';
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock, Settings, Check, ChevronsUpDown } from 'lucide-react';
+import { Home, Loader2, LogOut, QrCode, Users, Calendar, MapPin, Clock, Settings, Check, ChevronsUpDown } from 'lucide-react';
 import { VersionIndicator } from '@/components/system/VersionIndicator';
 import {
   DropdownMenu,
@@ -57,6 +57,8 @@ export default function DriverHome() {
 
   const canAccessDriverPortal =
     userRole === 'motorista' || userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
+  // Comentário: a rota /admin/dashboard é a home administrativa usada por operador, gerente e developer; motorista permanece apenas no validador.
+  const canReturnToAdminDashboard = userRole === 'operador' || userRole === 'gerente' || userRole === 'developer';
 
   const [allTrips, setAllTrips] = useState<TripInfo[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
@@ -421,25 +423,42 @@ export default function DriverHome() {
     <div className="min-h-screen bg-background px-4 py-6">
       <div className="mx-auto w-full max-w-md space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <Logo size="lg" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Configurações">
-                <Settings className="h-5 w-5" />
+        <div className="flex items-center justify-between gap-3">
+          {canReturnToAdminDashboard ? (
+            <Link to="/admin/dashboard" aria-label="Voltar ao painel do SmartBus" className="shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              <Logo size="lg" />
+            </Link>
+          ) : (
+            <Logo size="lg" />
+          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {canReturnToAdminDashboard && (
+              <Button variant="ghost" size="sm" className="h-9 px-2 text-xs font-medium" asChild>
+                <Link to="/admin/dashboard" aria-label="Voltar ao painel do SmartBus">
+                  <Home className="h-4 w-4 min-[360px]:mr-1.5" />
+                  <span className="hidden min-[360px]:inline min-[430px]:hidden">Início</span>
+                  <span className="hidden min-[430px]:inline">Voltar ao painel</span>
+                </Link>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate('/validador/preferencias')}>
-                <Settings className="mr-2 h-4 w-4" />
-                Preferências
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={signOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Configurações">
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => navigate('/validador/preferencias')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Preferências
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={signOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Greeting */}
