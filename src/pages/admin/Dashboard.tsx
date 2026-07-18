@@ -19,7 +19,6 @@ import {
   FileText,
   Home,
   LayoutGrid,
-  MoreHorizontal,
   Circle,
   CheckCircle2,
   ArrowRight,
@@ -43,6 +42,8 @@ import {
 } from 'recharts';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { adminMobileBottomNavItems, type AdminMobileBottomNavItem } from '@/components/layout/adminMobileBottomNavItems';
 import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
@@ -222,10 +223,10 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
   },
   {
     // Comentário: visibilidade herdada do item Validador de Passagens do menu administrativo.
-    title: 'Validar passagens',
-    description: 'Escaneie o QR Code',
-    href: '/validador',
-    icon: QrCode,
+    title: 'Embarque',
+    description: 'Controle validações',
+    href: '/validador/embarque',
+    icon: Bus,
   },
   {
     // Comentário: usa a rota real de lista de embarque para não duplicar o card de Vendas.
@@ -249,23 +250,14 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
   },
 ];
 
-const mobileBottomNavCandidates: MobileHomeLinkItem[] = [
-  { title: 'Início', href: '/admin/dashboard', icon: Home },
-  { title: 'Vendas', href: '/admin/vendas', icon: BarChart3 },
-  { title: 'Validar', href: '/validador', icon: QrCode },
-  { title: 'Relatórios', href: '/admin/relatorios/vendas', icon: FileText },
-];
+const mobileBottomNavCandidates: AdminMobileBottomNavItem[] = adminMobileBottomNavItems;
 
 function openAdminMobileMenu() {
   window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
 }
 
-function isActiveMobilePath(currentPath: string, href: string) {
-  return currentPath === href || currentPath.startsWith(`${href}/`);
-}
 
 function MobileDashboardHome({
-  activePath,
   cards,
   bottomNavItems,
   companyName,
@@ -278,9 +270,8 @@ function MobileDashboardHome({
   todaySummaryError,
   recentSalesError,
 }: {
-  activePath: string;
   cards: MobileHomeLinkItem[];
-  bottomNavItems: MobileHomeLinkItem[];
+  bottomNavItems: AdminMobileBottomNavItem[];
   companyName: string;
   canViewFinancials: boolean;
   canViewSalesRoute: boolean;
@@ -428,31 +419,7 @@ function MobileDashboardHome({
         </section>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/70 bg-white/95 px-4 pb-[calc(0.45rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-6px_18px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden" aria-label="Navegação principal mobile">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
-          {bottomNavItems.map((item) => (
-            <Link
-              key={item.title}
-              to={item.href}
-              className={cn(
-                'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1 text-[0.68rem] font-medium transition active:scale-95',
-                isActiveMobilePath(activePath, item.href) ? 'text-[hsl(var(--primary))]' : 'text-slate-500'
-              )}
-            >
-              <item.icon className="h-5 w-5" fill={isActiveMobilePath(activePath, item.href) ? 'currentColor' : 'none'} strokeWidth={2} />
-              <span>{item.title}</span>
-            </Link>
-          ))}
-          <button
-            type="button"
-            onClick={openAdminMobileMenu}
-            className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1 text-[0.68rem] font-medium text-slate-500 transition active:scale-95"
-          >
-            <MoreHorizontal className="h-5 w-5" strokeWidth={2} />
-            <span>Mais</span>
-          </button>
-        </div>
-      </nav>
+      <AdminMobileBottomNav activeItem="inicio" items={bottomNavItems} onMoreClick={openAdminMobileMenu} />
     </div>
   );
 }
@@ -605,15 +572,16 @@ export default function Dashboard() {
     // Comentário: cards e menu inferior reutilizam a regra real do menu administrativo por href, sem segunda matriz de permissões.
     return (href: string) => {
       if (href === '/admin/dashboard') return true;
+      const navigationHref = href === '/validador/embarque' ? '/validador' : href;
       return canViewAdminNavigationItem({
-        item: findAdminNavigationItemByHref(href),
+        item: findAdminNavigationItemByHref(navigationHref),
         userRole,
         isDeveloper,
         canAccessTemplatesLayout,
       });
     };
   }, [canAccessTemplatesLayout, isDeveloper, userRole]);
-  const canAccessDriverValidatorShortcut = canViewMobileRoute('/validador');
+  const canAccessDriverValidatorShortcut = canViewMobileRoute('/validador/embarque');
   const mobileHomeCards = useMemo(
     () => mobileHomeCardCandidates.filter((item) => canViewMobileRoute(item.href)).slice(0, 5),
     [canViewMobileRoute]
@@ -1276,7 +1244,6 @@ export default function Dashboard() {
   return (
     <AdminLayout>
       <MobileDashboardHome
-        activePath={location.pathname}
         cards={mobileHomeCards}
         bottomNavItems={mobileBottomNavItems}
         companyName={mobileCompanyName}
