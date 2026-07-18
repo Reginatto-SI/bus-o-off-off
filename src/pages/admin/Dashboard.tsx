@@ -27,6 +27,7 @@ import {
   ImageIcon,
   Sparkles,
   QrCode,
+  Clock3,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -56,6 +57,7 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsBelowBreakpoint } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { formatCurrencyBRL } from '@/lib/currency';
@@ -101,6 +103,22 @@ interface RankItem {
   count: number;
 }
 
+interface MobileTodaySummary {
+  paidSales: number;
+  ticketsSold: number;
+  grossRevenue: number;
+  eventsWithSales: number;
+  activeEvents: number;
+}
+
+interface MobileRecentSale {
+  id: string;
+  eventName: string;
+  quantity: number;
+  grossAmount: number;
+  createdAt: string;
+}
+
 type SaleStatus = Database['public']['Enums']['sale_status'];
 type EventSalesRankRow = {
   event_id: string;
@@ -111,6 +129,29 @@ type SellerSalesRankRow = {
   seller_id: string | null;
   quantity: number | null;
   sellers: { name: string | null } | null;
+};
+
+type MobileTodayOperationalSaleRow = {
+  id: string;
+  event_id: string | null;
+  quantity: number | null;
+};
+
+type MobileTodayFinancialSaleRow = MobileTodayOperationalSaleRow & {
+  gross_amount: number | null;
+  unit_price: number | null;
+};
+
+type MobileRecentOperationalSaleRow = {
+  id: string;
+  created_at: string;
+  quantity: number | null;
+  events: { name: string | null } | null;
+};
+
+type MobileRecentFinancialSaleRow = MobileRecentOperationalSaleRow & {
+  gross_amount: number | null;
+  unit_price: number | null;
 };
 
 interface OnboardingChecklistStatus {
@@ -154,6 +195,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 const CHART_LINE_COLOR = 'hsl(var(--primary))';
 const SMARTBUS_TIPS_ADMIN_ROLES = ['developer', 'gerente', 'operador'] as const;
+const LG_BREAKPOINT = 1024;
+const MOBILE_TODAY_OPERATIONAL_SALE_SELECT = 'id, event_id, quantity';
+const MOBILE_TODAY_FINANCIAL_SALE_SELECT = `${MOBILE_TODAY_OPERATIONAL_SALE_SELECT}, gross_amount, unit_price`;
+const MOBILE_RECENT_OPERATIONAL_SALE_SELECT = 'id, created_at, quantity, events(name)';
+const MOBILE_RECENT_FINANCIAL_SALE_SELECT = 'id, created_at, quantity, gross_amount, unit_price, events(name)';
 
 type MobileHomeLinkItem = {
   title: string;
@@ -224,12 +270,37 @@ function MobileDashboardHome({
   cards,
   bottomNavItems,
   companyName,
+  canViewFinancials,
+  canViewSalesRoute,
+  todaySummary,
+  recentSales,
+  todaySummaryLoading,
+  recentSalesLoading,
+  todaySummaryError,
+  recentSalesError,
 }: {
   activePath: string;
   cards: MobileHomeLinkItem[];
   bottomNavItems: MobileHomeLinkItem[];
   companyName: string;
+  canViewFinancials: boolean;
+  canViewSalesRoute: boolean;
+  todaySummary?: MobileTodaySummary;
+  recentSales?: MobileRecentSale[];
+  todaySummaryLoading: boolean;
+  recentSalesLoading: boolean;
+  todaySummaryError: boolean;
+  recentSalesError: boolean;
 }) {
+  const summaryItems = [
+    { title: 'Vendas pagas', value: String(todaySummary?.paidSales ?? 0), icon: CheckCircle2 },
+    { title: 'Passagens vendidas', value: String(todaySummary?.ticketsSold ?? 0), icon: Ticket },
+    canViewFinancials
+      ? { title: 'Valor vendido', value: formatCurrencyBRL(todaySummary?.grossRevenue ?? 0), icon: DollarSign }
+      : { title: 'Eventos ativos', value: String(todaySummary?.activeEvents ?? 0), icon: Calendar },
+    { title: 'Eventos com vendas', value: String(todaySummary?.eventsWithSales ?? 0), icon: Calendar },
+  ];
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
       {/* Comentário: home mobile exclusiva; o dashboard desktop continua renderizado apenas em telas grandes. */}
@@ -282,6 +353,79 @@ function MobileDashboardHome({
             <span className="text-[1.02rem] font-semibold leading-tight text-slate-950">Mais</span>
             <span className="mt-1.5 text-[0.78rem] leading-snug text-slate-500">Outras funcionalidades</span>
           </button>
+        </section>
+
+        <section className="mt-6 space-y-3" aria-labelledby="mobile-today-summary-title">
+          <h2 id="mobile-today-summary-title" className="text-base font-bold text-slate-950">Resumo de hoje</h2>
+          {todaySummaryError ? (
+            <p className="rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-600 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">Não foi possível carregar o resumo de hoje agora.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2.5 min-[390px]:gap-3">
+                {summaryItems.map((item) => (
+                  <div key={item.title} className="rounded-2xl border border-slate-200/70 bg-white p-3 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+                    {todaySummaryLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-6 rounded-lg" />
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-6 w-16" />
+                      </div>
+                    ) : (
+                      <>
+                        <span className="mb-2 flex h-7 w-7 items-center justify-center rounded-lg bg-orange-50 text-[hsl(var(--primary))]">
+                          <item.icon className="h-4 w-4" strokeWidth={2} />
+                        </span>
+                        <span className="block text-[0.7rem] font-semibold leading-tight text-slate-500">{item.title}</span>
+                        <span className="mt-1 block truncate text-[1.12rem] font-bold leading-tight text-slate-950">{item.value}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!todaySummaryLoading && (todaySummary?.paidSales ?? 0) === 0 && (
+                <p className="text-sm text-slate-500">Nenhuma venda confirmada hoje.</p>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="mt-6 space-y-3" aria-labelledby="mobile-recent-sales-title">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="mobile-recent-sales-title" className="text-base font-bold text-slate-950">Últimas vendas</h2>
+            {canViewSalesRoute && (
+              <Link to="/admin/vendas" className="text-sm font-semibold text-[hsl(var(--primary))] active:opacity-80">Ver todas</Link>
+            )}
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+            {recentSalesError ? (
+              <p className="px-4 py-3 text-sm text-slate-600">Não foi possível carregar as últimas vendas agora.</p>
+            ) : recentSalesLoading ? (
+              <div className="divide-y divide-slate-100">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="space-y-2 px-4 py-3">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-44" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                ))}
+              </div>
+            ) : (recentSales?.length ?? 0) === 0 ? (
+              <p className="px-4 py-3 text-sm text-slate-500">As vendas confirmadas aparecerão aqui.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {recentSales?.map((sale) => (
+                  <div key={sale.id} className="px-4 py-3">
+                    <p className="truncate text-sm font-semibold text-slate-950">{sale.eventName}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {sale.quantity} {sale.quantity === 1 ? 'passagem' : 'passagens'}
+                      {canViewFinancials && <> · {formatCurrencyBRL(sale.grossAmount)}</>}
+                    </p>
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-500"><Clock3 className="h-3 w-3" />{formatMobileSaleTime(sale.createdAt)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </main>
 
@@ -369,6 +513,21 @@ function formatPercent(value: number | null) {
   return `${value.toFixed(1)}%`;
 }
 
+function formatMobileSaleTime(dateInput: string) {
+  return format(new Date(dateInput), 'HH:mm', { locale: ptBR });
+}
+
+function getMobileTodayRange(now = new Date()) {
+  const dayKey = format(now, 'yyyy-MM-dd');
+  const dayStart = startOfDay(now);
+
+  return {
+    dayKey,
+    todayStartIso: dayStart.toISOString(),
+    tomorrowStartIso: addDays(dayStart, 1).toISOString(),
+  };
+}
+
 function SmartbusTipImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [hasError, setHasError] = useState(false);
 
@@ -397,6 +556,7 @@ function SmartbusTipImage({ src, alt, className }: { src: string; alt: string; c
 
 export default function Dashboard() {
   const { user, activeCompanyId, activeCompany, canViewFinancials, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
+  const isMobileDashboardHomeVisible = useIsBelowBreakpoint(LG_BREAKPOINT);
   const navigate = useNavigate();
   const location = useLocation();
   const [period, setPeriod] = useState<Period>(30);
@@ -405,6 +565,7 @@ export default function Dashboard() {
   const [doNotShowSmartbusTips, setDoNotShowSmartbusTips] = useState(false);
   const [smartbusTipsCarouselApi, setSmartbusTipsCarouselApi] = useState<CarouselApi>();
   const [smartbusTipsCarouselIndex, setSmartbusTipsCarouselIndex] = useState(0);
+  const [mobileTodayRange, setMobileTodayRange] = useState(() => getMobileTodayRange());
   const lastPopupModeRef = useRef<OnboardingPopupMode | null>(null);
   const onboardingWelcomeDismissKey = useMemo(
     () => `admin-dashboard:onboarding-popup-welcome-dismissed:${activeCompanyId ?? 'no-company'}`,
@@ -790,6 +951,98 @@ export default function Dashboard() {
     smartbusTipsCarouselApi?.scrollTo(0);
   }, [smartbusTipsCarouselApi, smartbusTipsOpen]);
 
+  useEffect(() => {
+    if (!isMobileDashboardHomeVisible) return;
+
+    const syncMobileTodayRange = () => {
+      const nextRange = getMobileTodayRange();
+      // Atualiza apenas quando a chave do dia muda; assim o refetch ao foco usa o novo intervalo sem polling.
+      setMobileTodayRange((currentRange) => (currentRange.dayKey === nextRange.dayKey ? currentRange : nextRange));
+    };
+
+    window.addEventListener('focus', syncMobileTodayRange);
+    document.addEventListener('visibilitychange', syncMobileTodayRange);
+    syncMobileTodayRange();
+
+    return () => {
+      window.removeEventListener('focus', syncMobileTodayRange);
+      document.removeEventListener('visibilitychange', syncMobileTodayRange);
+    };
+  }, [isMobileDashboardHomeVisible]);
+
+  // Mantém as consultas novas restritas à experiência mobile (<lg), evitando tráfego oculto no dashboard desktop.
+  const mobileQueriesEnabled = enabled && isMobileDashboardHomeVisible;
+
+  const { data: mobileTodaySummary, isLoading: mobileTodaySummaryLoading, isError: mobileTodaySummaryError } = useQuery({
+    queryKey: ['dashboard-mobile-today-summary', activeCompanyId, mobileTodayRange.dayKey, canViewFinancials],
+    enabled: mobileQueriesEnabled,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    queryFn: async (): Promise<MobileTodaySummary> => {
+      const [{ data: todaySales, error: todaySalesError }, { count: activeEventsCount, error: activeEventsError }] = await Promise.all([
+        supabase
+          .from('sales')
+          .select(canViewFinancials ? MOBILE_TODAY_FINANCIAL_SALE_SELECT : MOBILE_TODAY_OPERATIONAL_SALE_SELECT)
+          .eq('company_id', activeCompanyId!)
+          .eq('status', 'pago')
+          .gte('created_at', mobileTodayRange.todayStartIso)
+          .lt('created_at', mobileTodayRange.tomorrowStartIso),
+        supabase
+          .from('events')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', activeCompanyId!)
+          .eq('status', 'a_venda')
+          .eq('is_archived', false),
+      ]);
+
+      if (todaySalesError) throw todaySalesError;
+      if (activeEventsError) throw activeEventsError;
+
+      const paidSales = (todaySales ?? []) as Array<MobileTodayOperationalSaleRow | MobileTodayFinancialSaleRow>;
+      const eventIds = new Set(paidSales.map((sale) => sale.event_id).filter(Boolean));
+      const financialSales = canViewFinancials ? paidSales as MobileTodayFinancialSaleRow[] : [];
+      return {
+        paidSales: paidSales.length,
+        // Mesma regra operacional já usada no dashboard e em /admin/vendas: quantity da venda.
+        ticketsSold: paidSales.reduce((sum, sale) => sum + (Number(sale.quantity) || 0), 0),
+        // Mesma base financeira exibida em vendas/relatórios: gross_amount com fallback quantity * unit_price.
+        grossRevenue: financialSales.reduce((sum, sale) => sum + (Number(sale.gross_amount) || (Number(sale.quantity) || 0) * (Number(sale.unit_price) || 0)), 0),
+        eventsWithSales: eventIds.size,
+        activeEvents: activeEventsCount ?? 0,
+      };
+    },
+  });
+
+  const { data: mobileRecentSales, isLoading: mobileRecentSalesLoading, isError: mobileRecentSalesError } = useQuery({
+    queryKey: ['dashboard-mobile-recent-sales', activeCompanyId, canViewFinancials],
+    enabled: mobileQueriesEnabled,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    queryFn: async (): Promise<MobileRecentSale[]> => {
+      const { data, error } = await supabase
+        .from('sales')
+        .select(canViewFinancials ? MOBILE_RECENT_FINANCIAL_SALE_SELECT : MOBILE_RECENT_OPERATIONAL_SALE_SELECT)
+        .eq('company_id', activeCompanyId!)
+        .eq('status', 'pago')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (error) throw error;
+
+      const recentRows = (data ?? []) as Array<MobileRecentOperationalSaleRow | MobileRecentFinancialSaleRow>;
+      return recentRows.map((sale) => {
+        const financialSale = canViewFinancials ? sale as MobileRecentFinancialSaleRow : null;
+        return {
+          id: sale.id,
+          eventName: sale.events?.name ?? 'Evento',
+          quantity: Number(sale.quantity) || 0,
+          grossAmount: financialSale ? Number(financialSale.gross_amount) || (Number(financialSale.quantity) || 0) * (Number(financialSale.unit_price) || 0) : 0,
+          createdAt: sale.created_at,
+        };
+      });
+    },
+  });
+
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
     queryKey: ['dashboard-op', activeCompanyId, period],
@@ -1028,6 +1281,14 @@ export default function Dashboard() {
         cards={mobileHomeCards}
         bottomNavItems={mobileBottomNavItems}
         companyName={mobileCompanyName}
+        canViewFinancials={canViewFinancials}
+        canViewSalesRoute={canViewMobileRoute('/admin/vendas')}
+        todaySummary={mobileTodaySummary}
+        recentSales={mobileRecentSales}
+        todaySummaryLoading={mobileTodaySummaryLoading}
+        recentSalesLoading={mobileRecentSalesLoading}
+        todaySummaryError={mobileTodaySummaryError}
+        recentSalesError={mobileRecentSalesError}
       />
       <div className="hidden p-4 md:p-6 lg:block lg:space-y-6">
         {/* ── Header + Filtro ─────────────────────────── */}
