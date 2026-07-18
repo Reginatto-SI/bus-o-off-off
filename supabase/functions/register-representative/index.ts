@@ -95,6 +95,27 @@ serve(async (req) => {
         );
       }
 
+      // Guarda de divergência: se o usuário já é gerente de uma empresa, o
+      // representante oficial dele deve ser gerido pelo painel administrativo
+      // dessa empresa (/admin/representante), não por cadastro autônomo.
+      const { data: managerRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", existingUser.id)
+        .eq("role", "gerente")
+        .limit(1)
+        .maybeSingle();
+
+      if (managerRole?.company_id) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Este e-mail já é gerente de uma empresa. Acesse o painel administrativo em /admin/representante para gerenciar sua identidade de representante.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       // Reutilizar conta existente — não criar novo auth user.
       userId = existingUser.id;
       reusedAccount = true;
