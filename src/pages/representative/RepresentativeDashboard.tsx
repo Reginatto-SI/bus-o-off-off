@@ -478,9 +478,17 @@ export default function RepresentativeDashboard() {
     return <Navigate to="/login" replace />;
   }
 
+  // Gerentes de empresa gerenciam sua identidade de representante direto no
+  // painel administrativo — evita divergência entre este painel autônomo e o
+  // /admin/representante (dois registros paralelos para o mesmo usuário).
+  if (userRole === 'gerente') {
+    return <Navigate to="/admin/representante" replace />;
+  }
+
   if (!isRepresentative || !representativeProfile) {
     return <Navigate to="/admin/dashboard" replace />;
   }
+
 
   return (
     <div className="min-h-screen w-full max-w-full bg-background">
