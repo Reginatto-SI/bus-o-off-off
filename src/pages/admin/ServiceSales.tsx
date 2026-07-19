@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,7 +110,7 @@ const STEP_DETAILS: Array<{ value: WizardStep; label: string; icon: typeof Spark
 ];
 
 export default function ServiceSales() {
-  const { activeCompanyId, user } = useAuth();
+  const { activeCompanyId, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
 
   const [loading, setLoading] = useState(false);
@@ -128,6 +133,7 @@ export default function ServiceSales() {
   const [buyerName, setBuyerName] = useState('');
   const [latestReceipt, setLatestReceipt] = useState<ServiceSaleReceipt | null>(null);
   const [copyingQrToken, setCopyingQrToken] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId),
@@ -152,6 +158,21 @@ export default function ServiceSales() {
   const totalAmount = useMemo(
     () => (selectedEventService?.base_price ?? 0) * quantity,
     [selectedEventService, quantity],
+  );
+
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Reutiliza o destino visual de embarque e a permissão oficial do menu administrativo (/validador).
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole],
   );
 
   const filteredEvents = useMemo(() => {
@@ -470,9 +491,8 @@ export default function ServiceSales() {
     }
   }
 
-  return (
-    <AdminLayout>
-      <div className="page-container space-y-6">
+  const serviceSalesContent = (
+    <>
         <style>{`
           @media print {
             body * {
@@ -494,21 +514,23 @@ export default function ServiceSales() {
             }
           }
         `}</style>
-        <PageHeader
-          title="Venda de Serviços"
-          description="Wizard operacional para venda rápida vinculada ao evento"
-        />
+        <div className="hidden lg:block">
+          <PageHeader
+            title="Venda de Serviços"
+            description="Wizard operacional para venda rápida vinculada ao evento"
+          />
+        </div>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:rounded-lg lg:border-border lg:bg-card lg:shadow-sm">
           <CardHeader>
             <CardTitle>Fluxo rápido</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
-              <TabsList className="grid w-full grid-cols-3 h-12">
-                <TabsTrigger value="selecionar">1. Seleção</TabsTrigger>
-                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity}>2. Quantidade</TabsTrigger>
-                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity}>3. Pagamento</TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/30 p-1 sm:h-12 sm:gap-0">
+                <TabsTrigger value="selecionar" className="min-h-11 rounded-lg text-xs sm:text-sm">1. Seleção</TabsTrigger>
+                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">2. Quantidade</TabsTrigger>
+                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">3. Pagamento</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -530,7 +552,7 @@ export default function ServiceSales() {
                               <ChevronsUpDown className="h-4 w-4 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[420px] p-0" align="start">
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 sm:w-[420px]" align="start">
                             <Command>
                               <CommandInput
                                 placeholder="Buscar evento..."
@@ -859,6 +881,27 @@ export default function ServiceSales() {
             </CardContent>
           </Card>
         )}
+    </>
+  );
+
+  return (
+    <AdminLayout>
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Venda de serviços" subtitle="SmartBus" showMenuButton={false} />
+        </div>
+
+        <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5 lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+          <section className="space-y-3 lg:hidden">
+            <p className="text-sm text-slate-600">Registre serviços vinculados a eventos usando o fluxo operacional existente.</p>
+          </section>
+          {serviceSalesContent}
+        </main>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );
