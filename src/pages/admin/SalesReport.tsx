@@ -2,6 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, SaleStatus, Seller } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -45,6 +50,7 @@ import {
   List,
   Check,
   ChevronsUpDown,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -127,6 +133,13 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado',
 };
 
+function formatCpfMaskedForDisplay(cpf?: string | null): string {
+  const digits = (cpf ?? '').replace(/\D/g, '');
+  if (digits.length !== 11) return 'CPF não informado';
+  // Comentário de preservação: usa a mesma máscara parcial aplicada na Lista de Embarque para não expor CPF completo no card mobile.
+  return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
+}
+
 const initialFilters: ReportFilters = {
   search: '',
   status: 'all',
@@ -146,7 +159,7 @@ const SALES_REPORT_TABS = {
 type SalesReportTab = (typeof SALES_REPORT_TABS)[keyof typeof SALES_REPORT_TABS];
 
 export default function SalesReport() {
-  const { canViewFinancials, activeCompanyId, activeCompany } = useAuth();
+  const { canViewFinancials, activeCompanyId, activeCompany, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [summaryRows, setSummaryRows] = useState<EventSummaryRow[]>([]);
   const [seatLabelsMap, setSeatLabelsMap] = useState<Record<string, string[]>>({});
@@ -174,6 +187,7 @@ export default function SalesReport() {
   const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
   const [eventFilterSearch, setEventFilterSearch] = useState('');
   const [sellerFilterSearch, setSellerFilterSearch] = useState('');
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   const normalizeDateToIso = (dateInput: string, endOfDay = false) => {
     if (!dateInput) return null;
@@ -195,6 +209,7 @@ export default function SalesReport() {
   });
 
   const applySalesFilters = <T,>(query: T): T => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Query builder Supabase legado encadeia filtros dinâmicos sem tipo comum entre tabelas/RPCs.
     let nextQuery: any = query;
 
     if (activeCompanyId) {
@@ -507,6 +522,25 @@ export default function SalesReport() {
 
   const selectedEventFilterLabel = eventFilterOptions.find((option) => option.value === filters.eventId)?.label ?? 'Todos';
   const selectedSellerFilterLabel = sellerFilterOptions.find((option) => option.value === filters.sellerId)?.label ?? 'Todos';
+  const activeFilterCount = useMemo(() => Object.entries(filters).filter(([key, value]) => value !== initialFilters[key as keyof ReportFilters]).length, [filters]);
+  const reportPeriodLabel = filters.dateFrom || filters.dateTo
+    ? `${filters.dateFrom ? formatDateOnlyBR(filters.dateFrom) : 'Início'} até ${filters.dateTo ? formatDateOnlyBR(filters.dateTo) : 'Hoje'}`
+    : 'Todo o histórico';
+
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Comentário de preservação: Embarque navega para a tela direta, mas a permissão oficial continua sendo /validador.
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole],
+  );
 
   // KPI financeiro oficial: ticket médio considera somente vendas pagas.
   const ticketMedio = stats.paidSales > 0 ? stats.grossRevenue / stats.paidSales : 0;
@@ -522,6 +556,7 @@ export default function SalesReport() {
 
   const detailedFlatData = useMemo(() => {
     return sales.map((s) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tipo legado de Sale não expõe o relacionamento aninhado vehicle retornado pelo select.
       const vehicle = (s.trip as any)?.vehicle;
       return {
         created_at: s.created_at,
@@ -582,9 +617,9 @@ export default function SalesReport() {
     { key: 'cancelled_sales', label: 'Canceladas' },
     ...(canViewFinancials
       ? [
-          { key: 'gross_revenue', label: 'Receita Bruta (Pagas)', format: (v: any) => formatCurrencyBRL(Number(v)) },
-          { key: 'platform_fee', label: 'Custo da Plataforma', format: (v: any) => formatCurrencyBRL(Number(v)) },
-          { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'gross_revenue', label: 'Receita Bruta (Pagas)', format: (v) => formatCurrencyBRL(Number(v)) },
+          { key: 'platform_fee', label: 'Custo da Plataforma', format: (v) => formatCurrencyBRL(Number(v)) },
+          { key: 'sellers_commission', label: 'Comissão dos Vendedores', format: (v) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
   ];
@@ -615,6 +650,64 @@ export default function SalesReport() {
   const getSaleActions = (sale: Sale): ActionItem[] => [
     { label: 'Copiar Link', icon: Copy, onClick: () => handleCopyLink(sale.id) },
   ];
+
+  const mobilePrimaryStats = [
+    ...(canViewFinancials
+      ? [
+          { label: 'Receita Bruta (Pagas)', value: formatCurrencyBRL(stats.grossRevenue), icon: DollarSign, variant: 'success' as const },
+          { label: 'Ticket Médio', value: formatCurrencyBRL(ticketMedio), icon: TrendingUp },
+        ]
+      : []),
+    { label: 'Vendas Geradas', value: stats.totalSales, icon: ShoppingCart },
+    { label: 'Vendas Pagas', value: stats.paidSales, icon: CheckCircle, variant: 'success' as const },
+    { label: 'Cancelamentos', value: stats.cancelledSales, icon: Percent, variant: (cancelPercent > 10 ? 'destructive' : 'warning') as const },
+  ];
+
+  const mobileSummaryCards = (
+    <div className="space-y-3">
+      {summaryRows.map((row) => (
+        <article key={row.eventId} className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+          <h3 className="line-clamp-2 text-sm font-bold text-slate-950">{row.eventDisplayName}</h3>
+          <dl className="mt-3 grid grid-cols-3 gap-3 text-xs">
+            <div><dt className="font-semibold text-slate-500">Vendas</dt><dd className="mt-0.5 text-slate-900">{row.totalSales}</dd></div>
+            <div><dt className="font-semibold text-slate-500">Pagas</dt><dd className="mt-0.5 text-slate-900">{row.paidSales}</dd></div>
+            <div><dt className="font-semibold text-slate-500">Canceladas</dt><dd className="mt-0.5 text-slate-900">{row.cancelledSales}</dd></div>
+          </dl>
+          {canViewFinancials && (
+            <dl className="mt-3 grid grid-cols-1 gap-2 rounded-xl bg-slate-50 p-3 text-xs">
+              <div><dt className="font-semibold text-slate-500">Receita Bruta (Pagas)</dt><dd className="mt-0.5 font-bold text-slate-950">{formatCurrencyBRL(row.grossRevenue)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Custo da Plataforma</dt><dd className="mt-0.5 text-slate-900">{formatCurrencyBRL(row.platformFee)}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Comissão dos Vendedores</dt><dd className="mt-0.5 text-slate-900">{formatCurrencyBRL(row.sellersCommission)}</dd></div>
+            </dl>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+
+  const mobileDetailedCards = (
+    <div className="space-y-3">
+      {sales.map((sale) => {
+        const vehicle = (sale.trip as { vehicle?: { type?: string | null; plate?: string | null } | null } | null)?.vehicle;
+        return (
+          <article key={sale.id} className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold text-slate-950">{sale.customer_name}</h3><p className="mt-1 line-clamp-2 text-xs text-slate-500">{formatEventDisplayName(sale.event) || '-'}</p></div>
+              <ActionsDropdown actions={getSaleActions(sale)} />
+            </div>
+            <div className="mt-3"><StatusBadge status={sale.status} /></div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+              <div><dt className="font-semibold text-slate-500">Data</dt><dd className="mt-0.5 text-slate-900">{format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Qtd</dt><dd className="mt-0.5 text-slate-900">{sale.quantity}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Vendedor</dt><dd className="mt-0.5 text-slate-900">{sale.seller?.name ?? '-'}</dd></div>
+              {canViewFinancials && <div><dt className="font-semibold text-slate-500">Valor Total</dt><dd className="mt-0.5 font-bold text-slate-950">{formatCurrencyBRL(sale.quantity * sale.unit_price)}</dd></div>}
+            </dl>
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"><p className="font-medium text-slate-800">{!sale.trip_id && !sale.boarding_location_id ? 'Venda de serviço avulsa' : vehicle ? `${vehicleTypeLabels[vehicle.type] ?? vehicle.type} • ${vehicle.plate}` : 'Embarque não informado'}</p><p className="mt-0.5">{getSaleBoardingLabel(sale)}</p><p className="mt-0.5">Poltr. {formatSeatLabels(sale.id)}</p><p className="mt-0.5">CPF {formatCpfMaskedForDisplay(sale.customer_cpf)}</p></div>
+          </article>
+        );
+      })}
+    </div>
+  );
 
   const renderPagination = () => (
     <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -663,7 +756,67 @@ export default function SalesReport() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+        <AdminMobileHeader title="Relatório de vendas" subtitle="SmartBus" showMenuButton={false} />
+
+        <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
+          <section className="space-y-3">
+            <p className="text-sm text-slate-600">Visão executiva e analítica das vendas do período.</p>
+            <div className="grid grid-cols-3 gap-2">
+              <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => { setLoading(true); fetchSales(); }} disabled={loading}>
+                {loading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}Atualizar
+              </Button>
+              <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setPdfModalOpen(true)} disabled={loading}>
+                <FileText className="mr-1.5 h-4 w-4" />PDF
+              </Button>
+              <Button variant="outline" size="sm" className="h-10 rounded-xl bg-white" onClick={() => setExcelModalOpen(true)} disabled={loading}>
+                <FileSpreadsheet className="mr-1.5 h-4 w-4" />Excel
+              </Button>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div><h2 className="text-sm font-bold text-slate-950">Resumo principal</h2><p className="mt-1 text-xs text-slate-500">Período: {reportPeriodLabel}</p></div>
+            <div className="grid grid-cols-2 gap-3">
+              {mobilePrimaryStats.map((item) => (
+                <StatsCard key={item.label} className={cn('rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]', item.label === 'Cancelamentos' && mobilePrimaryStats.length % 2 === 1 && 'col-span-2')} label={item.label} value={item.value} icon={item.icon} variant={item.variant} />
+              ))}
+            </div>
+          </section>
+
+          {canViewFinancials && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-bold text-slate-950">Valores administrativos</h2>
+              <div className="grid grid-cols-1 gap-3">
+                <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Custo da Plataforma" value={formatCurrencyBRL(stats.platformFee)} icon={DollarSign} />
+                <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Comissão dos Vendedores" value={formatCurrencyBRL(stats.sellersCommission)} icon={Users} />
+              </div>
+            </section>
+          )}
+
+          <div className="mb-0">
+            {/* Comentário: mobile reaproveita FilterCard para manter todos os filtros e a mesma lógica server-side do desktop. */}
+            <FilterCard
+              searchValue={filters.search}
+              onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+              searchPlaceholder="Buscar por nome ou CPF..."
+              searchLabel="Cliente"
+              selects={[{ id: 'status', label: 'Status', placeholder: 'Todos', value: filters.status, onChange: (v) => setFilters((f) => ({ ...f, status: v as ReportFilters['status'] })), options: [{ value: 'all', label: 'Todos' }, { value: 'pendente', label: 'Pendente' }, { value: 'pendente_taxa', label: 'Pendente de taxa' }, { value: 'pendente_pagamento', label: 'Pendente pagamento' }, { value: 'reservado', label: 'Reservado' }, { value: 'pago', label: 'Pago' }, { value: 'cancelado', label: 'Cancelado' }] }]}
+              advancedFilters={<div className="grid grid-cols-1 gap-4"><div className="space-y-1.5"><label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Evento</label><Popover open={eventFilterOpen} onOpenChange={setEventFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" aria-expanded={eventFilterOpen} className={cn('w-full justify-between font-normal', filters.eventId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedEventFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar evento..." value={eventFilterSearch} onValueChange={setEventFilterSearch} /><CommandList><CommandEmpty>Nenhum evento encontrado.</CommandEmpty><CommandGroup>{filteredEventFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, eventId: option.value })); setEventFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.eventId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div><div className="space-y-1.5"><label className="flex items-center gap-2 text-sm font-medium text-muted-foreground">Vendedor</label><Popover open={sellerFilterOpen} onOpenChange={setSellerFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" aria-expanded={sellerFilterOpen} className={cn('w-full justify-between font-normal', filters.sellerId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedSellerFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar vendedor..." value={sellerFilterSearch} onValueChange={setSellerFilterSearch} /><CommandList><CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty><CommandGroup>{filteredSellerFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, sellerId: option.value })); setSellerFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.sellerId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div><FilterInput id="dateFrom" label="Data Inicial" placeholder="" value={filters.dateFrom} onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))} type="date" icon={Calendar} /><FilterInput id="dateTo" label="Data Final" placeholder="" value={filters.dateTo} onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))} type="date" icon={Calendar} /></div>}
+              onClearFilters={() => setFilters(initialFilters)}
+              hasActiveFilters={hasActiveFilters}
+            />
+            {hasActiveFilters && <p className="mt-2 flex items-center gap-1 text-xs text-[hsl(var(--primary))]"><SlidersHorizontal className="h-3.5 w-3.5" />{activeFilterCount} filtro(s) ativo(s)</p>}
+          </div>
+
+          {loading ? <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : totalResultsCount === 0 ? <EmptyState icon={<ShoppingCart className="h-8 w-8 text-muted-foreground" />} title="Nenhuma venda encontrada" description={hasActiveFilters ? 'Tente ajustar os filtros ou o período' : 'As vendas aparecerão aqui quando forem realizadas'} /> : <><Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SalesReportTab)}><TabsList className="grid w-full grid-cols-2 rounded-xl bg-white"><TabsTrigger value={SALES_REPORT_TABS.resumo} className="gap-2"><BarChart3 className="h-4 w-4" />Resumo</TabsTrigger><TabsTrigger value={SALES_REPORT_TABS.detalhado} className="gap-2"><List className="h-4 w-4" />Detalhado</TabsTrigger></TabsList><TabsContent value={SALES_REPORT_TABS.resumo} className="mt-3">{mobileSummaryCards}</TabsContent><TabsContent value={SALES_REPORT_TABS.detalhado} className="mt-3">{mobileDetailedCards}</TabsContent></Tabs><div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-600 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><span>Exibindo {rangeStart}–{rangeEnd} de {totalResultsCount} resultados</span><div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || loading}>Anterior</Button><span>Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage >= totalPages || loading}>Próxima</Button></div></div></>}
+        </main>
+
+        <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+        <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+      </div>
+
+      <div className="page-container hidden lg:block">
         <PageHeader
           title="Relatório de Vendas"
           description="Visão executiva e analítica das vendas do período"
@@ -715,7 +868,7 @@ export default function SalesReport() {
                 label: 'Status',
                 placeholder: 'Todos',
                 value: filters.status,
-                onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
+                onChange: (v) => setFilters((f) => ({ ...f, status: v as ReportFilters['status'] })),
                 options: [
                   { value: 'all', label: 'Todos' },
                   { value: 'pendente', label: 'Pendente' },
@@ -929,6 +1082,7 @@ export default function SalesReport() {
                     </TableHeader>
                     <TableBody>
                       {sales.map((sale) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tipo legado de Sale não expõe o relacionamento aninhado vehicle retornado pelo select.
                         const vehicle = (sale.trip as any)?.vehicle;
                         return (
                           <TableRow key={sale.id}>
