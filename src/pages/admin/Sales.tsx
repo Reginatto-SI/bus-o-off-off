@@ -98,6 +98,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NewSaleModal } from '@/components/admin/NewSaleModal';
 import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
 import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
 import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -1770,7 +1771,8 @@ export default function Sales() {
 
 
 
-  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const openAdminMobileMenu = () => setMobileMoreMenuOpen(true);
 
   const mobileBottomNavItems = useMemo(
     () => adminMobileBottomNavItems.filter((item) => {
@@ -1859,7 +1861,7 @@ export default function Sales() {
           <AdminMobileHeader
             title="Vendas"
             subtitle="SmartBus"
-            onMenuClick={openAdminMobileMenu}
+            showMenuButton={false}
             rightAction={<Button size="icon" variant="ghost" className="h-11 w-11 rounded-xl" onClick={() => { setLoading(true); fetchSales(); }} aria-label="Atualizar vendas"><RefreshCw className="h-5 w-5" /></Button>}
           />
 
@@ -1897,6 +1899,7 @@ export default function Sales() {
           </main>
 
           <AdminMobileBottomNav activeItem="vendas" items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
         </div>
       <div className="page-container hidden lg:block">
         {/* Header */}

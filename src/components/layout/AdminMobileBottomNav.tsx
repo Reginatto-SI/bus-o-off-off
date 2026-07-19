@@ -33,7 +33,7 @@ export function AdminMobileBottomNav({ activeItem, items = adminMobileBottomNavI
                 isActive ? 'text-[hsl(var(--primary))]' : 'text-slate-500'
               )}
             >
-              <item.icon className="h-5 w-5" fill={isActive ? 'currentColor' : 'none'} strokeWidth={2} />
+              <item.icon className="h-5 w-5" strokeWidth={2} />
               <span>{item.title}</span>
             </Link>
           );
