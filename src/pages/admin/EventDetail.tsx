@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, Sale } from '@/types/database';
+import { TablesInsert } from '@/integrations/supabase/types';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,6 +51,10 @@ import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { EventServicesTab } from '@/components/admin/EventServicesTab';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 
 // Adicionado Micro-ônibus como tipo suportado. Valor interno: micro_onibus
 const vehicleTypeLabels: Record<Vehicle['type'], string> = {
@@ -61,7 +66,7 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canViewFinancials, activeCompanyId } = useAuth();
+  const { canViewFinancials, activeCompanyId, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [eventLocations, setEventLocations] = useState<EventBoardingLocation[]>([]);
@@ -70,6 +75,21 @@ export default function EventDetail() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [locations, setLocations] = useState<BoardingLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Reutiliza a mesma permissão oficial das telas mobile existentes; Embarque usa /validador como origem administrativa.
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole]
+  );
 
   // Trip dialog
   const [tripDialogOpen, setTripDialogOpen] = useState(false);
@@ -171,7 +191,7 @@ export default function EventDetail() {
     if (!selectedLocationId) return;
     setSavingLocation(true);
 
-    const insertData: any = {
+    const insertData: TablesInsert<'event_boarding_locations'> = {
       event_id: id,
       boarding_location_id: selectedLocationId,
       company_id: activeCompanyId!,
@@ -210,7 +230,17 @@ export default function EventDetail() {
   if (loading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center py-12">
+        <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+          <main className="mx-auto w-full max-w-md px-4 py-6">
+            <div className="rounded-2xl border border-slate-200/70 bg-white py-10 text-center shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+              <p className="mt-3 text-sm text-slate-600">Carregando evento...</p>
+            </div>
+          </main>
+          <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+        </div>
+        <div className="hidden items-center justify-center py-12 lg:flex">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
@@ -218,17 +248,30 @@ export default function EventDetail() {
   }
 
   if (!event) {
+    const notFoundState = (
+      <EmptyState
+        icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
+        title="Evento não encontrado"
+        description="O evento que você está procurando não existe"
+        action={
+          <Button onClick={() => navigate('/admin/eventos')}>Voltar aos Eventos</Button>
+        }
+      />
+    );
+
     return (
       <AdminLayout>
-        <div className="page-container">
-          <EmptyState
-            icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
-            title="Evento não encontrado"
-            description="O evento que você está procurando não existe"
-            action={
-              <Button onClick={() => navigate('/admin/eventos')}>Voltar aos Eventos</Button>
-            }
-          />
+        <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+          <main className="mx-auto w-full max-w-md px-4 py-6">
+            <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+              <CardContent className="p-4">{notFoundState}</CardContent>
+            </Card>
+          </main>
+          <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+        </div>
+        <div className="page-container hidden lg:block">
+          {notFoundState}
         </div>
       </AdminLayout>
     );
@@ -238,9 +281,63 @@ export default function EventDetail() {
     (loc) => !eventLocations.some((el) => el.boarding_location_id === loc.id)
   );
 
+  const eventDateLabel = (() => {
+    const localDate = parseDateOnlyAsLocal(event.date);
+    return localDate
+      ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }).format(localDate)
+      : formatDateOnlyBR(event.date);
+  })();
+
   return (
     <AdminLayout>
-      <div className="page-container">
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+        <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+        <main className="mx-auto w-full max-w-md space-y-4 px-4 py-5">
+          <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold leading-tight text-slate-950">{event.name}</h2>
+                <StatusBadge status={event.status} />
+              </div>
+              <div className="grid gap-2 text-sm text-slate-600">
+                <div className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-slate-400" />{eventDateLabel}</div>
+                <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span className="break-words">{event.city}</span></div>
+                <div className="flex items-center gap-2"><Bus className="h-4 w-4 shrink-0 text-slate-400" />{trips.length} viagem(ns)</div>
+              </div>
+              {event.description && <p className="text-sm leading-relaxed text-slate-600">{event.description}</p>}
+            </CardContent>
+          </Card>
+
+          <Tabs defaultValue="trips" className="space-y-4">
+            <div className="overflow-x-auto pb-1">
+              <TabsList className="inline-flex h-auto min-w-max justify-start gap-1 rounded-2xl bg-white p-1 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+                <TabsTrigger value="trips" className="rounded-xl px-3 py-2 text-xs">Viagens</TabsTrigger>
+                <TabsTrigger value="locations" className="rounded-xl px-3 py-2 text-xs">Locais</TabsTrigger>
+                <TabsTrigger value="sales" className="rounded-xl px-3 py-2 text-xs">Vendas</TabsTrigger>
+                <TabsTrigger value="services" className="rounded-xl px-3 py-2 text-xs">Serviços</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="trips">
+              <Card className="rounded-2xl border-slate-200/70 bg-white"><CardHeader className="flex flex-row items-center justify-between p-4"><CardTitle className="text-base">Viagens</CardTitle><Button size="sm" onClick={() => setTripDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Adicionar</Button></CardHeader><CardContent className="space-y-3 p-4 pt-0">
+                {trips.length === 0 ? <EmptyState icon={<Bus className="h-6 w-6 text-muted-foreground" />} title="Nenhuma viagem cadastrada" description="Adicione viagens para este evento" className="py-8" /> : trips.map((trip) => <div key={trip.id} className="rounded-2xl bg-slate-50 p-3"><div className="flex items-start justify-between gap-2"><div className="space-y-2 text-sm"><p className="font-semibold text-slate-950">Trecho do evento</p><p className="flex items-center gap-2 text-slate-600"><Clock className="h-4 w-4" />{trip.departure_time?.slice(0, 5) ?? 'A definir'}</p><p className="flex items-center gap-2 text-slate-600"><Bus className="h-4 w-4" />{vehicleTypeLabels[trip.vehicle?.type ?? 'van']} - {trip.vehicle?.plate}</p><p className="flex items-center gap-2 text-slate-600"><Users className="h-4 w-4" />{trip.capacity} lugares</p></div><Button variant="ghost" size="icon" onClick={() => handleDeleteTrip(trip.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></div>)}
+              </CardContent></Card>
+            </TabsContent>
+            <TabsContent value="locations">
+              <Card className="rounded-2xl border-slate-200/70 bg-white"><CardHeader className="flex flex-row items-center justify-between p-4"><CardTitle className="text-base">Locais de Embarque</CardTitle><Button size="sm" disabled={availableLocations.length === 0} onClick={() => setLocationDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Adicionar</Button></CardHeader><CardContent className="space-y-3 p-4 pt-0">
+                {eventLocations.length === 0 ? <EmptyState icon={<MapPin className="h-6 w-6 text-muted-foreground" />} title="Nenhum local cadastrado" description="Adicione locais de embarque para este evento" className="py-8" /> : eventLocations.map((el) => <div key={el.id} className="rounded-2xl bg-slate-50 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0 space-y-1"><p className="break-words font-semibold">{el.boarding_location?.name}</p><p className="break-words text-sm text-slate-600">{el.boarding_location?.address}</p>{(el.departure_date || el.departure_time) && <p className="text-sm font-medium text-primary">{el.departure_date && formatDateOnlyBR(el.departure_date)}{el.departure_date && el.departure_time && ' às '}{el.departure_time && el.departure_time.slice(0, 5)}</p>}</div><div className="flex shrink-0 gap-1">{el.boarding_location?.maps_url && <Button variant="ghost" size="icon" asChild><a href={el.boarding_location.maps_url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>}<Button variant="ghost" size="icon" onClick={() => handleRemoveLocation(el.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></div></div>)}
+              </CardContent></Card>
+            </TabsContent>
+            <TabsContent value="sales">
+              <Card className="rounded-2xl border-slate-200/70 bg-white"><CardHeader className="p-4"><CardTitle className="text-base">Vendas</CardTitle></CardHeader><CardContent className="space-y-3 p-4 pt-0">{sales.length === 0 ? <EmptyState icon={<ShoppingCart className="h-6 w-6 text-muted-foreground" />} title="Nenhuma venda realizada" description="As vendas deste evento aparecerão aqui" className="py-8" /> : sales.map((sale) => <div key={sale.id} className="rounded-2xl bg-slate-50 p-3"><div className="flex items-start justify-between gap-2"><div className="min-w-0 space-y-1"><p className="break-words font-semibold">{sale.customer_name}</p><p className="text-sm text-slate-600">{sale.customer_phone}</p><p className="text-sm text-slate-600">{sale.boarding_location?.name}</p><p className="text-sm text-slate-600">{sale.quantity} passagem(ns){canViewFinancials ? ` · ${formatCurrencyBRL(sale.quantity * sale.unit_price)}` : ''}</p></div><StatusBadge status={sale.status} /></div></div>)}</CardContent></Card>
+            </TabsContent>
+            <TabsContent value="services"><EventServicesTab eventId={event.id} companyId={event.company_id} /></TabsContent>
+          </Tabs>
+        </main>
+        <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+      </div>
+
+      <div className="page-container hidden lg:block">
         <Button
           variant="ghost"
           className="mb-4"
