@@ -566,6 +566,9 @@ export default function Dashboard() {
 
   // ─── Guard: sem empresa ativa não consulta ─────────────
   const enabled = Boolean(activeCompanyId);
+  // Queries pesadas do dashboard desktop não devem rodar quando o usuário está vendo a home mobile.
+  // Isso removeu tráfego oculto que deixava a versão mobile lenta sem entregar nada visível.
+  const desktopQueriesEnabled = enabled && !isMobileDashboardHomeVisible;
   const canViewSmartbusTips =
     Boolean(activeCompanyId) &&
     SMARTBUS_TIPS_ADMIN_ROLES.includes(userRole as (typeof SMARTBUS_TIPS_ADMIN_ROLES)[number]);
