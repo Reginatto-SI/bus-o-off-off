@@ -966,7 +966,7 @@ export default function Dashboard() {
       if (todaySalesError) throw todaySalesError;
       if (activeEventsError) throw activeEventsError;
 
-      const paidSales = (todaySales ?? []) as Array<MobileTodayOperationalSaleRow | MobileTodayFinancialSaleRow>;
+      const paidSales = (todaySales ?? []) as unknown as Array<MobileTodayOperationalSaleRow | MobileTodayFinancialSaleRow>;
       const eventIds = new Set(paidSales.map((sale) => sale.event_id).filter(Boolean));
       const financialSales = canViewFinancials ? paidSales as MobileTodayFinancialSaleRow[] : [];
       return {
