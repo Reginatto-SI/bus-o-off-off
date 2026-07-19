@@ -1244,6 +1244,25 @@ export default function Events() {
     return uniqueVehicleIds.size;
   }, [eventTrips]);
 
+  const wizardStepTabs = useMemo(
+    () => WIZARD_TABS_ORDER.map((tab) => ({
+      value: tab,
+      label: WIZARD_TAB_LABELS[tab],
+      icon: WIZARD_TAB_ICONS[tab],
+      count: tab === 'viagens'
+        ? (editingId ? uniqueFleets : null)
+        : tab === 'embarques'
+          ? (editingId ? eventBoardingLocations.length : null)
+          : tab === 'termos'
+            ? (editingId ? eventTermLinksCount : null)
+            : tab === 'whatsapp'
+              ? (form.whatsapp_group_link.trim() ? 1 : null)
+              : null,
+      optional: WIZARD_OPTIONAL_TABS.has(tab),
+    })),
+    [editingId, eventBoardingLocations.length, eventTermLinksCount, form.whatsapp_group_link, uniqueFleets]
+  );
+
   // Correct capacity: sum only once per vehicle (not duplicating ida+volta)
   const correctTotalCapacity = useMemo(() => {
     const vehicleCapacities = new Map<string, number>();
