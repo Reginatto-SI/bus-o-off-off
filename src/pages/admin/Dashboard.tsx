@@ -997,7 +997,7 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      const recentRows = (data ?? []) as Array<MobileRecentOperationalSaleRow | MobileRecentFinancialSaleRow>;
+      const recentRows = (data ?? []) as unknown as Array<MobileRecentOperationalSaleRow | MobileRecentFinancialSaleRow>;
       return recentRows.map((sale) => {
         const financialSale = canViewFinancials ? sale as MobileRecentFinancialSaleRow : null;
         return {
