@@ -88,6 +88,8 @@ import {
   Sparkles,
   MessageCircle,
   Share2,
+  Search,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addMonths, format, isAfter, isBefore } from 'date-fns';
@@ -98,9 +100,14 @@ import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 import { DateBadge } from '@/components/public/DateBadge';
 import { Progress } from '@/components/ui/progress';
 import { useLocation } from 'react-router-dom';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CalculationSimulationCard } from '@/components/admin/CalculationSimulationCard';
 import { calculatePlatformFee, resolvePlatformFeePercentByTicketPrice } from '@/lib/feeCalculator';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -308,12 +315,13 @@ const seatCategoryLabels: Record<string, string> = {
 
 export default function Events() {
   const location = useLocation();
-  const { activeCompanyId, user } = useAuth();
+  const { activeCompanyId, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
   const [events, setEvents] = useState<EventWithTrips[]>([]);
   const [operationalEndMap, setOperationalEndMap] = useState<Map<string, Date | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
@@ -1140,9 +1148,38 @@ export default function Events() {
       filters.vehicleId !== 'all' ||
       filters.vehicleType !== 'all' ||
       filters.driverId !== 'all' ||
-      filters.imageStatus !== 'all'
+      filters.imageStatus !== 'all' ||
+      sortBy !== 'event_date_asc'
     );
-  }, [filters]);
+  }, [filters, sortBy]);
+
+  const activeFiltersCount = useMemo(() => {
+    return [
+      filters.search !== '',
+      filters.status !== 'all',
+      filters.eventCategory !== 'all',
+      filters.archiveState !== 'active',
+      filters.startDate !== '',
+      filters.endDate !== '',
+      filters.monthYear !== 'all',
+      filters.vehicleId !== 'all',
+      filters.vehicleType !== 'all',
+      filters.driverId !== 'all',
+      filters.imageStatus !== 'all',
+      sortBy !== 'event_date_asc',
+    ].filter(Boolean).length;
+  }, [filters, sortBy]);
+
+  const clearEventFilters = () => {
+    setFilters(initialFilters);
+    setSortBy('event_date_asc');
+    setCurrentPage(1);
+  };
+
+  const hasAnyEventInCurrentArchiveState = useMemo(
+    () => events.some((event) => event.is_archived === (filters.archiveState === 'archived')),
+    [events, filters.archiveState]
+  );
 
   useEffect(() => {
     // Reset inteligente da paginação ao alterar filtros principais ou ordenação.
@@ -1154,6 +1191,11 @@ export default function Events() {
     filters.archiveState,
     filters.startDate,
     filters.endDate,
+    filters.monthYear,
+    filters.vehicleId,
+    filters.vehicleType,
+    filters.driverId,
+    filters.imageStatus,
     sortBy,
   ]);
 
@@ -3061,6 +3103,36 @@ Links internos:
     return sortedEventTrips.map((trip) => ({ value: trip.id, label: getTripLabelWithoutTime(trip) }));
   }, [isGroupedTransportPolicy, groupedBoardingTripOptions, sortedEventTrips]);
 
+  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Reutiliza a permissão oficial do menu administrativo; a rota visual de embarque continua apontando para /validador/embarque.
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole]
+  );
+
+  const openCreateEventFlow = async () => {
+    const hasAsaasConnection = await checkAsaasConnection();
+    if (!hasAsaasConnection) {
+      setPaymentsGatePendingAction('create_event');
+      setPaymentsGateOpen(true);
+      return;
+    }
+
+    resetForm();
+    setIsCreateWizardMode(true);
+    setDialogOpen(true);
+  };
+
   const availableBoardingLocations = useMemo(() => {
     const addedIds = eventBoardingLocations.map(ebl => ebl.boarding_location_id);
     return boardingLocations.filter(bl => !addedIds.includes(bl.id));
@@ -3068,24 +3140,152 @@ Links internos:
 
   return (
     <AdminLayout>
-      <div className="page-container">
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
+        <AdminMobileHeader title="Eventos" subtitle="SmartBus" onMenuClick={openAdminMobileMenu} />
+
+        <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
+          <section className="space-y-3">
+            <p className="text-sm text-slate-600">Gerencie os eventos e viagens</p>
+            <Button className="h-12 w-full justify-center rounded-xl text-sm font-semibold" onClick={openCreateEventFlow}>
+              <Plus className="mr-2 h-4 w-4" />
+              Criar evento
+            </Button>
+          </section>
+
+          <Alert className="rounded-2xl border-slate-200/70 bg-white text-slate-700 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs leading-relaxed">
+              A visão padrão mostra eventos dentro da janela operacional. Finalizados seguem acessíveis pelos filtros históricos.
+            </AlertDescription>
+          </Alert>
+
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-950">Operação</h2>
+              <p className="mt-1 text-sm text-slate-600">Resumo dos eventos cadastrados na empresa ativa.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Total de eventos" value={stats.total} icon={Calendar} />
+              <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Rascunhos" value={stats.rascunhos} icon={FileEdit} />
+              <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="À venda" value={stats.aVenda} icon={ShoppingBag} variant="success" />
+              <StatsCard className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]" label="Encerrados" value={stats.encerrados} icon={CheckCircle} variant="destructive" />
+            </div>
+          </section>
+
+          <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
+            <CardContent className="space-y-3 p-4">
+              {/* Mobile: mantém a busca sempre visível e recolhe os filtros complementares para aproximar a listagem do topo. */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Busca principal</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={filters.search}
+                    onChange={(event) => setFilters({ ...filters, search: event.target.value })}
+                    placeholder="Pesquisar evento..."
+                    className="h-11 rounded-xl pl-9"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Collapsible open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen} className="w-full">
+                  <div className="flex items-center gap-2">
+                    <CollapsibleTrigger asChild>
+                      <Button variant="outline" className="h-10 flex-1 justify-center rounded-xl bg-white">
+                        <SlidersHorizontal className="mr-2 h-4 w-4" />
+                        Filtros
+                        {activeFiltersCount > 0 && (
+                          <Badge variant="secondary" className="ml-2 rounded-full px-2">
+                            {activeFiltersCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" className="h-10 rounded-xl px-3 text-xs text-primary" onClick={clearEventFilters}>
+                        Limpar filtros
+                      </Button>
+                    )}
+                  </div>
+
+                  {hasActiveFilters && (
+                    <p className="mt-2 text-xs font-medium text-primary">
+                      {activeFiltersCount} filtro(s) ativo(s)
+                    </p>
+                  )}
+
+                  <CollapsibleContent className="pt-3">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><CheckCircle className="h-4 w-4" />Status do evento</label>
+                        <Select value={filters.status} onValueChange={(value) => setFilters({ ...filters, status: value as EventFilters['status'] })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{statusOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Archive className="h-4 w-4" />Arquivamento</label>
+                        <Select value={filters.archiveState} onValueChange={(value) => setFilters({ ...filters, archiveState: value as EventFilters['archiveState'] })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Arquivamento" /></SelectTrigger><SelectContent><SelectItem value="active">Ativos</SelectItem><SelectItem value="archived">Arquivados</SelectItem></SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Tag className="h-4 w-4" />Categoria do evento</label>
+                        <Select value={filters.eventCategory} onValueChange={(value) => setFilters({ ...filters, eventCategory: value as EventFilters['eventCategory'] })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Categoria" /></SelectTrigger><SelectContent>{eventCategoryFilterOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><ArrowUpDown className="h-4 w-4" />Ordenar por</label>
+                        <Select value={sortBy} onValueChange={(value) => setSortBy(value as EventSortOption)}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Ordenação" /></SelectTrigger><SelectContent>{eventSortOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <FilterInput id="startDateMobile" label="Data inicial" placeholder="Selecionar data" value={filters.startDate} onChange={(value) => setFilters({ ...filters, startDate: value })} type="date" icon={CalendarRange} />
+                      <FilterInput id="endDateMobile" label="Data final" placeholder="Selecionar data" value={filters.endDate} onChange={(value) => setFilters({ ...filters, endDate: value })} type="date" icon={CalendarRange} />
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><CalendarDays className="h-4 w-4" />Mês / Ano</label>
+                        <Select value={filters.monthYear} onValueChange={(value) => setFilters({ ...filters, monthYear: value })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Selecione o mês" /></SelectTrigger><SelectContent>{monthYearOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Bus className="h-4 w-4" />Tipo de frota</label>
+                        <Select value={filters.vehicleType} onValueChange={(value) => setFilters({ ...filters, vehicleType: value as EventFilters['vehicleType'] })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Tipo de frota" /></SelectTrigger><SelectContent>{vehicleTypeOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Bus className="h-4 w-4" />Veículo</label>
+                        <Select value={filters.vehicleId} onValueChange={(value) => setFilters({ ...filters, vehicleId: value })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Selecione o veículo" /></SelectTrigger><SelectContent>{vehicleOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Users className="h-4 w-4" />Motorista</label>
+                        <Select value={filters.driverId} onValueChange={(value) => setFilters({ ...filters, driverId: value })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Selecione o motorista" /></SelectTrigger><SelectContent>{driverOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Image className="h-4 w-4" />Imagem do evento</label>
+                        <Select value={filters.imageStatus} onValueChange={(value) => setFilters({ ...filters, imageStatus: value as EventFilters['imageStatus'] })}><SelectTrigger className="h-10 w-full rounded-xl"><SelectValue placeholder="Imagem" /></SelectTrigger><SelectContent>{imageStatusOptions.map((option) => (<SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>))}</SelectContent></Select>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </CardContent>
+          </Card>
+
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200/70 bg-white py-10 text-center shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /><p className="mt-3 text-sm text-slate-600">Carregando eventos...</p></div>
+          ) : !hasAnyEventInCurrentArchiveState ? (
+            <EmptyState icon={<Calendar className="h-8 w-8 text-muted-foreground" />} title={filters.archiveState === 'archived' ? 'Nenhum evento arquivado' : 'Nenhum evento cadastrado'} description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'} action={<Button onClick={openCreateEventFlow}><Plus className="mr-2 h-4 w-4" />Criar evento</Button>} />
+          ) : sortedEvents.length === 0 ? (
+            <EmptyState icon={<Calendar className="h-8 w-8 text-muted-foreground" />} title="Nenhum evento encontrado" description="Ajuste os filtros para encontrar eventos" action={<Button variant="outline" onClick={clearEventFilters}>Limpar filtros</Button>} />
+          ) : (
+            <>
+              <div className="space-y-3">{paginatedEvents.map((event) => { const totalSold = salesByEvent.get(event.id) || 0; const vehicleCapacities = new Map<string, number>(); event.trips?.forEach(t => { if (t.vehicle_id && !vehicleCapacities.has(t.vehicle_id)) vehicleCapacities.set(t.vehicle_id, t.capacity || 0); }); const totalCapacity = Array.from(vehicleCapacities.values()).reduce((sum, c) => sum + c, 0); const percentSold = totalCapacity > 0 ? Math.round((totalSold / totalCapacity) * 100) : 0; return (<Card key={event.id} className={cn('rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]', event.status === 'rascunho' && 'border-dashed', event.status === 'encerrado' && 'opacity-80')}><CardContent className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="line-clamp-2 text-base font-bold text-slate-950">{event.name}</h3><div className="mt-2 flex flex-wrap items-center gap-1.5"><StatusBadge status={event.status} />{event.is_archived && <Badge variant="secondary">Arquivado</Badge>}</div></div><ActionsDropdown actions={getEventActions(event)} /></div><div className="mt-4 grid gap-2 text-sm text-slate-600"><div className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-slate-400" /><span>{formatDateOnlyBR(event.date, "dd 'de' MMM 'de' yyyy")}</span></div><div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{event.city}</span></div><div className="flex items-center gap-2"><Bus className="h-4 w-4 shrink-0 text-slate-400" /><span>{getFleetCount(event)} transporte(s)</span></div></div>{totalCapacity > 0 && <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2"><div className="mb-1 flex justify-between text-xs text-slate-600"><span>{totalSold} vendido(s)</span><span>{percentSold}% ocupação</span></div><Progress value={percentSold} className="h-1.5" /></div>}{event.status === 'rascunho' && (() => { const pendencias: string[] = []; if (!event.trips?.length) pendencias.push('frota'); if (event.unit_price <= 0) pendencias.push('preço'); return pendencias.length > 0 ? <div className="mt-3 flex items-center gap-1.5 text-xs text-warning"><AlertTriangle className="h-3.5 w-3.5" /><span>Faltam: {pendencias.join(', ')}</span></div> : null; })()}</CardContent></Card>); })}</div>
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-600 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"><span>Exibindo {rangeStart}–{rangeEnd} de {sortedEvents.length} eventos</span><div className="flex items-center justify-between gap-2"><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1 || loading}>Anterior</Button><span>Página {currentPage} de {totalPages}</span><Button variant="outline" size="sm" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage >= totalPages || loading}>Próxima</Button></div></div>
+            </>
+          )}
+        </main>
+
+        <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+      </div>
+
+      <div className="page-container hidden lg:block">
         {/* Header */}
         <PageHeader
           title="Eventos"
           description="Gerencie os eventos e viagens"
           actions={
-            <Button onClick={async () => {
-              const hasAsaasConnection = await checkAsaasConnection();
-              if (!hasAsaasConnection) {
-                setPaymentsGatePendingAction('create_event');
-                setPaymentsGateOpen(true);
-                return;
-              }
-
-              resetForm();
-              setIsCreateWizardMode(true);
-              setDialogOpen(true);
-            }}>
+            <Button onClick={openCreateEventFlow}>
               <Plus className="h-4 w-4 mr-2" />
               Criar Evento
             </Button>
@@ -3325,24 +3525,13 @@ Links internos:
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : events.filter((event) => event.is_archived === (filters.archiveState === 'archived')).length === 0 ? (
+        ) : !hasAnyEventInCurrentArchiveState ? (
           <EmptyState
             icon={<Calendar className="h-8 w-8 text-muted-foreground" />}
             title={filters.archiveState === 'archived' ? 'Nenhum evento arquivado' : 'Nenhum evento cadastrado'}
             description={filters.archiveState === 'archived' ? 'Os eventos arquivados aparecerão aqui.' : 'Crie seu primeiro evento para começar a vender passagens'}
             action={
-              <Button onClick={async () => {
-                const hasAsaasConnection = await checkAsaasConnection();
-                if (!hasAsaasConnection) {
-                  setPaymentsGatePendingAction('create_event');
-                  setPaymentsGateOpen(true);
-                  return;
-                }
-
-                resetForm();
-                setIsCreateWizardMode(true);
-                setDialogOpen(true);
-              }}>
+              <Button onClick={openCreateEventFlow}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar Evento
               </Button>
@@ -3354,7 +3543,7 @@ Links internos:
             title="Nenhum evento encontrado"
             description="Ajuste os filtros para encontrar eventos"
             action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+              <Button variant="outline" onClick={clearEventFilters}>
                 Limpar filtros
               </Button>
             }
