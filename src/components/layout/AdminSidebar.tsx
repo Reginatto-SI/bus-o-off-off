@@ -108,7 +108,7 @@ export function AdminSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobileDashboardHome = location.pathname === '/admin/dashboard';
-  const usesCustomMobileAdminChrome = isMobileDashboardHome || ['/admin/vendas', '/admin/eventos'].includes(location.pathname);
+  const usesCustomMobileAdminChrome = isMobileDashboardHome || ['/admin/vendas', '/admin/eventos'].includes(location.pathname) || /^\/admin\/eventos\/[^/]+$/.test(location.pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
 

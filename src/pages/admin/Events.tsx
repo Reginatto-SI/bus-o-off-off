@@ -313,6 +313,33 @@ const seatCategoryLabels: Record<string, string> = {
   leito_cama: 'Leito-cama',
 };
 
+const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'termos', 'servicos', 'whatsapp', 'patrocinadores', 'publicacao'] as const;
+type EventWizardTab = typeof WIZARD_TABS_ORDER[number];
+const isEventWizardTab = (tab: string): tab is EventWizardTab => WIZARD_TABS_ORDER.includes(tab as EventWizardTab);
+const WIZARD_TAB_LABELS: Record<EventWizardTab, string> = {
+  geral: 'Geral',
+  viagens: 'Frotas',
+  embarques: 'Embarques',
+  passagens: 'Passagens',
+  termos: 'Termos e Políticas',
+  servicos: 'Serviços',
+  whatsapp: 'Grupo WhatsApp',
+  patrocinadores: 'Patrocinadores',
+  publicacao: 'Publicação',
+};
+const WIZARD_TAB_ICONS: Record<EventWizardTab, typeof FileText> = {
+  geral: FileText,
+  viagens: Bus,
+  embarques: MapPin,
+  passagens: Ticket,
+  termos: ShieldCheck,
+  servicos: Sparkles,
+  whatsapp: MessageCircle,
+  patrocinadores: Star,
+  publicacao: Globe,
+};
+const WIZARD_OPTIONAL_TABS = new Set<EventWizardTab>(['termos', 'whatsapp']);
+
 export default function Events() {
   const location = useLocation();
   const { activeCompanyId, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
@@ -330,6 +357,7 @@ export default function Events() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [eventToArchiveAction, setEventToArchiveAction] = useState<EventWithTrips | null>(null);
   const [activeTab, setActiveTab] = useState('geral');
+  const activeWizardStepRef = useRef<HTMLButtonElement | null>(null);
   const [eventTermLinksCount, setEventTermLinksCount] = useState(0);
 
   // Post-create dialog
@@ -825,20 +853,6 @@ export default function Events() {
     setActiveTab(nextTab);
   };
 
-  const WIZARD_TABS_ORDER = ['geral', 'viagens', 'embarques', 'passagens', 'termos', 'servicos', 'whatsapp', 'patrocinadores', 'publicacao'] as const;
-  type EventWizardTab = typeof WIZARD_TABS_ORDER[number];
-  const isEventWizardTab = (tab: string): tab is EventWizardTab => WIZARD_TABS_ORDER.includes(tab as EventWizardTab);
-  const WIZARD_TAB_LABELS: Record<EventWizardTab, string> = {
-    geral: 'Geral',
-    viagens: 'Frotas',
-    embarques: 'Embarques',
-    passagens: 'Passagens',
-    termos: 'Termos e Políticas',
-    servicos: 'Serviços',
-    whatsapp: 'Grupo WhatsApp',
-    patrocinadores: 'Patrocinadores',
-    publicacao: 'Publicação',
-  };
 
   const getNextWizardTab = (currentTab: string): string | null => {
     const currentIndex = isEventWizardTab(currentTab) ? WIZARD_TABS_ORDER.indexOf(currentTab) : -1;
@@ -1210,6 +1224,25 @@ export default function Events() {
     const uniqueVehicleIds = new Set(eventTrips.map(t => t.vehicle_id));
     return uniqueVehicleIds.size;
   }, [eventTrips]);
+
+  const wizardStepTabs = useMemo(
+    () => WIZARD_TABS_ORDER.map((tab) => ({
+      value: tab,
+      label: WIZARD_TAB_LABELS[tab],
+      icon: WIZARD_TAB_ICONS[tab],
+      count: tab === 'viagens'
+        ? (editingId ? uniqueFleets : null)
+        : tab === 'embarques'
+          ? (editingId ? eventBoardingLocations.length : null)
+          : tab === 'termos'
+            ? (editingId ? eventTermLinksCount : null)
+            : tab === 'whatsapp'
+              ? (form.whatsapp_group_link.trim() ? 1 : null)
+              : null,
+      optional: WIZARD_OPTIONAL_TABS.has(tab),
+    })),
+    [editingId, eventBoardingLocations.length, eventTermLinksCount, form.whatsapp_group_link, uniqueFleets]
+  );
 
   // Correct capacity: sum only once per vehicle (not duplicating ida+volta)
   const correctTotalCapacity = useMemo(() => {
@@ -3120,6 +3153,12 @@ Links internos:
     [canAccessTemplatesLayout, isDeveloper, userRole]
   );
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    // Mantém a etapa ativa visível no carrossel mobile sem alterar o controle Tabs existente.
+    activeWizardStepRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [activeTab, dialogOpen]);
+
   const openCreateEventFlow = async () => {
     const hasAsaasConnection = await checkAsaasConnection();
     if (!hasAsaasConnection) {
@@ -3141,7 +3180,7 @@ Links internos:
   return (
     <AdminLayout>
       <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
-        <AdminMobileHeader title="Eventos" subtitle="SmartBus" onMenuClick={openAdminMobileMenu} />
+        <AdminMobileHeader title="Eventos" subtitle="SmartBus" showMenuButton={false} />
 
         <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
           <section className="space-y-3">
@@ -3696,8 +3735,8 @@ Links internos:
 
         {/* Event Modal with 5 Tabs */}
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-            <DialogHeader className="admin-modal__header px-6 py-4 border-b">
+          <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+            <DialogHeader className="admin-modal__header border-b px-4 py-3 sm:px-6 sm:py-4">
               <DialogTitle className="flex items-center gap-2">
                 {isReadOnly && <Lock className="h-4 w-4 text-muted-foreground" />}
                 {editingId ? (isReadOnly ? 'Visualizar' : 'Editar') : 'Novo'} Evento
@@ -3708,7 +3747,7 @@ Links internos:
               <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
                 {/* Wizard Progress Indicator */}
                 {!isReadOnly && (
-                  <div className="px-6 pt-4 pb-2 space-y-2">
+                  <div className="space-y-2 px-4 pb-2 pt-3 sm:px-6 sm:pt-4">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium text-foreground">
                         Etapa {getStepNumber(activeTab)} de {WIZARD_TABS_ORDER.length} — {WIZARD_TAB_LABELS[activeTab] || 'Geral'}
@@ -3721,54 +3760,78 @@ Links internos:
                   </div>
                 )}
 
-                <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2 border-b bg-muted/30">
-                  {[
-                    { value: 'geral', label: 'Geral', icon: FileText, count: null },
-                    { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
-                    { value: 'embarques', label: 'Embarques', icon: MapPin, count: editingId ? eventBoardingLocations.length : null },
-                    { value: 'passagens', label: 'Passagens', icon: Ticket, count: null },
-                    { value: 'termos', label: 'Termos e Políticas', icon: ShieldCheck, count: editingId ? eventTermLinksCount : null, optional: true },
-                    { value: 'servicos', label: 'Serviços', icon: Sparkles, count: null },
-                    { value: 'whatsapp', label: 'Grupo WhatsApp', icon: MessageCircle, count: form.whatsapp_group_link.trim() ? 1 : null, optional: true },
-                    { value: 'patrocinadores', label: 'Patrocinadores', icon: Star, count: null },
-                    { value: 'publicacao', label: 'Publicação', icon: Globe, count: null },
-                  ].map((tab) => {
-                    const lockMessage = getTabLockMessage(tab.value);
-                    const TabIcon = tab.icon;
-                    const stepComplete = isStepComplete(tab.value);
-                    const isCurrentTab = activeTab === tab.value;
+                <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-2 overflow-x-auto scroll-smooth whitespace-nowrap border-b bg-muted/30 px-4 py-2 sm:flex-wrap sm:gap-1 sm:overflow-visible sm:px-6">
+                    {wizardStepTabs.map((tab) => {
+                      const lockMessage = getTabLockMessage(tab.value);
+                      const stepComplete = isStepComplete(tab.value);
+                      const isCurrentTab = activeTab === tab.value;
+                      const stepNumber = getStepNumber(tab.value);
+                      const StepIcon = tab.icon;
+                      const accessibleState = lockMessage
+                        ? 'bloqueada'
+                        : stepComplete
+                          ? 'concluída'
+                          : 'pendente';
 
-                    return (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        aria-disabled={Boolean(lockMessage)}
-                        className={cn(
-                          'inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80',
-                          lockMessage && 'opacity-45 text-muted-foreground'
-                        )}
-                      >
-                        {/* Step status indicator */}
-                        {lockMessage ? (
-                          <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        ) : stepComplete && !isCurrentTab ? (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                        ) : (
-                          <TabIcon className="h-4 w-4 shrink-0" />
-                        )}
-                        <span className="min-w-0 truncate">{tab.label}</span>
-                        {tab.count !== null && (
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{tab.count}</span>
-                        )}
-                        {tab.optional && tab.count === 0 && (
-                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Opcional</span>
-                        )}
-                      </TabsTrigger>
-                    );
-                  })}
+                      return (
+                        <TabsTrigger
+                          key={tab.value}
+                          ref={isCurrentTab ? activeWizardStepRef : undefined}
+                          value={tab.value}
+                          aria-disabled={Boolean(lockMessage)}
+                          aria-label={`Ir para etapa ${stepNumber}: ${tab.label}${lockMessage ? ' bloqueada' : stepComplete ? ' concluída' : ''}${tab.optional ? ' opcional' : ''}`}
+                          title={lockMessage || `Ir para etapa ${stepNumber}: ${tab.label}`}
+                          className={cn(
+                            'group relative inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-0 text-sm font-semibold text-slate-600 shadow-sm transition hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-auto sm:w-auto sm:min-w-0 sm:rounded-md sm:border-b-2 sm:border-l-0 sm:border-r-0 sm:border-t-0 sm:border-transparent sm:bg-transparent sm:px-3 sm:py-1.5 sm:shadow-none',
+                            isCurrentTab
+                              ? 'min-w-[9rem] border-primary bg-primary px-3 text-primary-foreground shadow-[0_8px_18px_rgba(234,88,12,0.18)] data-[state=active]:text-primary-foreground sm:border-primary sm:bg-transparent sm:text-foreground sm:shadow-none sm:data-[state=active]:text-foreground'
+                              : 'w-10 data-[state=active]:text-slate-600 sm:w-auto',
+                            lockMessage && 'opacity-45 text-muted-foreground'
+                          )}
+                        >
+                          <span className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:hidden',
+                            isCurrentTab ? 'bg-white/20 text-primary-foreground' : 'bg-slate-100 text-slate-700',
+                            stepComplete && !isCurrentTab && !lockMessage && 'bg-green-50 text-green-700'
+                          )}>
+                            {lockMessage ? <Lock className="h-3.5 w-3.5" /> : stepComplete && !isCurrentTab ? <Check className="h-3.5 w-3.5" /> : stepNumber}
+                          </span>
+
+                          {isCurrentTab && (
+                            <span className="max-w-[14rem] truncate text-sm sm:hidden">
+                              {tab.label}{tab.optional ? ' · Opcional' : ''}
+                            </span>
+                          )}
+
+                          <span className="hidden items-center gap-1.5 sm:inline-flex">
+                            {lockMessage ? (
+                              <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : stepComplete && !isCurrentTab ? (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                            ) : (
+                              <StepIcon className="h-4 w-4 shrink-0" />
+                            )}
+                            <span className="min-w-0 truncate">{tab.label}</span>
+                          </span>
+
+                          {tab.count !== null && (
+                            <span className="absolute -right-1 -top-1 rounded-full bg-slate-900 px-1.5 py-0.5 text-[0.62rem] leading-none text-white sm:static sm:bg-muted sm:text-xs sm:text-foreground">{tab.count}</span>
+                          )}
+                          {tab.optional && !isCurrentTab && (
+                            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-slate-400 sm:hidden">
+                              <span className="sr-only">Etapa opcional</span>
+                            </span>
+                          )}
+                          {tab.optional && tab.count === 0 && (
+                            <span className="hidden rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground sm:inline">Opcional</span>
+                          )}
+                          <span className="sr-only">{`Etapa ${stepNumber}: ${tab.label} ${accessibleState}`}</span>
+                        </TabsTrigger>
+                      );
+                    })}
                 </TabsList>
 
-                <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                <div className="admin-modal__body flex-1 overflow-y-auto px-4 py-4 pb-28 sm:px-6 sm:pb-4">
                   {/* Read-only warning for encerrado events */}
                   {isReadOnly && (
                     <Card className="mb-4 border-destructive/50 bg-destructive/5">
@@ -5513,7 +5576,7 @@ Links internos:
                   </TabsContent>
                 </div>
 
-                <div className="admin-modal__footer px-6 py-4 border-t">
+                <div className="admin-modal__footer border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                   {isReadOnly ? (
                     <div className="flex justify-end">
                       <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -5522,7 +5585,7 @@ Links internos:
                     </div>
                   ) : !isCreateWizardMode ? (
                     /* Modo edição: manter botões existentes */
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                       <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                         Cancelar
                       </Button>
@@ -5534,7 +5597,7 @@ Links internos:
                     </div>
                   ) : (
                     /* Modo wizard: rodapé padronizado */
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       {/* Lado esquerdo: Salvar rascunho */}
                       <div>
                         {getStepNumber(activeTab) > 1 && (
@@ -5556,7 +5619,7 @@ Links internos:
                         )}
                       </div>
                       {/* Lado direito: Voltar + Próximo/Finalizar */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                         {getPreviousWizardTab(activeTab) && (
                           <Button
                             type="button"
