@@ -1881,8 +1881,8 @@ export default function Sales() {
             <div className="mb-0">
               {/* Comentário: os mesmos filtros da tela desktop são reutilizados no mobile para preservar a lógica de busca. */}
               <FilterCard
-                searchValue={filters.search}
-                onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+                searchValue={searchInput}
+                onSearchChange={setSearchInput}
                 searchPlaceholder="Buscar venda..."
                 searchLabel="Busca geral"
                 selects={[{ id: 'status', label: 'Status', placeholder: 'Todos', value: filters.status, onChange: (v) => setFilters((f) => ({ ...f, status: v as any })), options: [{ value: 'all', label: 'Todos' }, { value: 'pendente', label: 'Pendente' }, { value: 'pendente_taxa', label: 'Pendente de taxa' }, { value: 'pendente_pagamento', label: 'Pendente pagamento' }, { value: 'reservado', label: 'Reservado' }, { value: 'pago', label: 'Pago' }, { value: 'cancelado', label: 'Cancelado' }, { value: 'bloqueado', label: 'Bloqueado' }] }, { id: 'reservationRisk', label: 'Risco da Reserva', placeholder: 'Todos', value: filters.reservationRisk, onChange: (v) => setFilters((f) => ({ ...f, reservationRisk: v as SalesFilters['reservationRisk'] })), options: [{ value: 'all', label: 'Todos' }, { value: 'ativa', label: 'Reserva ativa' }, { value: 'proxima', label: 'Próxima do vencimento' }, { value: 'vencida', label: 'Vencida' }] }]}
@@ -2001,8 +2001,8 @@ export default function Sales() {
         {/* Filters */}
         <div className="mb-6">
           <FilterCard
-            searchValue={filters.search}
-            onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+            searchValue={searchInput}
+            onSearchChange={setSearchInput}
             searchPlaceholder="Buscar por nº da passagem, nome, CPF ou evento..."
             searchLabel="Busca geral"
             selects={[
