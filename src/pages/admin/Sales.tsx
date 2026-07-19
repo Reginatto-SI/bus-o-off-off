@@ -455,6 +455,15 @@ export default function Sales() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SalesFilters>(initialFilters);
+  // Buffer local do input de busca. O texto do usuário só vira filtro efetivo (e dispara consultas
+  // pesadas) depois do debounce, evitando um fetch para cada tecla digitada.
+  const [searchInput, setSearchInput] = useState<string>(initialFilters.search);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -701,6 +710,13 @@ export default function Sales() {
         }
       }
     }
+
+    // Libera a UI da tabela imediatamente com os dados principais já disponíveis.
+    // Consultas auxiliares (poltronas, embarque, travas) atualizam os mapas em segundo plano
+    // sem bloquear o skeleton — a lista aparece antes e enriquece progressivamente.
+    setLoading(false);
+
+
 
     // Busca apenas as poltronas das vendas da página atual para reduzir custo de consulta.
     const saleIds = (data ?? []).map((sale) => sale.id);
@@ -1865,14 +1881,14 @@ export default function Sales() {
             <div className="mb-0">
               {/* Comentário: os mesmos filtros da tela desktop são reutilizados no mobile para preservar a lógica de busca. */}
               <FilterCard
-                searchValue={filters.search}
-                onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+                searchValue={searchInput}
+                onSearchChange={setSearchInput}
                 searchPlaceholder="Buscar venda..."
                 searchLabel="Busca geral"
                 selects={[{ id: 'status', label: 'Status', placeholder: 'Todos', value: filters.status, onChange: (v) => setFilters((f) => ({ ...f, status: v as any })), options: [{ value: 'all', label: 'Todos' }, { value: 'pendente', label: 'Pendente' }, { value: 'pendente_taxa', label: 'Pendente de taxa' }, { value: 'pendente_pagamento', label: 'Pendente pagamento' }, { value: 'reservado', label: 'Reservado' }, { value: 'pago', label: 'Pago' }, { value: 'cancelado', label: 'Cancelado' }, { value: 'bloqueado', label: 'Bloqueado' }] }, { id: 'reservationRisk', label: 'Risco da Reserva', placeholder: 'Todos', value: filters.reservationRisk, onChange: (v) => setFilters((f) => ({ ...f, reservationRisk: v as SalesFilters['reservationRisk'] })), options: [{ value: 'all', label: 'Todos' }, { value: 'ativa', label: 'Reserva ativa' }, { value: 'proxima', label: 'Próxima do vencimento' }, { value: 'vencida', label: 'Vencida' }] }]}
                 mainFilters={(<><div className="space-y-1.5"><label className="text-sm font-medium text-muted-foreground">Evento</label><Popover open={eventFilterOpen} onOpenChange={setEventFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" className={cn('w-full justify-between font-normal', filters.eventId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedEventFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar evento..." value={eventFilterSearch} onValueChange={setEventFilterSearch} /><CommandList><CommandEmpty>Nenhum evento encontrado.</CommandEmpty><CommandGroup>{filteredEventFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, eventId: option.value })); setEventFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.eventId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div><div className="space-y-1.5"><label className="text-sm font-medium text-muted-foreground">Vendedor</label><Popover open={sellerFilterOpen} onOpenChange={setSellerFilterOpen}><PopoverTrigger asChild><Button variant="outline" role="combobox" className={cn('w-full justify-between font-normal', filters.sellerId === 'all' && 'text-muted-foreground')}><span className="truncate">{selectedSellerFilterLabel}</span><ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start"><Command shouldFilter={false}><CommandInput placeholder="Buscar vendedor..." value={sellerFilterSearch} onValueChange={setSellerFilterSearch} /><CommandList><CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty><CommandGroup>{filteredSellerFilterOptions.map((option) => (<CommandItem key={option.value} value={option.label} onSelect={() => { setFilters((f) => ({ ...f, sellerId: option.value })); setSellerFilterOpen(false); }}><Check className={cn('mr-2 h-4 w-4', filters.sellerId === option.value ? 'opacity-100' : 'opacity-0')} /><span className="truncate">{option.label}</span></CommandItem>))}</CommandGroup></CommandList></Command></PopoverContent></Popover></div></>)}
                 advancedFilters={<div className="grid grid-cols-1 gap-4"><FilterInput id="dateFrom" label="Data Inicial" placeholder="" value={filters.dateFrom} onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))} type="date" icon={Calendar} /><FilterInput id="dateTo" label="Data Final" placeholder="" value={filters.dateTo} onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))} type="date" icon={Calendar} /></div>}
-                onClearFilters={() => setFilters(initialFilters)}
+                onClearFilters={() => { setFilters(initialFilters); setSearchInput(initialFilters.search); }}
                 hasActiveFilters={hasActiveFilters}
               />
             </div>
@@ -1985,8 +2001,8 @@ export default function Sales() {
         {/* Filters */}
         <div className="mb-6">
           <FilterCard
-            searchValue={filters.search}
-            onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+            searchValue={searchInput}
+            onSearchChange={setSearchInput}
             searchPlaceholder="Buscar por nº da passagem, nome, CPF ou evento..."
             searchLabel="Busca geral"
             selects={[
@@ -2134,7 +2150,7 @@ export default function Sales() {
                 />
               </div>
             }
-            onClearFilters={() => setFilters(initialFilters)}
+            onClearFilters={() => { setFilters(initialFilters); setSearchInput(initialFilters.search); }}
             hasActiveFilters={hasActiveFilters}
           />
         </div>
