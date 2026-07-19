@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
+  Bus,
   Calendar,
   Globe,
   Ticket,
