@@ -27,6 +27,7 @@ import {
   QrCode,
   LayoutDashboard,
 } from 'lucide-react';
+import { normalizePublicSlug } from '@/lib/publicSlug';
 
 export type UserRole = 'gerente' | 'operador' | 'vendedor' | 'motorista' | 'developer';
 
@@ -41,7 +42,7 @@ export type NavigationItem = {
   openInNewTab?: boolean;
 };
 
-type NavigationGroup = {
+export type NavigationGroup = {
   id: string;
   label: string;
   icon: typeof Calendar;
@@ -242,3 +243,34 @@ export function canViewAdminNavigationItem({
   return isDeveloper || !item.roles || (userRole ? item.roles.includes(userRole) : false);
 }
 
+export function buildAdminPublicShowcaseUrl(publicSlug?: string | null) {
+  const normalizedPublicSlug = normalizePublicSlug(publicSlug ?? '');
+  if (!normalizedPublicSlug) return null;
+  // Comentário: mantém a URL absoluta no navegador sem quebrar testes/builds executados fora do browser.
+  if (typeof window === 'undefined') return null;
+  return `${window.location.origin}/${normalizedPublicSlug}`;
+}
+
+export function getAdminNavigationGroupsWithDynamicItems(publicShowcaseUrl: string | null): NavigationGroup[] {
+  return navigationGroups.map((group) => {
+    if (group.id !== 'eventos') return group;
+
+    const hasPublicShowcaseItem = group.items.some((item) => item.id === 'public-showcase' || item.name === 'Minha Vitrine Pública');
+    if (hasPublicShowcaseItem) return group;
+
+    return {
+      ...group,
+      items: [
+        ...group.items,
+        {
+          id: 'public-showcase',
+          name: 'Minha Vitrine Pública',
+          href: publicShowcaseUrl ?? '/admin/empresa',
+          icon: Globe,
+          openInNewTab: Boolean(publicShowcaseUrl),
+          statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
+        },
+      ],
+    };
+  });
+}

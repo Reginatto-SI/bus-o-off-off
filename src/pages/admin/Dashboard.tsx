@@ -43,6 +43,7 @@ import {
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
 import { adminMobileBottomNavItems, type AdminMobileBottomNavItem } from '@/components/layout/adminMobileBottomNavItems';
 import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
@@ -252,11 +253,6 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
 
 const mobileBottomNavCandidates: AdminMobileBottomNavItem[] = adminMobileBottomNavItems;
 
-function openAdminMobileMenu() {
-  window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
-}
-
-
 function MobileDashboardHome({
   cards,
   bottomNavItems,
@@ -282,6 +278,9 @@ function MobileDashboardHome({
   todaySummaryError: boolean;
   recentSalesError: boolean;
 }) {
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const openAdminMobileMenu = () => setMobileMoreMenuOpen(true);
+
   const summaryItems = [
     { title: 'Vendas pagas', value: String(todaySummary?.paidSales ?? 0), icon: CheckCircle2 },
     { title: 'Passagens vendidas', value: String(todaySummary?.ticketsSold ?? 0), icon: Ticket },
@@ -420,6 +419,7 @@ function MobileDashboardHome({
       </main>
 
       <AdminMobileBottomNav activeItem="inicio" items={bottomNavItems} onMoreClick={openAdminMobileMenu} />
+      <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
     </div>
   );
 }

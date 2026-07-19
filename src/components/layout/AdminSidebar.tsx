@@ -1,7 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Calendar,
-  Globe,
   LogOut,
   Menu,
   X,
@@ -15,16 +14,16 @@ import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed';
-import { normalizePublicSlug } from '@/lib/publicSlug';
 import busaoIcon from '@/assets/brand/busao-icon.svg';
 import collapsedSidebarOfficialIcon from '@/assets/brand/sidebar-collapsed-official.svg';
 import logoAdmin from '@/assets/logo_admin.png';
 import { toast } from 'sonner';
 
 import {
+  buildAdminPublicShowcaseUrl,
   canViewAdminNavigationItem,
   findAdminNavigationItemByHref,
-  navigationGroups,
+  getAdminNavigationGroupsWithDynamicItems,
   type NavigationItem,
   type UserRole,
 } from './adminNavigation';
@@ -113,38 +112,9 @@ export function AdminSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { collapsed, toggleCollapsed } = useSidebarCollapsed();
 
-  const normalizedPublicSlug = normalizePublicSlug(activeCompany?.public_slug ?? '');
-  const publicShowcaseUrl = normalizedPublicSlug ? `${window.location.origin}/${normalizedPublicSlug}` : null;
+  const publicShowcaseUrl = buildAdminPublicShowcaseUrl(activeCompany?.public_slug);
 
-  useEffect(() => {
-    // Comentário: permite que atalhos mobile do dashboard abram o menu administrativo existente sem duplicar navegação.
-    const handleOpenMobileMenu = () => setMobileOpen(true);
-    window.addEventListener('smartbus:open-admin-mobile-menu', handleOpenMobileMenu);
-
-    return () => window.removeEventListener('smartbus:open-admin-mobile-menu', handleOpenMobileMenu);
-  }, []);
-
-  // Comentário: item dinâmico usa somente o nick público da empresa ativa, sem expor identificadores internos.
-  const groupsWithDynamicItems = navigationGroups.map((group) => {
-    if (group.id === 'eventos') {
-      return {
-        ...group,
-        items: [
-          ...group.items,
-          {
-            id: 'public-showcase',
-            name: 'Minha Vitrine Pública',
-            href: publicShowcaseUrl ?? '/admin/empresa',
-            icon: Globe,
-            openInNewTab: Boolean(publicShowcaseUrl),
-            statusLabel: publicShowcaseUrl ? undefined : 'Configurar nick',
-          } satisfies NavigationItem,
-        ],
-      };
-    }
-
-    return group;
-  });
+  const groupsWithDynamicItems = getAdminNavigationGroupsWithDynamicItems(publicShowcaseUrl);
 
   const visibleGroups = groupsWithDynamicItems.map(group => ({
     ...group,
