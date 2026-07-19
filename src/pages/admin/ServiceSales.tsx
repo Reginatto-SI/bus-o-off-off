@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +31,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { CalendarDays, Check, ChevronsUpDown, CircleDollarSign, ClipboardList, Copy, Loader2, Printer, Sparkles, UserRound } from 'lucide-react';
+import { CalendarDays, Check, ChevronsUpDown, CircleDollarSign, ClipboardList, Copy, Loader2, Plus, Printer, Sparkles, UserRound } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -69,6 +75,17 @@ interface EventBoardingWindowRow {
   departure_time: string | null;
 }
 
+interface LinkedEventServiceStatus {
+  event_id: string;
+  is_active: boolean;
+  total_capacity: number;
+  sold_quantity: number;
+  service: {
+    name: string;
+    status: string;
+  } | null;
+}
+
 interface ServiceSaleReceipt {
   saleId: string;
   serviceQrCodeToken: string;
@@ -105,7 +122,9 @@ const STEP_DETAILS: Array<{ value: WizardStep; label: string; icon: typeof Spark
 ];
 
 export default function ServiceSales() {
-  const { activeCompanyId, user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { activeCompanyId, user, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const { environment: runtimePaymentEnvironment } = useRuntimePaymentEnvironment();
 
   const [loading, setLoading] = useState(false);
@@ -114,6 +133,8 @@ export default function ServiceSales() {
   const [step, setStep] = useState<WizardStep>('selecionar');
   const [events, setEvents] = useState<EventOption[]>([]);
   const [eventServices, setEventServices] = useState<EventServiceOption[]>([]);
+  const [linkedEventServices, setLinkedEventServices] = useState<LinkedEventServiceStatus[]>([]);
+  const [serviceCatalogStats, setServiceCatalogStats] = useState({ total: 0, active: 0 });
 
   const [eventPopoverOpen, setEventPopoverOpen] = useState(false);
   const [eventSearch, setEventSearch] = useState('');
@@ -128,6 +149,9 @@ export default function ServiceSales() {
   const [buyerName, setBuyerName] = useState('');
   const [latestReceipt, setLatestReceipt] = useState<ServiceSaleReceipt | null>(null);
   const [copyingQrToken, setCopyingQrToken] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const eventIdFromUrlRef = useRef(searchParams.get('eventId') ?? '');
+  eventIdFromUrlRef.current = searchParams.get('eventId') ?? '';
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === selectedEventId),
@@ -135,7 +159,7 @@ export default function ServiceSales() {
   );
 
   const availableEventServices = useMemo(
-    () => eventServices.filter((service) => service.event_id === selectedEventId && service.service?.status === 'ativo'),
+    () => eventServices.filter((service) => service.event_id === selectedEventId && service.service?.status === 'ativo' && Math.max((service.total_capacity ?? 0) - (service.sold_quantity ?? 0), 0) > 0),
     [eventServices, selectedEventId],
   );
 
@@ -154,6 +178,35 @@ export default function ServiceSales() {
     [selectedEventService, quantity],
   );
 
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      // Reutiliza o destino visual de embarque e a permissão oficial do menu administrativo (/validador).
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+        canAccessTemplatesLayout,
+      });
+    }),
+    [canAccessTemplatesLayout, isDeveloper, userRole],
+  );
+
+  const canAccessServiceCatalog = canViewAdminNavigationItem({
+    item: findAdminNavigationItemByHref('/admin/servicos'),
+    userRole,
+    isDeveloper,
+    canAccessTemplatesLayout,
+  });
+
+  const canAccessEventConfiguration = canViewAdminNavigationItem({
+    item: findAdminNavigationItemByHref('/admin/eventos'),
+    userRole,
+    isDeveloper,
+    canAccessTemplatesLayout,
+  });
+
   const filteredEvents = useMemo(() => {
     const term = eventSearch.trim().toLowerCase();
     if (!term) return events;
@@ -170,7 +223,12 @@ export default function ServiceSales() {
       setLoading(true);
 
       try {
-        const [{ data: eventsData, error: eventsError }, { data: eventServicesData, error: servicesError }] = await Promise.all([
+        const [
+          { data: eventsData, error: eventsError },
+          { data: eventServicesData, error: servicesError },
+          { data: linkedServicesData, error: linkedServicesError },
+          { data: serviceCatalogData, error: serviceCatalogError },
+        ] = await Promise.all([
           supabase
             .from('events')
             .select('id, name, date, city')
@@ -184,10 +242,20 @@ export default function ServiceSales() {
             .eq('company_id', activeCompanyId)
             .eq('is_active', true)
             .eq('service.status', 'ativo'),
+          supabase
+            .from('event_services')
+            .select('event_id, is_active, total_capacity, sold_quantity, service:services(name, status)')
+            .eq('company_id', activeCompanyId),
+          supabase
+            .from('services')
+            .select('status')
+            .eq('company_id', activeCompanyId),
         ]);
 
         if (eventsError) throw eventsError;
         if (servicesError) throw servicesError;
+        if (linkedServicesError) throw linkedServicesError;
+        if (serviceCatalogError) throw serviceCatalogError;
 
         const baseEventRows = eventsData ?? [];
         if (baseEventRows.length > 0) {
@@ -202,11 +270,33 @@ export default function ServiceSales() {
             baseEventRows,
             ((boardingsData ?? []) as EventBoardingWindowRow[]),
           );
-          setEvents(filterOperationallyVisibleEvents(baseEventRows, operationalEndMap));
+          const visibleEvents = filterOperationallyVisibleEvents(baseEventRows, operationalEndMap);
+          setEvents(visibleEvents);
+          const urlEventId = eventIdFromUrlRef.current;
+          if (urlEventId && visibleEvents.some((event) => event.id === urlEventId)) {
+            setSelectedEventId(urlEventId);
+          } else if (urlEventId) {
+            setSelectedEventId('');
+            setSelectedEventServiceId('');
+            setStep('selecionar');
+            setSearchParams({});
+          }
         } else {
           setEvents([]);
+          setSelectedEventId('');
+          setSelectedEventServiceId('');
+          setStep('selecionar');
+          if (eventIdFromUrlRef.current) {
+            setSearchParams({});
+          }
         }
         setEventServices((eventServicesData as EventServiceOption[]) ?? []);
+        setLinkedEventServices((linkedServicesData as unknown as LinkedEventServiceStatus[]) ?? []);
+        const serviceRows = (serviceCatalogData as Array<{ status: string | null }> | null) ?? [];
+        setServiceCatalogStats({
+          total: serviceRows.length,
+          active: serviceRows.filter((service) => service.status === 'ativo').length,
+        });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Erro ao carregar dados da venda de serviços.';
         toast.error(message);
@@ -216,7 +306,7 @@ export default function ServiceSales() {
     }
 
     loadData();
-  }, [activeCompanyId]);
+  }, [activeCompanyId, setSearchParams]);
 
   const selectedEventLabel = selectedEvent
     ? `${formatDateOnlyBR(selectedEvent.date)} — ${selectedEvent.name}${selectedEvent.city ? ` (${selectedEvent.city})` : ''}`
@@ -226,6 +316,63 @@ export default function ServiceSales() {
   const canAdvanceToPayment = Boolean(quantity > 0 && quantity <= availableQuantity);
   const safeBuyerName = buyerName.trim() || 'Cliente não informado (venda de serviço)';
   const currentStepIndex = STEP_DETAILS.findIndex((stepItem) => stepItem.value === step);
+
+  const selectedEventLinkedServices = useMemo(
+    () => linkedEventServices.filter((service) => service.event_id === selectedEventId),
+    [linkedEventServices, selectedEventId],
+  );
+
+  const serviceEmptyState = useMemo(() => {
+    if (!selectedEventId) {
+      return {
+        title: 'Selecione um evento',
+        description: 'Selecione um evento para visualizar os serviços disponíveis.',
+        actionLabel: null as string | null,
+        action: null as (() => void) | null,
+      };
+    }
+
+    if (serviceCatalogStats.total === 0) {
+      return {
+        title: 'Nenhum serviço cadastrado',
+        description: canAccessServiceCatalog
+          ? 'Cadastre o primeiro serviço da empresa para depois vinculá-lo a um evento e realizar a venda.'
+          : 'Nenhum serviço está disponível para este evento. Solicite a um administrador que cadastre ou vincule o serviço.',
+        actionLabel: canAccessServiceCatalog ? 'Cadastrar serviço' : null,
+        action: canAccessServiceCatalog ? () => navigate(`/admin/servicos?action=create&returnTo=/vendas/servicos&eventId=${selectedEventId}`) : null,
+      };
+    }
+
+    if (serviceCatalogStats.active === 0) {
+      return {
+        title: 'Nenhum serviço ativo',
+        description: canAccessServiceCatalog
+          ? 'A empresa possui serviços cadastrados, mas nenhum está ativo para ser vinculado e vendido.'
+          : 'Nenhum serviço está disponível para este evento. Solicite a um administrador que cadastre ou vincule o serviço.',
+        actionLabel: canAccessServiceCatalog ? 'Revisar cadastro de serviços' : null,
+        action: canAccessServiceCatalog ? () => navigate(`/admin/servicos?returnTo=/vendas/servicos&eventId=${selectedEventId}`) : null,
+      };
+    }
+
+    if (selectedEventLinkedServices.length === 0) {
+      return {
+        title: 'Nenhum serviço vinculado a este evento',
+        description: canAccessEventConfiguration
+          ? 'Vincule um serviço ao evento selecionado para liberar a venda.'
+          : 'Nenhum serviço está disponível para este evento. Solicite a um administrador que cadastre ou vincule o serviço.',
+        actionLabel: canAccessEventConfiguration ? 'Vincular serviço ao evento' : null,
+        action: canAccessEventConfiguration ? () => navigate(`/admin/eventos/${selectedEventId}?tab=services&returnTo=/vendas/servicos&eventId=${selectedEventId}`) : null,
+      };
+    }
+
+    return {
+      title: 'Serviços indisponíveis para venda',
+      description: 'O evento possui serviços vinculados, mas eles estão inativos, sem vagas ou indisponíveis pelas configurações atuais.',
+      actionLabel: canAccessEventConfiguration ? 'Revisar serviços do evento' : null,
+      action: canAccessEventConfiguration ? () => navigate(`/admin/eventos/${selectedEventId}?tab=services&returnTo=/vendas/servicos&eventId=${selectedEventId}`) : null,
+    };
+  }, [canAccessEventConfiguration, canAccessServiceCatalog, navigate, selectedEventId, selectedEventLinkedServices.length, serviceCatalogStats.active, serviceCatalogStats.total]);
+
 
   // Estado visual do card lateral para orientar a operação sem alterar o fluxo funcional.
   const summaryState: 'incompleto' | 'preenchendo' | 'pronto' = !canAdvanceToQuantity
@@ -470,9 +617,8 @@ export default function ServiceSales() {
     }
   }
 
-  return (
-    <AdminLayout>
-      <div className="page-container space-y-6">
+  const serviceSalesContent = (
+    <>
         <style>{`
           @media print {
             body * {
@@ -494,21 +640,23 @@ export default function ServiceSales() {
             }
           }
         `}</style>
-        <PageHeader
-          title="Venda de Serviços"
-          description="Wizard operacional para venda rápida vinculada ao evento"
-        />
+        <div className="hidden lg:block">
+          <PageHeader
+            title="Venda de Serviços"
+            description="Wizard operacional para venda rápida vinculada ao evento"
+          />
+        </div>
 
-        <Card>
+        <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:rounded-lg lg:border-border lg:bg-card lg:shadow-sm">
           <CardHeader>
             <CardTitle>Fluxo rápido</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
-              <TabsList className="grid w-full grid-cols-3 h-12">
-                <TabsTrigger value="selecionar">1. Seleção</TabsTrigger>
-                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity}>2. Quantidade</TabsTrigger>
-                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity}>3. Pagamento</TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/30 p-1 sm:h-12 sm:gap-0">
+                <TabsTrigger value="selecionar" className="min-h-11 rounded-lg text-xs sm:text-sm">1. Seleção</TabsTrigger>
+                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">2. Quantidade</TabsTrigger>
+                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">3. Pagamento</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -530,7 +678,7 @@ export default function ServiceSales() {
                               <ChevronsUpDown className="h-4 w-4 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[420px] p-0" align="start">
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 sm:w-[420px]" align="start">
                             <Command>
                               <CommandInput
                                 placeholder="Buscar evento..."
@@ -549,6 +697,7 @@ export default function ServiceSales() {
                                         onSelect={() => {
                                           setSelectedEventId(event.id);
                                           setSelectedEventServiceId('');
+                                          setSearchParams({ eventId: event.id });
                                           setEventPopoverOpen(false);
                                         }}
                                       >
@@ -577,7 +726,7 @@ export default function ServiceSales() {
                               </div>
                             ) : availableEventServices.length === 0 ? (
                               <div className="px-3 py-2 text-sm text-muted-foreground">
-                                Nenhum serviço vinculado ao evento selecionado. Faça o vínculo na aba Serviços do evento.
+                                Nenhum serviço disponível para o evento selecionado.
                               </div>
                             ) : (
                               availableEventServices.map((service) => (
@@ -588,6 +737,27 @@ export default function ServiceSales() {
                             )}
                           </SelectContent>
                         </Select>
+                        {availableEventServices.length === 0 && (
+                          <div className="mt-3 rounded-2xl border border-dashed border-primary/30 bg-orange-50/60 p-4 text-sm text-slate-700 shadow-sm">
+                            <div className="flex items-start gap-3">
+                              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-primary ring-1 ring-primary/20">
+                                <Sparkles className="h-4 w-4" />
+                              </span>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div>
+                                  <p className="font-semibold text-slate-950">{serviceEmptyState.title}</p>
+                                  <p className="mt-1 leading-relaxed text-slate-600">{serviceEmptyState.description}</p>
+                                </div>
+                                {serviceEmptyState.action && serviceEmptyState.actionLabel && (
+                                  <Button type="button" size="sm" className="min-h-10 w-full rounded-xl sm:w-auto" onClick={serviceEmptyState.action}>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    {serviceEmptyState.actionLabel}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="rounded-md border bg-muted/20 p-3">
@@ -859,6 +1029,27 @@ export default function ServiceSales() {
             </CardContent>
           </Card>
         )}
+    </>
+  );
+
+  return (
+    <AdminLayout>
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Venda de serviços" subtitle="SmartBus" showMenuButton={false} />
+        </div>
+
+        <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5 lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+          <section className="space-y-3 lg:hidden">
+            <p className="text-sm text-slate-600">Registre serviços vinculados a eventos usando o fluxo operacional existente.</p>
+          </section>
+          {serviceSalesContent}
+        </main>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );

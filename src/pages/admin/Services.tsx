@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Service,
@@ -110,6 +110,8 @@ const emptyForm: ServiceFormState = {
 };
 
 export default function Services() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isGerente, isDeveloper, activeCompanyId, user, loading: authLoading } = useAuth();
 
   const [services, setServices] = useState<Service[]>([]);
@@ -120,8 +122,17 @@ export default function Services() {
   const [form, setForm] = useState<ServiceFormState>(emptyForm);
   const [filters, setFilters] = useState<ServiceFilters>(initialFilters);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [returnEventBelongsToCompany, setReturnEventBelongsToCompany] = useState(false);
+  const autoCreateProcessedRef = useRef(false);
 
   const canManage = isGerente || isDeveloper;
+  const returnEventId = searchParams.get('eventId') ?? '';
+  const returnToServiceSales = searchParams.get('returnTo') === '/vendas/servicos'
+    ? `/vendas/servicos${returnEventId ? `?eventId=${returnEventId}` : ''}`
+    : null;
+  const linkServiceToEventUrl = returnEventId
+    ? `/admin/eventos/${returnEventId}?tab=services&returnTo=/vendas/servicos&eventId=${returnEventId}`
+    : null;
 
   const fetchServices = async () => {
     if (!activeCompanyId) return;
@@ -156,6 +167,42 @@ export default function Services() {
     fetchServices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    async function validateReturnEvent() {
+      if (!activeCompanyId || !returnEventId) {
+        setReturnEventBelongsToCompany(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('events')
+        .select('id')
+        .eq('id', returnEventId)
+        .eq('company_id', activeCompanyId)
+        .maybeSingle();
+
+      if (error) {
+        setReturnEventBelongsToCompany(false);
+        return;
+      }
+      setReturnEventBelongsToCompany(Boolean(data));
+    }
+
+    validateReturnEvent();
+  }, [activeCompanyId, returnEventId]);
+
+  useEffect(() => {
+    if (autoCreateProcessedRef.current) return;
+    if (searchParams.get('action') !== 'create') return;
+    if (!canManage || !activeCompanyId) return;
+
+    autoCreateProcessedRef.current = true;
+    openCreate();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    setSearchParams(nextParams, { replace: true });
+  }, [activeCompanyId, canManage, searchParams, setSearchParams]);
 
   const filtered = useMemo(() => {
     return services.filter((s) => {
@@ -256,7 +303,21 @@ export default function Services() {
           }),
         );
       } else {
-        toast.success('Serviço cadastrado.');
+        if (returnToServiceSales) {
+          toast.success('Serviço cadastrado com sucesso', {
+            description: returnEventBelongsToCompany && linkServiceToEventUrl && canManage
+              ? 'Agora vincule o serviço ao evento para disponibilizá-lo na venda.'
+              : 'Agora solicite a um administrador que vincule o serviço ao evento para disponibilizá-lo na venda.',
+            action: returnEventBelongsToCompany && linkServiceToEventUrl && canManage
+              ? {
+                  label: 'Vincular ao evento',
+                  onClick: () => navigate(linkServiceToEventUrl),
+                }
+              : undefined,
+          });
+        } else {
+          toast.success('Serviço cadastrado.');
+        }
         setDialogOpen(false);
         await fetchServices();
       }
@@ -336,10 +397,17 @@ export default function Services() {
           title="Passeios & Serviços"
           description="Cadastre os serviços (passeios, atrações, transfers) que sua agência poderá vincular aos eventos."
           actions={
-            <Button onClick={openCreate} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Novo serviço
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {returnToServiceSales && (
+                <Button type="button" variant="outline" onClick={() => navigate(returnToServiceSales)}>
+                  Voltar para Venda de Serviços
+                </Button>
+              )}
+              <Button onClick={openCreate} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Novo serviço
+              </Button>
+            </div>
           }
         />
 
@@ -461,13 +529,13 @@ export default function Services() {
 
       {/* Modal de cadastro/edição */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg flex-col overflow-hidden p-0 sm:max-h-[90vh] sm:w-full sm:p-6">
+          <DialogHeader className="px-4 py-3 sm:p-0">
             <DialogTitle>
               {editingId ? 'Editar serviço' : 'Novo serviço'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto px-4 pb-4 sm:px-0">
             <div className="space-y-1.5">
               <Label htmlFor="service-name">Nome *</Label>
               <Input
@@ -552,15 +620,16 @@ export default function Services() {
               </div>
             )}
           </div>
-          <div className="mt-2 flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:mt-2 sm:flex-row sm:justify-end sm:border-0 sm:px-0 sm:py-0">
             <Button
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button className="w-full sm:w-auto" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingId ? 'Salvar alterações' : 'Cadastrar serviço'}
             </Button>

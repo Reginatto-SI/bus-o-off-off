@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Event, Trip, Vehicle, Driver, BoardingLocation, EventBoardingLocation, Sale } from '@/types/database';
 import { TablesInsert } from '@/integrations/supabase/types';
@@ -66,6 +66,7 @@ const vehicleTypeLabels: Record<Vehicle['type'], string> = {
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { canViewFinancials, activeCompanyId, userRole, isDeveloper, canAccessTemplatesLayout } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -75,6 +76,9 @@ export default function EventDetail() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [locations, setLocations] = useState<BoardingLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialTab = searchParams.get('tab') === 'services' ? 'services' : 'trips';
+  const serviceSalesReturnTo = searchParams.get('returnTo') === '/vendas/servicos' ? `/vendas/servicos?eventId=${id ?? ''}` : null;
+  const mobileBackTarget = serviceSalesReturnTo ?? '/admin/eventos';
   const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
   const mobileBottomNavItems = useMemo(
     () => adminMobileBottomNavItems.filter((item) => {
@@ -231,7 +235,7 @@ export default function EventDetail() {
     return (
       <AdminLayout>
         <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
-          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate(mobileBackTarget)} />
           <main className="mx-auto w-full max-w-md px-4 py-6">
             <div className="rounded-2xl border border-slate-200/70 bg-white py-10 text-center shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
               <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
@@ -262,7 +266,7 @@ export default function EventDetail() {
     return (
       <AdminLayout>
         <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
-          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+          <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate(mobileBackTarget)} />
           <main className="mx-auto w-full max-w-md px-4 py-6">
             <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
               <CardContent className="p-4">{notFoundState}</CardContent>
@@ -291,7 +295,7 @@ export default function EventDetail() {
   return (
     <AdminLayout>
       <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
-        <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate('/admin/eventos')} />
+        <AdminMobileHeader title="Detalhes do evento" subtitle="SmartBus" onBackClick={() => navigate(mobileBackTarget)} />
         <main className="mx-auto w-full max-w-md space-y-4 px-4 py-5">
           <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
             <CardContent className="space-y-3 p-4">
@@ -308,7 +312,7 @@ export default function EventDetail() {
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="trips" className="space-y-4">
+          <Tabs defaultValue={initialTab} className="space-y-4">
             <div className="overflow-x-auto pb-1">
               <TabsList className="inline-flex h-auto min-w-max justify-start gap-1 rounded-2xl bg-white p-1 shadow-[0_5px_14px_rgba(15,23,42,0.045)]">
                 <TabsTrigger value="trips" className="rounded-xl px-3 py-2 text-xs">Viagens</TabsTrigger>
@@ -338,14 +342,20 @@ export default function EventDetail() {
       </div>
 
       <div className="page-container hidden lg:block">
-        <Button
-          variant="ghost"
-          className="mb-4"
-          onClick={() => navigate('/admin/eventos')}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/admin/eventos')}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          {serviceSalesReturnTo && (
+            <Button type="button" variant="outline" onClick={() => navigate(serviceSalesReturnTo)}>
+              Voltar para Venda de Serviços
+            </Button>
+          )}
+        </div>
 
         <Card className="mb-6">
           <CardHeader>
@@ -379,7 +389,7 @@ export default function EventDetail() {
           )}
         </Card>
 
-        <Tabs defaultValue="trips" className="space-y-4">
+        <Tabs defaultValue={initialTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="trips">Viagens</TabsTrigger>
             <TabsTrigger value="locations">Locais de Embarque</TabsTrigger>

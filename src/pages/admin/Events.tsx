@@ -3784,14 +3784,14 @@ Links internos:
                           className={cn(
                             'group relative inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-0 text-sm font-semibold text-slate-600 shadow-sm transition hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-auto sm:w-auto sm:min-w-0 sm:rounded-md sm:border-b-2 sm:border-l-0 sm:border-r-0 sm:border-t-0 sm:border-transparent sm:bg-transparent sm:px-3 sm:py-1.5 sm:shadow-none',
                             isCurrentTab
-                              ? 'min-w-[9rem] border-primary bg-primary px-3 text-primary-foreground shadow-[0_8px_18px_rgba(234,88,12,0.18)] data-[state=active]:text-primary-foreground sm:border-primary sm:bg-transparent sm:text-foreground sm:shadow-none sm:data-[state=active]:text-foreground'
+                              ? 'min-w-[9rem] border-primary bg-orange-50 px-3 text-slate-950 shadow-[0_8px_18px_rgba(234,88,12,0.18)] data-[state=active]:text-slate-950 sm:border-primary sm:bg-transparent sm:text-foreground sm:shadow-none sm:data-[state=active]:text-foreground'
                               : 'w-10 data-[state=active]:text-slate-600 sm:w-auto',
                             lockMessage && 'opacity-45 text-muted-foreground'
                           )}
                         >
                           <span className={cn(
                             'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:hidden',
-                            isCurrentTab ? 'bg-white/20 text-primary-foreground' : 'bg-slate-100 text-slate-700',
+                            isCurrentTab ? 'bg-white text-slate-950 ring-1 ring-primary/30' : 'bg-slate-100 text-slate-700',
                             stepComplete && !isCurrentTab && !lockMessage && 'bg-green-50 text-green-700'
                           )}>
                             {lockMessage ? <Lock className="h-3.5 w-3.5" /> : stepComplete && !isCurrentTab ? <Check className="h-3.5 w-3.5" /> : stepNumber}
