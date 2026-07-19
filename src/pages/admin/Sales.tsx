@@ -455,6 +455,15 @@ export default function Sales() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SalesFilters>(initialFilters);
+  // Buffer local do input de busca. O texto do usuário só vira filtro efetivo (e dispara consultas
+  // pesadas) depois do debounce, evitando um fetch para cada tecla digitada.
+  const [searchInput, setSearchInput] = useState<string>(initialFilters.search);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setFilters((prev) => (prev.search === searchInput ? prev : { ...prev, search: searchInput }));
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [exportModalOpen, setExportModalOpen] = useState(false);
