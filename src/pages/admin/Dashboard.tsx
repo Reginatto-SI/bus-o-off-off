@@ -1017,7 +1017,7 @@ export default function Dashboard() {
   /* ─── KPIs Operacionais ─────────────────────────────── */
   const { data: opKpis, isLoading: opLoading } = useQuery({
     queryKey: ['dashboard-op', activeCompanyId, period],
-    enabled,
+    desktopQueriesEnabled,
     queryFn: async (): Promise<OperationalKpis> => {
       // Eventos à venda (não arquivados)
       const { count: eventsOnSale } = await supabase
@@ -1105,7 +1105,7 @@ export default function Dashboard() {
   const { data: finKpis, isLoading: finLoading } = useQuery({
     queryKey: ['dashboard-fin', activeCompanyId, period],
     // Segurança: query nunca executa para Operador
-    enabled: enabled && canViewFinancials,
+    enabled: desktopQueriesEnabled && canViewFinancials,
     queryFn: async (): Promise<FinancialKpis> => {
       // Usar RPC existente que já agrega KPIs financeiros
       const { data } = await supabase.rpc('get_sales_report_kpis', {
@@ -1126,7 +1126,7 @@ export default function Dashboard() {
   /* ─── Gráfico: Vendas pagas por dia ───────────────────── */
   const { data: dailySales, isLoading: dailyLoading } = useQuery({
     queryKey: ['dashboard-daily', activeCompanyId, period],
-    enabled,
+    desktopQueriesEnabled,
     queryFn: async (): Promise<DailySales[]> => {
       const { data } = await supabase
         .from('sales')
@@ -1160,7 +1160,7 @@ export default function Dashboard() {
   /* ─── Gráfico: Distribuição por status ────────────────── */
   const { data: statusDist, isLoading: statusLoading } = useQuery({
     queryKey: ['dashboard-status', activeCompanyId, period],
-    enabled,
+    desktopQueriesEnabled,
     queryFn: async (): Promise<StatusDist[]> => {
       // Incluímos pendente para separar pipeline operacional de venda já paga.
       const statuses = ['pendente_pagamento', 'reservado', 'pago', 'cancelado'] as const;
@@ -1187,7 +1187,7 @@ export default function Dashboard() {
   /* ─── Ranking: Top 5 eventos ──────────────────────────── */
   const { data: topEvents, isLoading: topEventsLoading } = useQuery({
     queryKey: ['dashboard-top-events', activeCompanyId, period],
-    enabled,
+    desktopQueriesEnabled,
     queryFn: async (): Promise<RankItem[]> => {
       const { data } = await supabase
         .from('sales')
@@ -1215,7 +1215,7 @@ export default function Dashboard() {
   /* ─── Ranking: Top 5 vendedores ───────────────────────── */
   const { data: topSellers, isLoading: topSellersLoading } = useQuery({
     queryKey: ['dashboard-top-sellers', activeCompanyId, period],
-    enabled,
+    desktopQueriesEnabled,
     queryFn: async (): Promise<RankItem[]> => {
       const { data } = await supabase
         .from('sales')
