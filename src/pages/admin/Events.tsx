@@ -883,25 +883,6 @@ export default function Events() {
     return false;
   };
 
-  const wizardStepTabs = useMemo(
-    () => WIZARD_TABS_ORDER.map((tab) => ({
-      value: tab,
-      label: WIZARD_TAB_LABELS[tab],
-      icon: WIZARD_TAB_ICONS[tab],
-      count: tab === 'viagens'
-        ? (editingId ? uniqueFleets : null)
-        : tab === 'embarques'
-          ? (editingId ? eventBoardingLocations.length : null)
-          : tab === 'termos'
-            ? (editingId ? eventTermLinksCount : null)
-            : tab === 'whatsapp'
-              ? (form.whatsapp_group_link.trim() ? 1 : null)
-              : null,
-      optional: WIZARD_OPTIONAL_TABS.has(tab),
-    })),
-    [editingId, eventBoardingLocations.length, eventTermLinksCount, form.whatsapp_group_link, uniqueFleets]
-  );
-
   const getCurrentStepErrors = (tab: string): string[] => {
     if (tab === 'geral') return geralMissingFields.length > 0 ? [`Preencha: ${geralMissingFields.join(', ')}`] : [];
     if (tab === 'viagens') return !hasAtLeastOneFleet ? ['Adicione pelo menos 1 frota/transporte'] : [];
