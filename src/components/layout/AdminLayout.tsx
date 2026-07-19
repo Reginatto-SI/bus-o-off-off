@@ -95,7 +95,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }, [user, userRole]);
 
   const isMobileDashboardHome = location.pathname === '/admin/dashboard';
-  const usesCustomMobileAdminChrome = isMobileDashboardHome || ['/admin/vendas', '/admin/eventos', '/admin/relatorios/lista-embarque'].includes(location.pathname) || /^\/admin\/eventos\/[^/]+$/.test(location.pathname);
+  const usesCustomMobileAdminChrome = isMobileDashboardHome || ['/admin/vendas', '/admin/eventos', '/admin/relatorios/lista-embarque', '/admin/relatorios/vendas'].includes(location.pathname) || /^\/admin\/eventos\/[^/]+$/.test(location.pathname);
 
   const supportContactUrl = useMemo(() => {
     return buildWhatsappWaMeLink({
