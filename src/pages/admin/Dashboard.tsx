@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
+  Bus,
   Calendar,
   Globe,
   Ticket,
@@ -965,7 +966,7 @@ export default function Dashboard() {
       if (todaySalesError) throw todaySalesError;
       if (activeEventsError) throw activeEventsError;
 
-      const paidSales = (todaySales ?? []) as Array<MobileTodayOperationalSaleRow | MobileTodayFinancialSaleRow>;
+      const paidSales = (todaySales ?? []) as unknown as Array<MobileTodayOperationalSaleRow | MobileTodayFinancialSaleRow>;
       const eventIds = new Set(paidSales.map((sale) => sale.event_id).filter(Boolean));
       const financialSales = canViewFinancials ? paidSales as MobileTodayFinancialSaleRow[] : [];
       return {
@@ -996,7 +997,7 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      const recentRows = (data ?? []) as Array<MobileRecentOperationalSaleRow | MobileRecentFinancialSaleRow>;
+      const recentRows = (data ?? []) as unknown as Array<MobileRecentOperationalSaleRow | MobileRecentFinancialSaleRow>;
       return recentRows.map((sale) => {
         const financialSale = canViewFinancials ? sale as MobileRecentFinancialSaleRow : null;
         return {
