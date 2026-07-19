@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { subDays, format, startOfDay, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  Bus,
   Calendar,
   Globe,
   Ticket,
@@ -19,7 +18,7 @@ import {
   ClipboardList,
   FileText,
   Home,
-  LayoutGrid,
+  MoreHorizontal,
   Circle,
   CheckCircle2,
   ArrowRight,
@@ -227,7 +226,7 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
     title: 'Embarque',
     description: 'Controle validações',
     href: '/validador/embarque',
-    icon: Bus,
+    icon: QrCode,
   },
   {
     // Comentário: usa a rota real de lista de embarque para não duplicar o card de Vendas.
@@ -340,7 +339,7 @@ function MobileDashboardHome({
             onClick={openAdminMobileMenu}
             className="group flex min-h-[6.9rem] flex-col items-center justify-center rounded-[1.05rem] border border-slate-200/70 bg-white px-3 py-3.5 text-center shadow-[0_7px_18px_rgba(15,23,42,0.055)] transition active:scale-[0.98] min-[390px]:min-h-[7.25rem] min-[430px]:min-h-[7.5rem]"
           >
-            <LayoutGrid className="mb-2.5 h-9 w-9 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={1.9} />
+            <MoreHorizontal className="mb-2.5 h-9 w-9 text-[hsl(var(--primary))] transition group-active:scale-95" strokeWidth={1.9} />
             <span className="text-[1.02rem] font-semibold leading-tight text-slate-950">Mais</span>
             <span className="mt-1.5 text-[0.78rem] leading-snug text-slate-500">Outras funcionalidades</span>
           </button>
