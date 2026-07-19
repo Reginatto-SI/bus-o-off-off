@@ -702,6 +702,13 @@ export default function Sales() {
       }
     }
 
+    // Libera a UI da tabela imediatamente com os dados principais já disponíveis.
+    // Consultas auxiliares (poltronas, embarque, travas) atualizam os mapas em segundo plano
+    // sem bloquear o skeleton — a lista aparece antes e enriquece progressivamente.
+    setLoading(false);
+
+
+
     // Busca apenas as poltronas das vendas da página atual para reduzir custo de consulta.
     const saleIds = (data ?? []).map((sale) => sale.id);
     if (saleIds.length > 0) {
