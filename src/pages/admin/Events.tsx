@@ -3141,7 +3141,7 @@ Links internos:
   return (
     <AdminLayout>
       <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:hidden">
-        <AdminMobileHeader title="Eventos" subtitle="SmartBus" onMenuClick={openAdminMobileMenu} />
+        <AdminMobileHeader title="Eventos" subtitle="SmartBus" showMenuButton={false} />
 
         <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5">
           <section className="space-y-3">
@@ -3696,8 +3696,8 @@ Links internos:
 
         {/* Event Modal with 5 Tabs */}
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-            <DialogHeader className="admin-modal__header px-6 py-4 border-b">
+          <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+            <DialogHeader className="admin-modal__header border-b px-4 py-3 sm:px-6 sm:py-4">
               <DialogTitle className="flex items-center gap-2">
                 {isReadOnly && <Lock className="h-4 w-4 text-muted-foreground" />}
                 {editingId ? (isReadOnly ? 'Visualizar' : 'Editar') : 'Novo'} Evento
@@ -3708,7 +3708,7 @@ Links internos:
               <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col overflow-hidden">
                 {/* Wizard Progress Indicator */}
                 {!isReadOnly && (
-                  <div className="px-6 pt-4 pb-2 space-y-2">
+                  <div className="space-y-2 px-4 pb-2 pt-3 sm:px-6 sm:pt-4">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium text-foreground">
                         Etapa {getStepNumber(activeTab)} de {WIZARD_TABS_ORDER.length} — {WIZARD_TAB_LABELS[activeTab] || 'Geral'}
@@ -3721,7 +3721,7 @@ Links internos:
                   </div>
                 )}
 
-                <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2 border-b bg-muted/30">
+                <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto border-b bg-muted/30 px-4 py-2 sm:flex-wrap sm:px-6">
                   {[
                     { value: 'geral', label: 'Geral', icon: FileText, count: null },
                     { value: 'viagens', label: 'Frotas', icon: Bus, count: editingId ? uniqueFleets : null },
@@ -3768,7 +3768,7 @@ Links internos:
                   })}
                 </TabsList>
 
-                <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                <div className="admin-modal__body flex-1 overflow-y-auto px-4 py-4 pb-28 sm:px-6 sm:pb-4">
                   {/* Read-only warning for encerrado events */}
                   {isReadOnly && (
                     <Card className="mb-4 border-destructive/50 bg-destructive/5">
@@ -5513,7 +5513,7 @@ Links internos:
                   </TabsContent>
                 </div>
 
-                <div className="admin-modal__footer px-6 py-4 border-t">
+                <div className="admin-modal__footer border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                   {isReadOnly ? (
                     <div className="flex justify-end">
                       <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -5522,7 +5522,7 @@ Links internos:
                     </div>
                   ) : !isCreateWizardMode ? (
                     /* Modo edição: manter botões existentes */
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                       <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                         Cancelar
                       </Button>
@@ -5534,7 +5534,7 @@ Links internos:
                     </div>
                   ) : (
                     /* Modo wizard: rodapé padronizado */
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       {/* Lado esquerdo: Salvar rascunho */}
                       <div>
                         {getStepNumber(activeTab) > 1 && (
@@ -5556,7 +5556,7 @@ Links internos:
                         )}
                       </div>
                       {/* Lado direito: Voltar + Próximo/Finalizar */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                         {getPreviousWizardTab(activeTab) && (
                           <Button
                             type="button"
