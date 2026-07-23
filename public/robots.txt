@@ -22,4 +22,4 @@ Disallow: /v/
 Disallow: /i/
 Disallow: /eventos/
 
-Sitemap: https://www.smartbusbr.com.br/sitemap.xml
+Sitemap: https://www.smartbus.com.br/sitemap.xml

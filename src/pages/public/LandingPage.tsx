@@ -613,7 +613,7 @@ const JOURNEY_OPTIONS = [
     style: "bg-primary/5 border-primary/20 hover:border-primary/40",
   },
 ];
-const LANDING_CONTACT_EMAIL = "comercial@smartbusbr.com.br";
+const LANDING_CONTACT_EMAIL = "comercial@smartbuscom.br";
 interface LandingContactFormState {
   name: string;
   email: string;
@@ -2209,6 +2209,22 @@ export default function LandingPage() {
                     className="text-sm text-white/80 transition-colors hover:text-white"
                   >
                     Política de intermediação
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/privacidade"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
+                  >
+                    Política de Privacidade
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/exclusao-de-conta"
+                    className="text-sm text-white/80 transition-colors hover:text-white"
+                  >
+                    Exclusão de conta
                   </Link>
                 </li>
                 <li>

@@ -507,6 +507,9 @@ export default function RepresentativeDashboard() {
                   </Link>
                 </Button>
               )}
+              <Button variant="ghost" size="sm" asChild className="h-9 px-2.5 text-xs">
+                <Link to="/exclusao-de-conta">Privacidade</Link>
+              </Button>
               <Button variant="ghost" size="sm" onClick={signOut} className="h-9 gap-1.5 px-2.5">
                 <LogOut className="h-4 w-4 shrink-0" />
                 <span className="text-xs">Sair</span>
@@ -536,6 +539,9 @@ export default function RepresentativeDashboard() {
                   </Link>
                 </Button>
               )}
+              <Button variant="ghost" size="sm" asChild className="h-10 px-3">
+                <Link to="/exclusao-de-conta">Privacidade e exclusão de conta</Link>
+              </Button>
               <Button variant="ghost" size="sm" onClick={signOut} className="h-10 px-3">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Sair</span>

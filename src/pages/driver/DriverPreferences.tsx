@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, ScanLine, Volume2, Vibrate } from 'lucide-react';
+import { ArrowLeft, ScanLine, Shield, Volume2, Vibrate } from 'lucide-react';
 import { getDriverPreferences, setDriverPreferences, type DriverPreferences } from '@/lib/driverPreferences';
 import { playBeep } from '@/lib/driverScannerFeedback';
 
@@ -96,6 +96,23 @@ export default function DriverPreferencesPage() {
                 checked={prefs.vibrationEnabled}
                 onCheckedChange={(v) => update({ vibrationEnabled: v })}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5 space-y-3">
+            <div className="flex items-start gap-3">
+              <Shield className="mt-0.5 h-5 w-5 text-primary" />
+              <div className="space-y-2">
+                <div>
+                  <p className="font-semibold text-sm">Privacidade e conta</p>
+                  <p className="text-xs text-muted-foreground">Acesse a página pública para solicitar manualmente a exclusão da conta e dos dados vinculados.</p>
+                </div>
+                <Button asChild variant="outline" size="sm" className="w-full justify-center">
+                  <Link to="/exclusao-de-conta">Solicitar exclusão da conta</Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
