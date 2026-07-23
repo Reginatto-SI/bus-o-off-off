@@ -647,16 +647,17 @@ export default function ServiceSales() {
           />
         </div>
 
-        <Card className="rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:rounded-lg lg:border-border lg:bg-card lg:shadow-sm">
-          <CardHeader>
+        {/* Guardas responsivas locais: corrigem o overflow real dos filhos sem mascarar a página com overflow-x-hidden. */}
+        <Card className="min-w-0 max-w-full rounded-2xl border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:rounded-lg lg:border-border lg:bg-card lg:shadow-sm">
+          <CardHeader className="px-4 sm:px-6">
             <CardTitle>Fluxo rápido</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="min-w-0 max-w-full space-y-6 px-4 sm:px-6">
             <Tabs value={step} onValueChange={(value) => setStep(value as WizardStep)}>
               <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/30 p-1 sm:h-12 sm:gap-0">
-                <TabsTrigger value="selecionar" className="min-h-11 rounded-lg text-xs sm:text-sm">1. Seleção</TabsTrigger>
-                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">2. Quantidade</TabsTrigger>
-                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity} className="min-h-11 rounded-lg text-xs sm:text-sm">3. Pagamento</TabsTrigger>
+                <TabsTrigger value="selecionar" className="min-h-11 min-w-0 rounded-lg px-1 text-xs sm:px-3 sm:text-sm">1. Seleção</TabsTrigger>
+                <TabsTrigger value="quantidade" disabled={!canAdvanceToQuantity} className="min-h-11 min-w-0 rounded-lg px-1 text-xs sm:px-3 sm:text-sm">2. Quantidade</TabsTrigger>
+                <TabsTrigger value="pagamento" disabled={!canAdvanceToPayment || !canAdvanceToQuantity} className="min-h-11 min-w-0 rounded-lg px-1 text-xs sm:px-3 sm:text-sm">3. Pagamento</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -665,20 +666,20 @@ export default function ServiceSales() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados...
               </div>
             ) : (
-              <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-                <div className="rounded-lg border bg-card p-4 lg:p-5 transition-all duration-200">
+              <div className="grid min-w-0 max-w-full gap-6 xl:grid-cols-[2fr_1fr]">
+                <div className="min-w-0 max-w-full rounded-lg border bg-card p-3 transition-all duration-200 sm:p-4 lg:p-5">
                   {step === 'selecionar' && (
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid min-w-0 max-w-full gap-3 md:grid-cols-2">
                       <div className="space-y-2 md:col-span-2">
                         <Label>Evento</Label>
                         <Popover open={eventPopoverOpen} onOpenChange={setEventPopoverOpen}>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" role="combobox" className="h-10 w-full justify-between hover:border-primary/40">
-                              <span className="truncate">{selectedEventLabel}</span>
-                              <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                            <Button variant="outline" role="combobox" className="h-10 w-full min-w-0 justify-between gap-2 hover:border-primary/40">
+                              <span className="min-w-0 flex-1 truncate text-left">{selectedEventLabel}</span>
+                              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 sm:w-[420px]" align="start">
+                          <PopoverContent className="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))] max-w-[calc(100vw-2rem)] p-0 sm:w-[420px]" align="start">
                             <Command>
                               <CommandInput
                                 placeholder="Buscar evento..."
@@ -701,8 +702,8 @@ export default function ServiceSales() {
                                           setEventPopoverOpen(false);
                                         }}
                                       >
-                                        <Check className={cn('mr-2 h-4 w-4', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
-                                        {label}
+                                        <Check className={cn('mr-2 h-4 w-4 shrink-0', selectedEventId === event.id ? 'opacity-100' : 'opacity-0')} />
+                                        <span className="min-w-0 whitespace-normal break-words leading-snug">{label}</span>
                                       </CommandItem>
                                     );
                                   })}
@@ -716,10 +717,10 @@ export default function ServiceSales() {
                       <div className="space-y-2 md:col-span-2">
                         <Label>Serviço</Label>
                         <Select value={selectedEventServiceId} onValueChange={setSelectedEventServiceId}>
-                          <SelectTrigger className="h-10">
+                          <SelectTrigger className="h-10 min-w-0 max-w-full [&>span]:min-w-0 [&>span]:truncate">
                             <SelectValue placeholder="Selecione o serviço" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-w-[calc(100vw-2rem)]">
                             {!selectedEventId ? (
                               <div className="px-3 py-2 text-sm text-muted-foreground">
                                 Selecione um evento para carregar os serviços.
@@ -730,16 +731,18 @@ export default function ServiceSales() {
                               </div>
                             ) : (
                               availableEventServices.map((service) => (
-                                <SelectItem key={service.id} value={service.id}>
-                                  {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
+                                <SelectItem key={service.id} value={service.id} className="min-w-0 max-w-full whitespace-normal break-words">
+                                  <span className="min-w-0 whitespace-normal break-words leading-snug">
+                                    {service.service?.name} · {UNIT_LABELS[service.service?.unit_type ?? 'unitario']}
+                                  </span>
                                 </SelectItem>
                               ))
                             )}
                           </SelectContent>
                         </Select>
                         {availableEventServices.length === 0 && (
-                          <div className="mt-3 rounded-2xl border border-dashed border-primary/30 bg-orange-50/60 p-4 text-sm text-slate-700 shadow-sm">
-                            <div className="flex items-start gap-3">
+                          <div className="mt-3 min-w-0 max-w-full rounded-2xl border border-dashed border-primary/30 bg-orange-50/60 p-3 text-sm text-slate-700 shadow-sm sm:p-4">
+                            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
                               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-primary ring-1 ring-primary/20">
                                 <Sparkles className="h-4 w-4" />
                               </span>
@@ -749,7 +752,7 @@ export default function ServiceSales() {
                                   <p className="mt-1 leading-relaxed text-slate-600">{serviceEmptyState.description}</p>
                                 </div>
                                 {serviceEmptyState.action && serviceEmptyState.actionLabel && (
-                                  <Button type="button" size="sm" className="min-h-10 w-full rounded-xl sm:w-auto" onClick={serviceEmptyState.action}>
+                                  <Button type="button" size="sm" className="min-h-10 w-full min-w-0 whitespace-normal rounded-xl px-3 text-center leading-snug sm:w-auto" onClick={serviceEmptyState.action}>
                                     <Plus className="mr-2 h-4 w-4" />
                                     {serviceEmptyState.actionLabel}
                                   </Button>
@@ -760,18 +763,18 @@ export default function ServiceSales() {
                         )}
                       </div>
 
-                      <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="min-w-0 rounded-md border bg-muted/20 p-3">
                         <p className="text-xs text-muted-foreground">Valor do serviço</p>
-                        <p className="text-xl font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
+                        <p className="break-words text-xl font-semibold">{formatCurrencyBRL(selectedEventService?.base_price ?? 0)}</p>
                       </div>
 
-                      <div className="rounded-md border bg-muted/20 p-3">
+                      <div className="min-w-0 rounded-md border bg-muted/20 p-3">
                         <p className="text-xs text-muted-foreground">Vagas disponíveis</p>
                         <p className="text-xl font-semibold">{availableQuantity}</p>
                       </div>
 
                       <div className="flex justify-end md:col-span-2">
-                        <Button disabled={!canAdvanceToQuantity} onClick={() => setStep('quantidade')} className="h-10 px-6">
+                        <Button disabled={!canAdvanceToQuantity} onClick={() => setStep('quantidade')} className="h-10 w-full px-6 sm:w-auto">
                           Continuar
                         </Button>
                       </div>
@@ -780,7 +783,7 @@ export default function ServiceSales() {
 
                   {step === 'quantidade' && selectedEventService?.service && (
                     <div className="space-y-3">
-                      <div className="grid gap-3 md:grid-cols-2">
+                      <div className="grid min-w-0 max-w-full gap-3 md:grid-cols-2">
                         <div className="space-y-2 md:col-span-2">
                           <Label>Comprador/Responsável (opcional)</Label>
                           <Input
@@ -805,7 +808,7 @@ export default function ServiceSales() {
                           />
                         </div>
 
-                        <div className="rounded-md border bg-muted/20 p-3">
+                        <div className="min-w-0 rounded-md border bg-muted/20 p-3">
                           <p className="text-xs text-muted-foreground">Unidade</p>
                           <p className="text-xl font-semibold">{formatCurrencyBRL(selectedEventService.base_price)}</p>
                         </div>
@@ -828,11 +831,11 @@ export default function ServiceSales() {
                         </div>
                       )}
 
-                      <div className="flex justify-between gap-2">
-                        <Button variant="outline" className="h-10 px-6" onClick={() => setStep('selecionar')}>
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row">
+                        <Button variant="outline" className="h-10 w-full px-6 sm:w-auto" onClick={() => setStep('selecionar')}>
                           Voltar
                         </Button>
-                        <Button disabled={!canAdvanceToPayment} className="h-10 px-6" onClick={() => setStep('pagamento')}>
+                        <Button disabled={!canAdvanceToPayment} className="h-10 w-full px-6 sm:w-auto" onClick={() => setStep('pagamento')}>
                           Continuar
                         </Button>
                       </div>
@@ -844,10 +847,10 @@ export default function ServiceSales() {
                       <div className="space-y-2">
                         <Label>Forma de pagamento</Label>
                         <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
-                          <SelectTrigger className="h-10">
+                          <SelectTrigger className="h-10 min-w-0 max-w-full [&>span]:min-w-0 [&>span]:truncate">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-w-[calc(100vw-2rem)]">
                             <SelectItem value="dinheiro">Dinheiro</SelectItem>
                             <SelectItem value="pix">Pix</SelectItem>
                             <SelectItem value="link">Link</SelectItem>
@@ -875,15 +878,15 @@ export default function ServiceSales() {
                         </div>
                       )}
 
-                      <p className="text-sm text-muted-foreground">
+                      <p className="break-words text-sm text-muted-foreground">
                         Revise os dados antes de confirmar a venda.
                       </p>
 
-                      <div className="flex justify-between gap-2">
-                        <Button variant="outline" className="h-10 px-6" onClick={() => setStep('quantidade')}>
+                      <div className="flex flex-col justify-between gap-2 sm:flex-row">
+                        <Button variant="outline" className="h-10 w-full px-6 sm:w-auto" onClick={() => setStep('quantidade')}>
                           Voltar
                         </Button>
-                        <Button className="h-10 px-6" disabled={saving} onClick={handleConfirmSale}>
+                        <Button className="h-10 w-full px-6 sm:w-auto" disabled={saving} onClick={handleConfirmSale}>
                           {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                           Confirmar venda
                         </Button>
@@ -893,7 +896,7 @@ export default function ServiceSales() {
                 </div>
 
                 {/* Card lateral de contexto rápido com status visual para apoiar operação sem sair da etapa atual. */}
-                <Card className={cn('h-fit xl:sticky xl:top-24', summaryStateClasses[summaryState])}>
+                <Card className={cn('h-fit min-w-0 max-w-full xl:sticky xl:top-24', summaryStateClasses[summaryState])}>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">Resumo da venda</CardTitle>
                   </CardHeader>
@@ -903,7 +906,7 @@ export default function ServiceSales() {
                         <CalendarDays className="h-4 w-4" />
                         Evento
                       </p>
-                      <p className="font-medium leading-snug">{selectedEventLabel}</p>
+                      <p className="min-w-0 break-words font-medium leading-snug">{selectedEventLabel}</p>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
@@ -919,7 +922,7 @@ export default function ServiceSales() {
 
                     <div className="rounded-md border border-primary/30 bg-primary/10 p-3">
                       <p className="text-xs text-muted-foreground">Total estimado</p>
-                      <p className="text-3xl font-bold text-primary">{formatCurrencyBRL(totalAmount)}</p>
+                      <p className="break-words text-2xl font-bold text-primary sm:text-3xl">{formatCurrencyBRL(totalAmount)}</p>
                     </div>
 
                     <div className="rounded-md border p-3">
@@ -927,7 +930,7 @@ export default function ServiceSales() {
                         <UserRound className="h-4 w-4" />
                         Comprador
                       </p>
-                      <p className="font-medium">{safeBuyerName}</p>
+                      <p className="break-words font-medium">{safeBuyerName}</p>
                     </div>
 
                     <div className="rounded-md border p-3">
@@ -949,33 +952,33 @@ export default function ServiceSales() {
         </Card>
 
         {latestReceipt && (
-          <Card className="service-receipt-print">
+          <Card className="service-receipt-print min-w-0 max-w-full">
             <CardHeader>
               <CardTitle>Comprovante de Serviço SmartBus</CardTitle>
               <p className="text-sm text-muted-foreground">SmartBus · Operação de Serviços</p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border p-4 grid gap-2 md:grid-cols-2">
-                <p className="text-sm text-muted-foreground">Venda: {latestReceipt.saleId}</p>
+            <CardContent className="min-w-0 max-w-full space-y-4 px-4 sm:px-6">
+              <div className="grid min-w-0 gap-2 rounded-lg border p-3 sm:p-4 md:grid-cols-2">
+                <p className="break-words text-sm text-muted-foreground">Venda: {latestReceipt.saleId}</p>
                 <p className={`text-sm font-medium ${latestReceipt.status === 'pago' ? 'text-emerald-700' : 'text-amber-700'}`}>
                   Status: {latestReceipt.status}
                 </p>
-                <p className="text-sm text-muted-foreground">Forma de pagamento: {PAYMENT_LABELS[latestReceipt.paymentMethod]}</p>
-                <p className="text-sm text-muted-foreground">Emissão: {new Date(latestReceipt.issuedAt).toLocaleString('pt-BR')}</p>
-                <p className="text-sm text-muted-foreground">Evento: {latestReceipt.eventName}</p>
-                <p className="text-sm text-muted-foreground">Serviço: {latestReceipt.serviceName}</p>
-                <p className="text-sm text-muted-foreground">Cliente: {latestReceipt.customerName}</p>
+                <p className="break-words text-sm text-muted-foreground">Forma de pagamento: {PAYMENT_LABELS[latestReceipt.paymentMethod]}</p>
+                <p className="break-words text-sm text-muted-foreground">Emissão: {new Date(latestReceipt.issuedAt).toLocaleString('pt-BR')}</p>
+                <p className="break-words text-sm text-muted-foreground">Evento: {latestReceipt.eventName}</p>
+                <p className="break-words text-sm text-muted-foreground">Serviço: {latestReceipt.serviceName}</p>
+                <p className="break-words text-sm text-muted-foreground">Cliente: {latestReceipt.customerName}</p>
                 {latestReceipt.customerCpf && (
-                  <p className="text-sm text-muted-foreground">CPF: {latestReceipt.customerCpf}</p>
+                  <p className="break-words text-sm text-muted-foreground">CPF: {latestReceipt.customerCpf}</p>
                 )}
                 {latestReceipt.customerPhone && (
-                  <p className="text-sm text-muted-foreground">Telefone: {latestReceipt.customerPhone}</p>
+                  <p className="break-words text-sm text-muted-foreground">Telefone: {latestReceipt.customerPhone}</p>
                 )}
-                <p className="text-sm text-muted-foreground">
+                <p className="break-words text-sm text-muted-foreground">
                   Quantidade: {latestReceipt.quantity} {latestReceipt.unitLabel}
                 </p>
-                <p className="text-sm text-muted-foreground">Valor unitário: {formatCurrencyBRL(latestReceipt.unitPrice)}</p>
-                <p className="text-sm text-muted-foreground">Valor total: {formatCurrencyBRL(latestReceipt.totalAmount)}</p>
+                <p className="break-words text-sm text-muted-foreground">Valor unitário: {formatCurrencyBRL(latestReceipt.unitPrice)}</p>
+                <p className="break-words text-sm text-muted-foreground">Valor total: {formatCurrencyBRL(latestReceipt.totalAmount)}</p>
               </div>
 
               {latestReceipt.status !== 'pago' && (
@@ -991,7 +994,7 @@ export default function ServiceSales() {
               </div>
 
               <div className="flex flex-col md:flex-row gap-4 md:items-center">
-                <div className="w-fit rounded-lg border p-3 bg-white mx-auto md:mx-0">
+                <div className="mx-auto max-w-full rounded-lg border bg-white p-3 md:mx-0">
                   <QRCodeSVG
                     value={latestReceipt.serviceQrCodeToken}
                     size={180}
@@ -999,13 +1002,14 @@ export default function ServiceSales() {
                     includeMargin={false}
                   />
                 </div>
-                <div className="space-y-2 flex-1">
+                <div className="min-w-0 flex-1 space-y-2">
                   <Label>Código do QR de serviços</Label>
-                  <Input value={latestReceipt.serviceQrCodeToken} readOnly />
-                  <div className="flex gap-2 no-print">
+                  <Input value={latestReceipt.serviceQrCodeToken} readOnly className="min-w-0" />
+                  <div className="no-print flex flex-col gap-2 sm:flex-row">
                     <Button
                       type="button"
                       variant="outline"
+                      className="w-full min-w-0 whitespace-normal sm:w-auto"
                       onClick={() => handleCopyQrToken(latestReceipt.serviceQrCodeToken)}
                     >
                       <Copy className="h-4 w-4 mr-2" />
@@ -1014,6 +1018,7 @@ export default function ServiceSales() {
                     <Button
                       type="button"
                       variant="outline"
+                      className="w-full min-w-0 whitespace-normal sm:w-auto"
                       onClick={handlePrintReceipt}
                     >
                       <Printer className="h-4 w-4 mr-2" />
@@ -1039,7 +1044,7 @@ export default function ServiceSales() {
           <AdminMobileHeader title="Venda de serviços" subtitle="SmartBus" showMenuButton={false} />
         </div>
 
-        <main className="mx-auto w-full max-w-md space-y-5 px-4 py-5 lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+        <main className="mx-auto w-full max-w-md min-w-0 space-y-5 px-4 py-5 lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
           <section className="space-y-3 lg:hidden">
             <p className="text-sm text-slate-600">Registre serviços vinculados a eventos usando o fluxo operacional existente.</p>
           </section>
