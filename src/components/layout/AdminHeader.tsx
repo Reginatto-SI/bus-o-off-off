@@ -491,6 +491,12 @@ export function AdminHeader() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild className="cursor-pointer">
+            <Link to="/exclusao-de-conta">
+              <User className="mr-2 h-4 w-4" />
+              Privacidade e exclusão de conta
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="text-destructive focus:text-destructive cursor-pointer"
             onClick={signOut}

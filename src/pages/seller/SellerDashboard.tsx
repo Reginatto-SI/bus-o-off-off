@@ -5,7 +5,7 @@
  * Mobile-first: cards empilháveis, filtros colapsáveis, botão fixo de compartilhar.
  */
 import { useState, useEffect, useMemo } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Sale, Seller } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
@@ -301,9 +301,14 @@ export default function SellerDashboard() {
       <div className="min-h-screen bg-background flex flex-col">
         <header className="bg-card border-b px-4 py-3 flex items-center justify-between">
           <Logo size="sm" />
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" asChild className="px-2 text-xs">
+              <Link to="/exclusao-de-conta">Privacidade</Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
         <div className="flex-1 flex items-center justify-center p-4">
           <EmptyState
@@ -326,10 +331,15 @@ export default function SellerDashboard() {
             {profile?.name}
           </span>
         </div>
-        <Button variant="ghost" size="sm" onClick={signOut}>
-          <LogOut className="h-4 w-4 mr-1" />
-          <span className="hidden sm:inline">Sair</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" asChild className="px-2 text-xs sm:px-3">
+            <Link to="/exclusao-de-conta">Privacidade</Link>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={signOut}>
+            <LogOut className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">Sair</span>
+          </Button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 pb-24 max-w-2xl mx-auto w-full">

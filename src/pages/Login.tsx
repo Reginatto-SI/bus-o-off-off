@@ -386,6 +386,17 @@ export default function Login() {
                   "Entrar"
                 )}
               </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Ao acessar o sistema, consulte a{' '}
+                <Link to="/privacidade" className="font-medium text-primary underline-offset-4 hover:underline">
+                  Política de Privacidade
+                </Link>{' '}
+                ou{' '}
+                <Link to="/exclusao-de-conta" className="font-medium text-primary underline-offset-4 hover:underline">
+                  solicite exclusão da conta
+                </Link>
+                .
+              </p>
             </form>
           </CardContent>
         </Card>

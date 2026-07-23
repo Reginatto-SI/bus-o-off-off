@@ -122,6 +122,13 @@ export function PublicLayout({ children, hideMyTicketsButton = false, floatingWh
                         <DropdownMenuSeparator />
                       </>
                     )}
+                    <DropdownMenuItem asChild>
+                      <Link to="/exclusao-de-conta">
+                        <User className="h-4 w-4 mr-2" />
+                        Privacidade e exclusão de conta
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut}>
                       <LogOut className="h-4 w-4 mr-2" />
                       Sair

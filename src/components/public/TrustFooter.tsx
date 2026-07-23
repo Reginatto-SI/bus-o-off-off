@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Lock, CreditCard, Smartphone } from 'lucide-react';
 import { FooterVersionInfo } from '@/components/system/FooterVersionInfo';
 
@@ -44,6 +45,10 @@ export function TrustFooter({ companyName }: TrustFooterProps) {
               </p>
               <div className="flex flex-wrap items-center justify-center gap-x-1">
                 <span>Venda intermediada pela SmartBus — CNPJ 67.871.644/0001-26.</span>
+                <Link to="/privacidade" className="underline-offset-4 hover:text-foreground hover:underline">Política de Privacidade</Link>
+                <span>•</span>
+                <Link to="/exclusao-de-conta" className="underline-offset-4 hover:text-foreground hover:underline">Exclusão de conta</Link>
+                <span>•</span>
                 <FooterVersionInfo />
               </div>
             </div>
@@ -51,6 +56,10 @@ export function TrustFooter({ companyName }: TrustFooterProps) {
             <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-xs text-muted-foreground">
               {/* Rodapé legado: não alterar páginas públicas sem empresa da vitrine. */}
               <span>© {new Date().getFullYear()} SmartBus. Todos os direitos reservados • CNPJ 67.871.644/0001-26</span>
+              <Link to="/privacidade" className="underline-offset-4 hover:text-foreground hover:underline">Política de Privacidade</Link>
+              <span>•</span>
+              <Link to="/exclusao-de-conta" className="underline-offset-4 hover:text-foreground hover:underline">Exclusão de conta</Link>
+              <span>•</span>
               <FooterVersionInfo />
             </div>
           )}
