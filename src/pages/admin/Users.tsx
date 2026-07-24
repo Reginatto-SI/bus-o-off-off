@@ -3,6 +3,10 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { UserRole, UserWithRole, Seller, Driver, ProfileStatus } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,7 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -193,6 +196,7 @@ export default function UsersPage() {
   const [selectedUserForAuth, setSelectedUserForAuth] = useState<UserWithRole | null>(null);
   const [authStatusData, setAuthStatusData] = useState<AuthSupportResponse['data'] | null>(null);
   const [magicLinkValue, setMagicLinkValue] = useState<string | null>(null);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   // seller_id e driver_id conectam o usuário ao cadastro gerencial de vendedor/motorista
   // para controle interno de comissão e operação. Não tem relação com Stripe ou pagamento.
@@ -917,52 +921,80 @@ export default function UsersPage() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        {/* Header */}
-        <PageHeader
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Usuários" subtitle="Acessos do sistema" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl px-3 text-sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar usuário</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar usuários">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="hidden lg:block">
+            {/* Header */}
+            <PageHeader
           title="Usuários"
           description="Gerencie os usuários e acessos do sistema"
           actions={
             <div className="flex w-full items-center gap-2 sm:w-auto">
               {/* Mobile: ação primária permanece visível e exportações ficam em menu secundário. */}
               <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-                <DialogTrigger asChild>
-                  <Button className="flex-1 sm:flex-none">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Usuário
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                  <DialogHeader className="admin-modal__header px-6 py-4">
+                <Button className="flex-1 sm:flex-none" onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Usuário
+                </Button>
+                <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+                  <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Usuário</DialogTitle>
                   </DialogHeader>
-                  <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'acesso' | 'vinculos' | 'observacoes')} className="flex h-full flex-col">
-                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                  <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'acesso' | 'vinculos' | 'observacoes')} className="flex h-full min-h-0 flex-col">
+                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
                         <TabsTrigger
                           value="acesso"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                          className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
                         >
                           <Key className="h-4 w-4 shrink-0" />
                           <span className="min-w-0 truncate">Acesso</span>
                         </TabsTrigger>
                         <TabsTrigger
                           value="vinculos"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                          className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
                         >
                           <Link2 className="h-4 w-4 shrink-0" />
                           <span className="min-w-0 truncate">Vínculos</span>
                         </TabsTrigger>
                         <TabsTrigger
                           value="observacoes"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
+                          className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
                         >
                           <MessageSquare className="h-4 w-4 shrink-0" />
                           <span className="min-w-0 truncate">Observações</span>
                         </TabsTrigger>
                       </TabsList>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                      <div className="admin-modal__body min-h-0 flex-1 overflow-y-auto px-4 py-4 scroll-pb-28 sm:px-6">
                         {/* Tab: Acesso */}
                         <TabsContent value="acesso" className="mt-0">
                           <div className="mb-4 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -1152,14 +1184,14 @@ export default function UsersPage() {
                         </TabsContent>
                       </div>
                     </Tabs>
-                    <div className="admin-modal__footer px-6 py-4">
-                      <div className="flex flex-wrap justify-end gap-3">
+                    <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                         <DialogClose asChild>
-                          <Button type="button" variant="outline">
+                          <Button type="button" variant="outline" className="w-full sm:w-auto">
                             Cancelar
                           </Button>
                         </DialogClose>
-                        <Button type="submit" disabled={saving}>
+                        <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
                         </Button>
                       </div>
@@ -1200,9 +1232,10 @@ export default function UsersPage() {
               </div>
             </div>
           }
-        />
+          />
+          </div>
 
-        {/* Stats Cards */}
+          {/* Stats Cards */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-3 lg:grid-cols-4 sm:gap-4">
           <StatsCard
             label="Total de usuários"
@@ -1317,8 +1350,56 @@ export default function UsersPage() {
             }
           />
         ) : (
-          <Card>
-            <CardContent className="p-0">
+          <>
+            <div className="space-y-3 lg:hidden">
+              {filteredUsers.map((u) => (
+                <Card key={u.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="truncate text-base font-semibold text-foreground">{u.name}</p>
+                        <StatusBadge status={u.status} />
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {authActionLoadingUserId === u.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : null}
+                        <ActionsDropdown actions={getUserActions(u)} />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {u.role && (
+                        <span className={cn(
+                          'inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-xs font-medium',
+                          roleConfig[u.role]?.bgColor,
+                          roleConfig[u.role]?.textColor
+                        )}>
+                          <span className="truncate">{getOperationalLabel(u.role, u.operational_role)}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3 text-sm">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">E-mail</p>
+                        <div className="mt-1 flex min-w-0 items-center gap-2">
+                          <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <p className="truncate font-medium text-foreground">{u.email || 'E-mail não informado'}</p>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vínculo</p>
+                        <p className="truncate font-medium text-foreground">{getVinculo(u)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="hidden lg:block">
+              <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1373,6 +1454,7 @@ export default function UsersPage() {
               </Table>
             </CardContent>
           </Card>
+          </>
         )}
 
         {/* Export Excel Modal */}
@@ -1408,7 +1490,7 @@ export default function UsersPage() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-lg max-h-[90dvh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Status de autenticação</DialogTitle>
             </DialogHeader>
@@ -1462,7 +1544,7 @@ export default function UsersPage() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-lg max-h-[90dvh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Magic link assistido</DialogTitle>
             </DialogHeader>
@@ -1487,6 +1569,12 @@ export default function UsersPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );
