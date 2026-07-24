@@ -16,10 +16,15 @@ import {
   List,
   Check,
   ChevronsUpDown,
+  Ellipsis,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
@@ -27,6 +32,12 @@ import { ExportExcelModal, ExportColumn } from '@/components/admin/ExportExcelMo
 import { ExportPDFModal } from '@/components/admin/ExportPDFModal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -107,6 +118,10 @@ interface KpisPayload {
   sellers_count: number;
 }
 
+type CommissionRpcClient = typeof supabase & {
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+};
+
 const initialFilters: ReportFilters = {
   search: '',
   status: 'pago',
@@ -161,6 +176,7 @@ export default function SellersCommissionReport() {
   const [sellerFilterOpen, setSellerFilterOpen] = useState(false);
   const [eventFilterSearch, setEventFilterSearch] = useState('');
   const [sellerFilterSearch, setSellerFilterSearch] = useState('');
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   const normalizeDateToIso = (dateInput: string, endOfDay = false) => {
     if (!dateInput) return null;
@@ -268,7 +284,7 @@ export default function SellersCommissionReport() {
 
   const fetchSummaryPage = async () => {
     const offset = (currentPage - 1) * rowsPerPage;
-    const { data, error } = await (supabase as any).rpc('get_sellers_commission_summary_paginated', {
+    const { data, error } = await (supabase as CommissionRpcClient).rpc('get_sellers_commission_summary_paginated', {
       ...buildReportRpcParams(),
       p_limit: rowsPerPage,
       p_offset: offset,
@@ -329,7 +345,7 @@ export default function SellersCommissionReport() {
   };
 
   const fetchKpis = async () => {
-    const { data, error } = await (supabase as any).rpc('get_sellers_commission_kpis', buildReportRpcParams());
+    const { data, error } = await (supabase as CommissionRpcClient).rpc('get_sellers_commission_kpis', buildReportRpcParams());
 
     if (error) {
       toast.error('Erro ao calcular indicadores de comissão');
@@ -436,9 +452,9 @@ export default function SellersCommissionReport() {
     { key: 'total_tickets', label: 'Passagens' },
     ...(canViewFinancials
       ? [
-          { key: 'eligible_revenue', label: 'Receita elegível', format: (v: any) => formatCurrencyBRL(Number(v)) },
-          { key: 'commission_percent', label: 'Comissão %', format: (v: any) => `${Number(v).toFixed(2)}%` },
-          { key: 'total_commission', label: 'Comissão total', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'eligible_revenue', label: 'Receita elegível', format: (v: unknown) => formatCurrencyBRL(Number(v)) },
+          { key: 'commission_percent', label: 'Comissão %', format: (v: unknown) => `${Number(v).toFixed(2)}%` },
+          { key: 'total_commission', label: 'Comissão total', format: (v: unknown) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
   ];
@@ -451,9 +467,9 @@ export default function SellersCommissionReport() {
     { key: 'quantity', label: 'Quantidade' },
     ...(canViewFinancials
       ? [
-          { key: 'base_amount', label: 'Base da venda', format: (v: any) => formatCurrencyBRL(Number(v)) },
-          { key: 'commission_percent', label: 'Comissão %', format: (v: any) => `${Number(v).toFixed(2)}%` },
-          { key: 'commission_amount', label: 'Comissão (R$)', format: (v: any) => formatCurrencyBRL(Number(v)) },
+          { key: 'base_amount', label: 'Base da venda', format: (v: unknown) => formatCurrencyBRL(Number(v)) },
+          { key: 'commission_percent', label: 'Comissão %', format: (v: unknown) => `${Number(v).toFixed(2)}%` },
+          { key: 'commission_amount', label: 'Comissão (R$)', format: (v: unknown) => formatCurrencyBRL(Number(v)) },
         ]
       : []),
     { key: 'status', label: 'Status', format: (v) => statusLabels[v] ?? v },
@@ -502,11 +518,11 @@ export default function SellersCommissionReport() {
   ], [averageCommissionPerSale, kpis]);
 
   const renderPagination = () => (
-    <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <span>Exibindo {rangeStart}–{rangeEnd} de {totalResultsCount} resultados</span>
-        <div className="flex items-center gap-2">
-          <span>Linhas por página</span>
+    <div className="flex flex-col gap-3 border-t bg-white px-4 py-3 lg:bg-transparent sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <span className="leading-snug">Exibindo {rangeStart}–{rangeEnd} de {totalResultsCount} resultados</span>
+        <div className="flex items-center justify-between gap-2 sm:justify-start">
+          <span className="shrink-0">Linhas por página</span>
           <Select value={String(rowsPerPage)} onValueChange={(value) => setRowsPerPage(Number(value))}>
             <SelectTrigger className="h-8 w-[80px]">
               <SelectValue />
@@ -521,19 +537,21 @@ export default function SellersCommissionReport() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:justify-end">
         <Button
           variant="outline"
           size="sm"
+          className="h-10"
           onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
           disabled={currentPage === 1 || loading}
         >
           Anterior
         </Button>
-        <span className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
+        <span className="whitespace-nowrap text-center text-sm text-muted-foreground">Página {currentPage} de {totalPages}</span>
         <Button
           variant="outline"
           size="sm"
+          className="h-10"
           onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
           disabled={currentPage >= totalPages || loading}
         >
@@ -545,38 +563,69 @@ export default function SellersCommissionReport() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        <PageHeader
-          title="Comissão de Vendedores"
-          description="Relatório gerencial para apuração e envio aos vendedores."
-          actions={
-            <>
-              <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchReportData(); }}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Atualizar
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setExcelModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-            </>
-          }
-        />
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Comissão de Vendedores" subtitle="Vendas e comissões da equipe" showMenuButton={false} />
+        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button variant="outline" className="h-11 flex-1 rounded-xl bg-white px-3 text-sm" onClick={() => { setLoading(true); fetchReportData(); }}>
+              <RefreshCw className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Atualizar</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar comissão de vendedores">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setExcelModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Comissão de Vendedores"
+              description="Relatório gerencial para apuração e envio aos vendedores."
+              actions={
+                <>
+                  <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchReportData(); }}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Atualizar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExcelModalOpen(true)}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </Button>
+                </>
+              }
+            />
+          </div>
+
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
           {canViewFinancials && (
-            <StatsCard label="Comissão Total" value={formatCurrencyBRL(kpis.total_commission)} icon={BadgePercent} variant="success" />
+            <StatsCard label="Comissão Total" value={formatCurrencyBRL(kpis.total_commission)} icon={BadgePercent} variant="success" className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
           )}
           {canViewFinancials && (
-            <StatsCard label="Receita Elegível" value={formatCurrencyBRL(kpis.eligible_revenue)} icon={DollarSign} variant="success" />
+            <StatsCard label="Receita Elegível" value={formatCurrencyBRL(kpis.eligible_revenue)} icon={DollarSign} variant="success" className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
           )}
-          <StatsCard label="Vendas Elegíveis" value={kpis.eligible_sales} icon={ShoppingCart} />
-          <StatsCard label="Passagens" value={kpis.total_tickets} icon={Ticket} />
-          <StatsCard label="Nº de Vendedores" value={kpis.sellers_count} icon={Users} />
+          <StatsCard label="Vendas Elegíveis" value={kpis.eligible_sales} icon={ShoppingCart} className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Passagens" value={kpis.total_tickets} icon={Ticket} className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Nº de Vendedores" value={kpis.sellers_count} icon={Users} className="min-h-0 p-3 sm:p-4" />
         </div>
 
         <div className="mb-6">
@@ -591,7 +640,7 @@ export default function SellersCommissionReport() {
                 label: 'Status',
                 placeholder: 'Pago',
                 value: filters.status,
-                onChange: (v) => setFilters((f) => ({ ...f, status: v as any })),
+                onChange: (v) => setFilters((f) => ({ ...f, status: v as ReportFilters['status'] })),
                 options: [
                   { value: 'all', label: 'Todos' },
                   { value: 'pendente', label: 'Pendente' },
@@ -619,14 +668,14 @@ export default function SellersCommissionReport() {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <PopoverContent className="max-h-[70dvh] w-[min(var(--radix-popover-trigger-width),calc(100vw-1.5rem))] overflow-hidden p-0" align="start">
                       <Command shouldFilter={false}>
                         <CommandInput
                           placeholder="Buscar evento..."
                           value={eventFilterSearch}
                           onValueChange={setEventFilterSearch}
                         />
-                        <CommandList>
+                        <CommandList className="max-h-[55dvh]">
                           <CommandEmpty>Nenhum evento encontrado.</CommandEmpty>
                           <CommandGroup>
                             {filteredEventFilterOptions.map((option) => (
@@ -663,14 +712,14 @@ export default function SellersCommissionReport() {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <PopoverContent className="max-h-[70dvh] w-[min(var(--radix-popover-trigger-width),calc(100vw-1.5rem))] overflow-hidden p-0" align="start">
                       <Command shouldFilter={false}>
                         <CommandInput
                           placeholder="Buscar vendedor..."
                           value={sellerFilterSearch}
                           onValueChange={setSellerFilterSearch}
                         />
-                        <CommandList>
+                        <CommandList className="max-h-[55dvh]">
                           <CommandEmpty>Nenhum vendedor encontrado.</CommandEmpty>
                           <CommandGroup>
                             {filteredSellerFilterOptions.map((option) => (
@@ -733,19 +782,63 @@ export default function SellersCommissionReport() {
           />
         ) : (
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)}>
-            <TabsList className="mb-4">
-              <TabsTrigger value={REPORT_TABS.resumo} className="gap-2">
+            <TabsList className="mb-4 flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-1 py-1 sm:w-auto">
+              <TabsTrigger value={REPORT_TABS.resumo} className="min-w-max gap-2">
                 <BarChart3 className="h-4 w-4" />
                 Resumo por Vendedor
               </TabsTrigger>
-              <TabsTrigger value={REPORT_TABS.detalhado} className="gap-2">
+              <TabsTrigger value={REPORT_TABS.detalhado} className="min-w-max gap-2">
                 <List className="h-4 w-4" />
                 Detalhado por Venda
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value={REPORT_TABS.resumo}>
-              <Card>
+              <div className="space-y-3 lg:hidden">
+                {summaryRows.map((row) => (
+                  <Card key={row.seller_id ?? 'sem-vendedor'} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-base font-semibold text-foreground">{row.seller_name}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Resumo por vendedor</p>
+                        </div>
+                        {canViewFinancials && (
+                          <div className="rounded-xl bg-success/10 p-3 text-left sm:shrink-0 sm:text-right">
+                            <p className="text-xs font-medium text-muted-foreground">Comissão apurada</p>
+                            <p className="text-sm font-semibold text-foreground">{formatCurrencyBRL(row.total_commission)}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 text-sm">
+                        {canViewFinancials && (
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total vendido</p>
+                            <p className="truncate font-medium text-foreground">{formatCurrencyBRL(row.eligible_revenue)}</p>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vendas</p>
+                          <p className="truncate font-medium text-foreground">{row.eligible_sales}</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Passagens</p>
+                          <p className="truncate font-medium text-foreground">{row.total_tickets}</p>
+                        </div>
+                        {canViewFinancials && (
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Percentual</p>
+                            <p className="truncate font-medium text-foreground">{row.commission_percent.toFixed(2)}%</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <Card className="hidden lg:block">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -771,13 +864,66 @@ export default function SellersCommissionReport() {
                       ))}
                     </TableBody>
                   </Table>
-                  {renderPagination()}
                 </CardContent>
               </Card>
+              {renderPagination()}
             </TabsContent>
 
             <TabsContent value={REPORT_TABS.detalhado}>
-              <Card>
+              <div className="space-y-3 lg:hidden">
+                {detailedRows.map((sale) => {
+                  const baseAmount = getSaleBaseAmount(sale);
+                  const commissionPercent = Number(sale.seller?.commission_percent ?? 0);
+                  const commissionAmount = getSaleCommissionAmount(sale);
+
+                  return (
+                    <Card key={sale.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-base font-semibold text-foreground">{sale.seller?.name ?? 'Sem vendedor'}</p>
+                            <p className="mt-1 break-words text-xs text-muted-foreground">{sale.event?.name ?? '-'}</p>
+                          </div>
+                          <div className="shrink-0 self-start"><StatusBadge status={sale.status} /></div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 text-sm">
+                          {canViewFinancials && (
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Comissão</p>
+                              <p className="truncate font-medium text-foreground">{formatCurrencyBRL(commissionAmount)}</p>
+                            </div>
+                          )}
+                          {canViewFinancials && (
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Base da venda</p>
+                              <p className="truncate font-medium text-foreground">{formatCurrencyBRL(baseAmount)}</p>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Quantidade</p>
+                            <p className="truncate font-medium text-foreground">{sale.quantity}</p>
+                          </div>
+                          {canViewFinancials && (
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Percentual</p>
+                              <p className="truncate font-medium text-foreground">{commissionPercent.toFixed(2)}%</p>
+                            </div>
+                          )}
+                          <div className="col-span-2 min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Venda</p>
+                            <p className="truncate font-medium text-foreground">
+                              {sale.id.slice(0, 8)}… · {format(new Date(sale.created_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              <Card className="hidden lg:block">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -817,9 +963,9 @@ export default function SellersCommissionReport() {
                       })}
                     </TableBody>
                   </Table>
-                  {renderPagination()}
                 </CardContent>
               </Card>
+              {renderPagination()}
             </TabsContent>
           </Tabs>
         )}
@@ -848,6 +994,12 @@ export default function SellersCommissionReport() {
           summaryTitle="Resumo da Apuração"
           summaryItems={summaryItemsForPdf}
         />
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );
