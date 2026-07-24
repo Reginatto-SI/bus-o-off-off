@@ -34,8 +34,6 @@ import EventReport from "./pages/admin/EventReport";
 import CompanyActivationReport from "./pages/admin/CompanyActivationReport";
 import Referrals from "./pages/admin/Referrals";
 import RepresentativeAdmin from "./pages/admin/Representative";
-import BenefitPrograms from "./pages/admin/BenefitPrograms";
-import BenefitProgramEditor from "./pages/admin/BenefitProgramEditor";
 import Services from "./pages/admin/Services";
 import ServiceSales from "./pages/admin/ServiceSales";
 
@@ -147,9 +145,10 @@ const App = () => (
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
             <Route path="/admin/socios" element={<SociosSplit />} />
             <Route path="/admin/parceiros" element={<CommercialPartners />} />
-            <Route path="/admin/programas-beneficio" element={<BenefitPrograms />} />
-            <Route path="/admin/programas-beneficio/novo" element={<BenefitProgramEditor />} />
-            <Route path="/admin/programas-beneficio/:id" element={<BenefitProgramEditor />} />
+            {/* Programas de Benefício foi descontinuado: bloqueia acesso direto mantendo redirect seguro do admin. */}
+            <Route path="/admin/programas-beneficio" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/programas-beneficio/novo" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/programas-beneficio/:id" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/admin/servicos" element={<Services />} />
             <Route path="/vendas/servicos" element={<ServiceSales />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
