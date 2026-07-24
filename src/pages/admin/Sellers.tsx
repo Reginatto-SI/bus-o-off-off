@@ -15,6 +15,10 @@ import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Seller } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -31,7 +35,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,6 +48,12 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Table,
   TableBody,
   TableCell,
@@ -55,6 +64,7 @@ import {
 import {
   FileSpreadsheet,
   FileText,
+  Ellipsis,
   IdCard,
   Link as LinkIcon,
   Loader2,
@@ -92,6 +102,18 @@ interface SellerSalesStats {
   total: number;
 }
 
+interface SellerExportRow extends Seller {
+  sales_count: number;
+  sales_total: number;
+}
+
+interface SellerSaleSummaryRow {
+  seller_id: string;
+  quantity: number;
+  unit_price: number;
+  gross_amount: number | null;
+}
+
 export default function Sellers() {
   const { activeCompanyId, activeCompany, user } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
@@ -104,6 +126,7 @@ export default function Sellers() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SellerFilters>(initialFilters);
   const [qrModalSeller, setQrModalSeller] = useState<Seller | null>(null);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const [form, setForm] = useState({
     name: '',
     cpf: '',
@@ -183,22 +206,24 @@ export default function Sellers() {
       { key: 'cpf', label: 'CPF' },
       { key: 'phone', label: 'Telefone' },
       { key: 'email', label: 'E-mail' },
-      { key: 'commission_percent', label: 'Comissão (%)', format: (v: any) => `${v ?? 0}%` },
+      { key: 'commission_percent', label: 'Comissão (%)', format: (v: unknown) => `${v ?? 0}%` },
       { key: 'pix_key', label: 'Chave Pix' },
-      { key: 'status', label: 'Status', format: (v: any) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
+      { key: 'status', label: 'Status', format: (v: unknown) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
       {
         key: 'sales_count',
         label: 'Vendas (pagas)',
-        format: (_v: any, row?: any) => {
-          const st = row ? salesStats[row.id] : undefined;
+        format: (_v: unknown, row?: unknown) => {
+          const sellerRow = row as SellerExportRow | undefined;
+          const st = sellerRow ? salesStats[sellerRow.id] : undefined;
           return st ? String(st.count) : '0';
         },
       },
       {
         key: 'sales_total',
         label: 'Total Vendido (R$)',
-        format: (_v: any, row?: any) => {
-          const st = row ? salesStats[row.id] : undefined;
+        format: (_v: unknown, row?: unknown) => {
+          const sellerRow = row as SellerExportRow | undefined;
+          const st = sellerRow ? salesStats[sellerRow.id] : undefined;
           return formatCurrencyBRL(st?.total ?? 0);
         },
       },
@@ -206,7 +231,7 @@ export default function Sellers() {
       {
         key: 'created_at',
         label: 'Criado em',
-        format: (v: any) => (v ? new Date(v).toLocaleDateString('pt-BR') : ''),
+        format: (v: unknown) => (v ? new Date(String(v)).toLocaleDateString('pt-BR') : ''),
       },
     ],
     [salesStats]
@@ -273,8 +298,8 @@ export default function Sellers() {
     }
 
     const grouped: Record<string, SellerSalesStats> = {};
-    (data || []).forEach((sale: any) => {
-      const sid = sale.seller_id as string;
+    ((data || []) as SellerSaleSummaryRow[]).forEach((sale) => {
+      const sid = sale.seller_id;
       if (!grouped[sid]) grouped[sid] = { count: 0, total: 0 };
       grouped[sid].count += 1;
       // Usa gross_amount se disponível, senão calcula
@@ -445,317 +470,400 @@ export default function Sellers() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        <PageHeader
-          title="Vendedores"
-          description="Gerencie vendedores e comissões"
-          actions={
-            <>
-              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-              <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-                <DialogTrigger asChild>
-                  <Button>
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Vendedores" subtitle="Vendas e comissões" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Vendedores"
+              description="Gerencie vendedores e comissões"
+              actions={
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF
+                  </Button>
+                  <Button onClick={() => setDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Vendedor
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                  <DialogHeader className="admin-modal__header px-6 py-4">
-                    <DialogTitle>{editingId ? 'Editar' : 'Novo'} Vendedor</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="flex h-full flex-col">
-                    <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                        <TabsTrigger
-                          value="identificacao"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                        >
-                          <IdCard className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 truncate">Identificação</span>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="comissao"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                        >
-                          <Percent className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 truncate">Comissão</span>
-                        </TabsTrigger>
-                      </TabsList>
+                </>
+              }
+            />
+          </div>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
-                        <TabsContent value="identificacao" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="name">Nome *</Label>
-                              <Input
-                                id="name"
-                                value={form.name}
-                                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="cpf">CPF</Label>
-                              <Input
-                                id="cpf"
-                                value={form.cpf}
-                                onChange={(e) => setForm({ ...form, cpf: e.target.value })}
-                                placeholder="000.000.000-00"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="phone">Telefone / WhatsApp</Label>
-                              <Input
-                                id="phone"
-                                value={form.phone}
-                                onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
-                                placeholder="(00) 00000-0000"
-                                maxLength={15}
-                                inputMode="tel"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="email">E-mail</Label>
-                              <Input
-                                id="email"
-                                type="email"
-                                value={form.email}
-                                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                                placeholder="vendedor@email.com"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Status</Label>
-                              <Select
-                                value={form.status}
-                                onValueChange={(value: Seller['status']) => setForm({ ...form, status: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ativo">Ativo</SelectItem>
-                                  <SelectItem value="inativo">Inativo</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </TabsContent>
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl px-3 text-sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar vendedor</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar vendedores">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
-                        <TabsContent value="comissao" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label htmlFor="commission">Comissão (%)</Label>
-                              <Input
-                                id="commission"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="100"
-                                value={form.commission_percent}
-                                onChange={(e) => setForm({ ...form, commission_percent: e.target.value })}
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="pix_key">Chave Pix</Label>
-                              <Input
-                                id="pix_key"
-                                value={form.pix_key}
-                                onChange={(e) => setForm({ ...form, pix_key: e.target.value })}
-                                placeholder="CPF, e-mail, telefone ou chave aleatória"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Informativo — para pagamento manual de comissão pelo gerente.
-                              </p>
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="notes">Observações</Label>
-                              <Textarea
-                                id="notes"
-                                value={form.notes}
-                                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                                placeholder="Anotações internas sobre o vendedor..."
-                                rows={3}
-                              />
-                            </div>
-                          </div>
-                        </TabsContent>
-                      </div>
-                    </Tabs>
-                    <div className="admin-modal__footer px-6 py-4">
-                      <div className="flex flex-wrap justify-end gap-3">
-                        <DialogClose asChild>
-                          <Button type="button" variant="outline">
-                            Cancelar
-                          </Button>
-                        </DialogClose>
-                        <Button type="submit" disabled={saving}>
-                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                        </Button>
-                      </div>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </>
-          }
-        />
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            <StatsCard label="Total de vendedores" value={stats.total} icon={UserCheck} />
+            <StatsCard label="Vendedores ativos" value={stats.ativos} icon={UserCheck} variant="success" />
+            <StatsCard label="Vendedores inativos" value={stats.inativos} icon={UserCheck} variant="destructive" />
+            <StatsCard
+              label="Comissão média"
+              value={`${stats.averageCommission.toFixed(1)}%`}
+              icon={Percent}
+            />
+          </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Total de vendedores" value={stats.total} icon={UserCheck} />
-          <StatsCard label="Vendedores ativos" value={stats.ativos} icon={UserCheck} variant="success" />
-          <StatsCard label="Vendedores inativos" value={stats.inativos} icon={UserCheck} variant="destructive" />
-          <StatsCard
-            label="Comissão média"
-            value={`${stats.averageCommission.toFixed(1)}%`}
-            icon={Percent}
+          <FilterCard
+            className="mb-6"
+            searchValue={filters.search}
+            onSearchChange={(value) => setFilters({ ...filters, search: value })}
+            searchPlaceholder="Pesquisar por nome, telefone, e-mail..."
+            selects={[
+              {
+                id: 'status',
+                label: 'Status',
+                placeholder: 'Status',
+                value: filters.status,
+                onChange: (value) => setFilters({ ...filters, status: value as SellerFilters['status'] }),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  { value: 'ativo', label: 'Ativo' },
+                  { value: 'inativo', label: 'Inativo' },
+                ],
+              },
+              {
+                id: 'commissionRange',
+                label: 'Comissão',
+                placeholder: 'Comissão',
+                value: filters.commissionRange,
+                onChange: (value) =>
+                  setFilters({ ...filters, commissionRange: value as SellerFilters['commissionRange'] }),
+                options: [
+                  { value: 'all', label: 'Todas' },
+                  { value: '0-5', label: '0% a 5%' },
+                  { value: '5-10', label: '5% a 10%' },
+                  { value: '10-20', label: '10% a 20%' },
+                  { value: '20+', label: 'Acima de 20%' },
+                ],
+              },
+            ]}
+            onClearFilters={() => setFilters(initialFilters)}
+            hasActiveFilters={hasActiveFilters}
+            advancedFilters={
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <FilterInput
+                  id="commissionMin"
+                  label="Comissão mín."
+                  placeholder="Ex: 5"
+                  value={filters.commissionMin}
+                  onChange={(value) => setFilters({ ...filters, commissionMin: value })}
+                  type="number"
+                />
+                <FilterInput
+                  id="commissionMax"
+                  label="Comissão máx."
+                  placeholder="Ex: 20"
+                  value={filters.commissionMax}
+                  onChange={(value) => setFilters({ ...filters, commissionMax: value })}
+                  type="number"
+                />
+              </div>
+            }
           />
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : sellers.length === 0 ? (
+            <EmptyState
+              icon={<UserCheck className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum vendedor cadastrado"
+              description="Adicione vendedores para rastrear comissões"
+              action={
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar vendedor
+                </Button>
+              }
+            />
+          ) : filteredSellers.length === 0 ? (
+            <EmptyState
+              icon={<UserCheck className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum vendedor encontrado"
+              description="Ajuste os filtros para encontrar vendedores"
+              action={
+                <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                  Limpar filtros
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <div className="space-y-3 lg:hidden">
+                {filteredSellers.map((seller) => {
+                  const st = salesStats[seller.id];
+                  const formattedPhone = seller.phone ? formatPhoneBR(seller.phone) : 'Contato não informado';
+
+                  return (
+                    <Card key={seller.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <p className="truncate text-base font-semibold text-foreground">{seller.name}</p>
+                            <StatusBadge status={seller.status} />
+                          </div>
+                          <div className="shrink-0">
+                            <ActionsDropdown actions={getSellerActions(seller)} />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contato</p>
+                            <p className="truncate font-medium text-foreground">{formattedPhone}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Comissão</p>
+                            <p className="truncate font-medium text-foreground">{seller.commission_percent}%</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vendas pagas</p>
+                            <p className="truncate font-medium text-foreground">{st?.count ?? 0}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total vendido</p>
+                            <p className="truncate font-medium text-foreground">{formatCurrencyBRL(st?.total ?? 0)}</p>
+                          </div>
+                        </div>
+
+                        {seller.email ? (
+                          <p className="mt-3 truncate text-sm text-muted-foreground">{seller.email}</p>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              <Card className="hidden lg:block">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Comissão (%)</TableHead>
+                        <TableHead>Vendas</TableHead>
+                        <TableHead>Total Vendido</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[60px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredSellers.map((seller) => {
+                        const st = salesStats[seller.id];
+                        return (
+                          <TableRow key={seller.id}>
+                            <TableCell className="font-medium">{seller.name}</TableCell>
+                            <TableCell className="text-muted-foreground">{seller.phone || '—'}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Percent className="h-4 w-4 text-muted-foreground" />
+                                {seller.commission_percent}%
+                              </div>
+                            </TableCell>
+                            <TableCell>{st?.count ?? 0}</TableCell>
+                            <TableCell>
+                              {formatCurrencyBRL(st?.total ?? 0)}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={seller.status} />
+                            </TableCell>
+                            <TableCell>
+                              <ActionsDropdown actions={getSellerActions(seller)} />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+              <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
+                <DialogTitle>{editingId ? 'Editar' : 'Novo'} Vendedor</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+                <Tabs defaultValue="identificacao" className="flex h-full min-h-0 flex-col">
+                  <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
+                    <TabsTrigger
+                      value="identificacao"
+                      className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
+                    >
+                      <IdCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Identificação</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="comissao"
+                      className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
+                    >
+                      <Percent className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Comissão</span>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="admin-modal__body min-h-0 flex-1 overflow-y-auto px-4 py-4 scroll-pb-28 sm:px-6">
+                    <TabsContent value="identificacao" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="name">Nome *</Label>
+                          <Input
+                            id="name"
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cpf">CPF</Label>
+                          <Input
+                            id="cpf"
+                            inputMode="numeric"
+                            value={form.cpf}
+                            onChange={(e) => setForm({ ...form, cpf: e.target.value })}
+                            placeholder="000.000.000-00"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">Telefone / WhatsApp</Label>
+                          <Input
+                            id="phone"
+                            value={form.phone}
+                            onChange={(e) => setForm({ ...form, phone: formatPhoneBR(e.target.value) })}
+                            placeholder="(00) 00000-0000"
+                            maxLength={15}
+                            inputMode="tel"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="email">E-mail</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={form.email}
+                            onChange={(e) => setForm({ ...form, email: e.target.value })}
+                            placeholder="vendedor@email.com"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={form.status}
+                            onValueChange={(value: Seller['status']) => setForm({ ...form, status: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ativo">Ativo</SelectItem>
+                              <SelectItem value="inativo">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="comissao" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="commission">Comissão (%)</Label>
+                          <Input
+                            id="commission"
+                            type="number"
+                            inputMode="decimal"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={form.commission_percent}
+                            onChange={(e) => setForm({ ...form, commission_percent: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="pix_key">Chave Pix</Label>
+                          <Input
+                            id="pix_key"
+                            value={form.pix_key}
+                            onChange={(e) => setForm({ ...form, pix_key: e.target.value })}
+                            placeholder="CPF, e-mail, telefone ou chave aleatória"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Informativo — para pagamento manual de comissão pelo gerente.
+                          </p>
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="notes">Observações</Label>
+                          <Textarea
+                            id="notes"
+                            value={form.notes}
+                            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                            placeholder="Anotações internas sobre o vendedor..."
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </div>
+                </Tabs>
+                <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline" className="w-full sm:w-auto">
+                        Cancelar
+                      </Button>
+                    </DialogClose>
+                    <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {/* Filtros */}
-        <FilterCard
-          className="mb-6"
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por nome, telefone, e-mail..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as SellerFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-            {
-              id: 'commissionRange',
-              label: 'Comissão',
-              placeholder: 'Comissão',
-              value: filters.commissionRange,
-              onChange: (value) =>
-                setFilters({ ...filters, commissionRange: value as SellerFilters['commissionRange'] }),
-              options: [
-                { value: 'all', label: 'Todas' },
-                { value: '0-5', label: '0% a 5%' },
-                { value: '5-10', label: '5% a 10%' },
-                { value: '10-20', label: '10% a 20%' },
-                { value: '20+', label: 'Acima de 20%' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-          advancedFilters={
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <FilterInput
-                id="commissionMin"
-                label="Comissão mín."
-                placeholder="Ex: 5"
-                value={filters.commissionMin}
-                onChange={(value) => setFilters({ ...filters, commissionMin: value })}
-                type="number"
-              />
-              <FilterInput
-                id="commissionMax"
-                label="Comissão máx."
-                placeholder="Ex: 20"
-                value={filters.commissionMax}
-                onChange={(value) => setFilters({ ...filters, commissionMax: value })}
-                type="number"
-              />
-            </div>
-          }
-        />
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : sellers.length === 0 ? (
-          <EmptyState
-            icon={<UserCheck className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum vendedor cadastrado"
-            description="Adicione vendedores para rastrear comissões"
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Vendedor
-              </Button>
-            }
-          />
-        ) : filteredSellers.length === 0 ? (
-          <EmptyState
-            icon={<UserCheck className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum vendedor encontrado"
-            description="Ajuste os filtros para encontrar vendedores"
-            action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
-                Limpar filtros
-              </Button>
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Comissão (%)</TableHead>
-                    <TableHead>Vendas</TableHead>
-                    <TableHead>Total Vendido</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[60px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSellers.map((seller) => {
-                    const st = salesStats[seller.id];
-                    return (
-                      <TableRow key={seller.id}>
-                        <TableCell className="font-medium">{seller.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{seller.phone || '—'}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Percent className="h-4 w-4 text-muted-foreground" />
-                            {seller.commission_percent}%
-                          </div>
-                        </TableCell>
-                        <TableCell>{st?.count ?? 0}</TableCell>
-                        <TableCell>
-                          {formatCurrencyBRL(st?.total ?? 0)}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={seller.status} />
-                        </TableCell>
-                        <TableCell>
-                          <ActionsDropdown actions={getSellerActions(seller)} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
 
-      {/* Modais de Exportação */}
       <ExportExcelModal
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}

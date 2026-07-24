@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { BoardingLocation } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -21,7 +25,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,6 +77,7 @@ export default function BoardingLocations() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<LocationFilters>(initialFilters);
@@ -330,297 +334,348 @@ export default function BoardingLocations() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        {/* Header */}
-        <PageHeader
-          title="Locais de Embarque"
-          description="Gerencie os pontos de embarque"
-          actions={
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              {/* Mobile: priorizamos a ação principal e recolhemos exportações em menu secundário. */}
-              <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-                <DialogTrigger asChild>
-                  <Button className="flex-1 sm:flex-none">
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Locais de Embarque" subtitle="Pontos de embarque dos eventos" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Locais de Embarque"
+              description="Gerencie os pontos de embarque"
+              actions={
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <Button onClick={() => setDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Local
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  {/* Comentário: no mobile, priorizamos leitura vertical e ações empilhadas no formulário. */}
-                  <DialogHeader>
-                    <DialogTitle>{editingId ? 'Editar' : 'Novo'} Local</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nome *</Label>
-                      <Input
-                        id="name"
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        placeholder="Terminal Rodoviário"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Endereço *</Label>
-                      <Input
-                        id="address"
-                        value={form.address}
-                        onChange={(e) => setForm({ ...form, address: e.target.value })}
-                        placeholder="Av. Brasil, 1000 - Centro"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Cidade *</Label>
-                      <CityAutocomplete
-                        value={{ city: form.city, state: form.state }}
-                        onChange={({ city, state }) => setForm({ ...form, city, state })}
-                        placeholder="Selecione a cidade..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="maps_url">Link Google Maps</Label>
-                      <Input
-                        id="maps_url"
-                        type="url"
-                        value={form.maps_url}
-                        onChange={(e) => setForm({ ...form, maps_url: e.target.value })}
-                        placeholder="https://maps.google.com/..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="notes">Observações</Label>
-                      <Textarea
-                        id="notes"
-                        value={form.notes}
-                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                        placeholder="Informações adicionais sobre o local..."
-                        rows={3}
-                      />
-                    </div>
-                    <div className="flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end">
-                      <DialogClose asChild>
-                        <Button type="button" variant="outline">
-                          Cancelar
-                        </Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={saving}>
-                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
 
-              <div className="sm:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label="Mais ações">
-                      <Ellipsis className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleExportExcel}>
+                  <div className="hidden sm:flex sm:items-center sm:gap-2">
+                    <Button variant="outline" size="sm" onClick={handleExportExcel}>
                       <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Exportar Excel
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExportPDF}>
+                      Excel
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportPDF}>
                       <FileText className="h-4 w-4 mr-2" />
-                      Exportar PDF
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="hidden sm:flex sm:items-center sm:gap-2">
-                <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  PDF
-                </Button>
-              </div>
-            </div>
-          }
-        />
-
-        {/* Stats Cards */}
-        {/* Mobile: reduzimos altura dos KPIs e priorizamos 2 colunas para economizar dobra inicial. */}
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-3 sm:gap-4">
-          <StatsCard
-            label="Total de Locais"
-            value={stats.total}
-            icon={MapPin}
-            variant="default"
-            className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
-          />
-          <StatsCard
-            label="Locais Ativos"
-            value={stats.ativos}
-            icon={CheckCircle}
-            variant="success"
-            className="min-h-0 p-3 sm:p-4"
-          />
-          <StatsCard
-            label="Locais Inativos"
-            value={stats.inativos}
-            icon={XCircle}
-            variant="destructive"
-            className="min-h-0 p-3 sm:p-4"
-          />
-        </div>
-
-        {/* Filter Card */}
-        <FilterCard
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por nome ou endereço..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as LocationFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-          className="mb-6"
-        />
-
-        {/* Content */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      PDF
+                    </Button>
+                  </div>
+                </div>
+              }
+            />
           </div>
-        ) : locations.length === 0 ? (
-          <EmptyState
-            icon={<MapPin className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum local cadastrado"
-            description="Adicione pontos de embarque para seus eventos"
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Local
-              </Button>
-            }
+
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl px-3 text-sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar local</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar locais de embarque">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-3 sm:gap-4">
+            <StatsCard
+              label="Total de Locais"
+              value={stats.total}
+              icon={MapPin}
+              variant="default"
+              className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
+            />
+            <StatsCard
+              label="Locais Ativos"
+              value={stats.ativos}
+              icon={CheckCircle}
+              variant="success"
+              className="min-h-0 p-3 sm:p-4"
+            />
+            <StatsCard
+              label="Locais Inativos"
+              value={stats.inativos}
+              icon={XCircle}
+              variant="destructive"
+              className="min-h-0 p-3 sm:p-4"
+            />
+          </div>
+
+          <FilterCard
+            searchValue={filters.search}
+            onSearchChange={(value) => setFilters({ ...filters, search: value })}
+            searchPlaceholder="Pesquisar por nome ou endereço..."
+            selects={[
+              {
+                id: 'status',
+                label: 'Status',
+                placeholder: 'Status',
+                value: filters.status,
+                onChange: (value) => setFilters({ ...filters, status: value as LocationFilters['status'] }),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  { value: 'ativo', label: 'Ativo' },
+                  { value: 'inativo', label: 'Inativo' },
+                ],
+              },
+            ]}
+            onClearFilters={() => setFilters(initialFilters)}
+            hasActiveFilters={hasActiveFilters}
+            className="mb-6"
           />
-        ) : filteredLocations.length === 0 ? (
-          <EmptyState
-            icon={<MapPin className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum local encontrado"
-            description="Ajuste os filtros para encontrar locais"
-            action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
-                Limpar filtros
-              </Button>
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="admin-table-header">
-                    <TableHead>Local</TableHead>
-                    <TableHead className="hidden md:table-cell">Endereço</TableHead>
-                    <TableHead className="hidden lg:table-cell">Cidade/UF</TableHead>
-                    <TableHead className="hidden md:table-cell">Status</TableHead>
-                    <TableHead className="hidden md:table-cell w-[80px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                  <TableBody>
-                  {filteredLocations.map((location) => (
-                    <TableRow key={location.id} className="align-top">
-                      <TableCell className="py-3 sm:py-4">
-                        {/* Comentário Fase 3: no mobile, agrupamos nome + contexto para reduzir salto visual entre colunas. */}
-                        <div className="space-y-1.5">
-                          <p className="font-semibold leading-tight">{location.name}</p>
-                          <p className="text-sm text-muted-foreground md:hidden">{location.address}</p>
-                          {location.city && location.state ? (
-                            <p className="text-xs text-muted-foreground lg:hidden">{formatCityLabel(location.city, location.state)}</p>
-                          ) : null}
-                          {/* Mobile: status e ações ficam na mesma célula para eliminar rolagem horizontal e manter ação sempre visível. */}
-                          <div className="flex items-center justify-between gap-3 pt-1 md:hidden">
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : locations.length === 0 ? (
+            <EmptyState
+              icon={<MapPin className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum local cadastrado"
+              description="Adicione pontos de embarque para seus eventos"
+              action={
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar local
+                </Button>
+              }
+            />
+          ) : filteredLocations.length === 0 ? (
+            <EmptyState
+              icon={<MapPin className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum local encontrado"
+              description="Ajuste os filtros para encontrar locais"
+              action={
+                <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                  Limpar filtros
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <div className="space-y-3 lg:hidden">
+                {filteredLocations.map((location) => {
+                  const cityLabel = formatCityLabel(location.city, location.state);
+
+                  return (
+                    <Card key={location.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <p className="truncate text-base font-semibold text-foreground">{location.name}</p>
                             <StatusBadge status={location.status} />
-                            <div className="rounded-md border border-border/60 bg-muted/30">
-                              <ActionsDropdown actions={getLocationActions(location)} />
-                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate max-w-[300px]">{location.address}</span>
-                          {location.maps_url && (
-                            <a
-                              href={location.maps_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:text-primary/80"
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        {location.city && location.state ? (
-                          <span className="text-sm">{formatCityLabel(location.city, location.state)}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell py-3 sm:py-4">
-                        {/* Comentário Fase 3: mantemos status isolado para escaneabilidade rápida de ativo/inativo. */}
-                        <StatusBadge status={location.status} />
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell py-3 sm:py-4">
-                        {/* Desktop: preserva coluna dedicada de ações sem alterar o padrão atual da tela. */}
-                        <div className="flex items-center justify-end gap-1.5">
-                          <div className="rounded-md border border-border/60 bg-muted/30">
+                          <div className="shrink-0">
                             <ActionsDropdown actions={getLocationActions(location)} />
                           </div>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Export Modals */}
-        <ExportExcelModal
-          open={exportModalOpen}
-          onOpenChange={setExportModalOpen}
-          data={exportData}
-          columns={exportColumns}
-          fileName="locais-embarque"
-          storageKey="export-locations-columns"
-        />
+                        <div className="mt-4 rounded-xl bg-muted/40 p-3">
+                          <div className="flex min-w-0 items-start gap-2">
+                            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <p className="line-clamp-3 min-w-0 break-words text-sm font-medium leading-relaxed text-foreground">
+                              {location.address}
+                            </p>
+                          </div>
+                        </div>
 
-        <ExportPDFModal
-          open={pdfModalOpen}
-          onOpenChange={setPdfModalOpen}
-          data={exportData}
-          columns={exportColumns}
-          fileName="locais-embarque"
-          title="Locais de Embarque"
-          storageKey="export-locations-pdf-columns"
-          company={activeCompany}
-        />
+                        {cityLabel ? (
+                          <div className="mt-3 flex min-w-0">
+                            <span className="inline-flex max-w-full items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                              <span className="truncate">{cityLabel}</span>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {location.maps_url ? (
+                          <a
+                            href={location.maps_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex max-w-full items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-sm font-medium text-primary hover:text-primary/80"
+                          >
+                            <ExternalLink className="h-4 w-4 shrink-0" />
+                            <span className="truncate">Abrir no Google Maps</span>
+                          </a>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              <Card className="hidden lg:block">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="admin-table-header">
+                        <TableHead>Local</TableHead>
+                        <TableHead>Endereço</TableHead>
+                        <TableHead>Cidade/UF</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[80px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLocations.map((location) => (
+                        <TableRow key={location.id} className="align-top">
+                          <TableCell className="py-3 sm:py-4">
+                            <div className="space-y-1.5">
+                              <p className="font-semibold leading-tight">{location.name}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="truncate max-w-[300px]">{location.address}</span>
+                              {location.maps_url && (
+                                <a
+                                  href={location.maps_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:text-primary/80"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {location.city && location.state ? (
+                              <span className="text-sm">{formatCityLabel(location.city, location.state)}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <StatusBadge status={location.status} />
+                          </TableCell>
+                          <TableCell className="py-3 sm:py-4">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <div className="rounded-md border border-border/60 bg-muted/30">
+                                <ActionsDropdown actions={getLocationActions(location)} />
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-md flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-[95vw]">
+              <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
+                <DialogTitle>{editingId ? 'Editar' : 'Novo'} Local</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+                <div className="admin-modal__body min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-pb-28 sm:px-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome *</Label>
+                    <Input
+                      id="name"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="Terminal Rodoviário"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Endereço *</Label>
+                    <Input
+                      id="address"
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      placeholder="Av. Brasil, 1000 - Centro"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cidade *</Label>
+                    <CityAutocomplete
+                      value={{ city: form.city, state: form.state }}
+                      onChange={({ city, state }) => setForm({ ...form, city, state })}
+                      placeholder="Selecione a cidade..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maps_url">Link Google Maps</Label>
+                    <Input
+                      id="maps_url"
+                      type="url"
+                      value={form.maps_url}
+                      onChange={(e) => setForm({ ...form, maps_url: e.target.value })}
+                      placeholder="https://maps.google.com/..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Observações</Label>
+                    <Textarea
+                      id="notes"
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      placeholder="Informações adicionais sobre o local..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline" className="w-full sm:w-auto">
+                        Cancelar
+                      </Button>
+                    </DialogClose>
+                    <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
+
+      <ExportExcelModal
+        open={exportModalOpen}
+        onOpenChange={setExportModalOpen}
+        data={exportData}
+        columns={exportColumns}
+        fileName="locais-embarque"
+        storageKey="export-locations-columns"
+      />
+
+      <ExportPDFModal
+        open={pdfModalOpen}
+        onOpenChange={setPdfModalOpen}
+        data={exportData}
+        columns={exportColumns}
+        fileName="locais-embarque"
+        title="Locais de Embarque"
+        storageKey="export-locations-pdf-columns"
+        company={activeCompany}
+      />
     </AdminLayout>
   );
 }
