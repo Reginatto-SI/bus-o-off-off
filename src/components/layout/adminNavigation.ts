@@ -22,7 +22,6 @@ import {
   Activity,
   ClipboardList,
   UserRoundCheck,
-  Gift,
   Sparkles,
   QrCode,
   LayoutDashboard,
@@ -120,11 +119,6 @@ export const navigationGroups: NavigationGroup[] = [{
     href: '/admin/parceiros',
     icon: Briefcase,
     roles: ['gerente']
-  }, {
-    name: 'Programas de Benefício',
-    href: '/admin/programas-beneficio',
-    icon: Gift,
-    roles: ['gerente', 'developer']
   }, {
     // Módulo Passeios & Serviços (base inicial). Acesso restrito ao gerente, igual aos demais cadastros sensíveis.
     name: 'Serviços',
