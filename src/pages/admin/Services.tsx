@@ -9,6 +9,10 @@ import {
 } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -123,6 +127,7 @@ export default function Services() {
   const [filters, setFilters] = useState<ServiceFilters>(initialFilters);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [returnEventBelongsToCompany, setReturnEventBelongsToCompany] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const autoCreateProcessedRef = useRef(false);
 
   const canManage = isGerente || isDeveloper;
@@ -325,6 +330,22 @@ export default function Services() {
     setSaving(false);
   };
 
+  // Mantém uma única fonte de ações para a tabela desktop e os cards mobile.
+  const getServiceActions = (service: Service): ActionItem[] => [
+    { label: 'Editar', icon: Pencil, onClick: () => openEdit(service) },
+    {
+      label: service.status === 'ativo' ? 'Inativar' : 'Ativar',
+      icon: Power,
+      onClick: () => toggleStatus(service),
+    },
+    {
+      label: 'Excluir',
+      icon: Trash2,
+      variant: 'destructive',
+      onClick: () => setConfirmDeleteId(service.id),
+    },
+  ];
+
   const toggleStatus = async (service: Service) => {
     if (!activeCompanyId) return;
     const newStatus: ServiceStatus = service.status === 'ativo' ? 'inativo' : 'ativo';
@@ -391,151 +412,242 @@ export default function Services() {
 
   return (
     <AdminLayout>
-      {/* Ajuste visual: usa o mesmo container das telas admin consolidadas para alinhar largura e espaçamentos. */}
-      <div className="page-container">
-        <PageHeader
-          title="Passeios & Serviços"
-          description="Cadastre os serviços (passeios, atrações, transfers) que sua agência poderá vincular aos eventos."
-          actions={
-            <div className="flex flex-wrap gap-2">
-              {returnToServiceSales && (
-                <Button type="button" variant="outline" onClick={() => navigate(returnToServiceSales)}>
-                  Voltar para Venda de Serviços
-                </Button>
-              )}
-              <Button onClick={openCreate} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Novo serviço
-              </Button>
-            </div>
-          }
-        />
+      {/* Mobile usa chrome próprio; em lg+ o PageHeader e a tabela desktop permanecem preservados. */}
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader
+            title="Serviços"
+            subtitle="Cadastros disponíveis para venda"
+            showMenuButton={false}
+          />
+        </div>
 
-        {/* Ajuste visual: segue a mesma estrutura de /admin/frota (sem margem isolada no FilterCard). */}
-        <FilterCard
-          searchValue={filters.search}
-          onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
-          searchPlaceholder="Buscar por nome ou descrição..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Todos',
-              value: filters.status,
-              onChange: (v) =>
-                setFilters((f) => ({ ...f, status: v as ServiceFilters['status'] })),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-            {
-              id: 'unit_type',
-              label: 'Tipo de unidade',
-              placeholder: 'Todos',
-              value: filters.unit_type,
-              onChange: (v) =>
-                setFilters((f) => ({ ...f, unit_type: v as ServiceFilters['unit_type'] })),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'pessoa', label: 'Pessoa' },
-                { value: 'veiculo', label: 'Veículo' },
-                { value: 'unitario', label: 'Unitário' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-        />
-
-        <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex h-64 items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
-                title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
-                description={
-                  services.length === 0
-                    ? 'Cadastre seu primeiro passeio ou serviço para começar a vinculá-lo aos eventos.'
-                    : 'Ajuste os filtros para visualizar outros serviços.'
-                }
-                action={
-                  services.length === 0 ? (
-                    <Button onClick={openCreate} className="gap-2">
-                      <Plus className="h-4 w-4" /> Novo serviço
+        <div className="page-container max-w-md space-y-4 px-3 py-4 sm:px-6 md:max-w-3xl lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Passeios & Serviços"
+              description="Cadastre os serviços (passeios, atrações, transfers) que sua agência poderá vincular aos eventos."
+              actions={
+                <div className="flex flex-wrap gap-2">
+                  {returnToServiceSales && (
+                    <Button type="button" variant="outline" onClick={() => navigate(returnToServiceSales)}>
+                      Voltar para Venda de Serviços
                     </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Tipo de unidade</TableHead>
-                    <TableHead>Controle</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[60px] text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((service) => {
-                    const actions: ActionItem[] = [
-                      { label: 'Editar', icon: Pencil, onClick: () => openEdit(service) },
-                      {
-                        label: service.status === 'ativo' ? 'Inativar' : 'Ativar',
-                        icon: Power,
-                        onClick: () => toggleStatus(service),
-                      },
-                      {
-                        label: 'Excluir',
-                        icon: Trash2,
-                        variant: 'destructive',
-                        onClick: () => setConfirmDeleteId(service.id),
-                      },
-                    ];
-                    return (
-                      <TableRow key={service.id}>
-                        <TableCell>
-                          <div className="font-medium">{service.name}</div>
-                          {service.description && (
-                            <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                              {service.description}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>{UNIT_TYPE_LABELS[service.unit_type]}</TableCell>
-                        <TableCell>{CONTROL_TYPE_LABELS[service.control_type]}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={service.status} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <ActionsDropdown actions={actions} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                  )}
+                  <Button onClick={openCreate} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Novo serviço
+                  </Button>
+                </div>
+              }
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 min-[360px]:flex-row lg:hidden">
+            {returnToServiceSales && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(returnToServiceSales)}
+                className="h-11 w-full shrink-0 px-3 text-xs min-[360px]:w-auto"
+              >
+                Voltar
+              </Button>
             )}
-          </CardContent>
-        </Card>
+            <Button onClick={openCreate} className="h-11 min-w-0 flex-1 gap-2 rounded-2xl text-sm font-semibold">
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar serviço</span>
+            </Button>
+          </div>
+
+          <div className="space-y-4 lg:space-y-6">
+            <FilterCard
+              searchValue={filters.search}
+              onSearchChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+              searchPlaceholder="Buscar por nome ou descrição..."
+              selects={[
+                {
+                  id: 'status',
+                  label: 'Status',
+                  placeholder: 'Todos',
+                  value: filters.status,
+                  onChange: (v) =>
+                    setFilters((f) => ({ ...f, status: v as ServiceFilters['status'] })),
+                  options: [
+                    { value: 'all', label: 'Todos' },
+                    { value: 'ativo', label: 'Ativo' },
+                    { value: 'inativo', label: 'Inativo' },
+                  ],
+                },
+                {
+                  id: 'unit_type',
+                  label: 'Tipo de unidade',
+                  placeholder: 'Todos',
+                  value: filters.unit_type,
+                  onChange: (v) =>
+                    setFilters((f) => ({ ...f, unit_type: v as ServiceFilters['unit_type'] })),
+                  options: [
+                    { value: 'all', label: 'Todos' },
+                    { value: 'pessoa', label: 'Pessoa' },
+                    { value: 'veiculo', label: 'Veículo' },
+                    { value: 'unitario', label: 'Unitário' },
+                  ],
+                },
+              ]}
+              onClearFilters={() => setFilters(initialFilters)}
+              hasActiveFilters={hasActiveFilters}
+            />
+
+            <Card className="hidden lg:block">
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="flex h-64 items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <EmptyState
+                    icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
+                    title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
+                    description={
+                      services.length === 0
+                        ? 'Cadastre seu primeiro passeio ou serviço para começar a vinculá-lo aos eventos.'
+                        : 'Ajuste os filtros para visualizar outros serviços.'
+                    }
+                    action={
+                      services.length === 0 ? (
+                        <Button onClick={openCreate} className="gap-2">
+                          <Plus className="h-4 w-4" /> Novo serviço
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Tipo de unidade</TableHead>
+                        <TableHead>Controle</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[60px] text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filtered.map((service) => (
+                        <TableRow key={service.id}>
+                          <TableCell>
+                            <div className="font-medium">{service.name}</div>
+                            {service.description && (
+                              <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                                {service.description}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>{UNIT_TYPE_LABELS[service.unit_type]}</TableCell>
+                          <TableCell>{CONTROL_TYPE_LABELS[service.control_type]}</TableCell>
+                          <TableCell>
+                            <StatusBadge status={service.status} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <ActionsDropdown actions={getServiceActions(service)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:hidden">
+              {loading ? (
+                <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm">
+                  <CardContent className="flex h-48 items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ) : filtered.length === 0 ? (
+                <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm">
+                  <CardContent className="px-4 py-8">
+                    <EmptyState
+                      icon={<Sparkles className="h-7 w-7 text-muted-foreground" />}
+                      title={services.length === 0 ? 'Nenhum serviço cadastrado' : 'Nenhum serviço encontrado'}
+                      description={
+                        services.length === 0
+                          ? 'Cadastre seu primeiro passeio ou serviço para começar a vinculá-lo aos eventos.'
+                          : 'Ajuste os filtros para visualizar outros serviços.'
+                      }
+                      action={
+                        services.length === 0 ? (
+                          <Button onClick={openCreate} className="w-full gap-2">
+                            <Plus className="h-4 w-4" /> Adicionar serviço
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                filtered.map((service) => (
+                  <Card key={service.id} className="overflow-hidden rounded-3xl border-slate-200/70 bg-white shadow-sm">
+                    <CardContent className="space-y-4 p-4">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <h2 className="break-words text-base font-bold leading-tight text-slate-950">
+                            {service.name}
+                          </h2>
+                          <div className="flex flex-wrap gap-2">
+                            <StatusBadge status={service.status} />
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                              {UNIT_TYPE_LABELS[service.unit_type]}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          <ActionsDropdown actions={getServiceActions(service)} />
+                        </div>
+                      </div>
+
+                      {service.description ? (
+                        <p className="line-clamp-3 break-words text-sm leading-relaxed text-slate-600">
+                          {service.description}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-500">Sem descrição cadastrada.</p>
+                      )}
+
+                      <div className="rounded-2xl bg-slate-50 p-3 text-sm">
+                        <p className="text-xs font-medium text-slate-500">Controle</p>
+                        <p className="mt-1 break-words font-semibold text-slate-900">
+                          {CONTROL_TYPE_LABELS[service.control_type]}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav
+            items={adminMobileBottomNavItems}
+            onMoreClick={() => setMobileMoreMenuOpen(true)}
+          />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
 
       {/* Modal de cadastro/edição */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg flex-col overflow-hidden p-0 sm:max-h-[90vh] sm:w-full sm:p-6">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-lg flex-col overflow-hidden rounded-2xl p-0 sm:max-h-[90vh] sm:w-full sm:p-6">
           <DialogHeader className="px-4 py-3 sm:p-0">
             <DialogTitle>
               {editingId ? 'Editar serviço' : 'Novo serviço'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 overflow-y-auto px-4 pb-4 sm:px-0">
+          <div className="space-y-4 overflow-y-auto px-4 pb-6 sm:px-0">
             <div className="space-y-1.5">
               <Label htmlFor="service-name">Nome *</Label>
               <Input
@@ -620,7 +732,7 @@ export default function Services() {
               </div>
             )}
           </div>
-          <div className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:mt-2 sm:flex-row sm:justify-end sm:border-0 sm:px-0 sm:py-0">
+          <div className="flex flex-col-reverse gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:mt-2 sm:flex-row sm:justify-end sm:border-0 sm:px-0 sm:py-0">
             <Button
               variant="outline"
               className="w-full sm:w-auto"
@@ -642,7 +754,7 @@ export default function Services() {
         open={Boolean(confirmDeleteId)}
         onOpenChange={(open) => !open && setConfirmDeleteId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir serviço?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -650,11 +762,11 @@ export default function Services() {
               evento, a exclusão poderá ser bloqueada — nesse caso, prefira inativar.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="w-full sm:w-auto">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:w-auto"
             >
               Excluir
             </AlertDialogAction>

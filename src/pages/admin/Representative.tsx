@@ -6,6 +6,10 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { SellerQRCodeModal } from '@/components/admin/SellerQRCodeModal';
 import { AsaasTutorialVideoDialog } from '@/components/admin/AsaasTutorialVideoDialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -97,6 +101,22 @@ function getCommissionStatusVariant(status: CommissionStatus): 'default' | 'seco
   return 'destructive';
 }
 
+function getRepresentativeStatusLabel(status: RepresentativeStatus) {
+  if (status === 'ativo') return 'Ativo';
+  if (status === 'inativo') return 'Inativo';
+  if (status === 'bloqueado') return 'Bloqueado';
+  return 'Pendente de validação';
+}
+
+function formatOptionalDateBR(dateValue: string | null | undefined) {
+  if (!dateValue) return '—';
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return format(date, 'dd/MM/yyyy', { locale: ptBR });
+}
+
 export default function RepresentativeAdmin() {
   const { loading: authLoading, activeCompanyId, activeCompany } = useAuth();
   const { environment: paymentEnvironment, isReady: paymentEnvironmentReady } = useRuntimePaymentEnvironment();
@@ -110,6 +130,7 @@ export default function RepresentativeAdmin() {
   const [walletInput, setWalletInput] = useState('');
   const [walletSaving, setWalletSaving] = useState(false);
   const [walletTextHelpOpen, setWalletTextHelpOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
 
   useEffect(() => {
@@ -131,20 +152,29 @@ export default function RepresentativeAdmin() {
   useEffect(() => {
     if (authLoading) return;
 
+    let cancelled = false;
+    setLoading(true);
+    setDashboard(null);
+    setLinks([]);
+    setCommissions([]);
+    setWalletInput('');
+
     if (!activeCompanyId) {
       setLoading(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     const loadRepresentativePanel = async () => {
-      setLoading(true);
-
       // RPCs security definer validam empresa ativa/papel e evitam queries abertas de financeiro no frontend.
       const [dashboardResponse, linksResponse, commissionsResponse] = await Promise.all([
         supabase.rpc('get_company_representative_dashboard', { p_company_id: activeCompanyId }),
         supabase.rpc('get_company_representative_links', { p_company_id: activeCompanyId }),
         supabase.rpc('get_company_representative_commissions', { p_company_id: activeCompanyId }),
       ]);
+
+      if (cancelled) return;
 
       if (dashboardResponse.error) {
         console.error('[admin/representante] dashboard RPC failed', dashboardResponse.error);
@@ -175,6 +205,10 @@ export default function RepresentativeAdmin() {
     };
 
     void loadRepresentativePanel();
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeCompanyId, authLoading]);
 
   const officialLink = useMemo(() => resolveOfficialLink(dashboard?.referral_link ?? null), [dashboard?.referral_link]);
@@ -189,6 +223,11 @@ export default function RepresentativeAdmin() {
       ? 'Sandbox'
       : 'Não resolvido';
   const walletActionLabel = walletId ? 'Alterar carteira' : 'Configurar carteira';
+  const walletSummaryStatus = !paymentEnvironmentReady
+    ? 'Ambiente indisponível'
+    : walletId
+      ? 'Configurada'
+      : 'Não configurada';
 
   const copyOfficialLink = async () => {
     if (!officialLink) {
@@ -253,8 +292,24 @@ export default function RepresentativeAdmin() {
   if (authLoading || loading) {
     return (
       <AdminLayout>
-        <div className="flex min-h-[50vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+          <div className="lg:hidden">
+            <AdminMobileHeader
+              title="Representante"
+              subtitle="Indicações, empresas e comissões"
+              showMenuButton={false}
+            />
+          </div>
+          <div className="flex min-h-[50vh] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+          <div className="lg:hidden">
+            <AdminMobileBottomNav
+              items={adminMobileBottomNavItems}
+              onMoreClick={() => setMobileMoreMenuOpen(true)}
+            />
+            <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+          </div>
         </div>
       </AdminLayout>
     );
@@ -269,12 +324,28 @@ export default function RepresentativeAdmin() {
   if (!activeCompanyId) {
     return (
       <AdminLayout>
-        <div className="page-container">
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Empresa ativa não encontrada</AlertTitle>
-            <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
-          </Alert>
+        <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+          <div className="lg:hidden">
+            <AdminMobileHeader
+              title="Representante"
+              subtitle="Indicações, empresas e comissões"
+              showMenuButton={false}
+            />
+          </div>
+          <div className="page-container max-w-md px-3 py-4 sm:px-6 md:max-w-3xl lg:max-w-7xl lg:px-8 lg:py-6">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Empresa ativa não encontrada</AlertTitle>
+              <AlertDescription>Selecione uma empresa ativa para acessar o painel de representante.</AlertDescription>
+            </Alert>
+          </div>
+          <div className="lg:hidden">
+            <AdminMobileBottomNav
+              items={adminMobileBottomNavItems}
+              onMoreClick={() => setMobileMoreMenuOpen(true)}
+            />
+            <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+          </div>
         </div>
       </AdminLayout>
     );
@@ -282,8 +353,18 @@ export default function RepresentativeAdmin() {
 
   return (
     <AdminLayout>
-      <div className="page-container space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      {/* Mobile usa chrome próprio; em lg+ a hierarquia desktop do painel permanece preservada. */}
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader
+            title="Representante"
+            subtitle="Indicações, empresas e comissões"
+            showMenuButton={false}
+          />
+        </div>
+
+      <div className="page-container max-w-md space-y-4 px-3 py-4 sm:px-6 md:max-w-3xl lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+        <div className="hidden flex-col gap-3 lg:flex lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Representante Comercial</h1>
             <p className="text-muted-foreground">
@@ -292,10 +373,42 @@ export default function RepresentativeAdmin() {
           </div>
           {dashboard && (
             <Badge variant={dashboard.status === 'ativo' ? 'default' : 'secondary'} className="w-fit">
-              {dashboard.status}
+              {getRepresentativeStatusLabel(dashboard.status)}
             </Badge>
           )}
         </div>
+
+        {dashboard && (
+          <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:hidden">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Representante</p>
+                  <h1 className="line-clamp-2 break-words text-lg font-bold leading-tight text-slate-950">
+                    {dashboard.name}
+                  </h1>
+                </div>
+                <Badge variant={dashboard.status === 'ativo' ? 'default' : 'secondary'} className="shrink-0">
+                  {getRepresentativeStatusLabel(dashboard.status)}
+                </Badge>
+              </div>
+              <div className="grid gap-2 text-sm sm:grid-cols-2">
+                <div className="min-w-0 rounded-2xl border bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Empresas indicadas</p>
+                  <p className="font-semibold text-slate-900">
+                    {dashboard.linked_companies_count ?? 0}
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-2xl border bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Carteira</p>
+                  <p className="font-semibold text-slate-900">
+                    {walletSummaryStatus}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {!paymentEnvironmentReady && (
           <Alert>
@@ -318,26 +431,29 @@ export default function RepresentativeAdmin() {
         )}
 
         <section className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
+          <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:col-span-2 lg:rounded-lg">
+            <CardHeader className="px-4 py-4 sm:px-6">
               <CardTitle>Link oficial da empresa</CardTitle>
               <CardDescription>Código e link público usados para cadastrar empresas indicadas.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border bg-muted/20 p-3">
+            <CardContent className="space-y-4 px-4 pb-4 sm:px-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="min-w-0 rounded-2xl border bg-muted/20 p-3 lg:rounded-lg">
                   <p className="text-xs text-muted-foreground">Código oficial</p>
-                  <p className="mt-1 font-mono text-lg font-semibold">{dashboard?.representative_code || '—'}</p>
+                  <p className="mt-1 break-all font-mono text-lg font-semibold">{dashboard?.representative_code || '—'}</p>
                 </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="min-w-0 rounded-2xl border bg-muted/20 p-3 lg:rounded-lg">
                   <p className="text-xs text-muted-foreground">Carteira de recebimento</p>
-                  <p className="mt-1 truncate font-mono text-sm font-medium">{walletId || 'Não configurada'}</p>
+                  <p className="mt-1 text-sm font-semibold">{walletSummaryStatus}</p>
+                  {walletId && (
+                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{walletId}</p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">Ambiente: {paymentEnvironmentLabel}</p>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mt-3"
+                    className="mt-3 w-full sm:w-auto"
                     onClick={openWalletModal}
                     disabled={!dashboard?.id || !paymentEnvironmentReady}
                   >
@@ -346,16 +462,16 @@ export default function RepresentativeAdmin() {
                   </Button>
                 </div>
               </div>
-              <div className="rounded-lg border p-3">
+              <div className="min-w-0 rounded-2xl border p-3 lg:rounded-lg">
                 <p className="text-xs text-muted-foreground">Link público</p>
                 <p className="mt-1 break-all font-mono text-sm">{officialLink || 'Link indisponível'}</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <Button onClick={copyOfficialLink} disabled={!officialLink}>
+                <Button className="w-full sm:w-auto" onClick={copyOfficialLink} disabled={!officialLink}>
                   <Copy className="mr-2 h-4 w-4" />
                   Copiar link
                 </Button>
-                <Button variant="outline" onClick={() => setQrModalOpen(true)} disabled={!officialLink}>
+                <Button className="w-full sm:w-auto" variant="outline" onClick={() => setQrModalOpen(true)} disabled={!officialLink}>
                   <QrCode className="mr-2 h-4 w-4" />
                   Ver QR Code
                 </Button>
@@ -363,46 +479,84 @@ export default function RepresentativeAdmin() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:rounded-lg">
+            <CardHeader className="px-4 py-4 sm:px-6">
               <CardTitle>Resumo</CardTitle>
               <CardDescription>Indicadores diretos deste representante.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
+            <CardContent className="grid gap-3 px-4 pb-4 sm:grid-cols-2 sm:px-6 lg:block lg:space-y-3">
+              <div className="flex min-w-0 flex-col gap-1 rounded-2xl border bg-muted/20 p-3 lg:flex-row lg:items-center lg:justify-between lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:pb-2">
                 <span className="text-sm text-muted-foreground">Empresas indicadas</span>
                 <strong>{dashboard?.linked_companies_count ?? 0}</strong>
               </div>
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex min-w-0 flex-col gap-1 rounded-2xl border bg-muted/20 p-3 lg:flex-row lg:items-center lg:justify-between lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:pb-2">
                 <span className="text-sm text-muted-foreground">Empresas ativas</span>
                 <strong>{dashboard?.active_linked_companies_count ?? 0}</strong>
               </div>
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex min-w-0 flex-col gap-1 rounded-2xl border bg-muted/20 p-3 sm:col-span-2 lg:flex-row lg:items-center lg:justify-between lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:pb-2">
                 <span className="text-sm text-muted-foreground">Comissão paga</span>
-                <strong>{formatCurrencyBRL(Number(dashboard?.commission_paid ?? 0))}</strong>
+                <strong className="break-words">{formatCurrencyBRL(Number(dashboard?.commission_paid ?? 0))}</strong>
               </div>
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex min-w-0 flex-col gap-1 rounded-2xl border bg-muted/20 p-3 lg:flex-row lg:items-center lg:justify-between lg:rounded-none lg:border-x-0 lg:border-t-0 lg:bg-transparent lg:p-0 lg:pb-2">
                 <span className="text-sm text-muted-foreground">Pendente</span>
-                <strong>{formatCurrencyBRL(Number(dashboard?.commission_pending ?? 0))}</strong>
+                <strong className="break-words">{formatCurrencyBRL(Number(dashboard?.commission_pending ?? 0))}</strong>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex min-w-0 flex-col gap-1 rounded-2xl border bg-muted/20 p-3 lg:flex-row lg:items-center lg:justify-between lg:border-0 lg:bg-transparent lg:p-0">
                 <span className="text-sm text-muted-foreground">Bloqueada</span>
-                <strong>{formatCurrencyBRL(Number(dashboard?.commission_blocked ?? 0))}</strong>
+                <strong className="break-words">{formatCurrencyBRL(Number(dashboard?.commission_blocked ?? 0))}</strong>
               </div>
             </CardContent>
           </Card>
         </section>
 
         <section className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader>
+          <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:rounded-lg">
+            <CardHeader className="px-4 py-4 sm:px-6">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Building2 className="h-4 w-4" />
                 Empresas indicadas
               </CardTitle>
               <CardDescription>Empresas cadastradas pelo link deste representante.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4 sm:px-6">
+              <div className="grid gap-3 md:grid-cols-2 lg:hidden">
+                {links.map((link) => (
+                  <div key={link.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="line-clamp-2 break-words font-semibold text-slate-950">
+                          {link.company_trade_name || link.company_name}
+                        </h3>
+                        {link.company_trade_name && (
+                          <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                            {link.company_name}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant={link.company_is_active ? 'default' : 'secondary'} className="shrink-0">
+                        {link.company_is_active ? 'Ativa' : 'Inativa'}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <div className="rounded-xl bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Vínculo</p>
+                        <p className="font-medium">{formatOptionalDateBR(link.linked_at)}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Comissão</p>
+                        <p className="break-words font-semibold">{formatCurrencyBRL(Number(link.commission_total ?? 0))}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {links.length === 0 && (
+                  <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground md:col-span-2">
+                    Nenhuma empresa indicada por este link até o momento.
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -421,7 +575,7 @@ export default function RepresentativeAdmin() {
                           {link.company_is_active ? 'Ativa' : 'Inativa'}
                         </Badge>
                       </TableCell>
-                      <TableCell>{format(new Date(link.linked_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                      <TableCell>{formatOptionalDateBR(link.linked_at)}</TableCell>
                       <TableCell className="text-right">{formatCurrencyBRL(Number(link.commission_total ?? 0))}</TableCell>
                     </TableRow>
                   ))}
@@ -434,18 +588,57 @@ export default function RepresentativeAdmin() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:rounded-lg">
+            <CardHeader className="px-4 py-4 sm:px-6">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ClipboardList className="h-4 w-4" />
                 Ledger de comissões
               </CardTitle>
               <CardDescription>Últimos lançamentos diretos deste representante.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4 sm:px-6">
+              <div className="grid gap-3 md:grid-cols-2 lg:hidden">
+                {commissions.map((commission) => (
+                  <div key={commission.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="line-clamp-2 break-words font-semibold text-slate-950">
+                          {commission.company_trade_name || commission.company_name}
+                        </h3>
+                        <p className="break-all text-xs text-muted-foreground">Venda: {commission.sale_id}</p>
+                      </div>
+                      <Badge variant={getCommissionStatusVariant(commission.status)} className="shrink-0">
+                        {getCommissionStatusLabel(commission.status)}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <div className="rounded-xl bg-muted/30 p-3 sm:col-span-2">
+                        <p className="text-xs text-muted-foreground">Comissão</p>
+                        <p className="break-words text-base font-semibold">{formatCurrencyBRL(Number(commission.commission_amount ?? 0))}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Percentual</p>
+                        <p className="font-medium">{Number(commission.commission_percent ?? 0).toFixed(2)}%</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">Data</p>
+                        <p className="font-medium">{formatOptionalDateBR(commission.created_at)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {commissions.length === 0 && (
+                  <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground md:col-span-2">
+                    Nenhum lançamento de comissão encontrado.
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -465,7 +658,7 @@ export default function RepresentativeAdmin() {
                           {getCommissionStatusLabel(commission.status)}
                         </Badge>
                       </TableCell>
-                      <TableCell>{format(new Date(commission.created_at), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
+                      <TableCell>{formatOptionalDateBR(commission.created_at)}</TableCell>
                     </TableRow>
                   ))}
                   {commissions.length === 0 && (
@@ -477,6 +670,7 @@ export default function RepresentativeAdmin() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </section>
@@ -490,11 +684,11 @@ export default function RepresentativeAdmin() {
       />
 
       <Dialog open={walletModalOpen} onOpenChange={setWalletModalOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-lg flex-col overflow-hidden rounded-2xl p-0 sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Configurar carteira de recebimento</DialogTitle>
+            <DialogTitle className="px-4 pt-4 sm:px-6 sm:pt-6">Configurar carteira de recebimento</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-2 sm:px-6">
             <div className="rounded-lg border bg-muted/20 p-3 text-sm">
               <p className="text-muted-foreground">Ambiente atual</p>
               <p className="font-medium">{paymentEnvironmentLabel}</p>
@@ -506,6 +700,7 @@ export default function RepresentativeAdmin() {
                 value={walletInput}
                 onChange={(event) => setWalletInput(event.target.value)}
                 placeholder="Ex.: wallet_0000000000000000"
+                className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
                 Este é o código que identifica a carteira do Asaas que receberá suas comissões.
@@ -519,7 +714,7 @@ export default function RepresentativeAdmin() {
               className="group relative block w-full rounded-lg border border-dashed bg-muted/20 p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Abrir tutorial em vídeo para localizar o ID da carteira no Asaas"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-destructive/10 transition-colors group-hover:bg-destructive/20">
                   <Youtube className="h-7 w-7 text-destructive" />
                 </div>
@@ -565,11 +760,11 @@ export default function RepresentativeAdmin() {
               </CollapsibleContent>
             </Collapsible>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
+          <DialogFooter className="gap-2 border-t px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-6">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWalletModalOpen(false)} disabled={walletSaving}>
               Cancelar
             </Button>
-            <Button type="button" onClick={saveWallet} disabled={walletSaving || !paymentEnvironmentReady}>
+            <Button type="button" className="w-full sm:w-auto" onClick={saveWallet} disabled={walletSaving || !paymentEnvironmentReady}>
               {walletSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar carteira
             </Button>
@@ -586,6 +781,14 @@ export default function RepresentativeAdmin() {
         autoplay
       />
 
+        <div className="lg:hidden">
+          <AdminMobileBottomNav
+            items={adminMobileBottomNavItems}
+            onMoreClick={() => setMobileMoreMenuOpen(true)}
+          />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
+      </div>
     </AdminLayout>
   );
 }

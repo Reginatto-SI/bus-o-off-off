@@ -4,6 +4,10 @@ import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { Company } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -272,6 +276,7 @@ export default function CompanyPage() {
   const [slugCheckLoading, setSlugCheckLoading] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const showcaseQrRef = useRef<HTMLDivElement | null>(null);
+  const companyTabsViewportRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedPublicSlug = normalizePublicSlug(form.public_slug);
   const isReservedSlug = normalizedPublicSlug ? isReservedPublicSlug(normalizedPublicSlug) : false;
@@ -280,6 +285,10 @@ export default function CompanyPage() {
   const referralLink = company?.referral_code
     ? buildCompanyReferralLink(resolveCompanyReferralOrigin(), company.referral_code)
     : '';
+  const companyDisplayName = form.trade_name || form.legal_name || form.full_name || company?.name || 'Empresa';
+  const companyLegalDescription = form.legal_type === 'PF'
+    ? form.full_name
+    : form.legal_name;
   const canRenderShowcaseQr = normalizedPublicSlug.length > 0 && !isReservedSlug && slugAvailable === true;
 
   const getShowcaseQrFileBaseName = () => `qrcode-vitrine-${normalizedPublicSlug || 'nick'}`;
@@ -320,6 +329,14 @@ export default function CompanyPage() {
     setSearchParams(nextParams, { replace: true });
   };
 
+  useEffect(() => {
+    const activeTrigger = companyTabsViewportRef.current?.querySelector<HTMLElement>(
+      `[data-company-tab="${activeTab}"]`,
+    );
+
+    // Mantém a aba selecionada visível no carrossel mobile sem alterar valores, URL ou persistência.
+    activeTrigger?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeTab]);
 
   const handleDownloadShowcaseQrSvg = () => {
     if (!canRenderShowcaseQr) {
@@ -518,6 +535,7 @@ export default function CompanyPage() {
   const [asaasOnboardingMode, setAsaasOnboardingMode] = useState<'create' | 'link' | null>(null);
 
   const [asaasWizardOpen, setAsaasWizardOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   useEffect(() => {
     // Comentário de suporte: evita exibir resultado de verificação Pix de outra empresa/ambiente.
@@ -1265,30 +1283,85 @@ export default function CompanyPage() {
 
   return (
     <AdminLayout>
-      <div className="p-4 lg:p-8 space-y-6">
-        <PageHeader
-          title="Empresa"
-          description="Dados cadastrais e informações institucionais da empresa"
-        />
+      {/* Mobile usa chrome próprio; em lg+ o PageHeader e a estrutura desktop permanecem preservados. */}
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader
+            title="Empresa"
+            subtitle="Dados e configurações"
+            showMenuButton={false}
+          />
+        </div>
 
-        {loading ? (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-40" />
-                <Skeleton className="h-4 w-60" />
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
-                <Skeleton className="h-10" />
+        <div className="page-container max-w-md space-y-4 px-3 py-4 sm:px-6 md:max-w-3xl lg:max-w-7xl lg:space-y-6 lg:px-8 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Empresa"
+              description="Dados cadastrais e informações institucionais da empresa"
+            />
+          </div>
+
+          {!loading && (
+            <Card className="rounded-3xl border-slate-200/70 bg-white shadow-sm lg:hidden">
+              <CardContent className="flex min-w-0 items-start gap-3 p-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  {form.logo_url ? (
+                    <img src={form.logo_url} alt="Logo da empresa" className="h-full w-full object-contain" />
+                  ) : (
+                    <Store className="h-6 w-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="line-clamp-2 break-words text-base font-bold leading-snug text-slate-950">
+                    {companyDisplayName}
+                  </h2>
+                  {companyLegalDescription && (
+                    <p className="line-clamp-2 break-words text-sm leading-snug text-slate-600">
+                      {companyLegalDescription}
+                    </p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline" className="max-w-full">
+                      {form.legal_type === 'PF' ? 'Pessoa Física' : 'Empresa'}
+                    </Badge>
+                    {form.document_number && (
+                      <Badge variant="secondary" className="max-w-full whitespace-normal text-left">
+                        <span className="break-all">{form.document_number}</span>
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </div>
-        ) : (
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <Card>
-              <CardHeader>
+          )}
+
+          {loading ? (
+            <div className="space-y-6">
+              <Card className="overflow-hidden rounded-3xl border-slate-200/70 bg-white shadow-sm lg:rounded-lg">
+                <CardHeader className="px-4 py-4 sm:px-6">
+                  <Skeleton className="h-6 w-40" />
+                  <Skeleton className="h-4 w-60" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Skeleton className="h-10" />
+                  <Skeleton className="h-10" />
+                  <Skeleton className="h-10" />
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <form className="space-y-4 lg:space-y-6" onSubmit={handleSubmit}>
+              {!isGerente && !isDeveloper && (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-900 lg:hidden">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Seu perfil permite consultar os dados da empresa. O salvamento permanece restrito a gerentes.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Card className="overflow-hidden rounded-3xl border-slate-200/70 bg-white shadow-sm lg:rounded-lg">
+              <CardHeader className="px-4 py-4 sm:px-6">
                 <CardTitle>Dados da Empresa</CardTitle>
                 <CardDescription>
                   {company
@@ -1296,82 +1369,96 @@ export default function CompanyPage() {
                     : 'Cadastre os dados da empresa ativa para começar.'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-4 pb-4 sm:px-6">
                 <Tabs value={activeTab} onValueChange={handleCompanyTabChange} className="space-y-4">
-                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2">
+                  <div
+                    ref={companyTabsViewportRef}
+                    className="-mx-4 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,transparent,black_1rem,black_calc(100%_-_1rem),transparent)] sm:-mx-6 sm:px-6 lg:mx-0 lg:overflow-visible lg:px-0 lg:[mask-image:none]"
+                  >
+                    <TabsList className="flex h-auto w-max min-w-full justify-start gap-2 lg:w-full lg:flex-wrap">
                     <TabsTrigger
                       value="dados"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="dados"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <IdCard className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Dados Gerais</span>
+                      <span>Dados Gerais</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="endereco"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="endereco"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <MapPin className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Endereço</span>
+                      <span>Endereço</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="contato"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="contato"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <Phone className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Contato</span>
+                      <span>Contato</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="observacoes"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="observacoes"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <FileText className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Observações</span>
+                      <span>Observações</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="redes"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="redes"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <Share2 className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Redes Sociais</span>
+                      <span>Redes Sociais</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="configuracoes"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="configuracoes"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <Settings className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Configurações</span>
+                      <span>Configurações</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="termos"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="termos"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <FileText className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Termos e Políticas</span>
+                      <span>Termos e Políticas</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="pagamentos"
-                      className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                      data-company-tab="pagamentos"
+                      className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 truncate">Pagamentos</span>
+                      <span>Pagamentos</span>
                     </TabsTrigger>
                     {/* Vitrine Pública: aba visível somente para gerente/developer */}
                     {isGerente && (
                       <TabsTrigger
                         value="vitrine"
-                        className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap"
+                        data-company-tab="vitrine"
+                        className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
                       >
                         <Store className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">Vitrine Pública</span>
+                        <span>Vitrine Pública</span>
                       </TabsTrigger>
                     )}
                   </TabsList>
+                  </div>
 
                   <TabsContent value="dados" className="mt-0 space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-[180px,1fr]">
+                    <div className="grid gap-4 md:grid-cols-[180px,1fr]">
                       <div className="space-y-2">
                         <Label>Logo da empresa</Label>
-                        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-center">
+                        <div className="flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-center">
                           {form.logo_url ? (
                             <img
                               src={form.logo_url}
@@ -1515,6 +1602,7 @@ export default function CompanyPage() {
                             })
                           }
                           placeholder={form.legal_type === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
+                          inputMode="numeric"
                         />
                       </div>
                       {/* Comentário: inscrição estadual não existe no schema atual, então não exibimos aqui. */}
@@ -1642,8 +1730,14 @@ export default function CompanyPage() {
                               <p className="text-sm font-medium">QR Code da vitrine</p>
                               <div className="flex min-h-[220px] items-center justify-center rounded-md border bg-white p-3">
                                 {canRenderShowcaseQr ? (
-                                  <div ref={showcaseQrRef}>
-                                    <QRCodeSVG value={shortLink} size={200} level="H" includeMargin={false} />
+                                  <div ref={showcaseQrRef} className="max-w-full overflow-hidden">
+                                    <QRCodeSVG
+                                      value={shortLink}
+                                      size={200}
+                                      level="H"
+                                      includeMargin={false}
+                                      className="h-auto max-w-full"
+                                    />
                                   </div>
                                 ) : (
                                   <div className="space-y-2 text-center text-muted-foreground">
@@ -1728,6 +1822,7 @@ export default function CompanyPage() {
                           value={form.postal_code}
                           onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
                           placeholder="00000-000"
+                          inputMode="numeric"
                         />
                       </div>
                       <div className="space-y-2">
@@ -2326,9 +2421,10 @@ export default function CompanyPage() {
                                   )
                                   : 'Vamos abrir o mesmo wizard usado em /admin/eventos para vincular sua conta existente por API Key com a mesma regra de ambiente e tratamento de erros.'}
                               </p>
-                              <div className="flex gap-2">
+                              <div className="flex flex-col gap-2 sm:flex-row">
                                 <Button
                                   type="button"
+                                  className="w-full sm:w-auto"
                                   onClick={() => setAsaasWizardOpen(true)}
                                 >
                                   {asaasOnboardingMode === 'create' ? (
@@ -2338,7 +2434,12 @@ export default function CompanyPage() {
                                   )}
                                   {asaasOnboardingMode === 'create' ? 'Iniciar conexão guiada' : 'Abrir wizard de vínculo'}
                                 </Button>
-                                <Button type="button" variant="ghost" onClick={() => setAsaasOnboardingMode(null)}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="w-full sm:w-auto"
+                                  onClick={() => setAsaasOnboardingMode(null)}
+                                >
                                   Voltar
                                 </Button>
                               </div>
@@ -2380,7 +2481,7 @@ export default function CompanyPage() {
                     />
 
                     <AlertDialog open={disconnectAsaasDialogOpen} onOpenChange={setDisconnectAsaasDialogOpen}>
-                      <AlertDialogContent>
+                      <AlertDialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl">
                         <AlertDialogHeader>
                           <AlertDialogTitle>Desvincular conta Asaas?</AlertDialogTitle>
                           <AlertDialogDescription>
@@ -2388,14 +2489,15 @@ export default function CompanyPage() {
                             O histórico de vendas e relatórios permanece preservado.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel disabled={asaasDisconnecting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogFooter className="gap-2 sm:gap-0">
+                          <AlertDialogCancel disabled={asaasDisconnecting} className="w-full sm:w-auto">Cancelar</AlertDialogCancel>
                           <AlertDialogAction
                             onClick={(event) => {
                               event.preventDefault();
                               void handleDisconnectAsaasIntegration();
                             }}
                             disabled={asaasDisconnecting}
+                            className="w-full sm:w-auto"
                           >
                             {asaasDisconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                             Confirmar desvinculação
@@ -2518,17 +2620,26 @@ export default function CompanyPage() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={resetForm}>
+            <div className="flex flex-col-reverse gap-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end lg:pb-0">
+              <Button type="button" variant="ghost" onClick={resetForm} className="w-full sm:w-auto">
                 Cancelar
               </Button>
               {/* Hardening Fase 1: operador não pode salvar (read-only), alinhado com RLS */}
-              <Button type="submit" disabled={saving || (!isGerente && !isDeveloper)}>
+              <Button type="submit" disabled={saving || (!isGerente && !isDeveloper)} className="w-full sm:w-auto">
                 {saving ? 'Salvando...' : 'Salvar alterações'}
               </Button>
             </div>
           </form>
         )}
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav
+            items={adminMobileBottomNavItems}
+            onMoreClick={() => setMobileMoreMenuOpen(true)}
+          />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );
