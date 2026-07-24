@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { syncSeatsFromSnapshot } from '@/lib/vehicleSeatSync';
 import { SeatCategory, TemplateLayout, Vehicle } from '@/types/database';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,7 +24,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -145,6 +148,7 @@ export default function Fleet() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FleetFilters>(initialFilters);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   // Export columns configuration
   const exportColumns: ExportColumn[] = [
@@ -549,7 +553,7 @@ export default function Fleet() {
       whatsapp_group_link: form.whatsapp_group_link || null,
       notes: form.notes || null,
       template_layout_id: form.template_layout_id || null,
-      layout_snapshot: null as any,
+      layout_snapshot: null as Vehicle['layout_snapshot'],
       template_layout_version: null as number | null,
       company_id: activeCompanyId,
     };
@@ -820,28 +824,341 @@ export default function Fleet() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        {/* Header */}
-        <PageHeader
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Frota" subtitle="Veículos cadastrados" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          {/* Header desktop */}
+          <div className="hidden lg:block">
+            <PageHeader
           title="Frota"
           description="Gerencie os veículos disponíveis"
           actions={
             <div className="flex w-full items-center gap-2 sm:w-auto">
               {/* Mobile: mantém ação principal e recolhe exportações em menu discreto. */}
-              <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-                <DialogTrigger asChild>
-                  <Button className="flex-1 sm:flex-none">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Veículo
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                  <DialogHeader className="admin-modal__header px-6 py-4">
+              <Button className="flex-1 sm:flex-none" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Veículo
+              </Button>
+
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Mais ações">
+                      <Ellipsis className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleExportExcel}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Exportar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
+                <Button variant="outline" size="sm" onClick={handleExportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportPDF}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+          }
+        />
+          </div>
+
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar Veículo
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar frota">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+        {/* Stats Cards */}
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatsCard
+            label="Total de veículos"
+            value={stats.total}
+            icon={Bus}
+            className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
+          />
+          <StatsCard
+            label="Veículos ativos"
+            value={stats.ativos}
+            icon={CheckCircle}
+            variant="success"
+            className="min-h-0 p-3 sm:p-4"
+          />
+          <StatsCard
+            label="Veículos inativos"
+            value={stats.inativos}
+            icon={XCircle}
+            variant="destructive"
+            className="min-h-0 p-3 sm:p-4"
+          />
+          <StatsCard
+            label="Capacidade total"
+            value={`${stats.capacidadeTotal} pass.`}
+            icon={Users}
+            className="min-h-0 p-3 sm:p-4"
+          />
+        </div>
+
+        {/* Filters */}
+        <FilterCard
+          className="mb-6"
+          searchValue={filters.search}
+          onSearchChange={(value) => setFilters({ ...filters, search: value })}
+          searchPlaceholder="Pesquisar por placa, proprietário, marca ou modelo..."
+          selects={[
+            {
+              id: 'status',
+              label: 'Status',
+              placeholder: 'Status',
+              value: filters.status,
+              onChange: (value) => setFilters({ ...filters, status: value as FleetFilters['status'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'ativo', label: 'Ativo' },
+                { value: 'inativo', label: 'Inativo' },
+              ],
+            },
+            {
+              id: 'type',
+              label: 'Tipo',
+              placeholder: 'Tipo',
+              value: filters.type,
+              onChange: (value) => setFilters({ ...filters, type: value as FleetFilters['type'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                ...vehicleTypeOptions,
+              ],
+            },
+          ]}
+          onClearFilters={() => setFilters(initialFilters)}
+          hasActiveFilters={hasActiveFilters}
+          advancedFilters={
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <FilterInput
+                id="brand"
+                label="Marca"
+                placeholder="Ex: Mercedes"
+                value={filters.brand}
+                onChange={(value) => setFilters({ ...filters, brand: value })}
+              />
+              <FilterInput
+                id="model"
+                label="Modelo"
+                placeholder="Ex: O-500"
+                value={filters.model}
+                onChange={(value) => setFilters({ ...filters, model: value })}
+              />
+              <FilterInput
+                id="yearModel"
+                label="Ano Modelo"
+                placeholder="Ex: 2024"
+                value={filters.yearModel}
+                onChange={(value) => setFilters({ ...filters, yearModel: value })}
+                type="number"
+              />
+              <FilterInput
+                id="capacityMin"
+                label="Capacidade mín."
+                placeholder="Ex: 20"
+                value={filters.capacityMin}
+                onChange={(value) => setFilters({ ...filters, capacityMin: value })}
+                type="number"
+              />
+              <FilterInput
+                id="capacityMax"
+                label="Capacidade máx."
+                placeholder="Ex: 50"
+                value={filters.capacityMax}
+                onChange={(value) => setFilters({ ...filters, capacityMax: value })}
+                type="number"
+              />
+            </div>
+          }
+        />
+
+        {/* Listagem: cards abaixo de lg, tabela completa a partir de lg. */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : vehicles.length === 0 ? (
+          <EmptyState
+            icon={<Bus className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum veículo cadastrado"
+            description="Adicione veículos à sua frota"
+            action={
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Veículo
+              </Button>
+            }
+          />
+        ) : filteredVehicles.length === 0 ? (
+          <EmptyState
+            icon={<Bus className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum veículo encontrado"
+            description="Ajuste os filtros para encontrar veículos"
+            action={
+              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                Limpar filtros
+              </Button>
+            }
+          />
+        ) : (
+          <Card className="border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:shadow-sm">
+            <CardContent className="p-0">
+              {/* Mobile/tablet: mantém cards enquanto o chrome mobile estiver ativo. */}
+              <div className="space-y-3 p-3 lg:hidden">
+                {filteredVehicles.map((vehicle) => {
+                  const vehicleName = [vehicle.brand, vehicle.model].filter(Boolean).join(' / ') || vehicleTypeLabels[vehicle.type] || vehicle.type;
+                  const vehiclePlate = vehicle.plate || 'Placa não informada';
+
+                  return (
+                    <article
+                      key={vehicle.id}
+                      className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Bus className="h-4 w-4 shrink-0 text-slate-500" />
+                            <p className="truncate text-sm font-bold text-slate-950">{vehicleName}</p>
+                          </div>
+                          <p className="mt-1 truncate font-mono text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            {vehiclePlate}
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-xl border border-slate-200/70 bg-slate-50">
+                          <ActionsDropdown actions={getVehicleActions(vehicle)} />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={vehicle.status} />
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          {vehicleTypeLabels[vehicle.type] ?? vehicle.type}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-slate-500">Capacidade</p>
+                          <p className="mt-0.5 font-semibold text-slate-950">{vehicle.capacity} passageiros</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500">Proprietário</p>
+                          <p className="mt-0.5 truncate font-semibold text-slate-950">{vehicle.owner || '-'}</p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden lg:block">
+                <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Veículo</TableHead>
+                    <TableHead>Marca / Modelo</TableHead>
+                    <TableHead className="hidden sm:table-cell">Placa</TableHead>
+                    <TableHead className="hidden lg:table-cell">Proprietário</TableHead>
+                    <TableHead>Capacidade</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[60px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredVehicles.map((vehicle) => (
+                    <TableRow key={vehicle.id} className="align-top">
+                      <TableCell>
+                        {/* Comentário Fase 3: consolidamos dados-chave no primeiro bloco para leitura com rolagem vertical curta. */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <Bus className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{vehicleTypeLabels[vehicle.type] ?? vehicle.type}</span>
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground sm:hidden">{vehicle.plate}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p>
+                            {vehicle.brand || vehicle.model
+                              ? `${vehicle.brand ?? ''} ${vehicle.model ? `/ ${vehicle.model}` : ''}`.trim()
+                              : '-'}
+                          </p>
+                          {vehicle.owner ? (
+                            <p className="text-xs text-muted-foreground lg:hidden">Proprietário: {vehicle.owner}</p>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden font-mono sm:table-cell">{vehicle.plate}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{vehicle.owner ?? '-'}</TableCell>
+                      <TableCell>{vehicle.capacity} passageiros</TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        <StatusBadge status={vehicle.status} />
+                      </TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: reforça percepção de ação disponível sem expor múltiplos botões. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getVehicleActions(vehicle)} />
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+          <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+                  <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Veículo</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="flex h-full flex-col">
                     <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
                         <TabsTrigger
                           value="identificacao"
                           className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
@@ -872,7 +1189,7 @@ export default function Fleet() {
                         </TabsTrigger>
                       </TabsList>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                      <div className="admin-modal__body flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                         <TabsContent value="identificacao" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-2">
@@ -1137,253 +1454,21 @@ export default function Fleet() {
                         </TabsContent>
                       </div>
                     </Tabs>
-                    <div className="admin-modal__footer px-6 py-4">
-                      <div className="flex flex-wrap justify-end gap-3">
+                    <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
                         <DialogClose asChild>
-                          <Button type="button" variant="outline">
+                          <Button type="button" variant="outline" className="w-full sm:w-auto">
                             Cancelar
                           </Button>
                         </DialogClose>
-                        <Button type="submit" disabled={saving}>
+                        <Button type="submit" disabled={saving} className="w-full sm:w-auto">
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
                         </Button>
                       </div>
                     </div>
                   </form>
                 </DialogContent>
-              </Dialog>
-
-              <div className="sm:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label="Mais ações">
-                      <Ellipsis className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={handleExportExcel}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Exportar Excel
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExportPDF}>
-                      <FileText className="h-4 w-4 mr-2" />
-                      Exportar PDF
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="hidden sm:flex sm:items-center sm:gap-2">
-                <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  PDF
-                </Button>
-              </div>
-            </div>
-          }
-        />
-
-        {/* Stats Cards */}
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-          <StatsCard
-            label="Total de veículos"
-            value={stats.total}
-            icon={Bus}
-            className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4"
-          />
-          <StatsCard
-            label="Veículos ativos"
-            value={stats.ativos}
-            icon={CheckCircle}
-            variant="success"
-            className="min-h-0 p-3 sm:p-4"
-          />
-          <StatsCard
-            label="Veículos inativos"
-            value={stats.inativos}
-            icon={XCircle}
-            variant="destructive"
-            className="min-h-0 p-3 sm:p-4"
-          />
-          <StatsCard
-            label="Capacidade total"
-            value={`${stats.capacidadeTotal} pass.`}
-            icon={Users}
-            className="min-h-0 p-3 sm:p-4"
-          />
-        </div>
-
-        {/* Filters */}
-        <FilterCard
-          className="mb-6"
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por placa, proprietário, marca ou modelo..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as FleetFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-            {
-              id: 'type',
-              label: 'Tipo',
-              placeholder: 'Tipo',
-              value: filters.type,
-              onChange: (value) => setFilters({ ...filters, type: value as FleetFilters['type'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                ...vehicleTypeOptions,
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-          advancedFilters={
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <FilterInput
-                id="brand"
-                label="Marca"
-                placeholder="Ex: Mercedes"
-                value={filters.brand}
-                onChange={(value) => setFilters({ ...filters, brand: value })}
-              />
-              <FilterInput
-                id="model"
-                label="Modelo"
-                placeholder="Ex: O-500"
-                value={filters.model}
-                onChange={(value) => setFilters({ ...filters, model: value })}
-              />
-              <FilterInput
-                id="yearModel"
-                label="Ano Modelo"
-                placeholder="Ex: 2024"
-                value={filters.yearModel}
-                onChange={(value) => setFilters({ ...filters, yearModel: value })}
-                type="number"
-              />
-              <FilterInput
-                id="capacityMin"
-                label="Capacidade mín."
-                placeholder="Ex: 20"
-                value={filters.capacityMin}
-                onChange={(value) => setFilters({ ...filters, capacityMin: value })}
-                type="number"
-              />
-              <FilterInput
-                id="capacityMax"
-                label="Capacidade máx."
-                placeholder="Ex: 50"
-                value={filters.capacityMax}
-                onChange={(value) => setFilters({ ...filters, capacityMax: value })}
-                type="number"
-              />
-            </div>
-          }
-        />
-
-        {/* Table */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : vehicles.length === 0 ? (
-          <EmptyState
-            icon={<Bus className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum veículo cadastrado"
-            description="Adicione veículos à sua frota"
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Veículo
-              </Button>
-            }
-          />
-        ) : filteredVehicles.length === 0 ? (
-          <EmptyState
-            icon={<Bus className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum veículo encontrado"
-            description="Ajuste os filtros para encontrar veículos"
-            action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
-                Limpar filtros
-              </Button>
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Marca / Modelo</TableHead>
-                    <TableHead className="hidden sm:table-cell">Placa</TableHead>
-                    <TableHead className="hidden lg:table-cell">Proprietário</TableHead>
-                    <TableHead>Capacidade</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[60px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredVehicles.map((vehicle) => (
-                    <TableRow key={vehicle.id} className="align-top">
-                      <TableCell>
-                        {/* Comentário Fase 3: consolidamos dados-chave no primeiro bloco para leitura com rolagem vertical curta. */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <Bus className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{vehicleTypeLabels[vehicle.type] ?? vehicle.type}</span>
-                          </div>
-                          <p className="font-mono text-xs text-muted-foreground sm:hidden">{vehicle.plate}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p>
-                            {vehicle.brand || vehicle.model
-                              ? `${vehicle.brand ?? ''} ${vehicle.model ? `/ ${vehicle.model}` : ''}`.trim()
-                              : '-'}
-                          </p>
-                          {vehicle.owner ? (
-                            <p className="text-xs text-muted-foreground lg:hidden">Proprietário: {vehicle.owner}</p>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden font-mono sm:table-cell">{vehicle.plate}</TableCell>
-                      <TableCell className="hidden lg:table-cell">{vehicle.owner ?? '-'}</TableCell>
-                      <TableCell>{vehicle.capacity} passageiros</TableCell>
-                      <TableCell className="py-3 sm:py-4">
-                        <StatusBadge status={vehicle.status} />
-                      </TableCell>
-                      <TableCell className="py-3 sm:py-4">
-                        {/* Mobile: reforça percepção de ação disponível sem expor múltiplos botões. */}
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
-                          <div className="rounded-md border border-border/60 bg-muted/30">
-                            <ActionsDropdown actions={getVehicleActions(vehicle)} />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        </Dialog>
 
         {/* Export Excel Modal */}
         <ExportExcelModal
@@ -1407,6 +1492,12 @@ export default function Fleet() {
           title="Frota de Veículos"
         company={activeCompany}
         />
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );

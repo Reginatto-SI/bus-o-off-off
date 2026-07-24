@@ -5,6 +5,10 @@ import { CommercialPartner, CommercialPartnerStatus, CommercialPartnerTier } fro
 import { formatPhoneBR, normalizePhoneForStorage } from '@/lib/phone';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -29,7 +33,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -115,6 +118,7 @@ export default function CommercialPartners() {
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dados');
   const [filters, setFilters] = useState<PartnerFilters>(initialFilters);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
 
   // Wizard state
   const [wizardStep, setWizardStep] = useState(1);
@@ -456,7 +460,7 @@ export default function CommercialPartners() {
           placeholder="Ex: Restaurante Sabor da Terra"
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Status</Label>
           <Select value={form.status} onValueChange={(v: CommercialPartnerStatus) => setForm({ ...form, status: v })}>
@@ -481,7 +485,7 @@ export default function CommercialPartners() {
       </div>
       <div className="space-y-2">
         <Label>Nível do parceiro</Label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {([
             { value: 'basico' as CommercialPartnerTier, title: 'Básico', emoji: '', desc: 'Exibição padrão na vitrine da empresa. O parceiro aparece na lista de parceiros oficiais.' },
             { value: 'destaque' as CommercialPartnerTier, title: 'Destaque', emoji: ' ⭐', desc: 'Maior visibilidade na vitrine. Pode aparecer antes dos parceiros básicos.' },
@@ -677,7 +681,7 @@ export default function CommercialPartners() {
 
 
   const renderWizardProgress = () => (
-    <div className="px-6 py-4 border-b border-border">
+    <div className="border-b border-border px-4 py-4 sm:px-6">
       <div className="flex items-center justify-between">
         {WIZARD_STEPS.map((step, index) => {
           const stepNumber = index + 1;
@@ -715,10 +719,10 @@ export default function CommercialPartners() {
   const renderWizardFooter = () => {
     if (wizardStep === 1) {
       return (
-        <div className="admin-modal__footer px-6 py-4">
-          <div className="flex flex-wrap justify-end gap-3">
-            <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-            <Button type="button" disabled={saving} onClick={handleWizardStep1Save}>
+        <div className="admin-modal__footer px-4 py-4 sm:px-6">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cancelar</Button></DialogClose>
+            <Button type="button" className="w-full sm:w-auto" disabled={saving} onClick={handleWizardStep1Save}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar e continuar'}
             </Button>
           </div>
@@ -728,10 +732,10 @@ export default function CommercialPartners() {
 
     if (wizardStep === 5) {
       return (
-        <div className="admin-modal__footer px-6 py-4">
-          <div className="flex flex-wrap justify-between gap-3">
-            <Button type="button" variant="outline" onClick={() => setWizardStep(4)}>Voltar</Button>
-            <Button type="button" disabled={saving} onClick={() => handleWizardStepSave()}>
+        <div className="admin-modal__footer px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWizardStep(4)}>Voltar</Button>
+            <Button type="button" className="w-full sm:w-auto" disabled={saving} onClick={() => handleWizardStepSave()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finalizar cadastro'}
             </Button>
           </div>
@@ -740,10 +744,10 @@ export default function CommercialPartners() {
     }
 
     return (
-      <div className="admin-modal__footer px-6 py-4">
-        <div className="flex flex-wrap justify-between gap-3">
-          <Button type="button" variant="outline" onClick={() => setWizardStep(wizardStep - 1)}>Voltar</Button>
-          <Button type="button" disabled={saving} onClick={() => handleWizardStepSave(wizardStep + 1)}>
+      <div className="admin-modal__footer px-4 py-4 sm:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setWizardStep(wizardStep - 1)}>Voltar</Button>
+          <Button type="button" className="w-full sm:w-auto" disabled={saving} onClick={() => handleWizardStepSave(wizardStep + 1)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar'}
           </Button>
         </div>
@@ -752,9 +756,9 @@ export default function CommercialPartners() {
   };
 
   const renderWizardContent = () => (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {renderWizardProgress()}
-      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+      <div className="admin-modal__body min-h-0 flex-1 overflow-y-auto px-4 py-4 scroll-pb-28 sm:px-6">
         {wizardStep === 1 && renderDadosFields()}
         {wizardStep === 2 && renderLogoFields()}
         {wizardStep === 3 && renderRedirecionamentoFields()}
@@ -766,26 +770,26 @@ export default function CommercialPartners() {
   );
 
   const renderEditContent = () => (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full flex-col overflow-hidden">
-        <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-          <TabsTrigger value="dados" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+    <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full min-h-0 flex-col overflow-hidden">
+        <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
+          <TabsTrigger value="dados" className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0">
             <User className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Dados gerais</span>
           </TabsTrigger>
-          <TabsTrigger value="logo" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+          <TabsTrigger value="logo" className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0">
             <Image className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Logo</span>
           </TabsTrigger>
-          <TabsTrigger value="redirecionamento" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+          <TabsTrigger value="redirecionamento" className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0">
             <Globe className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Redirecionamento</span>
           </TabsTrigger>
-          <TabsTrigger value="contato" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+          <TabsTrigger value="contato" className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0">
             <Phone className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Contato</span>
           </TabsTrigger>
-          <TabsTrigger value="exibicao" className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80">
+          <TabsTrigger value="exibicao" className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0">
             <Eye className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">Exibição</span>
           </TabsTrigger>
         </TabsList>
-        <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+        <div className="admin-modal__body min-h-0 flex-1 overflow-y-auto px-4 py-4 scroll-pb-28 sm:px-6">
           <TabsContent value="dados" className="mt-0">{renderDadosFields()}</TabsContent>
           <TabsContent value="logo" className="mt-0">{renderLogoFields()}</TabsContent>
           <TabsContent value="redirecionamento" className="mt-0">{renderRedirecionamentoFields()}</TabsContent>
@@ -793,10 +797,10 @@ export default function CommercialPartners() {
           <TabsContent value="exibicao" className="mt-0">{renderExibicaoFields()}</TabsContent>
         </div>
       </Tabs>
-      <div className="admin-modal__footer px-6 py-4">
-        <div className="flex flex-wrap justify-end gap-3">
-          <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-          <Button type="submit" disabled={saving}>
+      <div className="admin-modal__footer px-4 py-4 sm:px-6">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cancelar</Button></DialogClose>
+          <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
           </Button>
         </div>
@@ -806,35 +810,48 @@ export default function CommercialPartners() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        <PageHeader
-          title="Parceiros Comerciais"
-          description="Gerencie empresas parceiras que mantêm relacionamento institucional com sua empresa. Restaurantes, hotéis, lojas e demais parceiros recorrentes."
-          actions={
-            <Dialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) resetForm();
-              }}
-            >
-              <DialogTrigger asChild>
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Parceiros" subtitle="Relacionamentos comerciais" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl px-3 text-sm" onClick={handleNewPartner}>
+              <Plus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar parceiro</span>
+            </Button>
+          </div>
+
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Parceiros Comerciais"
+              description="Gerencie empresas parceiras que mantêm relacionamento institucional com sua empresa. Restaurantes, hotéis, lojas e demais parceiros recorrentes."
+              actions={
                 <Button onClick={handleNewPartner}>
                   <Plus className="h-4 w-4 mr-2" />
                   Novo parceiro
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                <DialogHeader className="admin-modal__header px-6 py-4">
-                  <DialogTitle>
-                    {isCreateWizardMode ? 'Novo parceiro comercial' : 'Editar parceiro comercial'}
-                  </DialogTitle>
-                </DialogHeader>
-                {isCreateWizardMode ? renderWizardContent() : renderEditContent()}
-              </DialogContent>
-            </Dialog>
-          }
-        />
+              }
+            />
+          </div>
+
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}
+          >
+            <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+              <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
+                <DialogTitle>
+                  {isCreateWizardMode ? 'Novo parceiro comercial' : 'Editar parceiro comercial'}
+                </DialogTitle>
+              </DialogHeader>
+              {isCreateWizardMode ? renderWizardContent() : renderEditContent()}
+            </DialogContent>
+          </Dialog>
 
         {/* KPIs */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
@@ -897,8 +914,67 @@ export default function CommercialPartners() {
             }
           />
         ) : (
-          <Card>
-            <CardContent className="p-0">
+          <>
+            <div className="space-y-3 lg:hidden">
+              {filteredPartners.map((partner) => (
+                <Card key={partner.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="truncate text-base font-semibold text-foreground">{partner.name}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusBadge status={partner.status} />
+                          <span className={`inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                            partner.partner_tier === 'premium'
+                              ? 'bg-warning/10 text-warning'
+                              : partner.partner_tier === 'destaque'
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-muted text-muted-foreground'
+                          }`}>
+                            <span className="truncate">
+                              {TIER_LABELS[partner.partner_tier]}{partner.partner_tier === 'destaque' ? ' ⭐' : partner.partner_tier === 'premium' ? ' 🔥' : ''}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 rounded-md border border-border/60 bg-muted/30">
+                        <ActionsDropdown actions={getPartnerActions(partner)} />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-start gap-3 rounded-xl bg-muted/40 p-3">
+                      {partner.logo_url ? (
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border bg-background">
+                          <img src={partner.logo_url} alt={`Logo ${partner.name}`} className="h-full w-full object-contain p-1" />
+                        </div>
+                      ) : (
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+                          <Briefcase className="h-5 w-5" />
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1 space-y-2 text-sm">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ordem</p>
+                            <p className="truncate font-medium text-foreground">{partner.display_order}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contato</p>
+                            <p className="truncate font-medium text-foreground">
+                              {formatPhoneBR(partner.contact_phone ?? '') || partner.contact_email || 'Não informado'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="hidden lg:block">
+              <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -958,16 +1034,17 @@ export default function CommercialPartners() {
                 </TableBody>
               </Table>
             </CardContent>
-          </Card>
+            </Card>
+          </>
         )}
 
         {/* Preview da logo */}
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="w-[calc(100vw-1rem)] max-w-lg max-h-[90dvh] overflow-y-auto sm:max-w-lg">
             <DialogHeader><DialogTitle>Pré-visualização da logo</DialogTitle></DialogHeader>
             {form.logo_url ? (
               <div className="flex justify-center">
-                <img src={form.logo_url} alt="Pré-visualização da logo do parceiro" className="w-full max-w-[400px] rounded-lg border object-contain" />
+                <img src={form.logo_url} alt="Pré-visualização da logo do parceiro" className="max-h-[70dvh] w-full max-w-[400px] rounded-lg border object-contain" />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Nenhuma logo selecionada.</p>
@@ -977,21 +1054,27 @@ export default function CommercialPartners() {
 
         {/* AlertDialog de confirmação para exclusão */}
         <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="w-[calc(100vw-1rem)] max-w-lg">
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir parceiro</AlertDialogTitle>
               <AlertDialogDescription>
                 Tem certeza que deseja excluir <strong>{deleteTarget?.name}</strong>? Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+              <AlertDialogCancel className="w-full sm:w-auto">Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:w-auto">
                 Excluir
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
     </AdminLayout>
   );

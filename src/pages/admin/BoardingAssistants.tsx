@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Driver } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,7 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +42,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Users,
@@ -49,6 +58,7 @@ import {
   IdCard,
   FileSpreadsheet,
   FileText,
+  Ellipsis,
   CheckCircle,
   XCircle,
   Power,
@@ -83,6 +93,7 @@ export default function BoardingAssistants() {
   const [filters, setFilters] = useState<BoardingAssistantFilters>(initialFilters);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const [form, setForm] = useState({
     name: '',
     cpf: '',
@@ -429,325 +440,412 @@ export default function BoardingAssistants() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        <PageHeader
-          title="Auxiliares de Embarque"
-          description="Gerencie o cadastro operacional dos auxiliares de embarque"
-          actions={
-            <>
-              <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-              <Dialog
-                open={dialogOpen}
-                onOpenChange={(open) => {
-                  setDialogOpen(open);
-                  if (!open) resetForm();
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button>
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Auxiliares de Embarque" subtitle="Equipe de apoio operacional" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Auxiliares de Embarque"
+              description="Gerencie o cadastro operacional dos auxiliares de embarque"
+              actions={
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF
+                  </Button>
+                  <Button onClick={() => setDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Adicionar Auxiliar
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                  <DialogHeader className="admin-modal__header px-6 py-4">
-                    <DialogTitle>{editingId ? 'Editar' : 'Novo'} Auxiliar de Embarque</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
-                    <Tabs defaultValue="dados-pessoais" className="flex h-full min-h-0 flex-col">
-                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
-                        {/* Mantém o padrão visual de abas do admin (ícone + texto) sem criar novos componentes. */}
-                        <TabsTrigger
-                          value="dados-pessoais"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                        >
-                          <IdCard className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 truncate">Dados pessoais</span>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="contato-endereco"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                        >
-                          <MapPinned className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 truncate">Contato e endereço</span>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="dados-operacionais"
-                          className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
-                        >
-                          <BadgeCheck className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 truncate">Dados operacionais</span>
-                        </TabsTrigger>
-                      </TabsList>
+                </>
+              }
+            />
+          </div>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4 min-h-0">
-                        <TabsContent value="dados-pessoais" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="name">Nome completo</Label>
-                              <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="cpf">CPF</Label>
-                              <Input
-                                id="cpf"
-                                value={form.cpf}
-                                onChange={(e) => setForm({ ...form, cpf: formatCpfInput(e.target.value) })}
-                                placeholder="000.000.000-00"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="rg">RG</Label>
-                              <Input id="rg" value={form.rg} onChange={(e) => setForm({ ...form, rg: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="birth_date">Data de nascimento</Label>
-                              <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl px-3 text-sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Adicionar auxiliar</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar auxiliares">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            <StatsCard label="Total de auxiliares" value={stats.total} icon={Users} />
+            <StatsCard label="Auxiliares ativos" value={stats.ativos} icon={CheckCircle} variant="success" />
+            <StatsCard label="Auxiliares inativos" value={stats.inativos} icon={XCircle} variant="destructive" />
+            <StatsCard label="Sem usuário vinculado" value={stats.semUsuarioVinculado} icon={UserX} variant="warning" />
+          </div>
+
+          <FilterCard
+            className="mb-6"
+            searchValue={filters.search}
+            onSearchChange={(value) => setFilters({ ...filters, search: value })}
+            searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
+            selects={[
+              {
+                id: 'status',
+                label: 'Status',
+                placeholder: 'Status',
+                value: filters.status,
+                onChange: (value) => setFilters({ ...filters, status: value as BoardingAssistantFilters['status'] }),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  { value: 'ativo', label: 'Ativo' },
+                  { value: 'inativo', label: 'Inativo' },
+                ],
+              },
+              {
+                id: 'linked-user',
+                label: 'Vinculado a usuário',
+                placeholder: 'Vinculado',
+                value: filters.linkedUser,
+                onChange: (value) => setFilters({ ...filters, linkedUser: value as BoardingAssistantFilters['linkedUser'] }),
+                options: [
+                  { value: 'all', label: 'Todos' },
+                  { value: 'yes', label: 'Sim' },
+                  { value: 'no', label: 'Não' },
+                ],
+              },
+            ]}
+            onClearFilters={() => setFilters(initialFilters)}
+            hasActiveFilters={hasActiveFilters}
+          />
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : assistants.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum auxiliar de embarque cadastrado"
+              description="Adicione auxiliares para gestão operacional"
+              action={
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar auxiliar
+                </Button>
+              }
+            />
+          ) : filteredAssistants.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8 text-muted-foreground" />}
+              title="Nenhum auxiliar encontrado"
+              description="Ajuste os filtros para encontrar auxiliares"
+              action={<Button variant="outline" onClick={() => setFilters(initialFilters)}>Limpar filtros</Button>}
+            />
+          ) : (
+            <>
+              <div className="space-y-3 lg:hidden">
+                {filteredAssistants.map((assistant) => {
+                  const hasLinkedUser = linkedAssistantIds.has(assistant.id);
+                  const formattedPhone = assistant.phone ? formatPhoneInput(assistant.phone) : 'Telefone não informado';
+                  const formattedCpf = assistant.cpf ? formatCpfInput(assistant.cpf) : 'CPF não informado';
+
+                  return (
+                    <Card key={assistant.id} className="overflow-hidden rounded-2xl border border-border/70 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <p className="truncate text-base font-semibold text-foreground">{assistant.name}</p>
+                            <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                              <Phone className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{formattedPhone}</span>
                             </div>
                           </div>
-                        </TabsContent>
-
-                        <TabsContent value="contato-endereco" className="mt-0">
-                          {/* Reorganização em 3 colunas no desktop para compactar a aba e reduzir o estouro visual. */}
-                          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            <div className="space-y-2">
-                              <Label htmlFor="phone">Telefone</Label>
-                              <Input
-                                id="phone"
-                                value={form.phone}
-                                onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
-                                placeholder="(11) 99999-9999"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="whatsapp">WhatsApp</Label>
-                              <Input
-                                id="whatsapp"
-                                value={form.whatsapp}
-                                onChange={(e) => setForm({ ...form, whatsapp: formatPhoneInput(e.target.value) })}
-                                placeholder="(11) 99999-9999"
-                              />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-                              <Label htmlFor="cep">CEP</Label>
-                              <Input id="cep" value={form.cep} onChange={(e) => setForm({ ...form, cep: formatCepInput(e.target.value) })} placeholder="00000-000" />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-                              <Label htmlFor="email">E-mail</Label>
-                              <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-                              <Label htmlFor="street">Logradouro</Label>
-                              <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="number">Número</Label>
-                              <Input id="number" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="complement">Complemento</Label>
-                              <Input id="complement" value={form.complement} onChange={(e) => setForm({ ...form, complement: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="neighborhood">Bairro</Label>
-                              <Input id="neighborhood" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="city">Cidade</Label>
-                              <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="state">UF</Label>
-                              <Input id="state" value={form.state} maxLength={2} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
-                            </div>
+                          <div className="shrink-0">
+                            <ActionsDropdown actions={getActions(assistant)} />
                           </div>
-                        </TabsContent>
+                        </div>
 
-                        <TabsContent value="dados-operacionais" className="mt-0">
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>Status</Label>
-                              <Select
-                                value={form.status}
-                                onValueChange={(value: Driver['status']) => setForm({ ...form, status: value })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ativo">Ativo</SelectItem>
-                                  <SelectItem value="inativo">Inativo</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="emergency_contact_name">Contato de emergência</Label>
-                              <Input
-                                id="emergency_contact_name"
-                                value={form.emergency_contact_name}
-                                onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="emergency_contact_phone">Telefone de emergência</Label>
-                              <Input
-                                id="emergency_contact_phone"
-                                value={form.emergency_contact_phone}
-                                onChange={(e) => setForm({ ...form, emergency_contact_phone: formatPhoneInput(e.target.value) })}
-                                placeholder="(11) 99999-9999"
-                              />
-                            </div>
-                            <div className="space-y-2 sm:col-span-2">
-                              <Label htmlFor="notes">Observações</Label>
-                              <Textarea id="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} />
-                            </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <StatusBadge status={assistant.status ?? 'ativo'} />
+                          <span className="inline-flex max-w-full items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                            {hasLinkedUser ? 'Usuário vinculado' : 'Sem usuário vinculado'}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-3 text-sm sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">CPF</p>
+                            <p className="truncate font-medium text-foreground">{formattedCpf}</p>
                           </div>
-                        </TabsContent>
-                      </div>
-                    </Tabs>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">E-mail</p>
+                            <p className="truncate font-medium text-foreground">{assistant.email ?? 'E-mail não informado'}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
 
-                    <div className="admin-modal__footer px-6 py-4">
-                      <div className="flex flex-wrap justify-end gap-3">
-                        <DialogClose asChild>
-                          <Button type="button" variant="outline">Cancelar</Button>
-                        </DialogClose>
-                        <Button type="submit" disabled={saving}>
-                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-                        </Button>
-                      </div>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
+              <Card className="hidden lg:block">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>CPF</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>E-mail</TableHead>
+                        <TableHead>Vinculado</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[80px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAssistants.map((assistant) => (
+                        <TableRow key={assistant.id}>
+                          <TableCell className="font-medium">{assistant.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <IdCard className="h-4 w-4 text-muted-foreground" />
+                              {formatCpfInput(assistant.cpf ?? '')}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              {formatPhoneInput(assistant.phone)}
+                            </div>
+                          </TableCell>
+                          <TableCell>{assistant.email ?? '-'}</TableCell>
+                          <TableCell>
+                            <span className="inline-flex items-center gap-2 text-sm">
+                              <Link className="h-4 w-4 text-muted-foreground" />
+                              {linkedAssistantIds.has(assistant.id) ? 'Sim' : 'Não'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={assistant.status ?? 'ativo'} />
+                          </TableCell>
+                          <TableCell>
+                            <ActionsDropdown actions={getActions(assistant)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             </>
-          }
-        />
+          )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatsCard label="Total de auxiliares" value={stats.total} icon={Users} />
-          <StatsCard label="Auxiliares ativos" value={stats.ativos} icon={CheckCircle} variant="success" />
-          <StatsCard label="Auxiliares inativos" value={stats.inativos} icon={XCircle} variant="destructive" />
-          <StatsCard label="Sem usuário vinculado" value={stats.semUsuarioVinculado} icon={UserX} variant="warning" />
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}
+          >
+            <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+              <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
+                <DialogTitle>{editingId ? 'Editar' : 'Novo'} Auxiliar de Embarque</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+                <Tabs defaultValue="dados-pessoais" className="flex h-full min-h-0 flex-col">
+                  <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
+                    {/* Mantém o padrão visual de abas do admin (ícone + texto) sem criar novos componentes. */}
+                    <TabsTrigger
+                      value="dados-pessoais"
+                      className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
+                    >
+                      <IdCard className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Dados pessoais</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="contato-endereco"
+                      className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
+                    >
+                      <MapPinned className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Contato e endereço</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="dados-operacionais"
+                      className="inline-flex min-w-max items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80 sm:min-w-0"
+                    >
+                      <BadgeCheck className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">Dados operacionais</span>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="admin-modal__body min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                    <TabsContent value="dados-pessoais" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="name">Nome completo</Label>
+                          <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cpf">CPF</Label>
+                          <Input
+                            id="cpf"
+                            inputMode="numeric"
+                            value={form.cpf}
+                            onChange={(e) => setForm({ ...form, cpf: formatCpfInput(e.target.value) })}
+                            placeholder="000.000.000-00"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="rg">RG</Label>
+                          <Input id="rg" value={form.rg} onChange={(e) => setForm({ ...form, rg: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="birth_date">Data de nascimento</Label>
+                          <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="contato-endereco" className="mt-0">
+                      {/* Reorganização em 3 colunas no desktop para compactar a aba e reduzir o estouro visual. */}
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">Telefone</Label>
+                          <Input
+                            id="phone"
+                            inputMode="tel"
+                            value={form.phone}
+                            onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
+                            placeholder="(11) 99999-9999"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="whatsapp">WhatsApp</Label>
+                          <Input
+                            id="whatsapp"
+                            inputMode="tel"
+                            value={form.whatsapp}
+                            onChange={(e) => setForm({ ...form, whatsapp: formatPhoneInput(e.target.value) })}
+                            placeholder="(11) 99999-9999"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                          <Label htmlFor="cep">CEP</Label>
+                          <Input id="cep" inputMode="numeric" value={form.cep} onChange={(e) => setForm({ ...form, cep: formatCepInput(e.target.value) })} placeholder="00000-000" />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                          <Label htmlFor="email">E-mail</Label>
+                          <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                          <Label htmlFor="street">Logradouro</Label>
+                          <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="number">Número</Label>
+                          <Input id="number" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="complement">Complemento</Label>
+                          <Input id="complement" value={form.complement} onChange={(e) => setForm({ ...form, complement: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="neighborhood">Bairro</Label>
+                          <Input id="neighborhood" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="city">Cidade</Label>
+                          <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="state">UF</Label>
+                          <Input id="state" value={form.state} maxLength={2} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="dados-operacionais" className="mt-0">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={form.status}
+                            onValueChange={(value: Driver['status']) => setForm({ ...form, status: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ativo">Ativo</SelectItem>
+                              <SelectItem value="inativo">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="emergency_contact_name">Contato de emergência</Label>
+                          <Input
+                            id="emergency_contact_name"
+                            value={form.emergency_contact_name}
+                            onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="emergency_contact_phone">Telefone de emergência</Label>
+                          <Input
+                            id="emergency_contact_phone"
+                            inputMode="tel"
+                            value={form.emergency_contact_phone}
+                            onChange={(e) => setForm({ ...form, emergency_contact_phone: formatPhoneInput(e.target.value) })}
+                            placeholder="(11) 99999-9999"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label htmlFor="notes">Observações</Label>
+                          <Textarea id="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </div>
+                </Tabs>
+
+                <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline" className="w-full sm:w-auto">Cancelar</Button>
+                    </DialogClose>
+                    <Button type="submit" className="w-full sm:w-auto" disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        <FilterCard
-          className="mb-6"
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as BoardingAssistantFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-            {
-              id: 'linked-user',
-              label: 'Vinculado a usuário',
-              placeholder: 'Vinculado',
-              value: filters.linkedUser,
-              onChange: (value) => setFilters({ ...filters, linkedUser: value as BoardingAssistantFilters['linkedUser'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'yes', label: 'Sim' },
-                { value: 'no', label: 'Não' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-        />
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : assistants.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum auxiliar de embarque cadastrado"
-            description="Adicione auxiliares para gestão operacional"
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Auxiliar
-              </Button>
-            }
-          />
-        ) : filteredAssistants.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum auxiliar encontrado"
-            description="Ajuste os filtros para encontrar auxiliares"
-            action={<Button variant="outline" onClick={() => setFilters(initialFilters)}>Limpar filtros</Button>}
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>E-mail</TableHead>
-                    <TableHead>Vinculado</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[80px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredAssistants.map((assistant) => (
-                    <TableRow key={assistant.id}>
-                      <TableCell className="font-medium">{assistant.name}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <IdCard className="h-4 w-4 text-muted-foreground" />
-                          {formatCpfInput(assistant.cpf ?? '')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          {formatPhoneInput(assistant.phone)}
-                        </div>
-                      </TableCell>
-                      <TableCell>{assistant.email ?? '-'}</TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center gap-2 text-sm">
-                          <Link className="h-4 w-4 text-muted-foreground" />
-                          {linkedAssistantIds.has(assistant.id) ? 'Sim' : 'Não'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={assistant.status ?? 'ativo'} />
-                      </TableCell>
-                      <TableCell>
-                        <ActionsDropdown actions={getActions(assistant)} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
 
       <ExportExcelModal
