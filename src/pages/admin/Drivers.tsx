@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Driver } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,7 +23,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,6 +70,7 @@ import {
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { cn } from '@/lib/utils';
+import { formatDateOnlyBR, parseDateOnlyAsLocal } from '@/lib/date';
 
 interface DriverFilters {
   search: string;
@@ -90,6 +94,7 @@ export default function Drivers() {
   const [filters, setFilters] = useState<DriverFilters>(initialFilters);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const [sellerLinkDriver, setSellerLinkDriver] = useState<Driver | null>(null);
   const [sellerLinkCommission, setSellerLinkCommission] = useState('');
   const [sellerLinkSaving, setSellerLinkSaving] = useState(false);
@@ -128,13 +133,27 @@ export default function Drivers() {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
-  // Data de referência para cálculos de CNH
-  const today = useMemo(() => new Date(), []);
-  const thirtyDaysFromNow = useMemo(() => {
+  // Data de referência para cálculos de CNH. DATE do banco deve ser interpretado localmente para evitar deslocamento de fuso.
+  const today = useMemo(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 30);
+    date.setHours(0, 0, 0, 0);
     return date;
   }, []);
+  const thirtyDaysFromNow = useMemo(() => {
+    const date = new Date(today);
+    date.setDate(date.getDate() + 30);
+    return date;
+  }, [today]);
+
+  const getCnhExpirationDate = (expiresAt: string | null) => {
+    if (!expiresAt) return null;
+    return parseDateOnlyAsLocal(expiresAt) ?? new Date(expiresAt);
+  };
+
+  const formatCnhExpirationDate = (expiresAt: string | null) => {
+    if (!expiresAt) return 'Sem validade';
+    return formatDateOnlyBR(expiresAt);
+  };
 
   // KPIs memoizados
   const stats = useMemo(() => {
@@ -143,8 +162,8 @@ export default function Drivers() {
     const inativos = drivers.filter((d) => d.status === 'inativo').length;
     const cnhsAtencao = drivers.filter((d) => {
       if (!d.cnh_expires_at) return false;
-      const expiresAt = new Date(d.cnh_expires_at);
-      return expiresAt <= thirtyDaysFromNow;
+      const expiresAt = getCnhExpirationDate(d.cnh_expires_at);
+      return expiresAt ? expiresAt <= thirtyDaysFromNow : false;
     }).length;
     return { total, ativos, inativos, cnhsAtencao };
   }, [drivers, thirtyDaysFromNow]);
@@ -185,7 +204,7 @@ export default function Drivers() {
       {
         key: 'cnh_expires_at',
         label: 'Validade CNH',
-        format: (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : ''),
+        format: (v) => (v ? formatCnhExpirationDate(v) : ''),
       },
       { key: 'status', label: 'Status', format: (v) => (v === 'ativo' ? 'Ativo' : 'Inativo') },
       { key: 'notes', label: 'Observações' },
@@ -273,7 +292,7 @@ export default function Drivers() {
     }
 
     if (seller?.status === 'ativo') {
-      setExistingSellerNotice('Esta pessoa já atua como vendedora nesta empresa.');
+      setExistingSellerNotice('Esta pessoa já atua como vendedor nesta empresa.');
     } else if (seller?.status === 'inativo') {
       setExistingSellerNotice('Já existe um cadastro de vendedor inativo para este CPF. Ao confirmar, ele será reativado com a comissão informada.');
     } else {
@@ -422,7 +441,7 @@ export default function Drivers() {
 
     const sellerCommissionValue = parseSellerCommission(form.seller_commission_percent);
     if (form.also_seller && sellerCommissionValue === null) {
-      toast.error('Informe a comissão que será usada para este vendedor. A comissão deve estar entre 0 e 100.');
+      toast.error('Informe a comissão que será utilizada para este vendedor. A comissão deve estar entre 0 e 100.');
       setSaving(false);
       return;
     }
@@ -556,7 +575,7 @@ export default function Drivers() {
 
     const commissionValue = parseSellerCommission(sellerLinkCommission);
     if (commissionValue === null) {
-      toast.error('Informe a comissão que será usada para este vendedor. A comissão deve estar entre 0 e 100.');
+      toast.error('Informe a comissão que será utilizada para este vendedor. A comissão deve estar entre 0 e 100.');
       return;
     }
 
@@ -624,7 +643,7 @@ export default function Drivers() {
       onClick: () => handleEdit(driver),
     },
     {
-      label: 'Adicionar também como vendedora',
+      label: 'Adicionar também como vendedor',
       icon: UserCheck,
       onClick: () => handleAddAsSeller(driver),
     },
@@ -639,7 +658,8 @@ export default function Drivers() {
   // Função para verificar status de CNH
   const getCnhStatusClass = (expiresAt: string | null) => {
     if (!expiresAt) return '';
-    const expDate = new Date(expiresAt);
+    const expDate = getCnhExpirationDate(expiresAt);
+    if (!expDate) return '';
     if (expDate < today) return 'text-destructive font-medium';
     if (expDate <= thirtyDaysFromNow) return 'text-warning font-medium';
     return '';
@@ -647,37 +667,315 @@ export default function Drivers() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        {/* Cabeçalho */}
-        <PageHeader
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Motoristas" subtitle="Equipe operacional" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md px-3 py-4 sm:px-6 lg:max-w-7xl lg:px-8 lg:py-6">
+          {/* Cabeçalho desktop */}
+          <div className="hidden lg:block">
+            <PageHeader
           title="Motoristas"
           description="Gerencie os motoristas cadastrados"
           actions={
             <div className="flex w-full items-center gap-2 sm:w-auto">
               {/* Mobile: mantém ação principal visível e exportações em menu secundário. */}
-              <Dialog
-                open={dialogOpen}
-                onOpenChange={(open) => {
-                  setDialogOpen(open);
-                  if (!open) resetForm();
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button className="flex-1 sm:flex-none">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Motorista
-                  </Button>
-                </DialogTrigger>
-                {/* Ajuste necessário: modal estava alto e com scroll/footer inconsistentes.
-                    Aplicamos o mesmo padrão do modal de Frota (/admin/frota), incluindo abas,
-                    para controlar dimensões, rolagem interna e alinhamento do footer. */}
-                <DialogContent className="admin-modal flex h-[90vh] max-h-[90vh] w-[95vw] max-w-5xl flex-col gap-0 p-0">
-                  <DialogHeader className="admin-modal__header px-6 py-4">
+              <Button className="flex-1 sm:flex-none" onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Motorista
+              </Button>
+
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Mais ações">
+                      <Ellipsis className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Exportar Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Exportar PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="hidden sm:flex sm:items-center sm:gap-2">
+                <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+          }
+        />
+          </div>
+
+          <div className="mb-4 flex items-center gap-2 lg:hidden">
+            <Button className="h-11 flex-1 rounded-xl" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar motorista
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl bg-white" aria-label="Exportar motoristas">
+                  <Ellipsis className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+        {/* KPIs */}
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <StatsCard label="Total de motoristas" value={stats.total} icon={Users} className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
+          <StatsCard label="Motoristas ativos" value={stats.ativos} icon={CheckCircle} variant="success" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="Motoristas inativos" value={stats.inativos} icon={XCircle} variant="destructive" className="min-h-0 p-3 sm:p-4" />
+          <StatsCard label="CNHs atenção" value={stats.cnhsAtencao} icon={AlertTriangle} variant="warning" className="min-h-0 p-3 sm:p-4" />
+        </div>
+
+        {/* Filtros */}
+        <FilterCard
+          className="mb-6"
+          searchValue={filters.search}
+          onSearchChange={(value) => setFilters({ ...filters, search: value })}
+          searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
+          selects={[
+            {
+              id: 'status',
+              label: 'Status',
+              placeholder: 'Status',
+              value: filters.status,
+              onChange: (value) => setFilters({ ...filters, status: value as DriverFilters['status'] }),
+              options: [
+                { value: 'all', label: 'Todos' },
+                { value: 'ativo', label: 'Ativo' },
+                { value: 'inativo', label: 'Inativo' },
+              ],
+            },
+            {
+              id: 'cnhCategory',
+              label: 'Categoria',
+              placeholder: 'Categoria CNH',
+              value: filters.cnhCategory,
+              onChange: (value) => setFilters({ ...filters, cnhCategory: value }),
+              options: [
+                { value: 'all', label: 'Todas' },
+                { value: 'A', label: 'A' },
+                { value: 'B', label: 'B' },
+                { value: 'C', label: 'C' },
+                { value: 'D', label: 'D' },
+                { value: 'E', label: 'E' },
+                { value: 'AB', label: 'AB' },
+                { value: 'AC', label: 'AC' },
+                { value: 'AD', label: 'AD' },
+                { value: 'AE', label: 'AE' },
+              ],
+            },
+          ]}
+          onClearFilters={() => setFilters(initialFilters)}
+          hasActiveFilters={hasActiveFilters}
+        />
+
+        {/* Conteúdo: cards abaixo de lg, tabela completa em lg+. */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : drivers.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum motorista cadastrado"
+            description="Adicione motoristas para atribuir às viagens"
+            action={
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Motorista
+              </Button>
+            }
+          />
+        ) : filteredDrivers.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-8 w-8 text-muted-foreground" />}
+            title="Nenhum motorista encontrado"
+            description="Ajuste os filtros para encontrar motoristas"
+            action={
+              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
+                Limpar filtros
+              </Button>
+            }
+          />
+        ) : (
+          <Card className="border-slate-200/70 bg-white shadow-[0_5px_14px_rgba(15,23,42,0.045)] lg:shadow-sm">
+            <CardContent className="p-0">
+              {/* Mobile/tablet: segue o padrão de Frota e evita tabela comprimida antes de lg. */}
+              <div className="space-y-3 p-3 lg:hidden">
+                {filteredDrivers.map((driver) => {
+                  const cnhValidity = driver.cnh_expires_at
+                    ? formatCnhExpirationDate(driver.cnh_expires_at)
+                    : 'Sem validade';
+
+                  return (
+                    <article
+                      key={driver.id}
+                      className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-[0_5px_14px_rgba(15,23,42,0.045)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 shrink-0 text-slate-500" />
+                            <p className="truncate text-sm font-bold text-slate-950">{driver.name}</p>
+                          </div>
+                          <p className="mt-1 flex items-center gap-1 truncate text-xs font-medium text-slate-600">
+                            <Phone className="h-3.5 w-3.5 shrink-0" />
+                            {formatPhoneInput(driver.phone)}
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-xl border border-slate-200/70 bg-slate-50">
+                          <ActionsDropdown actions={getDriverActions(driver)} />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={driver.status ?? 'ativo'} />
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          CNH {driver.cnh_category || '-'}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500">CPF</p>
+                          <p className="mt-0.5 truncate font-semibold text-slate-950">{formatCpfInput(driver.cpf ?? '') || '-'}</p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500">CNH</p>
+                          <p className="mt-0.5 truncate font-semibold text-slate-950">{driver.cnh || '-'}</p>
+                        </div>
+                        <div className="col-span-2 min-w-0">
+                          <p className="text-xs text-slate-500">Validade CNH</p>
+                          <p className={cn('mt-0.5 truncate font-semibold text-slate-950', getCnhStatusClass(driver.cnh_expires_at))}>
+                            {cnhValidity}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden lg:block">
+                <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead className="hidden sm:table-cell">CPF</TableHead>
+                    <TableHead className="hidden md:table-cell">Telefone</TableHead>
+                    <TableHead className="hidden lg:table-cell">Categoria CNH</TableHead>
+                    <TableHead>Validade CNH</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[80px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDrivers.map((driver) => (
+                    <TableRow key={driver.id} className="align-top">
+                      <TableCell className="py-4">
+                        {/* Comentário Fase 3: concentramos identificação do motorista em um bloco para reduzir troca de foco no mobile. */}
+                        <div className="space-y-1.5">
+                          <p className="font-semibold leading-tight">{driver.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+                            <IdCard className="h-3.5 w-3.5" />
+                            {formatCpfInput(driver.cpf ?? '')}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground md:hidden">
+                            <Phone className="h-3.5 w-3.5" />
+                            {formatPhoneInput(driver.phone)}
+                          </div>
+                          <p className="text-xs text-muted-foreground lg:hidden">
+                            CNH: {driver.cnh_category ?? '-'}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <div className="flex items-center gap-2">
+                          <IdCard className="h-4 w-4 text-muted-foreground" />
+                          {formatCpfInput(driver.cpf ?? '')}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          {formatPhoneInput(driver.phone)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">{driver.cnh_category ?? '-'}</TableCell>
+                      <TableCell>
+                        {driver.cnh_expires_at ? (
+                          <span className={cn(getCnhStatusClass(driver.cnh_expires_at))}>
+                            {formatCnhExpirationDate(driver.cnh_expires_at)}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        <StatusBadge status={driver.status ?? 'ativo'} />
+                      </TableCell>
+                      <TableCell className="py-3 sm:py-4">
+                        {/* Mobile: evidência de ações mantendo menu compacto. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
+                          <div className="rounded-md border border-border/60 bg-muted/30">
+                            <ActionsDropdown actions={getDriverActions(driver)} />
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+
+
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) resetForm();
+          }}
+        >
+          <DialogContent className="admin-modal flex h-[92dvh] max-h-[92dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:h-[90vh] sm:max-h-[90vh] sm:w-[95vw]">
+                  <DialogHeader className="admin-modal__header px-4 py-4 sm:px-6">
                     <DialogTitle>{editingId ? 'Editar' : 'Novo'} Motorista</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="flex h-full flex-col">
                     <Tabs defaultValue="identificacao" className="flex h-full flex-col">
-                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-wrap justify-start gap-1 px-6 py-2">
+                      <TabsList className="admin-modal__tabs flex h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto px-4 py-2 sm:flex-wrap sm:px-6">
                         <TabsTrigger
                           value="identificacao"
                           className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground hover:text-foreground/80"
@@ -701,7 +999,7 @@ export default function Drivers() {
                         </TabsTrigger>
                       </TabsList>
 
-                      <div className="admin-modal__body flex-1 overflow-y-auto px-6 py-4">
+                      <div className="admin-modal__body flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                         <TabsContent value="identificacao" className="mt-0">
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2 sm:col-span-2">
@@ -771,14 +1069,14 @@ export default function Drivers() {
                                 <div className="space-y-1 leading-none">
                                   <Label htmlFor="also_seller">Também atua como vendedor</Label>
                                   <p className="text-xs text-muted-foreground">
-                                    Informe a comissão que será usada para este vendedor. O vínculo respeita a mesma empresa e não duplica o motorista.
+                                    Informe a comissão que será utilizada para este vendedor. O vínculo respeita a mesma empresa e não duplica o motorista.
                                   </p>
                                 </div>
                               </div>
                               {form.also_seller && (
                                 <div className="space-y-2">
-                                  <Label htmlFor="seller_commission_percent">Comissão da vendedora (%)</Label>
-                                  <p className="text-xs text-muted-foreground">Informe a comissão que será usada para este vendedor.</p>
+                                  <Label htmlFor="seller_commission_percent">Comissão do vendedor (%)</Label>
+                                  <p className="text-xs text-muted-foreground">Informe a comissão que será utilizada para este vendedor.</p>
                                   <Input
                                     id="seller_commission_percent"
                                     type="number"
@@ -847,232 +1145,47 @@ export default function Drivers() {
                         </TabsContent>
                       </div>
                     </Tabs>
-                    <div className="admin-modal__footer px-6 py-4">
-                      <div className="flex flex-wrap justify-end gap-3">
+                    <div className="admin-modal__footer px-4 py-4 sm:px-6">
+                      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
                         <DialogClose asChild>
-                          <Button type="button" variant="outline">
+                          <Button type="button" variant="outline" className="w-full sm:w-auto">
                             Cancelar
                           </Button>
                         </DialogClose>
-                        <Button type="submit" disabled={saving}>
+                        <Button type="submit" disabled={saving} className="w-full sm:w-auto">
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
                         </Button>
                       </div>
                     </div>
                   </form>
                 </DialogContent>
-              </Dialog>
+        </Dialog>
 
-              <div className="sm:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label="Mais ações">
-                      <Ellipsis className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setExportModalOpen(true)}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Exportar Excel
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setPdfModalOpen(true)}>
-                      <FileText className="h-4 w-4 mr-2" />
-                      Exportar PDF
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="hidden sm:flex sm:items-center sm:gap-2">
-                <Button variant="outline" size="sm" onClick={() => setExportModalOpen(true)}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  PDF
-                </Button>
-              </div>
-            </div>
-          }
-        />
-
-        {/* KPIs */}
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:mb-6 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-          <StatsCard label="Total de motoristas" value={stats.total} icon={Users} className="col-span-2 min-h-0 p-3 sm:col-span-1 sm:p-4" />
-          <StatsCard label="Motoristas ativos" value={stats.ativos} icon={CheckCircle} variant="success" className="min-h-0 p-3 sm:p-4" />
-          <StatsCard label="Motoristas inativos" value={stats.inativos} icon={XCircle} variant="destructive" className="min-h-0 p-3 sm:p-4" />
-          <StatsCard label="CNHs atenção" value={stats.cnhsAtencao} icon={AlertTriangle} variant="warning" className="min-h-0 p-3 sm:p-4" />
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
         </div>
-
-        {/* Filtros */}
-        <FilterCard
-          className="mb-6"
-          searchValue={filters.search}
-          onSearchChange={(value) => setFilters({ ...filters, search: value })}
-          searchPlaceholder="Pesquisar por nome, CPF ou telefone..."
-          selects={[
-            {
-              id: 'status',
-              label: 'Status',
-              placeholder: 'Status',
-              value: filters.status,
-              onChange: (value) => setFilters({ ...filters, status: value as DriverFilters['status'] }),
-              options: [
-                { value: 'all', label: 'Todos' },
-                { value: 'ativo', label: 'Ativo' },
-                { value: 'inativo', label: 'Inativo' },
-              ],
-            },
-            {
-              id: 'cnhCategory',
-              label: 'Categoria',
-              placeholder: 'Categoria CNH',
-              value: filters.cnhCategory,
-              onChange: (value) => setFilters({ ...filters, cnhCategory: value }),
-              options: [
-                { value: 'all', label: 'Todas' },
-                { value: 'A', label: 'A' },
-                { value: 'B', label: 'B' },
-                { value: 'C', label: 'C' },
-                { value: 'D', label: 'D' },
-                { value: 'E', label: 'E' },
-                { value: 'AB', label: 'AB' },
-                { value: 'AC', label: 'AC' },
-                { value: 'AD', label: 'AD' },
-                { value: 'AE', label: 'AE' },
-              ],
-            },
-          ]}
-          onClearFilters={() => setFilters(initialFilters)}
-          hasActiveFilters={hasActiveFilters}
-        />
-
-        {/* Conteúdo */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : drivers.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum motorista cadastrado"
-            description="Adicione motoristas para atribuir às viagens"
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Motorista
-              </Button>
-            }
-          />
-        ) : filteredDrivers.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum motorista encontrado"
-            description="Ajuste os filtros para encontrar motoristas"
-            action={
-              <Button variant="outline" onClick={() => setFilters(initialFilters)}>
-                Limpar filtros
-              </Button>
-            }
-          />
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead className="hidden sm:table-cell">CPF</TableHead>
-                    <TableHead className="hidden md:table-cell">Telefone</TableHead>
-                    <TableHead className="hidden lg:table-cell">Categoria CNH</TableHead>
-                    <TableHead>Validade CNH</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[80px]">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDrivers.map((driver) => (
-                    <TableRow key={driver.id} className="align-top">
-                      <TableCell className="py-4">
-                        {/* Comentário Fase 3: concentramos identificação do motorista em um bloco para reduzir troca de foco no mobile. */}
-                        <div className="space-y-1.5">
-                          <p className="font-semibold leading-tight">{driver.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
-                            <IdCard className="h-3.5 w-3.5" />
-                            {formatCpfInput(driver.cpf ?? '')}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground md:hidden">
-                            <Phone className="h-3.5 w-3.5" />
-                            {formatPhoneInput(driver.phone)}
-                          </div>
-                          <p className="text-xs text-muted-foreground lg:hidden">
-                            CNH: {driver.cnh_category ?? '-'}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <div className="flex items-center gap-2">
-                          <IdCard className="h-4 w-4 text-muted-foreground" />
-                          {formatCpfInput(driver.cpf ?? '')}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          {formatPhoneInput(driver.phone)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">{driver.cnh_category ?? '-'}</TableCell>
-                      <TableCell>
-                        {driver.cnh_expires_at ? (
-                          <span className={cn(getCnhStatusClass(driver.cnh_expires_at))}>
-                            {new Date(driver.cnh_expires_at).toLocaleDateString('pt-BR')}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3 sm:py-4">
-                        <StatusBadge status={driver.status ?? 'ativo'} />
-                      </TableCell>
-                      <TableCell className="py-3 sm:py-4">
-                        {/* Mobile: evidência de ações mantendo menu compacto. */}
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className="text-[11px] font-medium text-muted-foreground md:hidden">Ações</span>
-                          <div className="rounded-md border border-border/60 bg-muted/30">
-                            <ActionsDropdown actions={getDriverActions(driver)} />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
-
       <Dialog open={!!sellerLinkDriver} onOpenChange={(open) => !open && setSellerLinkDriver(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Adicionar também como vendedora</DialogTitle>
+        <DialogContent className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-md flex-col overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-4 sm:px-6">
+            <DialogTitle>Adicionar também como vendedor</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
             <p className="text-sm text-muted-foreground">
               {sellerLinkMode === 'reactivate'
                 ? 'Já existe um cadastro de vendedor inativo para este CPF. Ao confirmar, ele será reativado com a comissão informada.'
-                : `Informe a comissão que será usada para este vendedor ao vincular ${sellerLinkDriver?.name ?? 'esta pessoa'} como vendedora nesta empresa.`}
+                : `Informe a comissão que será utilizada para este vendedor ao vincular ${sellerLinkDriver?.name ?? 'esta pessoa'} como vendedor nesta empresa.`}
             </p>
             <div className="space-y-2">
-              <Label htmlFor="seller-link-commission">Comissão da vendedora (%)</Label>
-              <p className="text-xs text-muted-foreground">Informe a comissão que será usada para este vendedor.</p>
+              <Label htmlFor="seller-link-commission">Comissão do vendedor (%)</Label>
+              <p className="text-xs text-muted-foreground">Informe a comissão que será utilizada para este vendedor.</p>
               <Input
                 id="seller-link-commission"
                 type="number"
                 step="0.01"
+                inputMode="decimal"
                 min="0"
                 max="100"
                 placeholder="Ex: 10"
@@ -1080,11 +1193,11 @@ export default function Drivers() {
                 onChange={(e) => setSellerLinkCommission(e.target.value)}
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setSellerLinkDriver(null)}>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setSellerLinkDriver(null)}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={handleConfirmSellerLink} disabled={sellerLinkSaving}>
+              <Button type="button" className="w-full sm:w-auto" onClick={handleConfirmSellerLink} disabled={sellerLinkSaving}>
                 {sellerLinkSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar vínculo'}
               </Button>
             </div>

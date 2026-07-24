@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { buildDebugToastMessage, logSupabaseError } from '@/lib/errorDebug';
 import { CityAutocomplete } from '@/components/ui/city-autocomplete';
-import { IdCard, MapPin, Shield } from 'lucide-react';
+import { IdCard, Mail, MapPin, Shield } from 'lucide-react';
 import { formatPhoneBR } from '@/lib/phone';
 
 interface ProfileFormData {
@@ -69,6 +73,7 @@ export default function MyAccount() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [form, setForm] = useState<ProfileFormData>({
     name: '',
@@ -281,8 +286,14 @@ export default function MyAccount() {
 
   return (
     <AdminLayout>
-      <div className="p-4 lg:p-8 space-y-6">
-        <PageHeader
+      <div className="min-h-screen bg-slate-50 pb-24 lg:bg-transparent lg:pb-0">
+        <div className="lg:hidden">
+          <AdminMobileHeader title="Minha Conta" subtitle="Perfil e segurança" showMenuButton={false} />
+        </div>
+
+        <div className="mx-auto w-full max-w-md space-y-4 px-3 py-4 sm:px-6 lg:max-w-5xl lg:space-y-6 lg:px-8 lg:py-8">
+          <div className="hidden lg:block">
+            <PageHeader
           title="Minha Conta"
           description="Gerencie seus dados pessoais e segurança"
           actions={
@@ -292,16 +303,36 @@ export default function MyAccount() {
               </AvatarFallback>
             </Avatar>
           }
-        />
+            />
+          </div>
+
+          {!loading && (
+            <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm lg:hidden">
+              <CardContent className="flex min-w-0 items-center gap-3 p-4">
+                <Avatar className="h-14 w-14 shrink-0 border border-border">
+                  <AvatarFallback className="bg-muted text-muted-foreground">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold text-foreground">{form.name || 'Usuário'}</p>
+                  <div className="mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{form.email || user?.email || 'E-mail não informado'}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         {loading ? (
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border-border/70 shadow-sm lg:rounded-lg lg:shadow-none">
+              <CardHeader className="px-4 py-4 sm:px-6 lg:p-6">
                 <Skeleton className="h-6 w-40" />
                 <Skeleton className="h-4 w-64" />
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6 lg:p-6">
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
                 <Skeleton className="h-10" />
@@ -310,33 +341,33 @@ export default function MyAccount() {
           </div>
         ) : (
           <form className="space-y-6" onSubmit={handleSubmit}>
-            <Card>
-              <CardHeader>
+            <Card className="rounded-2xl border-border/70 shadow-sm lg:rounded-lg lg:shadow-none">
+              <CardHeader className="px-4 py-4 sm:px-6 lg:p-6">
                 <CardTitle>Minha Conta</CardTitle>
                 <CardDescription>Gerencie seus dados pessoais e segurança</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-4 pb-4 sm:px-6 sm:pb-6 lg:p-6">
                 {/* Comentário: seguimos o padrão da tela de empresa com abas internas. */}
                 <Tabs defaultValue="dados" className="space-y-4">
-                  {/* Comentário: em telas pequenas, as abas viram pilha para ampliar área de toque. */}
-                  <TabsList className="grid h-auto w-full grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-start">
+                  {/* Comentário: em telas pequenas, as abas rolam horizontalmente para preservar nomes e área de toque. */}
+                  <TabsList className="flex h-auto w-full flex-nowrap justify-start gap-2 overflow-x-auto px-1 py-1 sm:flex-wrap">
                     <TabsTrigger
                       value="dados"
-                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-max items-center justify-start gap-2 whitespace-nowrap sm:min-w-0"
                     >
                       <IdCard className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Dados Gerais</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="endereco"
-                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-max items-center justify-start gap-2 whitespace-nowrap sm:min-w-0"
                     >
                       <MapPin className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Endereço</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="seguranca"
-                      className="inline-flex min-w-0 items-center justify-start gap-2 whitespace-nowrap"
+                      className="inline-flex min-w-max items-center justify-start gap-2 whitespace-nowrap sm:min-w-0"
                     >
                       <Shield className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 truncate">Segurança</span>
@@ -363,6 +394,7 @@ export default function MyAccount() {
                           onChange={(event) =>
                             setForm({ ...form, phone: formatPhoneInput(event.target.value) })
                           }
+                          inputMode="tel"
                         />
                         {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
                       </div>
@@ -374,12 +406,13 @@ export default function MyAccount() {
                           onChange={(event) =>
                             setForm({ ...form, cpf: formatCpfInput(event.target.value) })
                           }
+                          inputMode="numeric"
                         />
                         {errors.cpf && <p className="text-sm text-destructive">{errors.cpf}</p>}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="email">E-mail</Label>
-                        <Input id="email" value={form.email} readOnly className="bg-muted" />
+                        <Input id="email" type="email" value={form.email} readOnly className="bg-muted" />
                         <p className="text-xs text-muted-foreground">
                           Este é seu login e não pode ser alterado aqui.
                         </p>
@@ -398,6 +431,7 @@ export default function MyAccount() {
                           onChange={(event) =>
                             setForm({ ...form, cep: formatCepInput(event.target.value) })
                           }
+                          inputMode="numeric"
                         />
                         {errors.cep && <p className="text-sm text-destructive">{errors.cep}</p>}
                       </div>
@@ -453,6 +487,7 @@ export default function MyAccount() {
                       <Button
                         type="button"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => setPasswordDialogOpen(true)}
                       >
                         Alterar senha
@@ -474,10 +509,16 @@ export default function MyAccount() {
             </div>
           </form>
         )}
+        </div>
+
+        <div className="lg:hidden">
+          <AdminMobileBottomNav items={adminMobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+          <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
+        </div>
       </div>
 
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           {/* Comentário: mantemos conteúdo em fluxo linear para reduzir quebra mental no mobile. */}
           <DialogHeader>
             <DialogTitle>Alterar senha</DialogTitle>
@@ -493,9 +534,9 @@ export default function MyAccount() {
               Trocar senha agora (em breve)
             </Button>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
             <DialogClose asChild>
-              <Button type="button" variant="ghost">
+              <Button type="button" variant="ghost" className="w-full sm:w-auto">
                 Fechar
               </Button>
             </DialogClose>
