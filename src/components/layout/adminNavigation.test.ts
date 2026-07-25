@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CUSTOM_MOBILE_ADMIN_CHROME_ROUTES,
   TECHNICAL_DESKTOP_ONLY_ROUTES,
   canAccessTechnicalDesktopRoute,
   canViewAdminNavigationItem,
   navigationGroups,
+  usesCustomMobileAdminChrome,
 } from './adminNavigation';
+
+describe('chrome mobile administrativo', () => {
+  it('mantém todas as rotas com chrome próprio na definição compartilhada', () => {
+    const expectedRoutes = [
+      '/admin/dashboard', '/admin/vendas', '/admin/eventos', '/admin/frota', '/admin/motoristas',
+      '/admin/auxiliares-embarque', '/admin/locais', '/admin/vendedores', '/admin/usuarios',
+      '/admin/empresa', '/admin/representante', '/admin/patrocinadores', '/admin/minha-conta',
+      '/admin/parceiros', '/admin/servicos', '/admin/relatorios/comissao-vendedores',
+      '/admin/relatorios/lista-embarque', '/admin/relatorios/vendas', '/admin/relatorios/eventos',
+      '/vendas/servicos',
+    ];
+
+    expect(CUSTOM_MOBILE_ADMIN_CHROME_ROUTES).toEqual(expectedRoutes);
+    expectedRoutes.forEach((pathname) => expect(usesCustomMobileAdminChrome(pathname)).toBe(true));
+    expect(usesCustomMobileAdminChrome('/admin/eventos/evento-123')).toBe(true);
+    expect(usesCustomMobileAdminChrome('/admin/rota-legada')).toBe(false);
+  });
+});
 
 describe('navegação das telas técnicas', () => {
   const technicalItems = navigationGroups

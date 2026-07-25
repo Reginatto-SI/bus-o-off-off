@@ -236,6 +236,35 @@ export function canViewAdminNavigationItem({
   return isDeveloper || !item.roles || (userRole ? item.roles.includes(userRole) : false);
 }
 
+export const CUSTOM_MOBILE_ADMIN_CHROME_ROUTES = [
+  '/admin/dashboard',
+  '/admin/vendas',
+  '/admin/eventos',
+  '/admin/frota',
+  '/admin/motoristas',
+  '/admin/auxiliares-embarque',
+  '/admin/locais',
+  '/admin/vendedores',
+  '/admin/usuarios',
+  '/admin/empresa',
+  '/admin/representante',
+  '/admin/patrocinadores',
+  '/admin/minha-conta',
+  '/admin/parceiros',
+  '/admin/servicos',
+  '/admin/relatorios/comissao-vendedores',
+  '/admin/relatorios/lista-embarque',
+  '/admin/relatorios/vendas',
+  '/admin/relatorios/eventos',
+  '/vendas/servicos',
+] as const;
+
+// Uma única definição evita divergência entre o espaçamento do layout e a ocultação do chrome legado.
+export function usesCustomMobileAdminChrome(pathname: string) {
+  return CUSTOM_MOBILE_ADMIN_CHROME_ROUTES.some((route) => pathname === route)
+    || /^\/admin\/eventos\/[^/]+$/.test(pathname);
+}
+
 // Telas técnicas ocultas no mobile e disponíveis somente para usuários desenvolvedores no desktop.
 // A restrição é intencional e não representa uma pendência de responsividade.
 export const TECHNICAL_DESKTOP_ONLY_ROUTES = [
