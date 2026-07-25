@@ -31,12 +31,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Dialog,
   DialogContent,
@@ -277,11 +272,7 @@ const QUICK_BENEFITS = [
 ];
 // Reforço comercial de preço: deixa explícito no topo que o Smartbus reduz barreira de entrada,
 // o que ajuda conversão ao comunicar risco quase zero logo na primeira dobra.
-const PRICING_HIGHLIGHTS = [
-  "Sem mensalidade",
-  "Sem custo fixo",
-  "Você só paga quando vender",
-];
+const PRICING_HIGHLIGHTS = ["Sem mensalidade", "Sem custo fixo", "Você só paga quando vender"];
 const PRICING_POINTS = [
   "Sem mensalidade",
   "Sem custo fixo",
@@ -313,11 +304,7 @@ const LANDING_SCENARIO_LINKS = [
 ];
 // Bloco de indicação: aproveita o programa existente para transformar clientes em canal orgânico de crescimento
 // sem criar uma nova jornada visual fora do padrão comercial atual da landing.
-const REFERRAL_STEPS = [
-  "Indique outras empresas",
-  "Quando elas começarem a vender",
-  "Você ganha R$50 por indicação",
-];
+const REFERRAL_STEPS = ["Indique outras empresas", "Quando elas começarem a vender", "Você ganha R$50 por indicação"];
 const PASSENGER_STEPS = [
   {
     icon: Calendar,
@@ -460,12 +447,7 @@ const LANDING_SOCIAL_LINKS = [
     label: "Instagram",
     href: "https://instagram.com/smartbusbr",
     icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="h-[18px] w-[18px]"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden="true">
         <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
       </svg>
     ),
@@ -475,12 +457,7 @@ const LANDING_SOCIAL_LINKS = [
     label: "Facebook",
     href: "https://www.facebook.com/smartbusbroficial",
     icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="h-[18px] w-[18px]"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden="true">
         <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
       </svg>
     ),
@@ -490,12 +467,7 @@ const LANDING_SOCIAL_LINKS = [
     label: "YouTube",
     href: "https://www.youtube.com/@SmartBusbr",
     icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="h-[18px] w-[18px]"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden="true">
         <path d="M23.498 6.186a2.998 2.998 0 0 0-2.11-2.12C19.533 3.563 12 3.563 12 3.563s-7.533 0-9.389.503A2.998 2.998 0 0 0 .502 6.186 31.08 31.08 0 0 0 0 12a31.08 31.08 0 0 0 .502 5.814 2.998 2.998 0 0 0 2.109 2.12c1.856.503 9.389.503 9.389.503s7.533 0 9.389-.503a2.998 2.998 0 0 0 2.11-2.12A31.08 31.08 0 0 0 24 12a31.08 31.08 0 0 0-.502-5.814ZM9.545 15.568V8.432L15.818 12l-6.273 3.568Z" />
       </svg>
     ),
@@ -505,12 +477,7 @@ const LANDING_SOCIAL_LINKS = [
     label: "X",
     href: "https://x.com/smartbusbr2026",
     icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="h-[18px] w-[18px]"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden="true">
         <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.847h-7.406l-5.8-7.584-6.64 7.584H.473l8.6-9.828L0 1.153h7.594l5.243 6.932 6.064-6.932Zm-1.291 19.49h2.039L6.486 3.249H4.298L17.61 20.643Z" />
       </svg>
     ),
@@ -532,33 +499,27 @@ const LANDING_FAQS = [
   },
   {
     question: "Preciso ter conta no Asaas?",
-    answer:
-      "Não. Você pode criar sua conta durante a configuração do sistema ou conectar uma conta já existente.",
+    answer: "Não. Você pode criar sua conta durante a configuração do sistema ou conectar uma conta já existente.",
   },
   {
     question: "Preciso ter CNPJ para usar o sistema?",
-    answer:
-      "Não. Você pode começar a usar mesmo sem CNPJ, conforme o seu modelo de operação.",
+    answer: "Não. Você pode começar a usar mesmo sem CNPJ, conforme o seu modelo de operação.",
   },
   {
     question: "Como recebo os pagamentos das vendas?",
-    answer:
-      "Os pagamentos são processados pelo Asaas e o valor é repassado conforme a configuração da sua operação.",
+    answer: "Os pagamentos são processados pelo Asaas e o valor é repassado conforme a configuração da sua operação.",
   },
   {
     question: "Posso vender passagens sem site próprio?",
-    answer:
-      "Sim. O sistema já oferece uma página pronta para divulgação e venda das passagens.",
+    answer: "Sim. O sistema já oferece uma página pronta para divulgação e venda das passagens.",
   },
   {
     question: "Preciso de conhecimento técnico para usar?",
-    answer:
-      "Não. O sistema foi desenvolvido para ser simples, prático e fácil de operar.",
+    answer: "Não. O sistema foi desenvolvido para ser simples, prático e fácil de operar.",
   },
   {
     question: "Em quanto tempo posso começar a vender?",
-    answer:
-      "Em poucos minutos você já pode configurar sua operação e começar a vender.",
+    answer: "Em poucos minutos você já pode configurar sua operação e começar a vender.",
   },
   {
     question: "Posso corrigir dados de uma passagem após a compra?",
@@ -613,7 +574,7 @@ const JOURNEY_OPTIONS = [
     style: "bg-primary/5 border-primary/20 hover:border-primary/40",
   },
 ];
-const LANDING_CONTACT_EMAIL = "comercial@smartbuscom.br";
+const LANDING_CONTACT_EMAIL = "comercial@smartbus.com.br";
 interface LandingContactFormState {
   name: string;
   email: string;
@@ -815,8 +776,7 @@ export default function LandingPage() {
           <div
             className="absolute inset-0 opacity-[0.035]"
             style={{
-              backgroundImage:
-                "radial-gradient(circle, hsl(0 0% 100%) 1px, transparent 1px)",
+              backgroundImage: "radial-gradient(circle, hsl(0 0% 100%) 1px, transparent 1px)",
               backgroundSize: "32px 32px",
             }}
           />
@@ -833,19 +793,12 @@ export default function LandingPage() {
                 </div>
                 <div className="space-y-4">
                   <h1 className="max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                    Venda passagens online, divulgue seus eventos e organize o
-                    embarque
-                    <span className="text-primary">
-                      {" "}
-                      com uma operação simples, profissional e pronta para
-                      crescer.
-                    </span>
+                    Venda passagens online, divulgue seus eventos e organize o embarque
+                    <span className="text-primary"> com uma operação simples, profissional e pronta para crescer.</span>
                   </h1>
                   <p className="max-w-3xl text-lg text-white/70 sm:text-xl">
-                    O SmartBus ajuda empresas e vendedores independentes a
-                    vender mais, compartilhar link próprio, acompanhar
-                    resultados e garantir um embarque mais organizado sem
-                    estrutura complexa.
+                    O SmartBus ajuda empresas e vendedores independentes a vender mais, compartilhar link próprio,
+                    acompanhar resultados e garantir um embarque mais organizado sem estrutura complexa.
                   </p>
                   {/*
                     Reforçamos "sem mensalidade" ainda no hero porque este é o principal argumento de conversão:
@@ -890,9 +843,7 @@ export default function LandingPage() {
               <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-5 shadow-2xl shadow-black/20 backdrop-blur-sm sm:p-6">
                 <div className="space-y-5">
                   <div className="space-y-2">
-                    <h2 className="text-2xl font-bold text-white sm:text-3xl">
-                      Como você prefere começar?
-                    </h2>
+                    <h2 className="text-2xl font-bold text-white sm:text-3xl">Como você prefere começar?</h2>
                     <p className="max-w-2xl text-sm text-white/70 sm:text-base">
                       Comece a vender agora ou conheça a plataforma em uma demonstração rápida com nossa equipe.
                     </p>
@@ -944,31 +895,68 @@ export default function LandingPage() {
                           <form className="space-y-4" onSubmit={handleDemoRequestSubmit}>
                             <div className="space-y-2">
                               <Label htmlFor="landing-demo-name">Nome</Label>
-                              <Input id="landing-demo-name" value={demoRequestForm.name} onChange={(event) => updateDemoRequestField("name", event.target.value)} placeholder="Seu nome" required />
-                              {demoRequestErrors.name && <p className="text-sm text-destructive">{demoRequestErrors.name}</p>}
+                              <Input
+                                id="landing-demo-name"
+                                value={demoRequestForm.name}
+                                onChange={(event) => updateDemoRequestField("name", event.target.value)}
+                                placeholder="Seu nome"
+                                required
+                              />
+                              {demoRequestErrors.name && (
+                                <p className="text-sm text-destructive">{demoRequestErrors.name}</p>
+                              )}
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="landing-demo-company">Nome da empresa ou atividade</Label>
-                              <Input id="landing-demo-company" value={demoRequestForm.company} onChange={(event) => updateDemoRequestField("company", event.target.value)} placeholder="Ex.: excursões, turismo, eventos" required />
-                              {demoRequestErrors.company && <p className="text-sm text-destructive">{demoRequestErrors.company}</p>}
+                              <Input
+                                id="landing-demo-company"
+                                value={demoRequestForm.company}
+                                onChange={(event) => updateDemoRequestField("company", event.target.value)}
+                                placeholder="Ex.: excursões, turismo, eventos"
+                                required
+                              />
+                              {demoRequestErrors.company && (
+                                <p className="text-sm text-destructive">{demoRequestErrors.company}</p>
+                              )}
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                               <div className="space-y-2">
                                 <Label htmlFor="landing-demo-date">Data desejada</Label>
-                                <Input id="landing-demo-date" type="date" min={todayDateInputValue} value={demoRequestForm.date} onChange={(event) => updateDemoRequestField("date", event.target.value)} required />
-                                {demoRequestErrors.date && <p className="text-sm text-destructive">{demoRequestErrors.date}</p>}
+                                <Input
+                                  id="landing-demo-date"
+                                  type="date"
+                                  min={todayDateInputValue}
+                                  value={demoRequestForm.date}
+                                  onChange={(event) => updateDemoRequestField("date", event.target.value)}
+                                  required
+                                />
+                                {demoRequestErrors.date && (
+                                  <p className="text-sm text-destructive">{demoRequestErrors.date}</p>
+                                )}
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor="landing-demo-time">Horário desejado</Label>
-                                <Input id="landing-demo-time" type="time" value={demoRequestForm.time} onChange={(event) => updateDemoRequestField("time", event.target.value)} required />
-                                {demoRequestErrors.time && <p className="text-sm text-destructive">{demoRequestErrors.time}</p>}
+                                <Input
+                                  id="landing-demo-time"
+                                  type="time"
+                                  value={demoRequestForm.time}
+                                  onChange={(event) => updateDemoRequestField("time", event.target.value)}
+                                  required
+                                />
+                                {demoRequestErrors.time && (
+                                  <p className="text-sm text-destructive">{demoRequestErrors.time}</p>
+                                )}
                               </div>
                             </div>
                             <div className="rounded-2xl border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
                               A data e o horário serão confirmados pela equipe no WhatsApp.
                             </div>
                             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                              <Button type="button" variant="outline" onClick={() => handleDemoRequestModalOpenChange(false)}>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => handleDemoRequestModalOpenChange(false)}
+                              >
                                 Fechar
                               </Button>
                               <Button type="submit" className="gap-2">
@@ -993,23 +981,18 @@ export default function LandingPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                       Para quem quer viajar
                     </p>
-                    <h2 className="mt-2 text-2xl font-bold">
-                      Compra simples, confirmação rápida e embarque sem fila
-                    </h2>
+                    <h2 className="mt-2 text-2xl font-bold">Compra simples, confirmação rápida e embarque sem fila</h2>
                   </div>
                 </div>
                 <div className="space-y-3 text-sm text-white/75">
                   <div className="flex items-center gap-2">
-                    <Clock3 className="h-4 w-4 text-primary" /> Compre online
-                    sem depender de atendimento manual
+                    <Clock3 className="h-4 w-4 text-primary" /> Compre online sem depender de atendimento manual
                   </div>
                   <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-primary" /> Pague com
-                    segurança e receba confirmação na hora
+                    <Shield className="h-4 w-4 text-primary" /> Pague com segurança e receba confirmação na hora
                   </div>
                   <div className="flex items-center gap-2">
-                    <QrCode className="h-4 w-4 text-primary" /> Embarque com QR
-                    Code validado pela equipe
+                    <QrCode className="h-4 w-4 text-primary" /> Embarque com QR Code validado pela equipe
                   </div>
                 </div>
               </div>
@@ -1020,8 +1003,7 @@ export default function LandingPage() {
                       Para empresas e vendedores independentes
                     </p>
                     <h2 className="mt-2 text-2xl font-bold">
-                      Uma estrutura simples para vender, divulgar e operar
-                      melhor
+                      Uma estrutura simples para vender, divulgar e operar melhor
                     </h2>
                   </div>
                   <div className="rounded-2xl bg-white/10 p-3">
@@ -1030,10 +1012,7 @@ export default function LandingPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                   {BUSINESS_BENEFITS.map((benefit) => (
-                    <div
-                      key={benefit.title}
-                      className="rounded-2xl border border-white/10 bg-white/5 p-4"
-                    >
+                    <div key={benefit.title} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
                         <benefit.icon className="h-4 w-4 text-primary" />
                         {benefit.title}
@@ -1057,14 +1036,12 @@ export default function LandingPage() {
                 Para quem vende passagens — empresas e vendedores independentes
               </div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Feito para quem quer vender mais passagens com organização e
-                presença profissional
+                Feito para quem quer vender mais passagens com organização e presença profissional
               </h2>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                O SmartBus foi feito para quem vende passagens — seja uma
-                empresa estruturada ou alguém que vende por conta própria.
-                Divulgue suas viagens, acompanhe vendas, organize embarques e
-                tenha controle total para crescer com mais profissionalismo.
+                O SmartBus foi feito para quem vende passagens — seja uma empresa estruturada ou alguém que vende por
+                conta própria. Divulgue suas viagens, acompanhe vendas, organize embarques e tenha controle total para
+                crescer com mais profissionalismo.
               </p>
               {/* Ajuste de conversão: a copy desta seção reduz o foco institucional em empresa e equilibra empresa + autônomo sem alterar o layout. */}
               {/* Refinamento visual: reduzimos a sensação de grade crua com cards mais macios, melhor espaçamento e profundidade discreta. */}
@@ -1077,12 +1054,8 @@ export default function LandingPage() {
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <benefit.icon className="h-5 w-5" />
                     </div>
-                    <h3 className="text-sm font-bold text-foreground">
-                      {benefit.title}
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {benefit.desc}
-                    </p>
+                    <h3 className="text-sm font-bold text-foreground">{benefit.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">{benefit.desc}</p>
                   </div>
                 ))}
               </div>
@@ -1090,35 +1063,27 @@ export default function LandingPage() {
             <div className="rounded-3xl border border-primary/15 bg-[hsl(222_47%_11%)] p-6 text-white shadow-xl shadow-primary/5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
-                    Vitrine própria
-                  </p>
-                  <p className="mt-3 text-3xl font-bold text-primary">
-                    Link + QR Code
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">Vitrine própria</p>
+                  <p className="mt-3 text-3xl font-bold text-primary">Link + QR Code</p>
                   <p className="mt-2 text-sm text-white/65">
-                    para divulgar suas viagens, compartilhar seu link de vendas
-                    e centralizar tudo em uma página profissional.
+                    para divulgar suas viagens, compartilhar seu link de vendas e centralizar tudo em uma página
+                    profissional.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/75">
                     Resultado operacional
                   </p>
-                  <p className="mt-3 text-3xl font-bold text-primary">
-                    Menos confusão
-                  </p>
+                  <p className="mt-3 text-3xl font-bold text-primary">Menos confusão</p>
                   <p className="mt-2 text-sm text-white/65">
-                    com lista de embarque, controle de presença e validação
-                    rápida para equipe e passageiro.
+                    com lista de embarque, controle de presença e validação rápida para equipe e passageiro.
                   </p>
                 </div>
               </div>
               <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/10 p-5">
                 <p className="text-sm text-white/75">
-                  Da divulgação ao embarque, você ganha uma estrutura mais
-                  organizada para vender, operar e acompanhar tudo o que
-                  acontece em cada evento.
+                  Da divulgação ao embarque, você ganha uma estrutura mais organizada para vender, operar e acompanhar
+                  tudo o que acontece em cada evento.
                 </p>
                 <Link
                   to="/cadastro"
@@ -1136,9 +1101,12 @@ export default function LandingPage() {
       <section className="bg-muted/30 py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
-            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">O SmartBus se adapta ao seu tipo de operação</h2>
+            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">
+              O SmartBus se adapta ao seu tipo de operação
+            </h2>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-base">
-              Seja para excursões, eventos ou viagens, você pode organizar e vender com uma operação simples e profissional.
+              Seja para excursões, eventos ou viagens, você pode organizar e vender com uma operação simples e
+              profissional.
             </p>
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {LANDING_SCENARIO_LINKS.map((item) => (
@@ -1202,10 +1170,12 @@ export default function LandingPage() {
                   Sem custo para começar
                 </p>
                 <p className="mt-2 text-base font-semibold text-foreground">
-                  Você entra sem risco de custo recorrente e acompanha o crescimento da operação pagando apenas quando houver venda.
+                  Você entra sem risco de custo recorrente e acompanha o crescimento da operação pagando apenas quando
+                  houver venda.
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Isso deixa a decisão mais leve para testar, validar demanda e crescer sem assumir mensalidade antes da primeira venda.
+                  Isso deixa a decisão mais leve para testar, validar demanda e crescer sem assumir mensalidade antes da
+                  primeira venda.
                 </p>
               </div>
             </div>
@@ -1231,8 +1201,8 @@ export default function LandingPage() {
               </p>
               <p className="text-muted-foreground">
                 Hoje, muitas operações ainda dependem de planilhas, anotações e processos manuais que geram erros,
-                retrabalho e perda de controle. A proposta da SmartBus é centralizar essa operação em um único
-                sistema, pensado para uso real no dia a dia.
+                retrabalho e perda de controle. A proposta da SmartBus é centralizar essa operação em um único sistema,
+                pensado para uso real no dia a dia.
               </p>
             </div>
             <div className="rounded-2xl border border-primary/15 bg-primary/5 p-5">
@@ -1274,40 +1244,36 @@ export default function LandingPage() {
               Posicionamento comercial claro para os dois públicos principais
             </div>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Serve para sua empresa e também para quem vende passagens por
-              conta própria
+              Serve para sua empresa e também para quem vende passagens por conta própria
             </h2>
             <p className="mt-3 text-muted-foreground sm:text-lg">
               {/* Ajuste estratégico de copy: deixamos explícita a dualidade empresa + autônomo sem criar nova arquitetura visual. */}
-              Seja para profissionalizar uma operação completa ou começar com um
-              link de venda no celular, o SmartBus ajuda a divulgar melhor,
-              vender com mais controle e garantir um embarque mais organizado.
+              Seja para profissionalizar uma operação completa ou começar com um link de venda no celular, o SmartBus
+              ajuda a divulgar melhor, vender com mais controle e garantir um embarque mais organizado.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
-                Empresas
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Empresas</p>
               <h3 className="mt-3 text-2xl font-bold text-foreground">
                 Mais estrutura para vender, operar e acompanhar resultados
               </h3>
               <p className="mt-3 text-muted-foreground">
-                Organize equipe comercial, acompanhe saídas, valide embarque e
-                centralize relatórios em um fluxo mais profissional.
+                Organize equipe comercial, acompanhe saídas, valide embarque e centralize relatórios em um fluxo mais
+                profissional.
               </p>
               <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Controle da operação e dos vendedores no mesmo lugar
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Controle da operação e dos
+                  vendedores no mesmo lugar
                 </li>
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Embarque mais organizado, com menos papel e menos confusão
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Embarque mais organizado, com menos
+                  papel e menos confusão
                 </li>
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Presença digital pronta para divulgar viagens e eventos
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Presença digital pronta para
+                  divulgar viagens e eventos
                 </li>
               </ul>
             </div>
@@ -1316,26 +1282,24 @@ export default function LandingPage() {
                 Vendedores independentes
               </p>
               <h3 className="mt-3 text-2xl font-bold text-foreground">
-                Mais praticidade para vender pelo link e se apresentar com
-                profissionalismo
+                Mais praticidade para vender pelo link e se apresentar com profissionalismo
               </h3>
               <p className="mt-3 text-muted-foreground">
-                Ideal para quem vende por WhatsApp, Instagram, indicação direta
-                ou excursão própria e quer sair do improviso sem complicação.
+                Ideal para quem vende por WhatsApp, Instagram, indicação direta ou excursão própria e quer sair do
+                improviso sem complicação.
               </p>
               <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Link de venda para compartilhar com clientes no celular
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Link de venda para compartilhar com
+                  clientes no celular
                 </li>
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Mais controle das passagens vendidas e dos lugares confirmados
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Mais controle das passagens vendidas
+                  e dos lugares confirmados
                 </li>
                 <li className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{" "}
-                  Serve para quem está começando e para quem já quer crescer
-                  organizado
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> Serve para quem está começando e
+                  para quem já quer crescer organizado
                 </li>
               </ul>
             </div>
@@ -1354,9 +1318,8 @@ export default function LandingPage() {
                 A experiência de compra continua simples para o passageiro
               </h2>
               <p className="max-w-2xl text-muted-foreground">
-                A mesma estrutura que fortalece a empresa também ajuda o
-                passageiro a decidir rápido, confiar na compra e chegar mais
-                preparado ao embarque.
+                A mesma estrutura que fortalece a empresa também ajuda o passageiro a decidir rápido, confiar na compra
+                e chegar mais preparado ao embarque.
               </p>
             </div>
             <Link
@@ -1376,8 +1339,8 @@ export default function LandingPage() {
                 size="icon"
                 className="pointer-events-auto h-10 w-10 rounded-full shadow-md"
                 onClick={() => {
-                  const el = document.getElementById('landing-events-scroll');
-                  if (el) el.scrollBy({ left: -340, behavior: 'smooth' });
+                  const el = document.getElementById("landing-events-scroll");
+                  if (el) el.scrollBy({ left: -340, behavior: "smooth" });
                 }}
                 aria-label="Ver eventos anteriores"
               >
@@ -1389,8 +1352,8 @@ export default function LandingPage() {
                 size="icon"
                 className="pointer-events-auto h-10 w-10 rounded-full shadow-md"
                 onClick={() => {
-                  const el = document.getElementById('landing-events-scroll');
-                  if (el) el.scrollBy({ left: 340, behavior: 'smooth' });
+                  const el = document.getElementById("landing-events-scroll");
+                  if (el) el.scrollBy({ left: 340, behavior: "smooth" });
                 }}
                 aria-label="Ver próximos eventos"
               >
@@ -1401,7 +1364,7 @@ export default function LandingPage() {
             <div
               id="landing-events-scroll"
               className="grid grid-flow-col grid-rows-2 gap-5 overflow-x-auto scroll-smooth pb-4 snap-x snap-mandatory scrollbar-hide"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
               {FEATURED_TRIPS.map((trip) => (
                 <Link
@@ -1421,9 +1384,7 @@ export default function LandingPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
                     <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[11px] font-bold ${trip.urgencyTone}`}
-                      >
+                      <span className={`rounded-full border px-3 py-1 text-[11px] font-bold ${trip.urgencyTone}`}>
                         {trip.urgency}
                       </span>
                       <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-[11px] font-bold text-emerald-100">
@@ -1432,9 +1393,7 @@ export default function LandingPage() {
                     </div>
                     <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
-                          A partir de
-                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">A partir de</p>
                         <p className="text-3xl font-extrabold text-white">
                           R$ {trip.price.toFixed(2).replace(".", ",")}
                         </p>
@@ -1465,9 +1424,7 @@ export default function LandingPage() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <div className="text-sm text-muted-foreground">
-                        Embarque sem fila com QR Code
-                      </div>
+                      <div className="text-sm text-muted-foreground">Embarque sem fila com QR Code</div>
                       <span className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors group-hover:bg-primary/90">
                         Ver detalhes
                         <ChevronRight className="h-4 w-4" />
@@ -1484,32 +1441,23 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Como o SmartBus ajuda a vender mais e embarcar com menos
-              confusão
+              Como o SmartBus ajuda a vender mais e embarcar com menos confusão
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Uma jornada clara para divulgar melhor, vender com mais controle e
-              validar o embarque com segurança.
+              Uma jornada clara para divulgar melhor, vender com mais controle e validar o embarque com segurança.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
             {PASSENGER_STEPS.map((step, index) => (
-              <div
-                key={step.title}
-                className="relative rounded-3xl border border-border bg-card p-6 shadow-sm"
-              >
+              <div key={step.title} className="relative rounded-3xl border border-border bg-card p-6 shadow-sm">
                 <span className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                   {index + 1}
                 </span>
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <step.icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground">
-                  {step.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {step.desc}
-                </p>
+                <h3 className="text-lg font-bold text-foreground">{step.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -1570,9 +1518,8 @@ export default function LandingPage() {
                 Diferenciais que mostram a força real do produto
               </h2>
               <p className="mt-2 max-w-3xl text-muted-foreground">
-                Transforme sua divulgação em vendas, acompanhe sua operação com
-                mais clareza e leve mais organização para o embarque de cada
-                evento.
+                Transforme sua divulgação em vendas, acompanhe sua operação com mais clareza e leve mais organização
+                para o embarque de cada evento.
               </p>
             </div>
           </div>
@@ -1585,12 +1532,8 @@ export default function LandingPage() {
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <item.icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-base font-bold text-foreground">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {item.desc}
-                </p>
+                <h3 className="text-base font-bold text-foreground">{item.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -1611,14 +1554,16 @@ export default function LandingPage() {
                 Venda passagens e abra novas fontes de receita
               </h2>
               <p className="max-w-2xl text-muted-foreground sm:text-lg">
-                No SmartBus, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
+                No SmartBus, você não paga mensalidade e ainda pode valorizar sua operação com parceiros da empresa e
+                patrocinadores do evento, criando novas oportunidades de faturamento com apresentação mais profissional.
               </p>
               <div className="rounded-[1.5rem] border border-primary/15 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-[0_20px_45px_-36px_rgba(249,115,22,0.4)]">
                 <p className="text-sm font-semibold text-foreground sm:text-base">
                   Sem mensalidade. Sem custo fixo. E com potencial de receita além da passagem.
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  A plataforma ajuda a vender, organizar, dar visibilidade comercial às marcas apoiadoras e fortalecer a credibilidade da empresa e de cada evento.
+                  A plataforma ajuda a vender, organizar, dar visibilidade comercial às marcas apoiadoras e fortalecer a
+                  credibilidade da empresa e de cada evento.
                 </p>
               </div>
             </div>
@@ -1647,8 +1592,7 @@ export default function LandingPage() {
               Escolha como você quer usar o SmartBus
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Em poucos segundos, fica claro se você quer comprar sua passagem
-              ou começar a vender com mais organização.
+              Em poucos segundos, fica claro se você quer comprar sua passagem ou começar a vender com mais organização.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-2">
@@ -1660,12 +1604,8 @@ export default function LandingPage() {
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <option.icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-2xl font-bold text-foreground">
-                  {option.title}
-                </h3>
-                <p className="mt-3 max-w-xl text-muted-foreground">
-                  {option.desc}
-                </p>
+                <h3 className="text-2xl font-bold text-foreground">{option.title}</h3>
+                <p className="mt-3 max-w-xl text-muted-foreground">{option.desc}</p>
                 <Link
                   to={option.to}
                   className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
@@ -1689,67 +1629,69 @@ export default function LandingPage() {
         <section className="bg-muted/40 py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <Gift className="h-3.5 w-3.5" />
-                Crescimento orgânico com recompensa
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                  <Gift className="h-3.5 w-3.5" />
+                  Crescimento orgânico com recompensa
+                </div>
+                <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                  Indique o Smartbus e Ganhe
+                </h2>
+                <p className="max-w-2xl text-muted-foreground sm:text-lg">
+                  Transforme sua rede de contatos em um novo canal de crescimento: indique empresas que também querem
+                  vender mais e seja recompensado quando elas começarem a operar.
+                </p>
               </div>
-              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Indique o Smartbus e Ganhe
-              </h2>
-              <p className="max-w-2xl text-muted-foreground sm:text-lg">
-                Transforme sua rede de contatos em um novo canal de crescimento: indique empresas que também querem vender mais e seja recompensado quando elas começarem a operar.
-              </p>
-            </div>
-            {/*
+              {/*
               A seção "Indique e Ganhe" reforça crescimento orgânico e adiciona incentivo simples para compartilhar a plataforma.
               Mantemos cards e CTA já conhecidos para aumentar conversão sem inventar um novo padrão visual.
             */}
-            <div className="rounded-[2rem] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-48px_rgba(15,23,42,0.45)] sm:p-7">
-              {/* Os passos ganham acabamento de painel comercial para destacar a recompensa sem criar uma nova linguagem visual. */}
-              <div className="rounded-[1.6rem] border border-primary/10 bg-gradient-to-br from-primary/10 via-transparent to-muted/40 p-4 sm:p-5">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
-                  Recompensa simples e direta
-                </p>
-                <p className="mt-2 text-lg font-semibold text-foreground sm:text-xl">
-                  Indique empresas que começam a vender e receba R$50 por cada operação ativada.
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  A proposta fica mais clara: você ajuda outra empresa a profissionalizar as vendas e ainda cria uma nova fonte de receita por indicação.
-                </p>
-              </div>
-              <div className="mt-4 space-y-3">
-                {REFERRAL_STEPS.map((step, index) => (
-                  <div
-                    key={step}
-                    className="flex items-start gap-3 rounded-[1.35rem] border border-primary/10 bg-gradient-to-r from-white to-muted/40 p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]"
+              <div className="rounded-[2rem] border border-primary/20 bg-card p-6 shadow-[0_28px_70px_-48px_rgba(15,23,42,0.45)] sm:p-7">
+                {/* Os passos ganham acabamento de painel comercial para destacar a recompensa sem criar uma nova linguagem visual. */}
+                <div className="rounded-[1.6rem] border border-primary/10 bg-gradient-to-br from-primary/10 via-transparent to-muted/40 p-4 sm:p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
+                    Recompensa simples e direta
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-foreground sm:text-xl">
+                    Indique empresas que começam a vender e receba R$50 por cada operação ativada.
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    A proposta fica mais clara: você ajuda outra empresa a profissionalizar as vendas e ainda cria uma
+                    nova fonte de receita por indicação.
+                  </p>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {REFERRAL_STEPS.map((step, index) => (
+                    <div
+                      key={step}
+                      className="flex items-start gap-3 rounded-[1.35rem] border border-primary/10 bg-gradient-to-r from-white to-muted/40 p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.35)]"
+                    >
+                      {/* A numeração fica mais evidente no mobile e em desktop para dar cadência comercial aos passos. */}
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm shadow-primary/30">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm text-foreground">{step}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Hierarquia de CTA: reforçamos o principal e mantemos o secundário como alternativa de baixa fricção. */}
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    to="/cadastro"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90"
                   >
-                    {/* A numeração fica mais evidente no mobile e em desktop para dar cadência comercial aos passos. */}
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm shadow-primary/30">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm text-foreground">{step}</span>
-                  </div>
-                ))}
-              </div>
-              {/* Hierarquia de CTA: reforçamos o principal e mantemos o secundário como alternativa de baixa fricção. */}
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  to="/cadastro"
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90"
-                >
-                  Começar agora
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  to="/cadastro"
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                >
-                  Criar conta grátis
-                </Link>
+                    Começar agora
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    to="/cadastro"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                  >
+                    Criar conta grátis
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </section>
       )}
@@ -1760,14 +1702,12 @@ export default function LandingPage() {
           <div className="rounded-[2rem] border border-primary/15 bg-card p-8 text-center shadow-xl sm:p-10">
             {/* CTA final reforçado para conversão B2B sem remover a alternativa do passageiro. */}
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Comece a vender passagens com mais organização, presença digital e
-              controle
+              Comece a vender passagens com mais organização, presença digital e controle
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
               {/* CTA final com menos objeção: reforça facilidade para empresa e autônomo sem prometer funcionalidades novas. */}
-              Com o SmartBus, sua empresa ou operação independente pode
-              divulgar melhor, vender online, acompanhar resultados e organizar
-              o embarque sem depender de uma estrutura complexa.
+              Com o SmartBus, sua empresa ou operação independente pode divulgar melhor, vender online, acompanhar
+              resultados e organizar o embarque sem depender de uma estrutura complexa.
             </p>
             <div className="mt-8 flex flex-col items-stretch justify-center gap-4 sm:flex-row">
               <Link
@@ -1789,16 +1729,13 @@ export default function LandingPage() {
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2">
-                <Building2 className="h-4 w-4 text-primary" /> Link de venda e
-                vitrine profissional
+                <Building2 className="h-4 w-4 text-primary" /> Link de venda e vitrine profissional
               </span>
               <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2">
-                <Users className="h-4 w-4 text-primary" /> Funciona para equipe
-                comercial e vendedor independente
+                <Users className="h-4 w-4 text-primary" /> Funciona para equipe comercial e vendedor independente
               </span>
               <span className="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-2">
-                <Bus className="h-4 w-4 text-primary" /> Lista de embarque e
-                validação no celular
+                <Bus className="h-4 w-4 text-primary" /> Lista de embarque e validação no celular
               </span>
             </div>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -1816,7 +1753,8 @@ export default function LandingPage() {
                   <DialogHeader>
                     <DialogTitle>Fale com a equipe da SmartBus</DialogTitle>
                     <DialogDescription>
-                      Fale com a nossa equipe para tirar dúvidas sobre implantação, uso do sistema ou parceria comercial.
+                      Fale com a nossa equipe para tirar dúvidas sobre implantação, uso do sistema ou parceria
+                      comercial.
                     </DialogDescription>
                   </DialogHeader>
                   <form className="space-y-4" onSubmit={handleContactSubmit}>
@@ -1865,7 +1803,8 @@ export default function LandingPage() {
                       {contactErrors.message && <p className="text-sm text-destructive">{contactErrors.message}</p>}
                     </div>
                     <div className="rounded-2xl border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
-                      Nesta etapa, o envio reutiliza o canal comercial já existente da landing para manter o fluxo simples, previsível e sem criar uma nova integração de backend.
+                      Nesta etapa, o envio reutiliza o canal comercial já existente da landing para manter o fluxo
+                      simples, previsível e sem criar uma nova integração de backend.
                     </div>
                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                       <Button type="button" variant="outline" onClick={() => setContactModalOpen(false)}>
@@ -1884,9 +1823,7 @@ export default function LandingPage() {
               </a>
             </div>
             <div className="mt-8 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Acompanhe nossos conteúdos e novidades
-              </p>
+              <p className="text-sm text-muted-foreground">Acompanhe nossos conteúdos e novidades</p>
               <div className="flex items-center justify-center gap-2">
                 {landingSocialLinks
                   .filter((item) => item.key !== "whatsapp")
@@ -1898,10 +1835,7 @@ export default function LandingPage() {
                       rel="noopener noreferrer"
                       aria-label={item.label}
                       title={item.label}
-                      className={socialIconLinkClass.replace(
-                        "text-white/65",
-                        "text-muted-foreground",
-                      )}
+                      className={socialIconLinkClass.replace("text-white/65", "text-muted-foreground")}
                     >
                       {item.icon}
                     </a>
@@ -1924,7 +1858,8 @@ export default function LandingPage() {
               Você só paga quando vende e nunca paga caro
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              Diferente de outras plataformas, nossa taxa é inteligente: quanto maior o valor da passagem, menor o impacto no seu lucro.
+              Diferente de outras plataformas, nossa taxa é inteligente: quanto maior o valor da passagem, menor o
+              impacto no seu lucro.
             </p>
           </div>
 
@@ -1944,9 +1879,7 @@ export default function LandingPage() {
                 <p className="mt-2 text-3xl font-bold text-foreground">{tier.rate}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{tier.label}</p>
                 {/* Microcopy comercial secundária: reduz objeção sem competir com a taxa exibida no card. */}
-                <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">
-                  Pode repassar ao cliente
-                </p>
+                <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">Pode repassar ao cliente</p>
               </div>
             ))}
             {/* Card de destaque — teto máximo */}
@@ -1958,9 +1891,7 @@ export default function LandingPage() {
               <p className="mt-1 text-lg font-bold text-foreground">Máx. R$ 25</p>
               <p className="mt-1 text-xs text-muted-foreground">por passagem vendida</p>
               {/* Mantém consistência visual com os demais cards e preserva comunicação de repasse opcional. */}
-              <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">
-                Pode repassar ao cliente
-              </p>
+              <p className="mt-2 text-[11px] font-medium text-muted-foreground/90">Pode repassar ao cliente</p>
             </div>
           </div>
 
@@ -2050,12 +1981,8 @@ export default function LandingPage() {
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <step.icon className="h-6 w-6" />
                 </div>
-                <h3 className="max-w-[85%] text-lg font-bold text-foreground">
-                  {step.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {step.desc}
-                </p>
+                <h3 className="max-w-[85%] text-lg font-bold text-foreground">{step.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -2075,12 +2002,8 @@ export default function LandingPage() {
       <section className="bg-muted/30 py-16 sm:py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Perguntas frequentes
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-              Tire suas principais dúvidas sobre o SmartBus
-            </p>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Perguntas frequentes</h2>
+            <p className="mt-2 text-muted-foreground">Tire suas principais dúvidas sobre o SmartBus</p>
           </div>
           <div className="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
             {/* O accordion mantém a leitura leve e deixa só uma resposta aberta por vez, evitando um bloco visual pesado perto do footer. */}
@@ -2103,14 +2026,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-4 sm:col-span-2 lg:col-span-1">
-              <img
-                src={logo}
-                alt="SmartBus"
-                className="h-10 object-contain brightness-0 invert"
-              />
+              <img src={logo} alt="SmartBus" className="h-10 object-contain brightness-0 invert" />
               <p className="text-sm leading-relaxed text-white/80">
-                Plataforma para empresas de viagens, eventos e excursões
-                venderem, divulgarem e operarem com mais controle.
+                Plataforma para empresas de viagens, eventos e excursões venderem, divulgarem e operarem com mais
+                controle.
               </p>
               <button
                 type="button"
@@ -2137,69 +2056,45 @@ export default function LandingPage() {
               </div>
             </div>
             <div>
-              <h4 className="mb-4 text-sm font-semibold text-white">
-                Para passageiros
-              </h4>
+              <h4 className="mb-4 text-sm font-semibold text-white">Para passageiros</h4>
               <ul className="space-y-2.5">
                 <li>
-                  <Link
-                    to="/eventos"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/eventos" className="text-sm text-white/80 transition-colors hover:text-white">
                     Buscar viagens
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    to="/consultar-passagens"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/consultar-passagens" className="text-sm text-white/80 transition-colors hover:text-white">
                     Consultar passagens
                   </Link>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="mb-4 text-sm font-semibold text-white">
-                Para empresas
-              </h4>
+              <h4 className="mb-4 text-sm font-semibold text-white">Para empresas</h4>
               <ul className="space-y-2.5">
                 <li>
-                  <Link
-                    to="/cadastro"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/cadastro" className="text-sm text-white/80 transition-colors hover:text-white">
                     Cadastrar empresa
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    to="/login"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/login" className="text-sm text-white/80 transition-colors hover:text-white">
                     Acessar painel
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    to="/seja-representante"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/seja-representante" className="text-sm text-white/80 transition-colors hover:text-white">
                     Seja um representante
                   </Link>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="mb-4 text-sm font-semibold text-white">
-                Institucional
-              </h4>
+              <h4 className="mb-4 text-sm font-semibold text-white">Institucional</h4>
               <ul className="space-y-2.5">
                 <li>
-                  <Link
-                    to="/sobre-smartbus-br"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/sobre-smartbus-br" className="text-sm text-white/80 transition-colors hover:text-white">
                     Sobre a SmartBus
                   </Link>
                 </li>
@@ -2212,18 +2107,12 @@ export default function LandingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    to="/privacidade"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/privacidade" className="text-sm text-white/80 transition-colors hover:text-white">
                     Política de Privacidade
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    to="/exclusao-de-conta"
-                    className="text-sm text-white/80 transition-colors hover:text-white"
-                  >
+                  <Link to="/exclusao-de-conta" className="text-sm text-white/80 transition-colors hover:text-white">
                     Exclusão de conta
                   </Link>
                 </li>
@@ -2253,8 +2142,7 @@ export default function LandingPage() {
         <div className="border-t border-white/5 py-5">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <p className="text-center text-xs text-white/70">
-              © {new Date().getFullYear()} SmartBus. Todos os direitos
-              reservados • CNPJ 67.871.644/0001-26
+              © {new Date().getFullYear()} SmartBus. Todos os direitos reservados • CNPJ 67.871.644/0001-26
             </p>
           </div>
         </div>
@@ -2263,9 +2151,7 @@ export default function LandingPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>QR Code oficial da SmartBus</DialogTitle>
-            <DialogDescription>
-              Baixe o QR Code oficial que direciona para {OFFICIAL_SMARTBUS_URL}
-            </DialogDescription>
+            <DialogDescription>Baixe o QR Code oficial que direciona para {OFFICIAL_SMARTBUS_URL}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex justify-center">
