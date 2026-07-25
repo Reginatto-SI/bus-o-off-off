@@ -660,7 +660,7 @@ export default function SalesReport() {
       : []),
     { label: 'Vendas Geradas', value: stats.totalSales, icon: ShoppingCart },
     { label: 'Vendas Pagas', value: stats.paidSales, icon: CheckCircle, variant: 'success' as const },
-    { label: 'Cancelamentos', value: stats.cancelledSales, icon: Percent, variant: (cancelPercent > 10 ? 'destructive' : 'warning') as const },
+    { label: 'Cancelamentos', value: stats.cancelledSales, icon: Percent, variant: (cancelPercent > 10 ? 'destructive' : 'warning') as 'destructive' | 'warning' },
   ];
 
   const mobileSummaryCards = (
