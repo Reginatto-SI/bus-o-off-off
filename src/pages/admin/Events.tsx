@@ -3137,7 +3137,8 @@ Links internos:
     return sortedEventTrips.map((trip) => ({ value: trip.id, label: getTripLabelWithoutTime(trip) }));
   }, [isGroupedTransportPolicy, groupedBoardingTripOptions, sortedEventTrips]);
 
-  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const openAdminMobileMenu = () => setMobileMoreMenuOpen(true);
 
   const mobileBottomNavItems = useMemo(
     () => adminMobileBottomNavItems.filter((item) => {
