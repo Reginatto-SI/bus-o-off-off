@@ -595,14 +595,15 @@ export default function Dashboard() {
   );
   const mobileCompanyName = activeCompany?.trade_name || activeCompany?.name || 'empresa atual';
 
+  // Chave de dispensa do popup: fixada por usuário (independente de empresa)
+  // para que "Não mostrar novamente" seja definitivo, mesmo trocando de empresa ativa.
   const smartbusTipsDismissKey = useMemo(
-    () => (
-      activeCompanyId
-        ? `admin-dashboard:smartbus-tips-dismissed:${activeCompanyId}:${user?.id ?? 'no-user'}`
-        : null
-    ),
-    [activeCompanyId, user?.id]
+    () => (user?.id ? `admin-dashboard:smartbus-tips-dismissed:${user.id}` : null),
+    [user?.id]
   );
+  // Guard para o popup automático só abrir uma vez por sessão/montagem,
+  // evitando que mudanças de dependências reabram o modal após o usuário fechar.
+  const smartbusTipsAutoOpenedRef = useRef(false);
 
   const handleSmartbusTipsOpenChange = (open: boolean) => {
     if (!open && doNotShowSmartbusTips && smartbusTipsDismissKey) {
