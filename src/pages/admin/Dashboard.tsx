@@ -595,14 +595,15 @@ export default function Dashboard() {
   );
   const mobileCompanyName = activeCompany?.trade_name || activeCompany?.name || 'empresa atual';
 
+  // Chave de dispensa do popup: fixada por usuário (independente de empresa)
+  // para que "Não mostrar novamente" seja definitivo, mesmo trocando de empresa ativa.
   const smartbusTipsDismissKey = useMemo(
-    () => (
-      activeCompanyId
-        ? `admin-dashboard:smartbus-tips-dismissed:${activeCompanyId}:${user?.id ?? 'no-user'}`
-        : null
-    ),
-    [activeCompanyId, user?.id]
+    () => (user?.id ? `admin-dashboard:smartbus-tips-dismissed:${user.id}` : null),
+    [user?.id]
   );
+  // Guard para o popup automático só abrir uma vez por sessão/montagem,
+  // evitando que mudanças de dependências reabram o modal após o usuário fechar.
+  const smartbusTipsAutoOpenedRef = useRef(false);
 
   const handleSmartbusTipsOpenChange = (open: boolean) => {
     if (!open && doNotShowSmartbusTips && smartbusTipsDismissKey) {
@@ -889,11 +890,14 @@ export default function Dashboard() {
       onboardingCompletedCount < onboardingItems.length);
 
   useEffect(() => {
-    // Comentário: o popup promocional automático só aparece quando o onboarding não está ativo,
-    // evitando dois modais no carregamento. O card fixo continua abrindo manualmente.
+    // Comentário: o popup promocional automático só aparece uma vez por sessão,
+    // e apenas quando o onboarding não está ativo. O card fixo continua abrindo manualmente.
     if (!canViewSmartbusTips || !smartbusTipsDismissKey || shouldShowOnboardingCard || onboardingPopupOpen) return;
+    if (smartbusTipsAutoOpenedRef.current) return;
+    smartbusTipsAutoOpenedRef.current = true;
     setDoNotShowSmartbusTips(false);
-    setSmartbusTipsOpen(window.localStorage.getItem(smartbusTipsDismissKey) !== '1');
+    if (window.localStorage.getItem(smartbusTipsDismissKey) === '1') return;
+    setSmartbusTipsOpen(true);
   }, [canViewSmartbusTips, onboardingPopupOpen, shouldShowOnboardingCard, smartbusTipsDismissKey]);
 
   useEffect(() => {
