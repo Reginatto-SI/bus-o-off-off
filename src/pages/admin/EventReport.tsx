@@ -404,7 +404,8 @@ export default function EventReport() {
           )}
         />
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        {/* Uma coluna no celular mantém valores financeiros legíveis; o grid desktop permanece inalterado. */}
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
           <StatsCard label="Eventos analisados" value={kpis.eventsCount} icon={Calendar} />
           <StatsCard label="Passagens pagas" value={kpis.soldTickets} icon={Ticket} />
           <StatsCard label="Receita bruta (pagas)" value={canViewFinancials ? formatCurrencyBRL(kpis.grossRevenue) : '—'} icon={DollarSign} variant="success" />
@@ -528,23 +529,24 @@ export default function EventReport() {
           />
         ) : (
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
-              <TabsTrigger value={REPORT_TABS.resumo} className="gap-2">
+            {/* Apenas a barra de abas pode rolar horizontalmente no mobile. */}
+            <TabsList className="flex w-full justify-start overflow-x-auto sm:grid sm:grid-cols-3">
+              <TabsTrigger value={REPORT_TABS.resumo} className="shrink-0 gap-2 whitespace-nowrap">
                 <BarChart3 className="h-4 w-4" />
                 Resumo por Evento
               </TabsTrigger>
-              <TabsTrigger value={REPORT_TABS.detalhado} className="gap-2">
+              <TabsTrigger value={REPORT_TABS.detalhado} className="shrink-0 gap-2 whitespace-nowrap">
                 <List className="h-4 w-4" />
                 Detalhado por Venda
               </TabsTrigger>
-              <TabsTrigger value={REPORT_TABS.ocupacao} className="gap-2">
+              <TabsTrigger value={REPORT_TABS.ocupacao} className="shrink-0 gap-2 whitespace-nowrap">
                 <Ticket className="h-4 w-4" />
                 Ocupação do Evento
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value={REPORT_TABS.resumo}>
-              <Card>
+              <Card className="hidden md:block">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -574,10 +576,29 @@ export default function EventReport() {
                   </Table>
                 </CardContent>
               </Card>
+              {/* Os cards reutilizam exatamente as linhas consolidadas exibidas na tabela desktop. */}
+              <div className="grid min-w-0 gap-3 md:hidden">
+                {summaryRows.map((row) => (
+                  <Card key={`mobile-${row.key}`} className="min-w-0">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="min-w-0">
+                        <p className="break-words font-semibold leading-tight">{row.eventName}</p>
+                        <p className="mt-1 break-words text-sm text-muted-foreground">{formatDateOnlyBR(row.eventDate)} • {row.vehicleName}</p>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                        <div><dt className="text-muted-foreground">Capacidade</dt><dd className="font-medium">{row.capacity}</dd></div>
+                        <div><dt className="text-muted-foreground">Passagens pagas</dt><dd className="font-medium">{row.soldTickets}</dd></div>
+                        <div><dt className="text-muted-foreground">Ocupação</dt><dd className="font-medium">{row.occupancy.toFixed(2)}%</dd></div>
+                        <div className="min-w-0"><dt className="text-muted-foreground">Receita</dt><dd className="break-words font-medium">{formatCurrencyBRL(row.grossRevenue)}</dd></div>
+                      </dl>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </TabsContent>
 
             <TabsContent value={REPORT_TABS.detalhado}>
-              <Card>
+              <Card className="hidden md:block">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -607,10 +628,32 @@ export default function EventReport() {
                   </Table>
                 </CardContent>
               </Card>
+              {/* No mobile, os dados principais da venda ficam em ordem de leitura e sem tabela comprimida. */}
+              <div className="grid min-w-0 gap-3 md:hidden">
+                {filteredSales.map((sale) => (
+                  <Card key={`mobile-${sale.id}`} className="min-w-0">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold leading-tight">{sale.event?.name ?? '-'}</p>
+                          <p className="mt-1 break-words text-sm text-muted-foreground">{sale.customer_name}</p>
+                        </div>
+                        <StatusBadge status={sale.status} />
+                      </div>
+                      <dl className="grid grid-cols-1 gap-2 text-sm min-[390px]:grid-cols-2">
+                        <div><dt className="text-muted-foreground">Data da compra</dt><dd>{format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</dd></div>
+                        <div><dt className="text-muted-foreground">Valor</dt><dd className="font-medium">{formatCurrencyBRL(getSaleAmount(sale))}</dd></div>
+                        <div className="min-w-0"><dt className="text-muted-foreground">Vendedor</dt><dd className="break-words">{sale.seller?.name ?? 'Sem vendedor'}</dd></div>
+                        <div><dt className="text-muted-foreground">ID da venda</dt><dd className="break-all font-mono text-xs">{sale.id}</dd></div>
+                      </dl>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </TabsContent>
 
             <TabsContent value={REPORT_TABS.ocupacao}>
-              <Card>
+              <Card className="hidden md:block">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -638,6 +681,25 @@ export default function EventReport() {
                   </Table>
                 </CardContent>
               </Card>
+              {/* A ocupação usa cards compactos no mobile e preserva a tabela completa no desktop. */}
+              <div className="grid min-w-0 gap-3 md:hidden">
+                {occupancyRows.map((row) => (
+                  <Card key={`mobile-ocupacao-${row.key}`} className="min-w-0">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="min-w-0">
+                        <p className="break-words font-semibold leading-tight">{row.eventName}</p>
+                        <p className="mt-1 break-words text-sm text-muted-foreground">{row.vehicleName}</p>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                        <div><dt className="text-muted-foreground">Capacidade</dt><dd className="font-medium">{row.capacity}</dd></div>
+                        <div><dt className="text-muted-foreground">Pagas</dt><dd className="font-medium">{row.soldTickets}</dd></div>
+                        <div><dt className="text-muted-foreground">Disponíveis</dt><dd className="font-medium">{row.availableTickets}</dd></div>
+                        <div><dt className="text-muted-foreground">Ocupação</dt><dd className="font-medium">{row.occupancy.toFixed(2)}%</dd></div>
+                      </dl>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </TabsContent>
           </Tabs>
         )}

@@ -151,8 +151,6 @@ export const navigationGroups: NavigationGroup[] = [{
     name: 'Relatório por Evento',
     href: '/admin/relatorios/eventos',
     icon: Calendar,
-    desktopOnly: true,
-    roles: ['developer'],
   }, {
     name: 'Lista de Embarque',
     href: '/admin/relatorios/lista-embarque',
@@ -243,7 +241,6 @@ export function canViewAdminNavigationItem({
 export const TECHNICAL_DESKTOP_ONLY_ROUTES = [
   '/admin/templates-layout',
   '/admin/relatorios/empresas-ativacao',
-  '/admin/relatorios/eventos',
   '/admin/diagnostico-vendas',
   '/admin/socios',
 ] as const;

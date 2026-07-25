@@ -183,7 +183,8 @@ const App = () => (
             <Route path="/admin/servicos" element={<Services />} />
             <Route path="/vendas/servicos" element={<ServiceSales />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
-            <Route path="/admin/relatorios/eventos" element={protectTechnicalDesktopRoute(<EventReport />)} />
+            {/* Relatório operacional: as permissões seguem o menu administrativo, inclusive no mobile. */}
+            <Route path="/admin/relatorios/eventos" element={<EventReport />} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/relatorios/lista-embarque" element={<BoardingManifestReport />} />
             <Route path="/admin/relatorios/empresas-ativacao" element={protectTechnicalDesktopRoute(<CompanyActivationReport />)} />
