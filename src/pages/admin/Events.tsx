@@ -3318,6 +3318,7 @@ Links internos:
         </main>
 
         <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+        <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
       </div>
 
       <div className="page-container hidden lg:block">
