@@ -227,12 +227,17 @@ export function canViewAdminNavigationItem({
   item,
   userRole,
   isDeveloper,
+  canAccessTemplatesLayout,
 }: {
   item: NavigationItem | null;
   userRole: UserRole | null;
   isDeveloper: boolean;
+  canAccessTemplatesLayout?: boolean;
 }) {
   if (!item) return false;
+  if (item.href === '/admin/templates-layout') {
+    return isDeveloper || Boolean(canAccessTemplatesLayout);
+  }
   return isDeveloper || !item.roles || (userRole ? item.roles.includes(userRole) : false);
 }
 
