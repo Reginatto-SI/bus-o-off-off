@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFoo
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { buildWhatsappWaMeLink } from '@/lib/whatsapp';
+import { usesCustomMobileAdminChrome } from './adminNavigation';
 
 // Valores padrão fixos da identidade visual SmartBus (index.css).
 const DEFAULT_PRIMARY_HSL = '25 95% 53%';
@@ -94,8 +95,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     void checkInactiveLinkedCompany();
   }, [user, userRole]);
 
-  const isMobileDashboardHome = location.pathname === '/admin/dashboard';
-  const usesCustomMobileAdminChrome = isMobileDashboardHome || ['/admin/vendas', '/admin/eventos', '/admin/frota', '/admin/motoristas', '/admin/auxiliares-embarque', '/admin/locais', '/admin/vendedores', '/admin/usuarios', '/admin/empresa', '/admin/representante', '/admin/patrocinadores', '/admin/minha-conta', '/admin/parceiros', '/admin/servicos', '/admin/relatorios/comissao-vendedores', '/admin/relatorios/lista-embarque', '/admin/relatorios/vendas', '/vendas/servicos'].includes(location.pathname) || /^\/admin\/eventos\/[^/]+$/.test(location.pathname);
+  const hasCustomMobileAdminChrome = usesCustomMobileAdminChrome(location.pathname);
 
   const supportContactUrl = useMemo(() => {
     return buildWhatsappWaMeLink({
@@ -136,7 +136,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <AdminHeader />
         {/* No mobile preservamos espaço para a barra fixa, exceto em telas com chrome mobile próprio. */}
-        <main className={cn(usesCustomMobileAdminChrome ? 'pt-0' : 'pt-14', 'lg:pt-0')}>
+        <main className={cn(hasCustomMobileAdminChrome ? 'pt-0' : 'pt-14', 'lg:pt-0')}>
           {children}
         </main>
       </div>

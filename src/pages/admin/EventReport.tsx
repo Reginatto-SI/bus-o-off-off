@@ -16,6 +16,11 @@ import {
 } from 'lucide-react';
 
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
+import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
+import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { FilterCard, FilterInput } from '@/components/admin/FilterCard';
@@ -129,7 +134,7 @@ const getSaleAmount = (sale: Pick<SaleReportRow, 'gross_amount' | 'quantity' | '
 };
 
 export default function EventReport() {
-  const { activeCompanyId, activeCompany, canViewFinancials } = useAuth();
+  const { activeCompanyId, activeCompany, canViewFinancials, userRole, isDeveloper } = useAuth();
 
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
   const [events, setEvents] = useState<EventOption[]>([]);
@@ -139,6 +144,21 @@ export default function EventReport() {
   const [activeTab, setActiveTab] = useState<ReportTab>(REPORT_TABS.resumo);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+
+  // Mantém a barra inferior sujeita às mesmas permissões usadas pelos demais relatórios administrativos.
+  const mobileBottomNavItems = useMemo(
+    () => adminMobileBottomNavItems.filter((item) => {
+      if (item.href === '/admin/dashboard') return true;
+      const navigationHref = item.href === '/validador/embarque' ? '/validador' : item.href;
+      return canViewAdminNavigationItem({
+        item: findAdminNavigationItemByHref(navigationHref),
+        userRole,
+        isDeveloper,
+      });
+    }),
+    [isDeveloper, userRole],
+  );
 
   const hasActiveFilters = useMemo(() => (
     filters.search.trim() !== ''
@@ -382,27 +402,48 @@ export default function EventReport() {
 
   return (
     <AdminLayout>
-      <div className="page-container">
-        <PageHeader
-          title="Relatório por Evento"
-          description="Análise gerencial de desempenho dos eventos com consolidação financeira apenas de vendas pagas."
-          actions={(
-            <>
-              <Button variant="outline" size="sm" onClick={refreshReportData}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Atualizar
+      <div className="min-h-screen bg-[#fbfaf8] pb-[calc(5.35rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:bg-transparent lg:pb-0">
+        <AdminMobileHeader title="Relatório por Evento" subtitle="SmartBus" showMenuButton={false} />
+
+        <div className="page-container py-5 lg:py-6">
+          <div className="hidden lg:block">
+            <PageHeader
+              title="Relatório por Evento"
+              description="Análise gerencial de desempenho dos eventos com consolidação financeira apenas de vendas pagas."
+              actions={(
+                <>
+                  <Button variant="outline" size="sm" onClick={refreshReportData}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Atualizar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExcelModalOpen(true)}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </Button>
+                </>
+              )}
+            />
+          </div>
+
+          {/* No mobile, o título pertence ao chrome compartilhado; descrição e ações do relatório permanecem no conteúdo. */}
+          <div className="mb-5 space-y-3 lg:hidden">
+            <p className="text-sm text-slate-600">Análise gerencial de desempenho dos eventos com consolidação financeira apenas de vendas pagas.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="col-span-2 h-11 rounded-xl bg-white" onClick={refreshReportData}>
+                <RefreshCw className="mr-1.5 h-4 w-4" />Atualizar
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfModalOpen(true)}>
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
+              <Button variant="outline" size="sm" className="h-11 rounded-xl bg-white" onClick={() => setPdfModalOpen(true)}>
+                <FileText className="mr-1.5 h-4 w-4" />PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setExcelModalOpen(true)}>
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Excel
+              <Button variant="outline" size="sm" className="h-11 rounded-xl bg-white" onClick={() => setExcelModalOpen(true)}>
+                <FileSpreadsheet className="mr-1.5 h-4 w-4" />Excel
               </Button>
-            </>
-          )}
-        />
+            </div>
+          </div>
 
         {/* Uma coluna no celular mantém valores financeiros legíveis; o grid desktop permanece inalterado. */}
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
@@ -725,6 +766,10 @@ export default function EventReport() {
           totalRecords={exportData.length}
           periodLabel={periodLabel}
         />
+        </div>
+
+        <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={() => setMobileMoreMenuOpen(true)} />
+        <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
       </div>
     </AdminLayout>
   );
