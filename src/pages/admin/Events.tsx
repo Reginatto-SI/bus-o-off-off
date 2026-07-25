@@ -101,6 +101,7 @@ import { DateBadge } from '@/components/public/DateBadge';
 import { Progress } from '@/components/ui/progress';
 import { useLocation } from 'react-router-dom';
 import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
 import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
 import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
