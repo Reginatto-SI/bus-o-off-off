@@ -104,7 +104,7 @@ function CollapsedNavItem({ item, isActive, onClick }: {
 }
 
 export function AdminSidebar() {
-  const { profile, userRole, signOut, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
+  const { profile, userRole, signOut, isDeveloper, activeCompany } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const isMobileDashboardHome = location.pathname === '/admin/dashboard';
@@ -122,12 +122,16 @@ export function AdminSidebar() {
       item,
       userRole,
       isDeveloper,
-      canAccessTemplatesLayout,
     }))
   })).filter(group => group.items.length > 0);
 
-  // Lista única para remover blocos/labels visuais sem alterar regras de permissão.
-  const visibleItems = visibleGroups.flatMap(group => group.items);
+  const mobileVisibleGroups = visibleGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.desktopOnly),
+  })).filter((group) => group.items.length > 0);
+
+  // O drawer legado recebe somente itens permitidos no mobile; a sidebar desktop mantém os itens técnicos.
+  const mobileVisibleItems = mobileVisibleGroups.flatMap(group => group.items);
 
   const handleItemClick = (item: NavigationItem, onClose?: () => void) => {
     if (item.id === 'public-showcase' && !publicShowcaseUrl) {
@@ -189,7 +193,7 @@ export function AdminSidebar() {
       <nav className="sidebar-scroll-hidden flex-1 bg-sidebar px-3 py-5 overflow-y-auto">
         {showToggle ? (
           <div className="space-y-4">
-            {visibleGroups.map(group => (
+            {(onClose ? mobileVisibleGroups : visibleGroups).map(group => (
               <div key={group.id} className="space-y-1">
                 {!group.standalone && (
                   /* Cabeçalho funciona como accordion somente no menu expandido. */
@@ -294,7 +298,7 @@ export function AdminSidebar() {
           </div>
         ) : (
           <div className="space-y-1">
-            {visibleItems.map((item, index) => {
+            {mobileVisibleItems.map((item, index) => {
             const isActive = item.href ? location.pathname === item.href || location.pathname.startsWith(`${item.href}/`) : false;
             const itemKey = `${item.href ?? item.name}-${index}`;
 
