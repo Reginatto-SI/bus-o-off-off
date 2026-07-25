@@ -39,6 +39,7 @@ export type NavigationItem = {
   disabled?: boolean;
   statusLabel?: string;
   openInNewTab?: boolean;
+  desktopOnly?: boolean;
 };
 
 export type NavigationGroup = {
@@ -129,13 +130,13 @@ export const navigationGroups: NavigationGroup[] = [{
     name: 'Sócios',
     href: '/admin/socios',
     icon: Handshake,
-    // Tela restrita: somente usuários developer podem visualizar o menu de Sócios.
+    desktopOnly: true,
     roles: ['developer']
   }, {
     name: 'Templates de Layout',
     href: '/admin/templates-layout',
     icon: LayoutTemplate,
-    // Catálogo oficial também é exclusivo de developer.
+    desktopOnly: true,
     roles: ['developer']
   }]
 }, {
@@ -150,6 +151,8 @@ export const navigationGroups: NavigationGroup[] = [{
     name: 'Relatório por Evento',
     href: '/admin/relatorios/eventos',
     icon: Calendar,
+    desktopOnly: true,
+    roles: ['developer'],
   }, {
     name: 'Lista de Embarque',
     href: '/admin/relatorios/lista-embarque',
@@ -158,6 +161,7 @@ export const navigationGroups: NavigationGroup[] = [{
     name: 'Empresas e Ativação',
     href: '/admin/relatorios/empresas-ativacao',
     icon: Building2,
+    desktopOnly: true,
     roles: ['developer']
   }, {
     name: 'Comissão de Vendedores',
@@ -201,6 +205,7 @@ export const navigationGroups: NavigationGroup[] = [{
     name: 'Diagnóstico de Vendas',
     href: '/admin/diagnostico-vendas',
     icon: Activity,
+    desktopOnly: true,
     roles: ['developer'] as UserRole[],
   }]
 }, {
@@ -224,17 +229,36 @@ export function canViewAdminNavigationItem({
   item,
   userRole,
   isDeveloper,
-  canAccessTemplatesLayout,
 }: {
   item: NavigationItem | null;
   userRole: UserRole | null;
   isDeveloper: boolean;
-  canAccessTemplatesLayout: boolean;
 }) {
   if (!item) return false;
-  // Comentário: mesma exceção usada no menu para manter Templates acessível ao sócio autorizado sem abrir permissões gerais.
-  if (item.href === '/admin/templates-layout') return canAccessTemplatesLayout;
   return isDeveloper || !item.roles || (userRole ? item.roles.includes(userRole) : false);
+}
+
+// Telas técnicas ocultas no mobile e disponíveis somente para usuários desenvolvedores no desktop.
+// A restrição é intencional e não representa uma pendência de responsividade.
+export const TECHNICAL_DESKTOP_ONLY_ROUTES = [
+  '/admin/templates-layout',
+  '/admin/relatorios/empresas-ativacao',
+  '/admin/relatorios/eventos',
+  '/admin/diagnostico-vendas',
+  '/admin/socios',
+] as const;
+
+export function canAccessTechnicalDesktopRoute({
+  pathname,
+  isDeveloper,
+  isBelowDesktopBreakpoint,
+}: {
+  pathname: string;
+  isDeveloper: boolean;
+  isBelowDesktopBreakpoint: boolean;
+}) {
+  const isTechnicalRoute = TECHNICAL_DESKTOP_ONLY_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return !isTechnicalRoute || (isDeveloper && !isBelowDesktopBreakpoint);
 }
 
 export function buildAdminPublicShowcaseUrl(publicSlug?: string | null) {

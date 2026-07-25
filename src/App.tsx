@@ -2,8 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useIsBelowBreakpoint } from "@/hooks/use-mobile";
+import { canAccessTechnicalDesktopRoute } from "@/components/layout/adminNavigation";
 import { VersionUpdateBanner } from "@/components/system/VersionUpdateBanner";
 
 // Auth
@@ -68,6 +73,32 @@ import PublicRootRedirect from "./pages/public/PublicRootRedirect";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+const DESKTOP_BREAKPOINT = 1024;
+
+function TechnicalDesktopRoute({ children }: { children: ReactNode }) {
+  const { isDeveloper, loading } = useAuth();
+  const location = useLocation();
+  const isBelowDesktopBreakpoint = useIsBelowBreakpoint(DESKTOP_BREAKPOINT);
+  const canAccess = canAccessTechnicalDesktopRoute({
+    pathname: location.pathname,
+    isDeveloper,
+    isBelowDesktopBreakpoint,
+  });
+
+  useEffect(() => {
+    if (loading || canAccess) return;
+    toast.warning(isBelowDesktopBreakpoint
+      ? 'Esta funcionalidade está disponível somente para desenvolvedores na versão desktop.'
+      : 'Esta funcionalidade está disponível somente para desenvolvedores.');
+  }, [canAccess, isBelowDesktopBreakpoint, loading]);
+
+  if (loading) return null;
+  if (!canAccess) return <Navigate to="/admin/dashboard" replace />;
+  return children;
+}
+
+const protectTechnicalDesktopRoute = (page: ReactNode) => <TechnicalDesktopRoute>{page}</TechnicalDesktopRoute>;
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -143,7 +174,7 @@ const App = () => (
             <Route path="/admin/representante" element={<RepresentativeAdmin />} />
             <Route path="/admin/minha-conta" element={<MyAccount />} />
             <Route path="/admin/patrocinadores" element={<Sponsors />} />
-            <Route path="/admin/socios" element={<SociosSplit />} />
+            <Route path="/admin/socios" element={protectTechnicalDesktopRoute(<SociosSplit />)} />
             <Route path="/admin/parceiros" element={<CommercialPartners />} />
             {/* Programas de Benefício foi descontinuado: bloqueia acesso direto mantendo redirect seguro do admin. */}
             <Route path="/admin/programas-beneficio" element={<Navigate to="/admin/dashboard" replace />} />
@@ -152,12 +183,12 @@ const App = () => (
             <Route path="/admin/servicos" element={<Services />} />
             <Route path="/vendas/servicos" element={<ServiceSales />} />
             <Route path="/admin/relatorios/vendas" element={<SalesReport />} />
-            <Route path="/admin/relatorios/eventos" element={<EventReport />} />
+            <Route path="/admin/relatorios/eventos" element={protectTechnicalDesktopRoute(<EventReport />)} />
             <Route path="/admin/relatorios/comissao-vendedores" element={<SellersCommissionReport />} />
             <Route path="/admin/relatorios/lista-embarque" element={<BoardingManifestReport />} />
-            <Route path="/admin/relatorios/empresas-ativacao" element={<CompanyActivationReport />} />
-            <Route path="/admin/templates-layout" element={<TemplatesLayout />} />
-            <Route path="/admin/diagnostico-vendas" element={<SalesDiagnostic />} />
+            <Route path="/admin/relatorios/empresas-ativacao" element={protectTechnicalDesktopRoute(<CompanyActivationReport />)} />
+            <Route path="/admin/templates-layout" element={protectTechnicalDesktopRoute(<TemplatesLayout />)} />
+            <Route path="/admin/diagnostico-vendas" element={protectTechnicalDesktopRoute(<SalesDiagnostic />)} />
             
             <Route path="/:nick" element={<PublicCompanyShortLink />} />
 

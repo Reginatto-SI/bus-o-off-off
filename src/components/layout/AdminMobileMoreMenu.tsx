@@ -23,7 +23,7 @@ interface AdminMobileMoreMenuProps {
 }
 
 export function AdminMobileMoreMenu({ open, onOpenChange }: AdminMobileMoreMenuProps) {
-  const { userRole, isDeveloper, canAccessTemplatesLayout, activeCompany } = useAuth();
+  const { userRole, isDeveloper, activeCompany } = useAuth();
   const navigate = useNavigate();
 
   const publicShowcaseUrl = useMemo(() => buildAdminPublicShowcaseUrl(activeCompany?.public_slug), [activeCompany?.public_slug]);
@@ -33,15 +33,14 @@ export function AdminMobileMoreMenu({ open, onOpenChange }: AdminMobileMoreMenuP
     return getAdminNavigationGroupsWithDynamicItems(publicShowcaseUrl)
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => canViewAdminNavigationItem({
+        items: group.items.filter((item) => !item.desktopOnly && canViewAdminNavigationItem({
           item,
           userRole,
           isDeveloper,
-          canAccessTemplatesLayout,
         })),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canAccessTemplatesLayout, isDeveloper, publicShowcaseUrl, userRole]);
+  }, [isDeveloper, publicShowcaseUrl, userRole]);
 
   const handleItemClick = (item: NavigationItem) => {
     // Comentário: mantém a mesma regra dinâmica da sidebar sem abrir o drawer desktop no mobile.

@@ -4,7 +4,9 @@ const MOBILE_BREAKPOINT = 768;
 
 // Hook responsivo compartilhado: permite reaproveitar o mesmo listener do padrão mobile com outros breakpoints Tailwind.
 export function useIsBelowBreakpoint(breakpoint: number) {
-  const [isBelowBreakpoint, setIsBelowBreakpoint] = React.useState<boolean | undefined>(undefined);
+  const [isBelowBreakpoint, setIsBelowBreakpoint] = React.useState<boolean | undefined>(() => (
+    typeof window === "undefined" ? undefined : window.innerWidth < breakpoint
+  ));
 
   React.useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
