@@ -101,6 +101,7 @@ import { DateBadge } from '@/components/public/DateBadge';
 import { Progress } from '@/components/ui/progress';
 import { useLocation } from 'react-router-dom';
 import { AdminMobileBottomNav } from '@/components/layout/AdminMobileBottomNav';
+import { AdminMobileMoreMenu } from '@/components/layout/AdminMobileMoreMenu';
 import { AdminMobileHeader } from '@/components/layout/AdminMobileHeader';
 import { adminMobileBottomNavItems } from '@/components/layout/adminMobileBottomNavItems';
 import { canViewAdminNavigationItem, findAdminNavigationItemByHref } from '@/components/layout/adminNavigation';
@@ -3136,7 +3137,8 @@ Links internos:
     return sortedEventTrips.map((trip) => ({ value: trip.id, label: getTripLabelWithoutTime(trip) }));
   }, [isGroupedTransportPolicy, groupedBoardingTripOptions, sortedEventTrips]);
 
-  const openAdminMobileMenu = () => window.dispatchEvent(new CustomEvent('smartbus:open-admin-mobile-menu'));
+  const [mobileMoreMenuOpen, setMobileMoreMenuOpen] = useState(false);
+  const openAdminMobileMenu = () => setMobileMoreMenuOpen(true);
 
   const mobileBottomNavItems = useMemo(
     () => adminMobileBottomNavItems.filter((item) => {
@@ -3316,6 +3318,7 @@ Links internos:
         </main>
 
         <AdminMobileBottomNav items={mobileBottomNavItems} onMoreClick={openAdminMobileMenu} />
+        <AdminMobileMoreMenu open={mobileMoreMenuOpen} onOpenChange={setMobileMoreMenuOpen} />
       </div>
 
       <div className="page-container hidden lg:block">
