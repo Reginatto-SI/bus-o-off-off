@@ -223,10 +223,10 @@ const mobileHomeCardCandidates: MobileHomeLinkItem[] = [
     icon: Calendar,
   },
   {
-    // Comentário: visibilidade herdada do item Validador de Passagens do menu administrativo.
+    // Comentário: abre o hub oficial do validador; a lista manual permanece em /validador/embarque.
     title: 'Embarque',
     description: 'Controle validações',
-    href: '/validador/embarque',
+    href: '/validador',
     icon: QrCode,
   },
   {
@@ -575,16 +575,15 @@ export default function Dashboard() {
     // Comentário: cards e menu inferior reutilizam a regra real do menu administrativo por href, sem segunda matriz de permissões.
     return (href: string) => {
       if (href === '/admin/dashboard') return true;
-      const navigationHref = href === '/validador/embarque' ? '/validador' : href;
       return canViewAdminNavigationItem({
-        item: findAdminNavigationItemByHref(navigationHref),
+        item: findAdminNavigationItemByHref(href),
         userRole,
         isDeveloper,
         canAccessTemplatesLayout,
       });
     };
   }, [canAccessTemplatesLayout, isDeveloper, userRole]);
-  const canAccessDriverValidatorShortcut = canViewMobileRoute('/validador/embarque');
+  const canAccessDriverValidatorShortcut = canViewMobileRoute('/validador');
   const mobileHomeCards = useMemo(
     () => mobileHomeCardCandidates.filter((item) => canViewMobileRoute(item.href)).slice(0, 5),
     [canViewMobileRoute]
