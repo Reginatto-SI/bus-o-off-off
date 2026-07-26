@@ -387,16 +387,34 @@ export default function DriverValidate() {
     const thisInitId = initCountRef.current;
     const initTimestamp = new Date().toISOString().slice(11, 23);
     const attemptResults: AttemptResult[] = [];
-    console.info(`[CAM] solicitação #${thisInitId} iniciada`, { secureContext: window.isSecureContext });
+    const environment = detectCameraEnvironment();
+    const timeline: string[] = [];
+
+    // Cada etapa é registrada em tempo real para diagnóstico em campo.
+    const step = (message: string) => {
+      const at = new Date().toISOString().slice(11, 23);
+      timeline.push(`${at} — ${message}`);
+      console.info(`[CAM] ${message}`);
+      updateDebug({ timeline: [...timeline] });
+    };
 
     stopCurrentStream();
     setCameraError(null);
-    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: thisInitId, lastInitAt: initTimestamp });
+    updateDebug({
+      ...INITIAL_DEBUG,
+      initInProgress: true,
+      initCount: thisInitId,
+      lastInitAt: initTimestamp,
+      environment,
+    });
+    step(`botão "Abrir câmera" clicado (solicitação #${thisInitId})`);
+    step(`ambiente detectado: ${environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}`);
 
     const finishInit = () => {
       initInProgressRef.current = false;
-      updateDebug({ initInProgress: false });
+      updateDebug({ initInProgress: false, attemptResults: [...attemptResults], timeline: [...timeline] });
     };
+
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       const reason = !window.isSecureContext ? 'contexto_inseguro' : 'api_indisponivel';
