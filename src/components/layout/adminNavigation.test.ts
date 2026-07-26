@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { adminMobileBottomNavItems } from './adminMobileBottomNavItems';
 import {
   CUSTOM_MOBILE_ADMIN_CHROME_ROUTES,
   TECHNICAL_DESKTOP_ONLY_ROUTES,
@@ -64,5 +65,13 @@ describe('navegação das telas técnicas', () => {
       expect(canAccessTechnicalDesktopRoute({ pathname, isDeveloper: false, isBelowDesktopBreakpoint: false })).toBe(false);
       expect(canAccessTechnicalDesktopRoute({ pathname, isDeveloper: true, isBelowDesktopBreakpoint: false })).toBe(true);
     });
+  });
+});
+
+// O card e o menu inferior compartilham o mesmo destino oficial do validador QR.
+
+describe('atalho mobile de embarque', () => {
+  it('direciona o embarque para o hub oficial do validador', () => {
+    expect(adminMobileBottomNavItems.find((item) => item.key === 'embarque')?.href).toBe('/validador');
   });
 });

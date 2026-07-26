@@ -136,71 +136,6 @@ const INITIAL_DEBUG: DebugInfo = {
   attemptResults: [],
 };
 
-/**
- * tryDeviceCamera — opens a stream for a specific deviceId,
- * binds to video, validates that it produces real frames.
- * Returns the stream if valid, or null + reason if not.
- */
-async function tryDeviceCamera(
-  video: HTMLVideoElement,
-  deviceId: string,
-): Promise<{ stream: MediaStream | null; ok: boolean; reason: string }> {
-  let stream: MediaStream | null = null;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId } },
-      audio: false,
-    });
-  } catch (err: any) {
-    return { stream: null, ok: false, reason: `getUserMedia error: ${err?.name}` };
-  }
-
-  const track = stream.getVideoTracks()[0];
-  if (!track || track.readyState !== 'live') {
-    stream.getTracks().forEach(t => t.stop());
-    return { stream: null, ok: false, reason: `track ${track?.readyState ?? 'missing'}` };
-  }
-
-  // Bind and wait for metadata
-  video.srcObject = stream;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      if (video.readyState >= 1) { resolve(); return; }
-      const onMeta = () => { video.removeEventListener('loadedmetadata', onMeta); resolve(); };
-      video.addEventListener('loadedmetadata', onMeta);
-      setTimeout(() => { video.removeEventListener('loadedmetadata', onMeta); reject(new Error('metadata_timeout')); }, 4000);
-    });
-    await video.play();
-  } catch (err: any) {
-    stream.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
-    return { stream: null, ok: false, reason: `play error: ${err?.message}` };
-  }
-
-  // Poll for real frames (up to 2s)
-  let frameOk = false;
-  for (let i = 0; i < 20; i++) {
-    if (track.readyState !== 'live') {
-      stream.getTracks().forEach(t => t.stop());
-      video.srcObject = null;
-      return { stream: null, ok: false, reason: 'track_ended during poll' };
-    }
-    if (video.videoWidth > 100 && video.videoHeight > 100) {
-      frameOk = true;
-      break;
-    }
-    await new Promise(r => setTimeout(r, 100));
-  }
-
-  if (!frameOk) {
-    stream.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
-    return { stream: null, ok: false, reason: `no_frames ${video.videoWidth}x${video.videoHeight}` };
-  }
-
-  return { stream, ok: true, reason: 'success' };
-}
-
 export default function DriverValidate() {
   const navigate = useNavigate();
   const { user, userRole, loading, activeCompanyId } = useAuth();
@@ -417,213 +352,150 @@ export default function DriverValidate() {
   /* ---------- startCamera — core init routine ---------- */
 
   const startCamera = useCallback(async (video: HTMLVideoElement) => {
-    // Guard: prevent concurrent initializations (race condition fix)
+    // A solicitação nasce apenas do botão do usuário e a trava impede duas aberturas concorrentes.
     if (initInProgressRef.current) {
-      console.log('[CAM] startCamera SKIPPED — init already in progress');
+      console.info('[CAM] solicitação ignorada: inicialização já em andamento');
       return;
     }
+
     initInProgressRef.current = true;
     initCountRef.current += 1;
     const thisInitId = initCountRef.current;
     const initTimestamp = new Date().toISOString().slice(11, 23);
-    console.log(`[CAM] startCamera #${thisInitId} BEGIN at ${initTimestamp}`);
+    const attemptResults: AttemptResult[] = [];
+    console.info(`[CAM] solicitação #${thisInitId} iniciada`, { secureContext: window.isSecureContext });
 
     stopCurrentStream();
     setCameraError(null);
     updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: thisInitId, lastInitAt: initTimestamp });
 
-    // 1. Check permission
-    try {
-      const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
-      console.log('[CAM] permission state:', perm.state);
-      updateDebug({ permission: perm.state });
-    } catch {
-      console.log('[CAM] permissions API not available');
-      updateDebug({ permission: 'api_unavailable' });
-    }
-
-    // 2. Setup BarcodeDetector
-    const hasBarcodeDetector = Boolean(window.BarcodeDetector);
-    if (hasBarcodeDetector && window.BarcodeDetector) {
-      detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
-      scannerEngineRef.current = 'barcode_detector';
-      setScannerSupported(true);
-      setScannerStatusMessage(null);
-      updateDebug({ scannerSupported: true, scannerEngine: 'barcode_detector' });
-    } else {
-      // iOS Safari não expõe BarcodeDetector; sem fallback o vídeo abre, mas o scanner nunca inicia.
-      detectorRef.current = null;
-      scannerEngineRef.current = 'jsqr';
-      setScannerSupported(true);
-      setScannerStatusMessage('Usando modo de leitura compatível com este navegador.');
-      updateDebug({ scannerSupported: true, scannerEngine: 'jsqr' });
-      console.warn('[SCAN] BarcodeDetector indisponível; fallback para jsQR ativado.');
-    }
-
-    // 3. Enumerate devices for debug
-    try {
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
-      const deviceLabels = videoDevices.map(d => `${d.label || 'unnamed'} [${d.deviceId.slice(0, 8)}]`);
-      console.log('[CAM] videoinput devices:', deviceLabels);
-      updateDebug({ devices: deviceLabels });
-    } catch (e) {
-      console.warn('[CAM] enumerateDevices failed', e);
-    }
-
-    // 4. Enumerate devices & find back cameras
-    let stream: MediaStream | null = null;
-    let usedConstraint = 'none';
-    let selectedDeviceId: string | null = null;
-    const attemptResults: AttemptResult[] = [];
-
-    try {
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
-      const backCameras = videoDevices.filter(d =>
-        /back|rear|environment|traseira/i.test(d.label)
-      );
-
-      // Sort: prefer lower camera index (camera 0 = primary on most Android)
-      backCameras.sort((a, b) => {
-        const numA = parseInt(a.label.match(/\d+/)?.[0] ?? '99', 10);
-        const numB = parseInt(b.label.match(/\d+/)?.[0] ?? '99', 10);
-        return numA - numB;
-      });
-
-      const candidateLabels = backCameras.map(d => `${d.label} [${d.deviceId.slice(0, 8)}]`);
-      console.log('[CAM] back camera candidates (sorted):', candidateLabels);
-      updateDebug({ candidateBackCameras: candidateLabels });
-
-      // Phase 1: Try each back camera by deviceId (with delay between attempts)
-      for (let i = 0; i < backCameras.length; i++) {
-        const cam = backCameras[i];
-        console.log(`[CAM] trying back cam #${i}: ${cam.label} [${cam.deviceId.slice(0, 8)}]`);
-        const result = await tryDeviceCamera(video, cam.deviceId);
-        const attempt: AttemptResult = {
-          label: cam.label || 'unnamed',
-          deviceId: cam.deviceId.slice(0, 8),
-          result: result.ok ? 'success' : (result.reason.includes('track') ? 'track_ended' : (result.reason.includes('no_frames') ? 'no_frames' : 'error')),
-          detail: result.reason,
-        };
-        attemptResults.push(attempt);
-        console.log(`[CAM] back cam #${i} result:`, attempt.result, attempt.detail);
-
-        if (result.ok && result.stream) {
-          stream = result.stream;
-          usedConstraint = `deviceId:${cam.label}`;
-          selectedDeviceId = cam.deviceId;
-          break;
-        }
-
-        // Wait 800ms for Android camera driver to release hardware before next attempt
-        console.log('[CAM] waiting 800ms for driver release…');
-        await new Promise(r => setTimeout(r, 800));
-      }
-
-      // Phase 2: Fallback — facingMode: environment
-      if (!stream) {
-        console.log('[CAM] no back cam worked, waiting 1s before fallbacks…');
-        await new Promise(r => setTimeout(r, 1000));
-        console.log('[CAM] trying facingMode environment');
-        try {
-          const envStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' } }, audio: false,
-          });
-          const t = envStream.getVideoTracks()[0];
-          video.srcObject = envStream;
-          await video.play().catch(() => {});
-          await new Promise(r => setTimeout(r, 500));
-          if (t?.readyState === 'live' && video.videoWidth > 100) {
-            stream = envStream;
-            usedConstraint = 'facingMode:environment';
-          } else {
-            envStream.getTracks().forEach(t => t.stop());
-            video.srcObject = null;
-            attemptResults.push({ label: 'facingMode:env', deviceId: '-', result: 'no_frames', detail: `${video.videoWidth}x${video.videoHeight}` });
-          }
-        } catch (err: any) {
-          attemptResults.push({ label: 'facingMode:env', deviceId: '-', result: 'error', detail: err?.message });
-        }
-      }
-
-      // Phase 3: Fallback — video: true
-      if (!stream) {
-        console.log('[CAM] trying video:true fallback');
-        try {
-          const anyStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-          const t = anyStream.getVideoTracks()[0];
-          video.srcObject = anyStream;
-          await video.play().catch(() => {});
-          await new Promise(r => setTimeout(r, 500));
-          if (t?.readyState === 'live' && video.videoWidth > 100) {
-            stream = anyStream;
-            usedConstraint = 'video:true';
-          } else {
-            anyStream.getTracks().forEach(t => t.stop());
-            video.srcObject = null;
-            attemptResults.push({ label: 'video:true', deviceId: '-', result: 'no_frames', detail: `${video.videoWidth}x${video.videoHeight}` });
-          }
-        } catch (err: any) {
-          attemptResults.push({ label: 'video:true', deviceId: '-', result: 'error', detail: err?.message });
-        }
-      }
-    } catch (enumErr: any) {
-      console.error('[CAM] enumerate failed:', enumErr);
-      updateDebug({ lastError: `enumerate: ${enumErr?.message}` });
-    }
-
-    updateDebug({ attemptResults, selectedDeviceId: selectedDeviceId?.slice(0, 8) ?? null });
-
-    if (!stream) {
-      const errMsg = 'Nenhuma câmera funcionou. Verifique as permissões ou use o campo manual.';
-      setCameraError(errMsg);
-      updateDebug({ cameraError: errMsg, streamExists: false });
+    const finishInit = () => {
       initInProgressRef.current = false;
       updateDebug({ initInProgress: false });
-      console.log(`[CAM] startCamera #${thisInitId} END — no camera`);
+    };
+
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      const reason = !window.isSecureContext ? 'contexto_inseguro' : 'api_indisponivel';
+      console.error('[CAM] câmera indisponível', { reason });
+      setCameraError('Não foi possível acessar a câmera. Abra o SmartBus em uma conexão segura e tente novamente. Você também pode validar a passagem manualmente.');
+      updateDebug({ cameraError: reason, lastError: reason });
+      finishInit();
       return;
     }
 
-    // Stream is already bound to video by tryDeviceCamera or fallback
-    streamRef.current = stream;
+    try {
+      try {
+        const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        console.info('[CAM] estado da permissão antes da solicitação', { state: permission.state });
+        updateDebug({ permission: permission.state });
+      } catch {
+        updateDebug({ permission: 'api_unavailable' });
+      }
 
-    const tracks = stream.getVideoTracks();
-    console.log('[CAM] ✅ camera selected:', usedConstraint, `${video.videoWidth}×${video.videoHeight}`);
-    updateDebug({
-      streamExists: true,
-      constraintUsed: usedConstraint,
-      trackCount: tracks.length,
-      trackStates: tracks.map(t => t.readyState),
-      trackLabels: tracks.map(t => t.label || 'unnamed'),
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      readyState: video.readyState,
-    });
+      const hasBarcodeDetector = Boolean(window.BarcodeDetector);
+      if (hasBarcodeDetector && window.BarcodeDetector) {
+        detectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        scannerEngineRef.current = 'barcode_detector';
+      } else {
+        detectorRef.current = null;
+        scannerEngineRef.current = 'jsqr';
+        console.warn('[SCAN] BarcodeDetector indisponível; fallback jsQR ativado');
+      }
+      setScannerSupported(true);
+      updateDebug({ scannerSupported: true, scannerEngine: scannerEngineRef.current });
 
-    setCameraReady(true);
-    setCameraError(null);
-    updateDebug({ cameraReady: true, cameraError: null });
+      const enumerate = async (stage: 'antes' | 'depois') => {
+        try {
+          const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
+          const labels = devices.map(device => `${device.label || 'unnamed'} [${device.deviceId.slice(0, 8)}]`);
+          console.info(`[CAM] dispositivos ${stage} da autorização`, { count: devices.length, devices: labels });
+          updateDebug({ devices: labels });
+          return devices;
+        } catch (error: any) {
+          console.warn(`[CAM] enumerateDevices falhou ${stage}`, { name: error?.name, message: error?.message });
+          return [];
+        }
+      };
 
-    // Check torch
-    const track = stream.getVideoTracks()[0];
-    if (track) {
-      const caps = (track as any).getCapabilities?.();
-      if (caps?.torch) setTorchSupported(true);
+      await enumerate('antes');
+
+      const requestStream = async (label: string, constraints: MediaStreamConstraints) => {
+        console.info('[CAM] getUserMedia', { label, constraints });
+        let timedOut = false;
+        const request = navigator.mediaDevices.getUserMedia(constraints).then(lateStream => {
+          if (timedOut) lateStream.getTracks().forEach(track => track.stop());
+          return lateStream;
+        });
+        const timeout = new Promise<never>((_, reject) => window.setTimeout(() => {
+          timedOut = true;
+          reject(new DOMException('A solicitação da câmera não respondeu em 15 segundos.', 'TimeoutError'));
+        }, 15000));
+        return Promise.race([request, timeout]);
+      };
+
+      let stream: MediaStream | null = null;
+      let usedConstraint = 'none';
+      const constraints: Array<[string, MediaStreamConstraints]> = [
+        ['facingMode:environment', { video: { facingMode: { ideal: 'environment' } }, audio: false }],
+        ['video:true', { video: true, audio: false }],
+      ];
+
+      for (const [label, constraint] of constraints) {
+        try {
+          stream = await requestStream(label, constraint);
+          usedConstraint = label;
+          attemptResults.push({ label, deviceId: '-', result: 'success' });
+          console.info('[CAM] getUserMedia retornou stream', { label, tracks: stream.getVideoTracks().length });
+          break;
+        } catch (error: any) {
+          const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
+          attemptResults.push({ label, deviceId: '-', result: 'error', detail });
+          console.error('[CAM] getUserMedia falhou', { label, name: error?.name, message: error?.message, code: error?.code });
+          updateDebug({ lastError: detail });
+        }
+      }
+
+      if (!stream) throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
+
+      streamRef.current = stream;
+      video.srcObject = stream;
+      await video.play();
+      await enumerate('depois');
+
+      const track = stream.getVideoTracks()[0];
+      if (!track || track.readyState !== 'live') throw new DOMException('O stream não possui faixa de vídeo ativa.', 'NotReadableError');
+
+      updateDebug({
+        permission: 'granted', streamExists: true, constraintUsed: usedConstraint,
+        trackCount: stream.getVideoTracks().length,
+        trackStates: stream.getVideoTracks().map(item => item.readyState),
+        trackLabels: stream.getVideoTracks().map(item => item.label || 'unnamed'),
+        selectedDeviceId: track.getSettings().deviceId?.slice(0, 8) ?? null,
+        attemptResults, videoWidth: video.videoWidth, videoHeight: video.videoHeight,
+        readyState: video.readyState, cameraReady: true, cameraError: null,
+      });
+      setCameraReady(true);
+      const capabilities = (track as any).getCapabilities?.();
+      if (capabilities?.torch) setTorchSupported(true);
+      console.info('[CAM] stream pronto', { constraint: usedConstraint, width: video.videoWidth, height: video.videoHeight });
+    } catch (error: any) {
+      stopCurrentStream();
+      const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
+      console.error('[CAM] inicialização encerrada com falha', { name: error?.name, message: error?.message, code: error?.code });
+      setCameraError('Não foi possível acessar a câmera. Verifique a permissão do aplicativo e tente novamente. Você também pode validar a passagem manualmente.');
+      updateDebug({ cameraError: detail, lastError: detail, attemptResults, streamExists: false });
+    } finally {
+      finishInit();
     }
-
-    initInProgressRef.current = false;
-    updateDebug({ initInProgress: false });
-    console.log(`[CAM] startCamera #${thisInitId} END — success`);
   }, [stopCurrentStream, updateDebug]);
 
   /* ---------- Camera init effect ---------- */
 
   useEffect(() => {
     if (!videoEl) return;
-    startCamera(videoEl);
+    // A câmera só é solicitada após o clique explícito; ao desmontar, libera o hardware.
     return () => { stopCurrentStream(); };
-  }, [videoEl, startCamera, stopCurrentStream]);
+  }, [videoEl, stopCurrentStream]);
 
   /* ---------- Visibility change ---------- */
 
@@ -633,15 +505,9 @@ export default function DriverValidate() {
       const state = document.visibilityState;
       const inProgress = initInProgressRef.current;
       console.log(`[CAM] visibilitychange → ${state}, initInProgress=${inProgress}`);
-      if (state === 'visible') {
-        startCamera(videoEl);
-      } else {
-        // Do NOT kill the stream if init is in progress (e.g. permission dialog open on Android)
-        if (!inProgress) {
-          stopCurrentStream();
-        } else {
-          console.log('[CAM] hidden ignored — init in progress (permission dialog?)');
-        }
+      if (state === 'hidden' && !inProgress) {
+        // Ao retornar, o botão visível cria um novo stream a partir de uma ação do usuário.
+        stopCurrentStream();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -875,9 +741,12 @@ export default function DriverValidate() {
               )}
 
               {!cameraReady && !cameraError && (
-                <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-white/80">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Preparando câmera...
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white/90">
+                  <p className="text-sm">Abra a câmera para ler o QR Code da passagem.</p>
+                  <Button type="button" onClick={() => videoEl && startCamera(videoEl)} disabled={debugInfo.initInProgress}>
+                    {debugInfo.initInProgress ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <QrCode className="mr-2 h-4 w-4" />}
+                    {debugInfo.initInProgress ? 'Abrindo câmera...' : 'Abrir câmera'}
+                  </Button>
                 </div>
               )}
 

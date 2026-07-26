@@ -13,6 +13,6 @@ export interface AdminMobileBottomNavItem {
 export const adminMobileBottomNavItems: AdminMobileBottomNavItem[] = [
   { key: 'inicio', title: 'Início', href: '/admin/dashboard', icon: Home },
   { key: 'vendas', title: 'Vendas', href: '/admin/vendas', icon: BarChart3 },
-  // Rota real de embarque declarada em App.tsx; evita depender do hub /validador.
-  { key: 'embarque', title: 'Embarque', href: '/validador/embarque', icon: QrCode },
+  // O atalho administrativo abre o hub oficial do validador QR; a lista manual continua em /validador/embarque.
+  { key: 'embarque', title: 'Embarque', href: '/validador', icon: QrCode },
 ];
