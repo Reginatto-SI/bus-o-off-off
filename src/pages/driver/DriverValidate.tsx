@@ -86,6 +86,22 @@ type AttemptResult = {
   detail?: string;
 };
 
+type CameraEnvironment = 'webview_android' | 'navegador';
+
+/**
+ * Detecta WebView Android embarcado (WebInto.app e similares).
+ * UA "Dalvik/..." ou "; wv" (WebView) ou Android sem "Chrome/" indicam WebView.
+ */
+function detectCameraEnvironment(): CameraEnvironment {
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  const isDalvik = /Dalvik/i.test(ua);
+  const isWv = /;\s*wv\)/i.test(ua);
+  const hasChrome = /Chrome\//i.test(ua);
+  if (isDalvik || isWv || (isAndroid && !hasChrome)) return 'webview_android';
+  return 'navegador';
+}
+
 type DebugInfo = {
   permission: string;
   streamExists: boolean;
@@ -109,6 +125,8 @@ type DebugInfo = {
   selectedDeviceId: string | null;
   candidateBackCameras: string[];
   attemptResults: AttemptResult[];
+  environment: CameraEnvironment;
+  timeline: string[];
 };
 
 const INITIAL_DEBUG: DebugInfo = {
@@ -134,7 +152,13 @@ const INITIAL_DEBUG: DebugInfo = {
   selectedDeviceId: null,
   candidateBackCameras: [],
   attemptResults: [],
+  environment: 'navegador',
+  timeline: [],
 };
+
+/** Timeout por tentativa de getUserMedia (ms). */
+const GET_USER_MEDIA_TIMEOUT_MS = 8000;
+
 
 export default function DriverValidate() {
   const navigate = useNavigate();
@@ -363,16 +387,34 @@ export default function DriverValidate() {
     const thisInitId = initCountRef.current;
     const initTimestamp = new Date().toISOString().slice(11, 23);
     const attemptResults: AttemptResult[] = [];
-    console.info(`[CAM] solicitação #${thisInitId} iniciada`, { secureContext: window.isSecureContext });
+    const environment = detectCameraEnvironment();
+    const timeline: string[] = [];
+
+    // Cada etapa é registrada em tempo real para diagnóstico em campo.
+    const step = (message: string) => {
+      const at = new Date().toISOString().slice(11, 23);
+      timeline.push(`${at} — ${message}`);
+      console.info(`[CAM] ${message}`);
+      updateDebug({ timeline: [...timeline] });
+    };
 
     stopCurrentStream();
     setCameraError(null);
-    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: thisInitId, lastInitAt: initTimestamp });
+    updateDebug({
+      ...INITIAL_DEBUG,
+      initInProgress: true,
+      initCount: thisInitId,
+      lastInitAt: initTimestamp,
+      environment,
+    });
+    step(`botão "Abrir câmera" clicado (solicitação #${thisInitId})`);
+    step(`ambiente detectado: ${environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}`);
 
     const finishInit = () => {
       initInProgressRef.current = false;
-      updateDebug({ initInProgress: false });
+      updateDebug({ initInProgress: false, attemptResults: [...attemptResults], timeline: [...timeline] });
     };
+
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       const reason = !window.isSecureContext ? 'contexto_inseguro' : 'api_indisponivel';
@@ -386,9 +428,10 @@ export default function DriverValidate() {
     try {
       try {
         const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        console.info('[CAM] estado da permissão antes da solicitação', { state: permission.state });
+        step(`estado da permissão antes da solicitação: ${permission.state}`);
         updateDebug({ permission: permission.state });
       } catch {
+        step('Permissions API indisponível neste ambiente');
         updateDebug({ permission: 'api_unavailable' });
       }
 
@@ -408,11 +451,11 @@ export default function DriverValidate() {
         try {
           const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
           const labels = devices.map(device => `${device.label || 'unnamed'} [${device.deviceId.slice(0, 8)}]`);
-          console.info(`[CAM] dispositivos ${stage} da autorização`, { count: devices.length, devices: labels });
+          step(`dispositivos ${stage} da autorização: ${devices.length} (${labels.join(' | ') || 'nenhum'})`);
           updateDebug({ devices: labels });
           return devices;
         } catch (error: any) {
-          console.warn(`[CAM] enumerateDevices falhou ${stage}`, { name: error?.name, message: error?.message });
+          step(`enumerateDevices falhou ${stage}: ${error?.name ?? 'Error'}`);
           return [];
         }
       };
@@ -420,42 +463,74 @@ export default function DriverValidate() {
       await enumerate('antes');
 
       const requestStream = async (label: string, constraints: MediaStreamConstraints) => {
-        console.info('[CAM] getUserMedia', { label, constraints });
+        step(`getUserMedia chamado (${label}) — aguardando resposta…`);
+        let settled = false;
         let timedOut = false;
         const request = navigator.mediaDevices.getUserMedia(constraints).then(lateStream => {
-          if (timedOut) lateStream.getTracks().forEach(track => track.stop());
+          settled = true;
+          if (timedOut) {
+            step(`retorno tardio de ${label} após o timeout — stream descartado`);
+            lateStream.getTracks().forEach(track => track.stop());
+          }
           return lateStream;
+        }).catch(error => {
+          settled = true;
+          throw error;
         });
         const timeout = new Promise<never>((_, reject) => window.setTimeout(() => {
+          if (settled) return;
           timedOut = true;
-          reject(new DOMException('A solicitação da câmera não respondeu em 15 segundos.', 'TimeoutError'));
-        }, 15000));
+          step(`promessa de ${label} continua PENDENTE — timeout de ${GET_USER_MEDIA_TIMEOUT_MS / 1000}s disparado`);
+          reject(new DOMException(
+            `A solicitação da câmera não respondeu em ${GET_USER_MEDIA_TIMEOUT_MS / 1000} segundos.`,
+            'TimeoutError',
+          ));
+        }, GET_USER_MEDIA_TIMEOUT_MS));
         return Promise.race([request, timeout]);
       };
 
       let stream: MediaStream | null = null;
       let usedConstraint = 'none';
+      let pendingInWebView = false;
       const constraints: Array<[string, MediaStreamConstraints]> = [
         ['facingMode:environment', { video: { facingMode: { ideal: 'environment' } }, audio: false }],
         ['video:true', { video: true, audio: false }],
       ];
 
-      for (const [label, constraint] of constraints) {
+      for (let index = 0; index < constraints.length; index++) {
+        const [label, constraint] = constraints[index];
+        if (index > 0) step(`fallback iniciado → tentando ${label}`);
         try {
           stream = await requestStream(label, constraint);
           usedConstraint = label;
           attemptResults.push({ label, deviceId: '-', result: 'success' });
-          console.info('[CAM] getUserMedia retornou stream', { label, tracks: stream.getVideoTracks().length });
+          updateDebug({ attemptResults: [...attemptResults] });
+          step(`stream criado com ${label} (${stream.getVideoTracks().length} faixa(s) de vídeo)`);
           break;
         } catch (error: any) {
           const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
           attemptResults.push({ label, deviceId: '-', result: 'error', detail });
           console.error('[CAM] getUserMedia falhou', { label, name: error?.name, message: error?.message, code: error?.code });
-          updateDebug({ lastError: detail });
+          updateDebug({ lastError: detail, attemptResults: [...attemptResults] });
+          if (error?.name === 'TimeoutError' && environment === 'webview_android') {
+            // Em WebView Android sem onPermissionRequest a promessa nunca resolve:
+            // repetir a chamada apenas prolongaria a espera.
+            pendingInWebView = true;
+            step('WebView não respondeu à solicitação de câmera — fallback interrompido para não travar a tela');
+            break;
+          }
         }
       }
 
-      if (!stream) throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
+      if (!stream) {
+        if (pendingInWebView) {
+          throw new DOMException(
+            'O aplicativo não liberou a câmera para a página (solicitação sem resposta).',
+            'TimeoutError',
+          );
+        }
+        throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
+      }
 
       streamRef.current = stream;
       video.srcObject = stream;
@@ -465,25 +540,33 @@ export default function DriverValidate() {
       const track = stream.getVideoTracks()[0];
       if (!track || track.readyState !== 'live') throw new DOMException('O stream não possui faixa de vídeo ativa.', 'NotReadableError');
 
+      step(`vídeo recebeu dimensões: ${video.videoWidth}×${video.videoHeight} (readyState ${video.readyState})`);
+
       updateDebug({
         permission: 'granted', streamExists: true, constraintUsed: usedConstraint,
         trackCount: stream.getVideoTracks().length,
         trackStates: stream.getVideoTracks().map(item => item.readyState),
         trackLabels: stream.getVideoTracks().map(item => item.label || 'unnamed'),
         selectedDeviceId: track.getSettings().deviceId?.slice(0, 8) ?? null,
-        attemptResults, videoWidth: video.videoWidth, videoHeight: video.videoHeight,
+        attemptResults: [...attemptResults], videoWidth: video.videoWidth, videoHeight: video.videoHeight,
         readyState: video.readyState, cameraReady: true, cameraError: null,
       });
       setCameraReady(true);
       const capabilities = (track as any).getCapabilities?.();
       if (capabilities?.torch) setTorchSupported(true);
-      console.info('[CAM] stream pronto', { constraint: usedConstraint, width: video.videoWidth, height: video.videoHeight });
     } catch (error: any) {
       stopCurrentStream();
       const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
       console.error('[CAM] inicialização encerrada com falha', { name: error?.name, message: error?.message, code: error?.code });
-      setCameraError('Não foi possível acessar a câmera. Verifique a permissão do aplicativo e tente novamente. Você também pode validar a passagem manualmente.');
-      updateDebug({ cameraError: detail, lastError: detail, attemptResults, streamExists: false });
+      const isWebViewBlock = error?.name === 'TimeoutError' && environment === 'webview_android';
+      step(isWebViewBlock
+        ? 'conclusão: bloqueio no WebView do aplicativo (a página nunca recebeu resposta da câmera)'
+        : `conclusão: falha no navegador — ${detail}`);
+      setCameraError(isWebViewBlock
+        ? 'O aplicativo não liberou a câmera para esta tela. A permissão de câmera do Android está concedida, mas o app precisa autorizar também a solicitação feita pela página. Use a validação manual abaixo ou abra esta tela no Chrome para confirmar.'
+        : 'Não foi possível acessar a câmera. Verifique a permissão do aplicativo e tente novamente. Você também pode validar a passagem manualmente.');
+      updateDebug({ cameraError: detail, lastError: detail, attemptResults: [...attemptResults], streamExists: false });
+
     } finally {
       finishInit();
     }
@@ -926,7 +1009,10 @@ export default function DriverValidate() {
                 `backCameras: ${debugInfo.candidateBackCameras.length > 0 ? debugInfo.candidateBackCameras.join(' | ') : 'nenhuma'}`,
                 `devices: ${debugInfo.devices.length > 0 ? debugInfo.devices.join(' | ') : 'nenhum'}`,
                 ...(attemptLines.length > 0 ? ['--- tentativas:', ...attemptLines] : ['--- tentativas: nenhuma']),
+                `--- ambiente: ${debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}`,
+                ...(debugInfo.timeline.length > 0 ? ['--- timeline:', ...debugInfo.timeline.map(t => `  ${t}`)] : ['--- timeline: vazia']),
                 `--- userAgent: ${navigator.userAgent}`,
+
               ];
               navigator.clipboard.writeText(lines.join('\n')).then(() => {
                 const btn = document.activeElement as HTMLButtonElement;
@@ -967,7 +1053,15 @@ export default function DriverValidate() {
                 ))}
               </ul>
             ) : <p className="ml-3">nenhuma</p>}
+            <p><strong>ambiente:</strong> {debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}</p>
+            <p><strong>timeline:</strong></p>
+            {debugInfo.timeline.length > 0 ? (
+              <ol className="ml-3 list-decimal">
+                {debugInfo.timeline.map((t, i) => <li key={i}>{t}</li>)}
+              </ol>
+            ) : <p className="ml-3">vazia</p>}
             <p><strong>devices:</strong></p>
+
             {debugInfo.devices.length > 0 ? (
               <ul className="ml-3 list-disc">
                 {debugInfo.devices.map((d, i) => <li key={i}>{d}</li>)}
