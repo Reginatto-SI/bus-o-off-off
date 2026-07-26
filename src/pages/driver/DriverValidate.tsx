@@ -86,6 +86,22 @@ type AttemptResult = {
   detail?: string;
 };
 
+type CameraEnvironment = 'webview_android' | 'navegador';
+
+/**
+ * Detecta WebView Android embarcado (WebInto.app e similares).
+ * UA "Dalvik/..." ou "; wv" (WebView) ou Android sem "Chrome/" indicam WebView.
+ */
+function detectCameraEnvironment(): CameraEnvironment {
+  const ua = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(ua);
+  const isDalvik = /Dalvik/i.test(ua);
+  const isWv = /;\s*wv\)/i.test(ua);
+  const hasChrome = /Chrome\//i.test(ua);
+  if (isDalvik || isWv || (isAndroid && !hasChrome)) return 'webview_android';
+  return 'navegador';
+}
+
 type DebugInfo = {
   permission: string;
   streamExists: boolean;
@@ -109,6 +125,8 @@ type DebugInfo = {
   selectedDeviceId: string | null;
   candidateBackCameras: string[];
   attemptResults: AttemptResult[];
+  environment: CameraEnvironment;
+  timeline: string[];
 };
 
 const INITIAL_DEBUG: DebugInfo = {
@@ -134,7 +152,13 @@ const INITIAL_DEBUG: DebugInfo = {
   selectedDeviceId: null,
   candidateBackCameras: [],
   attemptResults: [],
+  environment: 'navegador',
+  timeline: [],
 };
+
+/** Timeout por tentativa de getUserMedia (ms). */
+const GET_USER_MEDIA_TIMEOUT_MS = 8000;
+
 
 export default function DriverValidate() {
   const navigate = useNavigate();
