@@ -1053,7 +1053,15 @@ export default function DriverValidate() {
                 ))}
               </ul>
             ) : <p className="ml-3">nenhuma</p>}
+            <p><strong>ambiente:</strong> {debugInfo.environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}</p>
+            <p><strong>timeline:</strong></p>
+            {debugInfo.timeline.length > 0 ? (
+              <ol className="ml-3 list-decimal">
+                {debugInfo.timeline.map((t, i) => <li key={i}>{t}</li>)}
+              </ol>
+            ) : <p className="ml-3">vazia</p>}
             <p><strong>devices:</strong></p>
+
             {debugInfo.devices.length > 0 ? (
               <ul className="ml-3 list-disc">
                 {debugInfo.devices.map((d, i) => <li key={i}>{d}</li>)}
