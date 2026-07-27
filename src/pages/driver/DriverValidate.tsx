@@ -414,11 +414,26 @@ export default function DriverValidate() {
     step(`botão "Abrir câmera" clicado (solicitação #${thisInitId})`);
     step(`ambiente detectado: ${environment === 'webview_android' ? 'WebView Android (app instalado)' : 'navegador'}`);
 
+    // Watchdog puramente visual: nunca cancela nem descarta a solicitação da câmera.
+    let watchdogFired = false;
+    let settledForWatchdog = false;
+    const watchdogId = window.setTimeout(() => {
+      if (settledForWatchdog) return;
+      watchdogFired = true;
+      step(`sem resposta da câmera após ${CAMERA_WATCHDOG_MS / 1000}s — a solicitação continua ativa em segundo plano`);
+      initInProgressRef.current = false;
+      setCameraError(environment === 'webview_android'
+        ? 'O aplicativo ainda não liberou a câmera para esta tela. Use a validação manual abaixo ou abra esta tela no Chrome. Se você autorizar agora, a câmera abre automaticamente.'
+        : 'A câmera ainda não respondeu. Autorize o acesso quando o navegador perguntar ou toque em "Tentar novamente". Você também pode validar a passagem manualmente.');
+      updateDebug({ initInProgress: false, lastError: 'watchdog_sem_resposta', timeline: [...timeline] });
+    }, CAMERA_WATCHDOG_MS);
+
     const finishInit = () => {
+      settledForWatchdog = true;
+      window.clearTimeout(watchdogId);
       initInProgressRef.current = false;
       updateDebug({ initInProgress: false, attemptResults: [...attemptResults], timeline: [...timeline] });
     };
-
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       const reason = !window.isSecureContext ? 'contexto_inseguro' : 'api_indisponivel';
@@ -466,36 +481,15 @@ export default function DriverValidate() {
 
       await enumerate('antes');
 
+      // Sem corrida com timeout: aguarda o retorno REAL de getUserMedia.
       const requestStream = async (label: string, constraints: MediaStreamConstraints) => {
         step(`getUserMedia chamado (${label}) — aguardando resposta…`);
-        let settled = false;
-        let timedOut = false;
-        const request = navigator.mediaDevices.getUserMedia(constraints).then(lateStream => {
-          settled = true;
-          if (timedOut) {
-            step(`retorno tardio de ${label} após o timeout — stream descartado`);
-            lateStream.getTracks().forEach(track => track.stop());
-          }
-          return lateStream;
-        }).catch(error => {
-          settled = true;
-          throw error;
-        });
-        const timeout = new Promise<never>((_, reject) => window.setTimeout(() => {
-          if (settled) return;
-          timedOut = true;
-          step(`promessa de ${label} continua PENDENTE — timeout de ${GET_USER_MEDIA_TIMEOUT_MS / 1000}s disparado`);
-          reject(new DOMException(
-            `A solicitação da câmera não respondeu em ${GET_USER_MEDIA_TIMEOUT_MS / 1000} segundos.`,
-            'TimeoutError',
-          ));
-        }, GET_USER_MEDIA_TIMEOUT_MS));
-        return Promise.race([request, timeout]);
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        return stream;
       };
 
       let stream: MediaStream | null = null;
       let usedConstraint = 'none';
-      let pendingInWebView = false;
       const constraints: Array<[string, MediaStreamConstraints]> = [
         ['facingMode:environment', { video: { facingMode: { ideal: 'environment' } }, audio: false }],
         ['video:true', { video: true, audio: false }],
@@ -516,34 +510,61 @@ export default function DriverValidate() {
           attemptResults.push({ label, deviceId: '-', result: 'error', detail });
           console.error('[CAM] getUserMedia falhou', { label, name: error?.name, message: error?.message, code: error?.code });
           updateDebug({ lastError: detail, attemptResults: [...attemptResults] });
-          if (error?.name === 'TimeoutError' && environment === 'webview_android') {
-            // Em WebView Android sem onPermissionRequest a promessa nunca resolve:
-            // repetir a chamada apenas prolongaria a espera.
-            pendingInWebView = true;
-            step('WebView não respondeu à solicitação de câmera — fallback interrompido para não travar a tela');
-            break;
-          }
         }
       }
 
-      if (!stream) {
-        if (pendingInWebView) {
-          throw new DOMException(
-            'O aplicativo não liberou a câmera para a página (solicitação sem resposta).',
-            'TimeoutError',
-          );
-        }
-        throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
+      if (!stream) throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
+
+      if (watchdogFired) {
+        // A câmera respondeu depois do watchdog: aceita o stream e limpa o aviso.
+        step('retorno após o watchdog — stream aceito e câmera reativada');
+        setCameraError(null);
       }
 
       streamRef.current = stream;
       video.srcObject = stream;
-      await video.play();
+
+      // Aguarda os metadados antes de tocar o vídeo (evita AbortError em alguns navegadores).
+      if (video.readyState < 1) {
+        await new Promise<void>(resolve => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            video.removeEventListener('loadedmetadata', finish);
+            window.clearTimeout(guard);
+            resolve();
+          };
+          const guard = window.setTimeout(finish, METADATA_WAIT_MS);
+          video.addEventListener('loadedmetadata', finish);
+        });
+      }
+      step(`loadedmetadata concluído (readyState ${video.readyState})`);
+
+      try {
+        await video.play();
+      } catch (playError: any) {
+        // play() pode rejeitar por política de autoplay; o stream continua válido.
+        step(`video.play() rejeitou (${playError?.name ?? 'Error'}) — seguindo com o stream ativo`);
+      }
+
       await enumerate('depois');
 
       const track = stream.getVideoTracks()[0];
       if (!track || track.readyState !== 'live') throw new DOMException('O stream não possui faixa de vídeo ativa.', 'NotReadableError');
 
+      // Confirma quadros reais antes de liberar o scanner.
+      if (!video.videoWidth || !video.videoHeight) {
+        await new Promise<void>(resolve => {
+          const started = Date.now();
+          const id = window.setInterval(() => {
+            if ((video.videoWidth && video.videoHeight) || Date.now() - started > 3000) {
+              window.clearInterval(id);
+              resolve();
+            }
+          }, 100);
+        });
+      }
       step(`vídeo recebeu dimensões: ${video.videoWidth}×${video.videoHeight} (readyState ${video.readyState})`);
 
       updateDebug({
@@ -562,15 +583,11 @@ export default function DriverValidate() {
       stopCurrentStream();
       const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
       console.error('[CAM] inicialização encerrada com falha', { name: error?.name, message: error?.message, code: error?.code });
-      const isWebViewBlock = error?.name === 'TimeoutError' && environment === 'webview_android';
-      step(isWebViewBlock
-        ? 'conclusão: bloqueio no WebView do aplicativo (a página nunca recebeu resposta da câmera)'
-        : `conclusão: falha no navegador — ${detail}`);
-      setCameraError(isWebViewBlock
-        ? 'O aplicativo não liberou a câmera para esta tela. A permissão de câmera do Android está concedida, mas o app precisa autorizar também a solicitação feita pela página. Use a validação manual abaixo ou abra esta tela no Chrome para confirmar.'
-        : 'Não foi possível acessar a câmera. Verifique a permissão do aplicativo e tente novamente. Você também pode validar a passagem manualmente.');
+      step(`conclusão: falha ao abrir a câmera — ${detail}`);
+      setCameraError(error?.name === 'NotAllowedError'
+        ? 'Permissão de câmera negada. Autorize o acesso nas configurações do navegador e toque em "Tentar novamente". Você também pode validar a passagem manualmente.'
+        : 'Não foi possível acessar a câmera. Verifique a permissão e tente novamente. Você também pode validar a passagem manualmente.');
       updateDebug({ cameraError: detail, lastError: detail, attemptResults: [...attemptResults], streamExists: false });
-
     } finally {
       finishInit();
     }
