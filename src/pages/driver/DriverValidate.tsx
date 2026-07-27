@@ -515,6 +515,13 @@ export default function DriverValidate() {
 
       if (!stream) throw new DOMException('Todas as constraints falharam.', 'NotReadableError');
 
+      // Uma solicitação mais recente assumiu o controle: descarta este stream tardio.
+      if (thisInitId !== initCountRef.current) {
+        step('solicitação substituída por outra mais recente — stream descartado');
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
       if (watchdogFired) {
         // A câmera respondeu depois do watchdog: aceita o stream e limpa o aviso.
         step('retorno após o watchdog — stream aceito e câmera reativada');
