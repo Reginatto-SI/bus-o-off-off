@@ -153,8 +153,15 @@ const INITIAL_DEBUG: DebugInfo = {
   timeline: [],
 };
 
-/** Timeout por tentativa de getUserMedia (ms). */
-const GET_USER_MEDIA_TIMEOUT_MS = 8000;
+/**
+ * Watchdog APENAS visual: se a câmera não responder nesse tempo, a tela sai do
+ * estado "abrindo…" e mostra mensagem. A solicitação original continua viva —
+ * se o usuário autorizar depois, o stream é aceito normalmente.
+ */
+const CAMERA_WATCHDOG_MS = 12000;
+
+/** Tempo máximo de espera pelo evento loadedmetadata antes de seguir mesmo assim. */
+const METADATA_WAIT_MS = 5000;
 
 
 export default function DriverValidate() {
