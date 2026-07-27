@@ -1,0 +1,10 @@
+| Versão  |         Resolução | Proporção | Uso                       |
+| ------- | ----------------: | --------: | ------------------------- |
+| Desktop | **2000 × 400 px** |   **5:1** | Telas com 1024 px ou mais |
+| Mobile  | **1200 × 675 px** |  **16:9** | Telas até 1023 px         |
+
+
+.webp
+.png
+
+Prefira WebP, porque mantém boa qualidade com arquivo menor.
