@@ -90,15 +90,12 @@ type CameraEnvironment = 'webview_android' | 'navegador';
 
 /**
  * Detecta WebView Android embarcado (WebInto.app e similares).
- * UA "Dalvik/..." ou "; wv" (WebView) ou Android sem "Chrome/" indicam WebView.
+ * Detecção ESTRITA: apenas UA "Dalvik/..." ou "; wv)".
+ * Usado somente para a mensagem exibida — nunca para decidir o fluxo da câmera.
  */
 function detectCameraEnvironment(): CameraEnvironment {
   const ua = navigator.userAgent || '';
-  const isAndroid = /Android/i.test(ua);
-  const isDalvik = /Dalvik/i.test(ua);
-  const isWv = /;\s*wv\)/i.test(ua);
-  const hasChrome = /Chrome\//i.test(ua);
-  if (isDalvik || isWv || (isAndroid && !hasChrome)) return 'webview_android';
+  if (/Dalvik/i.test(ua) || /;\s*wv\)/i.test(ua)) return 'webview_android';
   return 'navegador';
 }
 
