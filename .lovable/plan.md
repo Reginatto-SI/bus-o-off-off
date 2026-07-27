@@ -1,38 +1,51 @@
-## Diagnóstico (baseado no código e no log enviado)
+## Causa raiz da regressão no navegador
 
-Análise de `src/pages/driver/DriverValidate.tsx` (linhas 354–490), `index.html` e `vite.config.ts`.
+Comparação entre a versão atual de `src/pages/driver/DriverValidate.tsx` e a última versão funcional (`cdb9abed`), função `startCamera`:
 
-O que o log prova:
+1. **Timeout reduzido de 15s → 8s aplicado diretamente sobre `getUserMedia`** (`GET_USER_MEDIA_TIMEOUT_MS = 8000`, linha 160). No navegador, enquanto o diálogo nativo de permissão está aberto a promessa fica pendente por design. Se o usuário demora mais de 8s para tocar em "Permitir", o `Promise.race` rejeita com `TimeoutError`.
+2. **Stream tardio descartado**: quando o timeout dispara, o `.then` marca `timedOut` e faz `lateStream.getTracks().forEach(stop)`. Ou seja, mesmo que o usuário autorize depois, o stream válido é destruído e a tela fica em erro.
+3. **Segunda tentativa dispara novo `getUserMedia`** enquanto a primeira ainda está pendente no navegador — Chrome/Safari tratam isso mal (segunda solicitação enfileirada/negada), agravando a falha.
+4. **Interrupção do fallback por user-agent** (`pendingInWebView`) — regra correta em WebView, mas a detecção `Android && !Chrome/` pode classificar navegadores legítimos como WebView e abortar o fallback.
+5. **Faltam etapas de prontidão do vídeo**: `video.play()` é chamado logo após `srcObject`, sem aguardar `loadedmetadata` nem validar `videoWidth/videoHeight > 0`. Em alguns navegadores `play()` rejeita com `AbortError`, caindo no `catch` e derrubando todo o fluxo.
 
-- `stream: ❌`, `tracks: 0`, `readyState: 0` → `getUserMedia` nunca resolveu nem rejeitou; só o nosso timeout de 15s disparou (`lastError: TimeoutError`).
-- `permission: prompt` → a Permissions API do WebView continua em `prompt` mesmo após o usuário autorizar no diálogo do Android.
-- `devices: unnamed []` → `enumerateDevices` retorna dispositivo sem label e sem `deviceId`, ou seja, o WebView nunca concedeu acesso de mídia à página.
-- `initInProgress: ⏳ sim` com `tentativas: nenhuma` → o loop ainda estava na 2ª constraint (`video:true`) quando o log foi copiado; `attemptResults` só é gravado no debug no fim do fluxo.
-- `userAgent: Dalvik/...` (sem `wv`, sem Chrome) → é WebView embarcado do WebInto.app, não Chrome Android.
+Nada disso é do WebView: são mudanças que passaram a valer também no navegador.
 
-Não há nada no projeto bloqueando a câmera: não existe `Permissions-Policy`, nem `allow=`, nem iframe, nem CSP restritiva; o `<video>` já usa `autoPlay muted playsInline`; o fluxo já é disparado por gesto do usuário e já tem fallback de constraints.
+## Comportamento que será restaurado
 
-**Causa mais provável (a confirmar com os testes abaixo):** em Android WebView, a permissão de câmera do app (manifest/Android) **não basta**. O app nativo precisa implementar `WebChromeClient.onPermissionRequest()` e chamar `request.grant(request.getResources())` para o recurso `VIDEO_CAPTURE`. Sem isso, a promise de `getUserMedia` fica **pendente para sempre** — exatamente o sintoma observado (sem erro, sem stream, permissão travada em `prompt`). Isso é do WebInto.app, não do SmartBus.
+Fluxo do navegador volta a ser o da versão funcional, sem timeout que cancele a solicitação:
 
-## O que será feito no projeto (frontend, mínimo)
+- clique em "Abrir câmera" → `getUserMedia` com `facingMode: environment`;
+- aguarda o retorno **real** da promessa (sem corrida com timeout que rejeite e descarte o stream);
+- fallback para `video: true` apenas quando a primeira tentativa **rejeitar de fato**;
+- `srcObject` → aguarda `loadedmetadata` → `video.play()` (com `catch` tolerante) → confirma track `live` e `videoWidth/videoHeight > 0`;
+- inicia o scanner (BarcodeDetector, fallback jsQR — inalterados);
+- em erro, libera a trava e permite "Tentar novamente".
 
-Somente em `src/pages/driver/DriverValidate.tsx`:
+## Trechos revertidos
 
-1. **Detecção de WebView** (`Dalvik`, `; wv`, ausência de `Chrome/` em UA Android) exposta no debug e usada nas mensagens.
-2. **Timeout reduzido para 8s por tentativa** (hoje 15s × 2 = até 30s de tela travada) e encerramento imediato do loop quando a 1ª tentativa der `TimeoutError` dentro de WebView — nesse caso a 2ª constraint também ficará pendente.
-3. **Diagnóstico passo a passo em tempo real** (`attemptResults` e um novo campo `timeline` gravados a cada etapa, não só no fim):
-   - clique no botão → `getUserMedia chamado (constraint X)` → `pendente…` → `timeout 8s` → `fallback iniciado` → `retorno tardio (stream descartado)` → `stream criado` → `vídeo com dimensões WxH`.
-   - Marcação explícita `ambiente: WebView Android` vs `navegador`.
-4. **Mensagem de erro específica para WebView**: quando houver `TimeoutError` + UA de WebView, exibir texto claro dizendo que o aplicativo não liberou a câmera para a página e orientar (a) validação manual e (b) abrir `/validador/validar` no Chrome para confirmar.
-5. **Preservados sem alteração**: botão "Abrir câmera", "Tentar novamente", validação manual, biblioteca de leitura (BarcodeDetector + jsQR), tela e rotas atuais. Nada de banco, RLS, vendas ou embarques.
+Em `src/pages/driver/DriverValidate.tsx`, apenas dentro de `startCamera` e constantes correlatas:
 
-## Como confirmar que a falha é do WebInto.app
+- remover `GET_USER_MEDIA_TIMEOUT_MS` como timeout de rejeição do `getUserMedia`;
+- remover o descarte do stream tardio;
+- remover `pendingInWebView` como interruptor do fallback;
+- remover a dependência do user-agent para decidir o fluxo.
 
-Teste decisivo: abrir a mesma URL `/validador/validar` no **Chrome Android** no mesmo aparelho (SM-S928B).
+## Proteções mantidas / novas (mínimas)
 
-- Funciona no Chrome e falha no app → bloqueio no WebView do WebInto.app; solução obrigatoriamente do lado nativo (`onPermissionRequest` → `grant`), além da permissão `android.permission.CAMERA`.
-- Falha nos dois → volto a investigar o SmartBus.
+- `initInProgressRef` impedindo inicializações simultâneas;
+- `stopCurrentStream()` antes de abrir novo stream e no unmount;
+- liberação da trava no `finally`;
+- `timeline` de diagnóstico e painel de debug (apenas registro, nunca decisão de fluxo);
+- validação manual, rota `/validador` e `/validador/embarque` intocadas;
+- **watchdog visual (não cancelador)**: após 12s sem resposta, a tela sai do estado "abrindo…", exibe mensagem e mantém "Tentar novamente" — mas a promessa original continua viva e, se resolver depois, o stream é aceito e a câmera liga normalmente.
+- **mensagem específica do WebInto**: exibida somente quando o watchdog disparar **e** o user-agent contiver `Dalvik` ou `; wv)` (detecção estrita; `Android sem Chrome/` deixa de contar). Fora disso, mensagem genérica de erro. O texto é apenas cosmético — não altera o fluxo.
 
-## Entrega final
+## Detalhes técnicos
 
-Ao concluir, informo: causa, arquivos analisados, arquivo alterado, correção aplicada, testes realizados, o que depende do WebInto.app e o resultado do teste no Chrome.
+- Arquivo alterado: `src/pages/driver/DriverValidate.tsx` (somente `startCamera`, `detectCameraEnvironment` e a constante de timeout).
+- Nova função interna `attachStream(video, stream)`: `srcObject` → `await once('loadedmetadata')` com guarda de 5s → `await video.play().catch(...)` → verifica `videoWidth/videoHeight`.
+- Sem mudanças em banco, RLS, vendas, embarque, rotas, biblioteca de QR ou validação manual.
+
+## Testes
+
+Playwright em `localhost:8080/validador/validar` com câmera fake do Chromium (`--use-fake-device-for-media-stream`) para validar: permissão concedida, permissão negada, "Tentar novamente", dimensões reais do vídeo e ausência de erro no console. Cenários com prompt real e WebInto exigem validação no aparelho.
