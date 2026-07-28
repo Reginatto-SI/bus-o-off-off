@@ -2827,7 +2827,7 @@ export type Database = {
           asaas_wallet_id_production: string | null
           asaas_wallet_id_sandbox: string | null
           commission_percent: number
-          company_id: string
+          company_id: string | null
           created_at: string
           id: string
           name: string
@@ -2840,7 +2840,7 @@ export type Database = {
           asaas_wallet_id_production?: string | null
           asaas_wallet_id_sandbox?: string | null
           commission_percent?: number
-          company_id: string
+          company_id?: string | null
           created_at?: string
           id?: string
           name: string
@@ -2853,7 +2853,7 @@ export type Database = {
           asaas_wallet_id_production?: string | null
           asaas_wallet_id_sandbox?: string | null
           commission_percent?: number
-          company_id?: string
+          company_id?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -2861,15 +2861,7 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "socios_split_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       sponsors: {
         Row: {

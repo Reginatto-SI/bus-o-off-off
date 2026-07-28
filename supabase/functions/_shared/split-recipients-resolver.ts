@@ -193,12 +193,14 @@ export async function resolveAsaasSplitRecipients(
   }
 
   if (requestedSocioPercent > 0) {
+    // Sócio é uma configuração GLOBAL da plataforma: não filtra por company_id.
+    // O limite 2 mantém a defesa contra mais de um ativo (o banco também impede via índice único).
     const { data: socioRows, error: socioError } = await params.supabaseAdmin
       .from("socios_split")
       .select("id, name, status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox")
-      .eq("company_id", params.companyId)
       .eq("status", "ativo")
       .limit(2);
+
 
     if (socioError) {
       throw new Error(`split_socio_query_failed:${socioError.message}`);

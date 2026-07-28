@@ -640,8 +640,9 @@ export interface ServiceItemValidation {
 
 export interface SocioSplit {
   id: string;
-  /** Multi-tenant: sócio financeiro sempre pertence a uma empresa específica. */
-  company_id: string;
+  /** LEGADO: sócio agora é uma configuração global da plataforma. Não usar operacionalmente. */
+  company_id?: string | null;
+
   name: string;
   /** Identificador legado da carteira Asaas para split direto no pagamento. */
   asaas_wallet_id: string | null;
