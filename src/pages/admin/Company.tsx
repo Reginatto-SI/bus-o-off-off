@@ -465,15 +465,16 @@ export default function CompanyPage() {
   };
 
   const fetchFinancialSocios = async () => {
-    if (!activeCompanyId) {
+    // Sócio é configuração GLOBAL da plataforma (sem company_id) e visível apenas ao developer.
+    if (!isDeveloper) {
       setFinancialSocios([]);
       return;
     }
 
     const { data, error } = await supabase
       .from('socios_split')
-      .select('status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox')
-      .eq('company_id', activeCompanyId);
+      .select('status, asaas_wallet_id, asaas_wallet_id_production, asaas_wallet_id_sandbox');
+
 
     if (error) {
       console.error('[Company] Erro ao carregar sócios financeiros para validação de split', {
