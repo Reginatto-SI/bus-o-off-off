@@ -32,16 +32,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Handshake, Plus, Loader2, Pencil, Code2, AlertTriangle } from 'lucide-react';
+import { Handshake, Plus, Loader2, Pencil, Code2, AlertTriangle, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { getFinancialSocioConfigStatus } from '@/lib/financialSocioSplitConfig';
+
+/** Exibe apenas os últimos caracteres da wallet — nunca o identificador completo. */
+function maskWallet(value?: string | null): string {
+  if (!value) return '—';
+  const trimmed = value.trim();
+  if (trimmed.length <= 4) return '••••';
+  return `••••${trimmed.slice(-4)}`;
+}
 
 export default function SociosSplit() {
-  const { isDeveloper, activeCompanyId, activeCompany } = useAuth();
+  const { isDeveloper } = useAuth();
   const [socios, setSocios] = useState<SocioSplit[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -49,33 +56,29 @@ export default function SociosSplit() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
-    asaas_wallet_id: '',
+    asaas_wallet_id_production: '',
+    asaas_wallet_id_sandbox: '',
     status: 'ativo' as SocioSplitStatus,
     notes: '',
   });
 
-  const splitConfigStatus = getFinancialSocioConfigStatus({
-    socioSplitPercent: Number(activeCompany?.socio_split_percent ?? 0),
-    socios,
-  });
+  const activeSocio = socios.find((item) => item.status === 'ativo') ?? null;
 
+  /**
+   * Configuração GLOBAL da plataforma: a consulta não filtra nem envia company_id,
+   * portanto o conteúdo não muda ao trocar a empresa ativa no painel.
+   */
   const fetchSocios = async () => {
-    if (!activeCompanyId) {
-      setSocios([]);
-      setLoading(false);
-      return;
-    }
-
+    setLoading(true);
     const { data, error } = await supabase
       .from('socios_split')
       .select('*')
-      // Fase 4: `socios_split` passa a ser a fonte oficial do beneficiário financeiro
-      // e continua respeitando escopo multiempresa por company_id.
-      .eq('company_id', activeCompanyId)
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast.error('Erro ao carregar sócios');
+      console.error('[SociosSplit] Falha ao carregar sócio global', { code: error.code });
+      toast.error('Não foi possível carregar a configuração do sócio da plataforma.');
+      setSocios([]);
     } else {
       setSocios((data ?? []) as SocioSplit[]);
     }
@@ -84,11 +87,18 @@ export default function SociosSplit() {
 
   useEffect(() => {
     fetchSocios();
-  }, [activeCompanyId]);
+    // Sem dependência de empresa ativa: configuração global.
+  }, []);
 
   const openNew = () => {
     setEditingId(null);
-    setForm({ name: '', asaas_wallet_id: '', status: 'ativo', notes: '' });
+    setForm({
+      name: '',
+      asaas_wallet_id_production: '',
+      asaas_wallet_id_sandbox: '',
+      status: 'ativo',
+      notes: '',
+    });
     setModalOpen(true);
   };
 
@@ -96,7 +106,8 @@ export default function SociosSplit() {
     setEditingId(p.id);
     setForm({
       name: p.name,
-      asaas_wallet_id: p.asaas_wallet_id ?? '',
+      asaas_wallet_id_production: p.asaas_wallet_id_production ?? '',
+      asaas_wallet_id_sandbox: p.asaas_wallet_id_sandbox ?? '',
       status: p.status as SocioSplitStatus,
       notes: p.notes ?? '',
     });
@@ -104,60 +115,56 @@ export default function SociosSplit() {
   };
 
   const handleSubmit = async () => {
+    if (saving) return; // trava contra clique duplo
+
     if (!form.name.trim()) {
       toast.error('Informe o nome do sócio');
       return;
     }
 
-    if (!activeCompanyId) {
-      toast.error('Selecione uma empresa ativa antes de gerenciar sócios');
+    // Regra: no máximo 1 sócio global ativo (o banco também garante via índice único).
+    if (form.status === 'ativo' && activeSocio && activeSocio.id !== editingId) {
+      toast.error(
+        `Já existe um sócio global ativo: "${activeSocio.name}". Inative-o antes de ativar outro.`,
+      );
       return;
     }
 
-    // Regra: no máximo 1 sócio ativo. Se tentando salvar como ativo, verificar conflito.
-    if (form.status === 'ativo') {
-      const existingActive = socios.find(
-        (p) => p.status === 'ativo' && p.id !== editingId
-      );
-      if (existingActive) {
-        toast.error(
-          `Já existe um sócio ativo: "${existingActive.name}". Inative-o antes de ativar outro.`
-        );
-        return;
-      }
-    }
-
     setSaving(true);
+    // company_id não é enviado: o sócio é global da plataforma.
     const payload = {
-      company_id: activeCompanyId,
       name: form.name.trim(),
-      asaas_wallet_id: form.asaas_wallet_id.trim() || null,
+      asaas_wallet_id_production: form.asaas_wallet_id_production.trim() || null,
+      asaas_wallet_id_sandbox: form.asaas_wallet_id_sandbox.trim() || null,
       status: form.status,
       notes: form.notes.trim() || null,
     };
 
     let error;
     if (editingId) {
-      ({ error } = await supabase
-        .from('socios_split')
-        .update(payload)
-        .eq('id', editingId)
-        .eq('company_id', activeCompanyId));
+      ({ error } = await supabase.from('socios_split').update(payload).eq('id', editingId));
     } else {
       ({ error } = await supabase.from('socios_split').insert([payload]));
     }
 
     if (error) {
-      toast.error('Erro ao salvar sócio');
+      console.error('[SociosSplit] Falha ao salvar sócio global', { code: error.code });
+      if (error.code === '23505') {
+        toast.error('Já existe um sócio global ativo. Inative o atual antes de ativar outro.');
+      } else if (error.code === '42501') {
+        toast.error('Você não tem permissão para alterar a configuração global da plataforma.');
+      } else {
+        toast.error('Não foi possível salvar a configuração do sócio.');
+      }
     } else {
-      toast.success(editingId ? 'Sócio atualizado' : 'Sócio cadastrado');
+      toast.success(editingId ? 'Sócio global atualizado' : 'Sócio global cadastrado');
       setModalOpen(false);
       fetchSocios();
     }
     setSaving(false);
   };
 
-  // Proteção de rota: página exclusiva para perfil developer.
+  // Proteção de rota: página exclusiva para perfil developer (RLS é a proteção real).
   if (!isDeveloper) {
     return <Navigate to="/admin/eventos" replace />;
   }
@@ -166,19 +173,26 @@ export default function SociosSplit() {
     <AdminLayout>
       <div className="page-container">
         <PageHeader
-          title="Sócios da Plataforma"
+          title="Sócio Global da Plataforma"
           metadata={
             <div className="space-y-2">
-              <Badge variant="secondary" className="inline-flex items-center gap-1.5 border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-100">
-                <Code2 className="h-3.5 w-3.5" />
-                Área do Desenvolvedor
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="inline-flex items-center gap-1.5 border border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-100">
+                  <Code2 className="h-3.5 w-3.5" />
+                  Área do Desenvolvedor
+                </Badge>
+                <Badge variant="secondary" className="inline-flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  Configuração global
+                </Badge>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Cadastro técnico dos sócios da plataforma. O percentual de repasse é configurado individualmente por empresa na aba Pagamentos.
+                Esta configuração é da plataforma SmartBus BR e não pertence a nenhuma empresa cliente.
+                Trocar a empresa ativa no painel não altera o que é exibido aqui.
               </p>
             </div>
           }
-          description="Gerencie os sócios que recebem parte da comissão da plataforma via split direto no Asaas."
+          description="Sócio da plataforma que recebe parte da taxa em vendas de todas as empresas, via split direto no Asaas."
           actions={
             <Button onClick={openNew}>
               <Plus className="h-4 w-4 mr-2" />
@@ -187,20 +201,14 @@ export default function SociosSplit() {
           }
         />
 
-        {!activeCompanyId && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Selecione uma empresa ativa para visualizar ou cadastrar o sócio financeiro responsável pelo split.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {activeCompanyId && splitConfigStatus.state !== 'valid' && (
+        {!loading && activeSocio && !activeSocio.asaas_wallet_id_production && !activeSocio.asaas_wallet_id_sandbox && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              {splitConfigStatus.message} O backend também bloqueia a criação do split enquanto essa condição não for corrigida.
+              O sócio global ativo não possui carteira de produção nem de sandbox configurada.
+              {activeSocio.asaas_wallet_id
+                ? ' Há apenas a carteira legada preenchida — informe a carteira do ambiente correspondente.'
+                : ' O split de sócio será ignorado até que uma carteira seja informada.'}
             </AlertDescription>
           </Alert>
         )}
@@ -212,8 +220,8 @@ export default function SociosSplit() {
         ) : socios.length === 0 ? (
           <EmptyState
             icon={<Handshake className="h-8 w-8 text-muted-foreground" />}
-            title="Nenhum sócio cadastrado"
-            description="Cadastre um sócio para dividir a comissão da plataforma automaticamente via split Asaas."
+            title="Nenhum sócio global cadastrado"
+            description="Cadastre o sócio da plataforma para dividir a taxa automaticamente via split Asaas."
             action={
               <Button onClick={openNew}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -228,7 +236,8 @@ export default function SociosSplit() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Asaas Wallet ID</TableHead>
+                    <TableHead>Carteira produção</TableHead>
+                    <TableHead>Carteira sandbox</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[60px]">Ação</TableHead>
                   </TableRow>
@@ -238,7 +247,10 @@ export default function SociosSplit() {
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground font-mono">
-                        {p.asaas_wallet_id || '—'}
+                        {maskWallet(p.asaas_wallet_id_production)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground font-mono">
+                        {maskWallet(p.asaas_wallet_id_sandbox)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={p.status} />
@@ -260,7 +272,7 @@ export default function SociosSplit() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingId ? 'Editar Sócio' : 'Novo Sócio'}</DialogTitle>
+              <DialogTitle>{editingId ? 'Editar Sócio Global' : 'Novo Sócio Global'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -271,18 +283,33 @@ export default function SociosSplit() {
                   placeholder="Nome do sócio"
                 />
               </div>
+
               <div className="space-y-2">
-                <Label>Asaas Wallet ID</Label>
+                <Label>Carteira de recebimento — Produção</Label>
                 <Input
-                  value={form.asaas_wallet_id}
-                  onChange={(e) => setForm({ ...form, asaas_wallet_id: e.target.value })}
-                  placeholder="Ex: 5f7e3b2a-..."
+                  value={form.asaas_wallet_id_production}
+                  onChange={(e) => setForm({ ...form, asaas_wallet_id_production: e.target.value })}
+                  placeholder="Wallet ID do ambiente de produção"
                   className="font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Identificador da carteira do sócio no Asaas. Usado para receber o split direto no pagamento.
+                  Usada somente em vendas de produção.
                 </p>
               </div>
+
+              <div className="space-y-2">
+                <Label>Carteira de recebimento — Sandbox</Label>
+                <Input
+                  value={form.asaas_wallet_id_sandbox}
+                  onChange={(e) => setForm({ ...form, asaas_wallet_id_sandbox: e.target.value })}
+                  placeholder="Wallet ID do ambiente de sandbox"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Usada somente em vendas de sandbox. As carteiras nunca são copiadas entre ambientes.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as SocioSplitStatus })}>
@@ -294,12 +321,12 @@ export default function SociosSplit() {
                 </Select>
               </div>
 
-              {/* Alerta: validação de 1 sócio ativo */}
-              {form.status === 'ativo' && socios.some((p) => p.status === 'ativo' && p.id !== editingId) && (
+              {/* Alerta: validação de 1 sócio global ativo */}
+              {form.status === 'ativo' && activeSocio && activeSocio.id !== editingId && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    Já existe um sócio ativo. Apenas 1 sócio pode estar ativo por vez. Inative o atual antes.
+                    Já existe um sócio global ativo. Apenas 1 pode estar ativo por vez. Inative o atual antes.
                   </AlertDescription>
                 </Alert>
               )}
