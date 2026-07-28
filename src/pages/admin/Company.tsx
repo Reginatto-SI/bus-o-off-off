@@ -913,10 +913,14 @@ export default function CompanyPage() {
 
     const platformFeePercent = parsePercentInput(form.platform_fee_percent);
     const socioSplitPercent = parsePercentInput(form.socio_split_percent);
-    const splitConfigStatus = getFinancialSocioConfigStatus({
-      socioSplitPercent: socioSplitPercent ?? 0,
-      socios: financialSocios,
-    });
+    // Diagnóstico do sócio global só é avaliável por developer (RLS restringe a leitura).
+    const splitConfigStatus = isDeveloper
+      ? getFinancialSocioConfigStatus({
+          socioSplitPercent: socioSplitPercent ?? 0,
+          socios: financialSocios,
+        })
+      : ({ state: 'valid', message: null } as const);
+
 
     if (platformFeePercent === null || Number.isNaN(platformFeePercent) || platformFeePercent < 0 || platformFeePercent > 100) {
       toast.error('Taxa da Plataforma deve estar entre 0 e 100');
