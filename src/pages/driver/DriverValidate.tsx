@@ -364,22 +364,52 @@ export default function DriverValidate() {
     } catch { /* torch not supported */ }
   }, [torchOn]);
 
+  /* ---------- diagnóstico ---------- */
+
+  const logStep = useCallback((message: string) => {
+    const at = new Date().toISOString().slice(11, 23);
+    timelineRef.current = [...timelineRef.current, `${at} — ${message}`];
+    console.info(`[CAM] ${message}`);
+    updateDebug({ timeline: timelineRef.current });
+  }, [updateDebug]);
+
   /* ---------- stopCurrentStream ---------- */
 
-  const stopCurrentStream = useCallback(() => {
-    console.log('[CAM] stopCurrentStream');
+  const stopCurrentStream = useCallback((reason: string, ownerInitId?: number) => {
+    const stream = streamRef.current;
+    if (stream && typeof ownerInitId === 'number' && streamOwnerInitRef.current !== ownerInitId) {
+      // Uma sessão antiga nunca pode encerrar o stream de uma sessão mais nova.
+      logStep(`encerramento ignorado (${reason}): stream pertence à sessão #${streamOwnerInitRef.current}`);
+      return;
+    }
+
+    const before = stream?.getVideoTracks().map(t => t.readyState) ?? [];
     if (scanIntervalRef.current) {
       window.clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+    const after = stream?.getVideoTracks().map(t => t.readyState) ?? [];
+
+    console.log('[CAM] stopCurrentStream', {
+      reason,
+      initId: initCountRef.current,
+      streamOwner: streamOwnerInitRef.current,
+      visibility: document.visibilityState,
+      tracks: before.length,
+      before,
+      after,
+    });
+    if (before.length) logStep(`câmera encerrada (${reason}) — tracks ${before.join(',')} → ${after.join(',')}`);
+
+    cameraReadyRef.current = false;
     setCameraReady(false);
     setTorchOn(false);
     setTorchSupported(false);
-  }, []);
+  }, [logStep]);
 
   /* ---------- startCamera — core init routine ---------- */
 
@@ -396,17 +426,11 @@ export default function DriverValidate() {
     const initTimestamp = new Date().toISOString().slice(11, 23);
     const attemptResults: AttemptResult[] = [];
     const environment = detectCameraEnvironment();
-    const timeline: string[] = [];
 
-    // Cada etapa é registrada em tempo real para diagnóstico em campo.
-    const step = (message: string) => {
-      const at = new Date().toISOString().slice(11, 23);
-      timeline.push(`${at} — ${message}`);
-      console.info(`[CAM] ${message}`);
-      updateDebug({ timeline: [...timeline] });
-    };
+    timelineRef.current = [];
+    const step = logStep;
 
-    stopCurrentStream();
+    stopCurrentStream('nova_inicializacao');
     setCameraError(null);
     updateDebug({
       ...INITIAL_DEBUG,
@@ -429,20 +453,22 @@ export default function DriverValidate() {
       setCameraError(environment === 'webview_android'
         ? 'O aplicativo ainda não liberou a câmera para esta tela. Use a validação manual abaixo ou abra esta tela no Chrome. Se você autorizar agora, a câmera abre automaticamente.'
         : 'A câmera ainda não respondeu. Autorize o acesso quando o navegador perguntar ou toque em "Tentar novamente". Você também pode validar a passagem manualmente.');
-      updateDebug({ initInProgress: false, lastError: 'watchdog_sem_resposta', timeline: [...timeline] });
+      updateDebug({ initInProgress: false, lastError: 'watchdog_sem_resposta' });
     }, CAMERA_WATCHDOG_MS);
 
     const finishInit = () => {
       settledForWatchdog = true;
       window.clearTimeout(watchdogId);
       initInProgressRef.current = false;
-      updateDebug({ initInProgress: false, attemptResults: [...attemptResults], timeline: [...timeline] });
+      updateDebug({ initInProgress: false, attemptResults: [...attemptResults] });
     };
 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       const reason = !window.isSecureContext ? 'contexto_inseguro' : 'api_indisponivel';
       console.error('[CAM] câmera indisponível', { reason });
-      setCameraError('Não foi possível acessar a câmera. Abra o SmartBus em uma conexão segura e tente novamente. Você também pode validar a passagem manualmente.');
+      setCameraError(reason === 'contexto_inseguro'
+        ? 'Não foi possível acessar a câmera: a conexão não é segura (HTTPS). Você também pode validar a passagem manualmente.'
+        : 'Este navegador não oferece suporte à leitura por câmera. Use a validação manual abaixo.');
       updateDebug({ cameraError: reason, lastError: reason });
       finishInit();
       return;
@@ -470,11 +496,12 @@ export default function DriverValidate() {
       setScannerSupported(true);
       updateDebug({ scannerSupported: true, scannerEngine: scannerEngineRef.current });
 
+      // enumerateDevices é apenas diagnóstico: nunca condiciona a abertura do stream.
       const enumerate = async (stage: 'antes' | 'depois') => {
         try {
           const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
           const labels = devices.map(device => `${device.label || 'unnamed'} [${device.deviceId.slice(0, 8)}]`);
-          step(`dispositivos ${stage} da autorização: ${devices.length} (${labels.join(' | ') || 'nenhum'})`);
+          step(`dispositivos ${stage} da autorização: ${devices.length} (${labels.join(' | ') || 'nenhum'}) — apenas diagnóstico`);
           updateDebug({ devices: labels });
           return devices;
         } catch (error: any) {
@@ -532,7 +559,17 @@ export default function DriverValidate() {
         setCameraError(null);
       }
 
+      // Instrumentação do ciclo de vida de cada faixa (sem dados pessoais).
+      stream.getVideoTracks().forEach(track => {
+        const settings = track.getSettings?.() ?? {};
+        step(`track criada #${thisInitId} id=${track.id.slice(0, 8)} label="${track.label || 'unnamed'}" state=${track.readyState} muted=${track.muted} ${settings.width ?? '?'}×${settings.height ?? '?'}`);
+        track.addEventListener('ended', () => step(`track ENDED id=${track.id.slice(0, 8)} (sessão #${thisInitId}, visibility=${document.visibilityState})`));
+        track.addEventListener('mute', () => step(`track MUTE id=${track.id.slice(0, 8)} (sessão #${thisInitId})`));
+        track.addEventListener('unmute', () => step(`track UNMUTE id=${track.id.slice(0, 8)} (sessão #${thisInitId})`));
+      });
+
       streamRef.current = stream;
+      streamOwnerInitRef.current = thisInitId;
       video.srcObject = stream;
 
       // Aguarda os metadados antes de tocar o vídeo (evita AbortError em alguns navegadores).
@@ -561,19 +598,43 @@ export default function DriverValidate() {
 
       await enumerate('depois');
 
-      const track = stream.getVideoTracks()[0];
-      if (!track || track.readyState !== 'live') throw new DOMException('O stream não possui faixa de vídeo ativa.', 'NotReadableError');
+      // A track pode levar alguns instantes para ficar 'live' — não falhar de imediato.
+      let track = stream.getVideoTracks()[0];
+      if (!track || track.readyState !== 'live') {
+        step(`track ainda não está live (${track?.readyState ?? 'ausente'}) — aguardando até 1,5s`);
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 1500) {
+          await new Promise(resolve => window.setTimeout(resolve, 150));
+          track = stream.getVideoTracks()[0];
+          if (track?.readyState === 'live') break;
+        }
+      }
+      if (!track || track.readyState !== 'live') {
+        throw new DOMException('O stream foi encerrado antes de ficar pronto.', 'StreamEndedError');
+      }
 
-      // Confirma quadros reais antes de liberar o scanner.
+      // Confirma quadros reais antes de liberar o scanner (playing/rVFC + polling limitado).
       if (!video.videoWidth || !video.videoHeight) {
+        step('aguardando o primeiro quadro real do vídeo…');
         await new Promise<void>(resolve => {
-          const started = Date.now();
-          const id = window.setInterval(() => {
-            if ((video.videoWidth && video.videoHeight) || Date.now() - started > 3000) {
-              window.clearInterval(id);
-              resolve();
-            }
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            video.removeEventListener('playing', finish);
+            video.removeEventListener('canplay', finish);
+            window.clearInterval(pollId);
+            window.clearTimeout(guardId);
+            resolve();
+          };
+          const pollId = window.setInterval(() => {
+            if (video.videoWidth && video.videoHeight) finish();
           }, 100);
+          const guardId = window.setTimeout(finish, 3000);
+          video.addEventListener('playing', finish);
+          video.addEventListener('canplay', finish);
+          const rvfc = (video as any).requestVideoFrameCallback;
+          if (typeof rvfc === 'function') rvfc.call(video, () => finish());
         });
       }
       step(`vídeo recebeu dimensões: ${video.videoWidth}×${video.videoHeight} (readyState ${video.readyState})`);
@@ -587,49 +648,75 @@ export default function DriverValidate() {
         attemptResults: [...attemptResults], videoWidth: video.videoWidth, videoHeight: video.videoHeight,
         readyState: video.readyState, cameraReady: true, cameraError: null,
       });
+      cameraReadyRef.current = true;
       setCameraReady(true);
       const capabilities = (track as any).getCapabilities?.();
       if (capabilities?.torch) setTorchSupported(true);
     } catch (error: any) {
-      stopCurrentStream();
+      stopCurrentStream('falha_inicializacao', thisInitId);
       const detail = `${error?.name ?? 'Error'}: ${error?.message ?? 'sem mensagem'}`;
       console.error('[CAM] inicialização encerrada com falha', { name: error?.name, message: error?.message, code: error?.code });
       step(`conclusão: falha ao abrir a câmera — ${detail}`);
-      setCameraError(error?.name === 'NotAllowedError'
-        ? 'Permissão de câmera negada. Autorize o acesso nas configurações do navegador e toque em "Tentar novamente". Você também pode validar a passagem manualmente.'
-        : 'Não foi possível acessar a câmera. Verifique a permissão e tente novamente. Você também pode validar a passagem manualmente.');
+      const manualHint = ' Você também pode validar a passagem manualmente.';
+      const name = error?.name;
+      let message: string;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        message = 'Permissão de câmera negada. Autorize o acesso nas configurações do navegador e toque em "Tentar novamente".';
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        message = 'Nenhuma câmera disponível neste dispositivo.';
+      } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+        message = 'A câmera parece estar em uso por outro aplicativo. Feche os demais apps que usam a câmera e toque em "Tentar novamente".';
+      } else if (name === 'StreamEndedError') {
+        message = 'A câmera foi encerrada inesperadamente durante a abertura. Toque em "Tentar novamente".';
+      } else if (environment === 'webview_android') {
+        message = 'O aplicativo instalado não respondeu à solicitação de câmera. Abra esta tela pelo Chrome.';
+      } else {
+        message = 'Não foi possível acessar a câmera. Verifique a permissão e tente novamente.';
+      }
+      setCameraError(message + manualHint);
       updateDebug({ cameraError: detail, lastError: detail, attemptResults: [...attemptResults], streamExists: false });
     } finally {
       finishInit();
     }
-  }, [stopCurrentStream, updateDebug]);
+  }, [stopCurrentStream, updateDebug, logStep]);
 
-  /* ---------- Camera init effect ---------- */
+  /* ---------- Libera o hardware apenas no desmonte real da tela ---------- */
 
   useEffect(() => {
-    if (!videoEl) return;
-    // A câmera só é solicitada após o clique explícito; ao desmontar, libera o hardware.
-    return () => { stopCurrentStream(); };
-  }, [videoEl, stopCurrentStream]);
+    return () => { stopCurrentStream('desmontagem_da_tela'); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------- Reanexa o stream caso o elemento de vídeo seja recriado ---------- */
+
+  useEffect(() => {
+    if (!videoEl || !streamRef.current) return;
+    if (videoEl.srcObject !== streamRef.current) {
+      videoEl.srcObject = streamRef.current;
+      void videoEl.play().catch(() => undefined);
+    }
+  }, [videoEl]);
 
   /* ---------- Visibility change ---------- */
 
   useEffect(() => {
-    if (!videoEl) return;
     const handleVisibility = () => {
       const state = document.visibilityState;
       const inProgress = initInProgressRef.current;
-      console.log(`[CAM] visibilitychange → ${state}, initInProgress=${inProgress}`);
-      if (state === 'hidden' && !inProgress) {
-        // Ao retornar, o botão visível cria um novo stream a partir de uma ação do usuário.
-        stopCurrentStream();
+      console.log(`[CAM] visibilitychange → ${state}, initInProgress=${inProgress}, cameraReady=${cameraReadyRef.current}`);
+      // O diálogo de permissão também dispara visibilitychange: só encerra quando
+      // a câmera já estava pronta e não há inicialização pendente.
+      if (state === 'hidden' && !inProgress && cameraReadyRef.current) {
+        stopCurrentStream('pagina_em_background');
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [videoEl, startCamera, stopCurrentStream]);
+  }, [stopCurrentStream]);
 
   /* ---------- QR scanning loop ---------- */
+
+
 
   useEffect(() => {
     if (!scannerSupported || !cameraReady || !videoEl || overlay || serviceOverlay || processing) return;
