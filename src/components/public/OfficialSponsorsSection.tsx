@@ -244,7 +244,7 @@ export function OfficialSponsorsSection({
                 <article
                   key={card.headline}
                   data-sponsor-card={index}
-                  className="flex w-full min-w-0 flex-none basis-full snap-start flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)]"
+                  className={`flex w-full min-w-0 flex-none basis-full snap-start flex-col overflow-hidden rounded-[1.6rem] border border-border/80 bg-background shadow-[0_24px_60px_-46px_rgba(15,23,42,0.65)] ${card.type === "sponsor" ? "self-start" : ""}`}
                 >
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
@@ -261,7 +261,8 @@ export function OfficialSponsorsSection({
                       </div>
                     )}
                   </div>
-                  <div className={`flex min-w-0 flex-1 flex-col ${card.type === "sponsor" ? "p-4" : compact ? "space-y-2 p-4" : "space-y-3 p-5"}`}>
+                  {/* O card real mantém altura intrínseca; somente o placeholder cresce para acomodar seu conteúdo textual. */}
+                  <div className={`flex min-w-0 flex-col ${card.type === "sponsor" ? "p-4" : compact ? "flex-1 space-y-2 p-4" : "flex-1 space-y-3 p-5"}`}>
                     {/* A arte real já comunica marca e campanha; textos comerciais completos permanecem somente no fallback. */}
                     {card.type === "placeholder" && (
                       <>

@@ -36,6 +36,8 @@ describe("OfficialSponsorsSection", () => {
     );
     expect(within(firstMobileCard).getByRole("link", { name: /Conhecer patrocinador/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Abrir site/ })).not.toBeInTheDocument();
+    expect(firstMobileCard).toHaveClass("self-start");
+    expect(firstMobileCard.lastElementChild).not.toHaveClass("flex-1");
   });
 
   it("mantém somente o Patrocinador 02 real quando os slots 01 e 03 falharem no mobile", () => {
@@ -49,6 +51,8 @@ describe("OfficialSponsorsSection", () => {
     expect(within(updatedMobileCards[0]).getAllByText("Anuncie aqui").length).toBeGreaterThan(0);
     expect(within(updatedMobileCards[0]).getByText("Sua marca pode aparecer em uma área de destaque dentro do SmartBus.")).toBeInTheDocument();
     expect(within(updatedMobileCards[0]).getByRole("link", { name: /Quero ser patrocinador/ })).toBeInTheDocument();
+    expect(updatedMobileCards[0]).not.toHaveClass("self-start");
+    expect(updatedMobileCards[0].lastElementChild).toHaveClass("flex-1");
     expect(within(updatedMobileCards[1]).getByAltText("Banner mobile do Patrocinador 02")).toHaveAttribute(
       "src",
       "/sponsors/patrocinador-02-mobile.png",
