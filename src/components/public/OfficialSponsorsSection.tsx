@@ -55,23 +55,7 @@ type OfficialSponsorsSectionProps = {
 //   desktopAlt: "Banner horizontal do patrocinador Nome da Empresa",
 //   mobileAlt: "Banner mobile do patrocinador Nome da Empresa",
 // }
-// Fonte única dos cards oficiais: landing e /eventos reaproveitam os mesmos placeholders e patrocinadores reais.
-const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
-  // Par versionado completo: mobile abaixo de 1024 px e desktop a partir de 1024 px.
-  {
-    type: "sponsor",
-    sponsorName: "Patrocinador 02",
-    headline: "Patrocinador 02",
-    text: "Patrocinador oficial SmartBus BR.",
-    cta: "Conhecer patrocinador",
-    imageSrc: "/sponsors/patrocinador-02-mobile.png",
-    desktopImageSrc: "/sponsors/patrocinador-02-desktop.png",
-    mobileImageSrc: "/sponsors/patrocinador-02-mobile.png",
-    href: "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.",
-    alt: "Banner do Patrocinador 02",
-    desktopAlt: "Banner desktop do Patrocinador 02",
-    mobileAlt: "Banner mobile do Patrocinador 02",
-  },
+const OFFICIAL_SPONSOR_PLACEHOLDERS: OfficialSponsorPlaceholderCard[] = [
   {
     type: "placeholder",
     icon: Star,
@@ -98,6 +82,27 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
   },
 ];
 
+const SPONSOR_COMMERCIAL_URL = "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
+
+// Três posições permanentes: para trocar uma arte, basta substituir o par PNG correspondente em /public/sponsors/.
+const OFFICIAL_SPONSOR_SLOTS = ["01", "02", "03"].map((id): OfficialSponsorRealCard => ({
+  type: "sponsor",
+  sponsorName: `Patrocinador ${id}`,
+  headline: `Patrocinador ${id}`,
+  text: "Patrocinador oficial SmartBus BR.",
+  cta: "Conhecer patrocinador",
+  imageSrc: `/sponsors/patrocinador-${id}-mobile.png`,
+  desktopImageSrc: `/sponsors/patrocinador-${id}-desktop.png`,
+  mobileImageSrc: `/sponsors/patrocinador-${id}-mobile.png`,
+  href: SPONSOR_COMMERCIAL_URL,
+  alt: `Banner do Patrocinador ${id}`,
+  desktopAlt: `Banner desktop do Patrocinador ${id}`,
+  mobileAlt: `Banner mobile do Patrocinador ${id}`,
+}));
+
+// Fonte única dos três slides: cada viewport substitui apenas a arte que falhar pelo placeholder da mesma posição.
+const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = OFFICIAL_SPONSOR_SLOTS;
+
 export function OfficialSponsorsSection({
   title = "Patrocinadores Oficiais SmartBus",
   subtitle = "Sua marca pode aparecer em uma vitrine digital em crescimento, vista por empresas, organizadores e passageiros.",
@@ -110,6 +115,8 @@ export function OfficialSponsorsSection({
   const [isDesktopSponsorCarouselHovered, setIsDesktopSponsorCarouselHovered] = useState(false);
   const [hasInteractedWithDesktopSponsorCarousel, setHasInteractedWithDesktopSponsorCarousel] = useState(false);
   const [hasInteractedWithMobileSponsorCarousel, setHasInteractedWithMobileSponsorCarousel] = useState(false);
+  const [failedDesktopSponsorSlots, setFailedDesktopSponsorSlots] = useState<Set<number>>(() => new Set());
+  const [failedMobileSponsorSlots, setFailedMobileSponsorSlots] = useState<Set<number>>(() => new Set());
   const sponsorWhatsappUrl =
     buildWhatsappWaMeLink({
       phone: "(31) 99207-4309",
@@ -117,6 +124,11 @@ export function OfficialSponsorsSection({
     }) ??
     "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
 
+  const markSponsorSlotAsFailed = (index: number, viewport: "desktop" | "mobile") => {
+    const updateFailedSlots = viewport === "desktop" ? setFailedDesktopSponsorSlots : setFailedMobileSponsorSlots;
+    // Set evita novas tentativas e mantém a falha isolada por posição e viewport.
+    updateFailedSlots((currentSlots) => currentSlots.has(index) ? currentSlots : new Set(currentSlots).add(index));
+  };
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -234,7 +246,8 @@ export function OfficialSponsorsSection({
             onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
             className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x snap-mandatory gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
           >
-            {OFFICIAL_SPONSOR_CARDS.map((card, index) => {
+            {OFFICIAL_SPONSOR_CARDS.map((configuredCard, index) => {
+              const card = failedMobileSponsorSlots.has(index) ? OFFICIAL_SPONSOR_PLACEHOLDERS[index] : configuredCard;
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
               const mobileImageSrc = card.type === "sponsor" ? card.mobileImageSrc ?? card.imageSrc : undefined;
               const mobileAlt = card.type === "sponsor" ? card.mobileAlt ?? card.alt : undefined;
@@ -248,7 +261,7 @@ export function OfficialSponsorsSection({
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
                       <a href={card.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${card.sponsorName}`}>
-                        <img src={mobileImageSrc} alt={mobileAlt} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
+                        <img src={mobileImageSrc} alt={mobileAlt} onError={() => markSponsorSlotAsFailed(index, "mobile")} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
                       </a>
                     ) : (
                       <div className="flex h-full items-center justify-center px-6 text-center">
@@ -286,7 +299,10 @@ export function OfficialSponsorsSection({
             onFocus={() => setHasInteractedWithDesktopSponsorCarousel(true)}
           >
             {(() => {
-              const activeCard = OFFICIAL_SPONSOR_CARDS[activeSponsorCardIndex] ?? OFFICIAL_SPONSOR_CARDS[0];
+              const configuredCard = OFFICIAL_SPONSOR_CARDS[activeSponsorCardIndex] ?? OFFICIAL_SPONSOR_CARDS[0];
+              const activeCard = failedDesktopSponsorSlots.has(activeSponsorCardIndex)
+                ? OFFICIAL_SPONSOR_PLACEHOLDERS[activeSponsorCardIndex]
+                : configuredCard;
               const desktopImageSrc = activeCard.type === "sponsor" ? activeCard.desktopImageSrc ?? activeCard.imageSrc : undefined;
               const desktopAlt = activeCard.type === "sponsor" ? activeCard.desktopAlt ?? activeCard.alt : undefined;
               const activeHref = activeCard.type === "sponsor" ? activeCard.href : sponsorWhatsappUrl;
@@ -299,7 +315,7 @@ export function OfficialSponsorsSection({
                   <div className={`overflow-hidden rounded-[1.75rem] border border-border/80 bg-gradient-to-br shadow-[0_28px_90px_-55px_rgba(15,23,42,0.7)] ${activeCard.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {activeCard.type === "sponsor" ? (
                       <a href={activeCard.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${activeCard.sponsorName}`} className="block">
-                        <img src={desktopImageSrc} alt={desktopAlt} className="aspect-[5/1] w-full object-cover transition-transform duration-500 hover:scale-[1.01]" loading="lazy" />
+                        <img src={desktopImageSrc} alt={desktopAlt} onError={() => markSponsorSlotAsFailed(activeSponsorCardIndex, "desktop")} className="aspect-[5/1] w-full object-cover transition-transform duration-500 hover:scale-[1.01]" loading="lazy" />
                       </a>
                     ) : (
                       <a href={activeHref} target="_blank" rel="noreferrer" className="flex aspect-[5/1] min-h-[220px] w-full items-center justify-center px-8 text-center">
