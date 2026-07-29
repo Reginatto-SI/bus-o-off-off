@@ -111,7 +111,7 @@ const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = OFFICIAL_SPONSOR_SLOTS;
 
 export function OfficialSponsorsSection({
   title = "Patrocinadores Oficiais SmartBus",
-  subtitle = "Sua marca pode aparecer em uma vitrine digital em crescimento, vista por empresas, organizadores e passageiros.",
+  subtitle = "Parceiros em destaque no ecossistema SmartBus.",
   // Landing padrão mais compacta para integrar a seção ao fluxo sem afetar o modo compact de /eventos.
   className = "bg-gradient-to-b from-background to-muted/30 py-8 sm:py-10",
   compact = false,
@@ -220,32 +220,19 @@ export function OfficialSponsorsSection({
     <section className={className}>
       <div className={`mx-auto max-w-7xl ${compact ? "px-0" : "px-4 sm:px-6 lg:px-8"}`}>
         <div className={`rounded-[2rem] border border-border/80 bg-card/95 shadow-[0_28px_80px_-60px_rgba(15,23,42,0.55)] ${compact ? "p-3 sm:p-4 lg:p-5" : "p-4 sm:p-5 lg:p-6"}`}>
-          <div className={`flex flex-col ${compact ? "gap-3" : "gap-3"} lg:flex-row lg:items-end lg:justify-between`}>
-            <div className={`${compact ? "max-w-4xl space-y-2" : "max-w-3xl space-y-2"}`}>
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <Star className="h-3.5 w-3.5" />
-                Espaços comerciais oficiais
-              </div>
-              <div className={compact ? "space-y-1.5" : "space-y-2"}>
-                <h2 className={`${compact ? "text-lg sm:text-xl" : "text-2xl sm:text-3xl"} font-extrabold tracking-tight text-foreground`}>
-                  {title}
-                </h2>
-                <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">{subtitle}</p>
-              </div>
-            </div>
-            {!compact && (
-              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3 text-sm text-muted-foreground lg:max-w-sm">
-                <p className="font-semibold text-foreground">Destaque sua marca em uma área oficial do SmartBus.</p>
-                <p className="mt-1">Espaços pensados para marcas que querem estar próximas de empresas, organizadores e passageiros em uma vitrine digital de viagens e excursões.</p>
-              </div>
-            )}
+          {/* Cabeçalho institucional enxuto para dar protagonismo imediato às artes dos patrocinadores. */}
+          <div className={compact ? "max-w-4xl space-y-1.5" : "max-w-3xl space-y-2"}>
+            <h2 className={`${compact ? "text-lg sm:text-xl" : "text-2xl sm:text-3xl"} font-extrabold tracking-tight text-foreground`}>
+              {title}
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">{subtitle}</p>
           </div>
 
           <div
             ref={sponsorCarouselRef}
             onScroll={handleSponsorCarouselScroll}
             onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
-            className={`${compact ? "mt-3 sm:mt-4" : "mt-4 sm:mt-5"} flex snap-x snap-mandatory gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] lg:hidden [&::-webkit-scrollbar]:hidden`}
+            className="mt-3 flex snap-x snap-mandatory gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] sm:mt-4 lg:hidden [&::-webkit-scrollbar]:hidden"
           >
             {OFFICIAL_SPONSOR_CARDS.map((configuredCard, index) => {
               const card = failedMobileSponsorSlots.has(index) ? OFFICIAL_SPONSOR_PLACEHOLDERS[index] : configuredCard;
@@ -299,7 +286,7 @@ export function OfficialSponsorsSection({
           </div>
 
           <div
-            className={`${compact ? "mt-4" : "mt-5"} hidden lg:block`}
+            className="mt-4 hidden lg:block"
             onMouseEnter={() => setIsDesktopSponsorCarouselHovered(true)}
             onMouseLeave={() => setIsDesktopSponsorCarouselHovered(false)}
             onFocus={() => setHasInteractedWithDesktopSponsorCarousel(true)}

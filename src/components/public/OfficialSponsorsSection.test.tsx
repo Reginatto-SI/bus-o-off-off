@@ -3,6 +3,15 @@ import { describe, expect, it } from "vitest";
 import { OfficialSponsorsSection } from "./OfficialSponsorsSection";
 
 describe("OfficialSponsorsSection", () => {
+  it("mantém um cabeçalho institucional curto sem chamadas de captação", () => {
+    render(<OfficialSponsorsSection />);
+
+    expect(screen.getByRole("heading", { name: "Patrocinadores Oficiais SmartBus" })).toBeInTheDocument();
+    expect(screen.getByText("Parceiros em destaque no ecossistema SmartBus.")).toBeInTheDocument();
+    expect(screen.queryByText("Espaços comerciais oficiais")).not.toBeInTheDocument();
+    expect(screen.queryByText("Destaque sua marca em uma área oficial do SmartBus.")).not.toBeInTheDocument();
+  });
+
   it("mantém exatamente três slots na ordem 01, 02 e 03", () => {
     const { container } = render(<OfficialSponsorsSection />);
     const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
