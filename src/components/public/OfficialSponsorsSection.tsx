@@ -82,7 +82,13 @@ const OFFICIAL_SPONSOR_PLACEHOLDERS: OfficialSponsorPlaceholderCard[] = [
   },
 ];
 
-const SPONSOR_COMMERCIAL_URL = "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
+// Destino comercial único para imagens, CTAs dos patrocinadores e placeholders.
+const SPONSOR_COMMERCIAL_URL =
+  buildWhatsappWaMeLink({
+    phone: "(31) 99207-4309",
+    message: "Olá! Quero conhecer os espaços de Patrocinadores Oficiais do SmartBus.",
+  }) ??
+  "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
 
 // Três posições permanentes: para trocar uma arte, basta substituir o par PNG correspondente em /public/sponsors/.
 const OFFICIAL_SPONSOR_SLOTS = ["01", "02", "03"].map((id): OfficialSponsorRealCard => ({
@@ -117,12 +123,7 @@ export function OfficialSponsorsSection({
   const [hasInteractedWithMobileSponsorCarousel, setHasInteractedWithMobileSponsorCarousel] = useState(false);
   const [failedDesktopSponsorSlots, setFailedDesktopSponsorSlots] = useState<Set<number>>(() => new Set());
   const [failedMobileSponsorSlots, setFailedMobileSponsorSlots] = useState<Set<number>>(() => new Set());
-  const sponsorWhatsappUrl =
-    buildWhatsappWaMeLink({
-      phone: "(31) 99207-4309",
-      message: "Olá! Quero conhecer os espaços de Patrocinadores Oficiais do SmartBus.",
-    }) ??
-    "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.";
+  const sponsorWhatsappUrl = SPONSOR_COMMERCIAL_URL;
 
   const markSponsorSlotAsFailed = (index: number, viewport: "desktop" | "mobile") => {
     const updateFailedSlots = viewport === "desktop" ? setFailedDesktopSponsorSlots : setFailedMobileSponsorSlots;
@@ -260,7 +261,7 @@ export function OfficialSponsorsSection({
                 >
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
-                      <a href={card.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${card.sponsorName}`}>
+                      <a href={card.href} target="_blank" rel="noreferrer" aria-label={`Conhecer o ${card.sponsorName}`}>
                         <img src={mobileImageSrc} alt={mobileAlt} onError={() => markSponsorSlotAsFailed(index, "mobile")} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
                       </a>
                     ) : (
@@ -273,9 +274,14 @@ export function OfficialSponsorsSection({
                       </div>
                     )}
                   </div>
-                  <div className={`flex min-w-0 flex-1 flex-col ${compact ? "space-y-2 p-4" : "space-y-3 p-5"}`}>
-                    <h3 className={`${compact ? "min-h-0" : "min-h-[2.5rem]"} break-words text-base font-bold leading-tight text-foreground`}>{card.headline}</h3>
-                    <p className={`${compact ? "min-h-0" : "min-h-[3rem]"} flex-1 break-words text-sm leading-relaxed text-muted-foreground`}>{card.text}</p>
+                  <div className={`flex min-w-0 flex-1 flex-col ${card.type === "sponsor" ? "p-4" : compact ? "space-y-2 p-4" : "space-y-3 p-5"}`}>
+                    {/* A arte real já comunica marca e campanha; textos comerciais completos permanecem somente no fallback. */}
+                    {card.type === "placeholder" && (
+                      <>
+                        <h3 className={`${compact ? "min-h-0" : "min-h-[2.5rem]"} break-words text-base font-bold leading-tight text-foreground`}>{card.headline}</h3>
+                        <p className={`${compact ? "min-h-0" : "min-h-[3rem]"} flex-1 break-words text-sm leading-relaxed text-muted-foreground`}>{card.text}</p>
+                      </>
+                    )}
                     <a href={cardHref} target="_blank" rel="noreferrer" className="mt-auto inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary to-orange-500 px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 transition-all hover:-translate-y-0.5 hover:shadow-primary/25">
                       {card.cta}
                       <ArrowRight className="h-4 w-4" />
@@ -314,7 +320,7 @@ export function OfficialSponsorsSection({
                   </button>
                   <div className={`overflow-hidden rounded-[1.75rem] border border-border/80 bg-gradient-to-br shadow-[0_28px_90px_-55px_rgba(15,23,42,0.7)] ${activeCard.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {activeCard.type === "sponsor" ? (
-                      <a href={activeCard.href} target="_blank" rel="noreferrer" aria-label={`Abrir site do patrocinador ${activeCard.sponsorName}`} className="block">
+                      <a href={activeCard.href} target="_blank" rel="noreferrer" aria-label={`Conhecer o ${activeCard.sponsorName}`} className="block">
                         <img src={desktopImageSrc} alt={desktopAlt} onError={() => markSponsorSlotAsFailed(activeSponsorCardIndex, "desktop")} className="aspect-[5/1] w-full object-cover transition-transform duration-500 hover:scale-[1.01]" loading="lazy" />
                       </a>
                     ) : (
