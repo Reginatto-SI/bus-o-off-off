@@ -1,73 +1,54 @@
-# Correção do sócio global da plataforma
 
-## Estado real verificado no banco (antes de qualquer alteração)
+# Correção da câmera em `/validador/validar`
 
-Consultei o schema, as políticas e os dados reais:
+## 1. Causa provável identificada (confirmada por leitura de código)
 
-- `public.socios_split` possui `company_id uuid NOT NULL`, com FK para `companies(id) ON DELETE CASCADE` e índice `idx_socios_split_company_status (company_id, status, created_at)`.
-- Campos de wallet existentes: `asaas_wallet_id` (legado), `asaas_wallet_id_production`, `asaas_wallet_id_sandbox`.
-- Trigger: `set_partners_updated_at` (atualiza `updated_at`).
-- Única política RLS instalada: *"Gerentes and developers can manage socios_split by company"* — `FOR ALL`, para `authenticated`, exigindo em `USING` e `WITH CHECK` que exista `user_roles` do usuário **com o mesmo `company_id` do registro** e papel `gerente` ou `developer`.
-- Dados: **1 único registro**. Nome "Diego", status `inativo`, `commission_percent` 50, vinculado a uma empresa cliente, com **apenas o campo legado `asaas_wallet_id` preenchido** (produção e sandbox vazios). Criado em 24/03/2026.
-- `public.is_developer(_user_id)` já existe e é **global** (checa `user_roles.role = 'developer'` sem `company_id`) — serve como base de autorização.
+O diagnóstico do seu prompt está correto: alguém encerra a track logo depois do `getUserMedia`. O ponto exato é uma combinação de dois trechos em `src/pages/driver/DriverValidate.tsx`:
 
-Não há ambiguidade: existe um só registro, portanto **não se aplica a condição de bloqueio** por múltiplos candidatos. Nenhuma wallet será sobrescrita nem copiada entre ambientes.
+1. **Guarda de autenticação desmonta a tela inteira** (linha ~774):
+```text
+if (loading) return <Loader2 />;
+```
+`AuthContext` volta a `setLoading(true)` dentro de `onAuthStateChange` (linha 256 de `src/contexts/AuthContext.tsx`). No Android, o diálogo de permissão manda a página para background; ao voltar, o Supabase dispara `TOKEN_REFRESHED`/`SIGNED_IN` → `loading = true` → a árvore inteira é substituída pelo loader → o `<video>` é **desmontado**.
 
-Observação: o documento citado `docs/Analises/analise-socio-global-plataforma-split-asaas.md` **não existe** no repositório. A análise acima substitui essa fonte; os PRDs Asaas 04 e 07 e as migrations foram consultados.
+2. **Cleanup do efeito mata o stream** (linhas 605-609):
+```text
+useEffect(() => { if (!videoEl) return; return () => stopCurrentStream(); }, [videoEl, stopCurrentStream]);
+```
+Ao desmontar o `<video>`, `setVideoEl(null)` roda o cleanup → `track.stop()`. Quando o `startCamera` (ainda em execução) chega na validação da linha 561, encontra `readyState !== 'live'` e lança `NotReadableError: O stream não possui faixa de vídeo ativa` — exatamente o log apresentado. O `videoSize: 2×2` e `devices: 0` são consequência do elemento novo/remontado, não a causa.
 
-## Causa do erro 403
+Ou seja: **não é permissão, HTTPS, facingMode nem scanner** — é remontagem do componente durante a inicialização.
 
-A política exige `user_roles.company_id = socios_split.company_id`. Ao cadastrar o sócio na empresa ativa, o usuário técnico (developer) não possui linha em `user_roles` para aquela empresa, então o `WITH CHECK` falha e o PostgREST devolve 403. A causa raiz, porém, é conceitual: o sócio é da plataforma, não da empresa.
+## 2. Correção mínima proposta (somente câmera, em 1 arquivo)
 
-## O que será feito
+`src/pages/driver/DriverValidate.tsx`:
 
-### 1. Migration nova (não editar as antigas)
+1. **Manter o `<video>` montado durante `loading`**: não retornar cedo por `loading` quando `user` já existe; renderizar o spinner como overlay sobre a mesma árvore. Guardas que realmente saem da tela (`!user`, sem permissão) continuam iguais.
+2. **Cleanup só no desmonte real**: trocar o efeito por `useEffect(() => () => stopCurrentStream(), [])` (deps vazias), sem depender de `videoEl`. Re-render nunca mais encerra o stream.
+3. **Reanexar o stream ao elemento**: se o `<video>` for recriado por qualquer motivo, um efeito reatribui `streamRef.current` ao novo elemento em vez de reiniciar/parar a câmera.
+4. **Guarda de sessão no encerramento**: `stopCurrentStream(motivo)` passa a receber motivo e só encerra o stream se ele pertencer à inicialização atual (`initCountRef`), evitando que uma sessão antiga mate uma nova.
+5. **Não falhar imediatamente por track não-live**: se a track não estiver `live`, aguardar curto período (até ~1,5s) e reavaliar; só então erro.
+6. **Esperar quadro real** antes de `cameraReady`: `playing`/`canplay` + `requestVideoFrameCallback` quando existir, com fallback ao polling atual de dimensões (limite de 3s). Nada de espera infinita.
+7. **`enumerateDevices` não bloqueia nada**: mantido apenas como diagnóstico; lista vazia com stream ativo segue normalmente.
+8. **`visibilitychange`**: só encerra quando `hidden` **e** não há init pendente **e** já existe stream pronto (`cameraReady`), evitando o falso "abandono" causado pelo diálogo de permissão.
+9. **Mensagens de erro diferenciadas**: permissão negada, câmera ocupada (`NotReadableError`/`TrackStartError`), sem câmera (`NotFoundError`), stream encerrado inesperadamente, navegador sem suporte, WebView sem resposta, falha genérica — sem citar "aplicativo não liberou" quando o ambiente for navegador/PWA.
 
-Uma única migration, em ordem segura:
+## 3. Instrumentação temporária (conforme solicitado)
 
-1. Tornar `company_id` **nullable** e remover a FK/constraint que impede registro sem empresa (mantendo a coluna temporariamente como histórico, sem uso operacional).
-2. Zerar o uso operacional: `UPDATE socios_split SET company_id = NULL` no registro existente (mantendo o registro, seu status `inativo` e sua wallet legada intactos).
-3. Índice único parcial garantindo **no máximo um sócio global ativo**: `CREATE UNIQUE INDEX ... ON socios_split ((true)) WHERE status = 'ativo'`.
-4. Remover a política antiga por empresa e criar quatro políticas (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) restritas a `authenticated` com `public.is_developer(auth.uid())`. RLS permanece habilitada; sem política para `anon`; sem `service_role` no frontend.
-5. Manter/ajustar os GRANTs: `SELECT, INSERT, UPDATE, DELETE` para `authenticated`, `ALL` para `service_role`.
-6. Comentário de tabela documentando o rollback (recriar a política antiga, repovoar `company_id`, dropar o índice único).
+- Para cada track: `initId`, `track.id`, `label`, `readyState`, `muted`, `getSettings()`, timestamp; listeners `ended`, `mute`, `unmute` alimentando a timeline de debug.
+- Em todo `stopCurrentStream(reason)`: motivo, `initId` atual, `document.visibilityState`, nº de tracks, `readyState` antes/depois.
+- Nada de imagem, conteúdo de QR ou dado pessoal nos logs.
 
-Nada em `sales`, snapshots, ledger, webhook ou verify é tocado.
+## 4. Riscos
 
-### 2. Tela `/admin/socios` (`src/pages/admin/SociosSplit.tsx`)
+- Baixo/médio, restrito à tela do validador. Risco principal: manter o `<video>` montado durante `loading` altera a ordem de render dessa tela — mitigado mantendo as demais guardas e o overlay de loading.
+- Espera por primeiro quadro pode adicionar até ~1s na abertura em aparelhos lentos.
 
-- Deixa de ler/filtrar/enviar `company_id`; passa a funcionar sem empresa ativa selecionada e não muda ao trocar de empresa.
-- Cabeçalho passa a identificar explicitamente "Configuração global da plataforma SmartBus BR".
-- Acesso restrito ao developer (guarda no frontend + RLS no banco como proteção real).
-- Campos de wallet separados por ambiente (Produção / Sandbox), rotulados, sem cópia automática entre eles; listagem exibe apenas wallet mascarada.
-- Bloqueio de segundo ativo na UI (exige inativar o atual) e trava contra clique duplo no salvar.
-- Mensagens de erro claras, sem expor detalhes internos. Modal e padrão visual atuais preservados.
+## 5. Fora de escopo (não será tocado)
 
-### 3. Resolvedor central (`supabase/functions/_shared/split-recipients-resolver.ts`)
+Banco, RLS, migrations, vendas, embarque, validação de passagens, rotas, engines de leitura (BarcodeDetector/jsQR), validação manual.
 
-Alteração mínima: remover `.eq("company_id", params.companyId)` da consulta de `socios_split`, mantendo `status = 'ativo'` e `limit(2)` (a validação de "mais de um ativo" continua valendo como defesa). Toda a fórmula de distribuição (1/2 e 1/3, redistribuição quando inelegível, teto e faixas) permanece **inalterada** — ela já vem do motor central via `distributionPercentages`, e a auditoria confirma que representante continua sendo resolvido pelo `representative_id` da venda, preservando o isolamento por empresa.
+## 6. Testes
 
-A resolução da wallet por ambiente já é feita por `validateFinancialSocioForSplit` (produção/sandbox com fallback legado). O fallback legado é **mantido** nesta etapa, com log de alerta quando usado — sua remoção fica para tarefa futura.
-
-### 4. `src/pages/admin/Company.tsx`
-
-O card de diagnóstico de split lê `socios_split` filtrando por empresa; passa a ler globalmente (sem `company_id`), sem mudança visual.
-
-## Testes
-
-- RLS: developer (permitido), gerente/operador/vendedor/anônimo (negado) em SELECT/INSERT/UPDATE/DELETE.
-- Cadastro global: sem sócio ativo, com sócio ativo, tentativa de segundo ativo (bloqueio na UI e no índice único), edição, troca de empresa no painel, duplo clique.
-- Split: cenários 6% / 5% / 4% / 3%, com e sem representante, sócio ativo e inativo, wallet só de produção, só de sandbox e só legada.
-- Multiempresa: vendas de duas empresas usam o mesmo sócio global e apenas o próprio representante.
-- Histórico: conferir que vendas pagas, snapshots e ledger permanecem idênticos antes/depois (contagem e amostragem por consulta).
-- `vitest` e typecheck do projeto.
-
-## Detalhes técnicos
-
-Arquivos previstos: nova migration em `supabase/migrations/`, `src/pages/admin/SociosSplit.tsx`, `src/pages/admin/Company.tsx`, `supabase/functions/_shared/split-recipients-resolver.ts`. Ordem de aplicação: migration → resolvedor → tela, de modo que o código antigo (que filtra por `company_id`) e o novo esquema não conflitem — como `company_id` fica nullable e o único registro está inativo, não há janela de quebra de vendas.
-
-Ao final entrego o relatório em Markdown com as 14 seções solicitadas, com wallets mascaradas.
-
-## Ponto que preciso confirmar
-
-O único registro existente ("Diego") está **inativo** e tem somente a wallet legada. Ele será preservado como está (apenas com `company_id` zerado) — a ativação e o preenchimento das wallets de produção/sandbox ficam para você fazer pela tela, já que não devo copiar wallet entre ambientes.
+- Vitest: nenhum teste de câmera existe; a verificação real é manual em desktop Chrome, Chrome Android (permissão já concedida e primeira autorização), PWA Android, Safari/PWA iPhone, permissão negada, câmera ocupada, sair/voltar da tela, rotação, "Tentar novamente" e leitura real de QR.
+- O painel de debug da própria tela passa a mostrar exatamente quem e quando encerrou a track.
