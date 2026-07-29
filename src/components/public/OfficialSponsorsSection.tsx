@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bus, Star, TrendingUp } from "lucide-react";
 import { buildWhatsappWaMeLink } from "@/lib/whatsapp";
 
@@ -123,6 +123,7 @@ export function OfficialSponsorsSection({
   const [hasInteractedWithMobileSponsorCarousel, setHasInteractedWithMobileSponsorCarousel] = useState(false);
   const [failedDesktopSponsorSlots, setFailedDesktopSponsorSlots] = useState<Set<number>>(() => new Set());
   const [failedMobileSponsorSlots, setFailedMobileSponsorSlots] = useState<Set<number>>(() => new Set());
+  const [mobileSponsorCarouselHeight, setMobileSponsorCarouselHeight] = useState<number>();
   const sponsorWhatsappUrl = SPONSOR_COMMERCIAL_URL;
 
   const markSponsorSlotAsFailed = (index: number, viewport: "desktop" | "mobile") => {
@@ -195,6 +196,31 @@ export function OfficialSponsorsSection({
     setActiveSponsorCardIndex(index);
   }, []);
 
+  const updateMobileSponsorCarouselHeight = useCallback(() => {
+    const activeCard = sponsorCarouselRef.current?.querySelector<HTMLElement>(
+      `[data-sponsor-card="${activeSponsorCardIndex}"]`,
+    );
+    if (activeCard && activeCard.offsetHeight > 0) {
+      setMobileSponsorCarouselHeight(activeCard.offsetHeight);
+    }
+  }, [activeSponsorCardIndex]);
+
+  useLayoutEffect(() => {
+    // O trilho horizontal teria a altura do maior slide; medimos o ativo para manter os dots logo abaixo dele.
+    updateMobileSponsorCarouselHeight();
+  }, [failedMobileSponsorSlots, updateMobileSponsorCarouselHeight]);
+
+  useEffect(() => {
+    const activeCard = sponsorCarouselRef.current?.querySelector<HTMLElement>(
+      `[data-sponsor-card="${activeSponsorCardIndex}"]`,
+    );
+    if (!activeCard || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateMobileSponsorCarouselHeight);
+    observer.observe(activeCard);
+    return () => observer.disconnect();
+  }, [activeSponsorCardIndex, updateMobileSponsorCarouselHeight]);
+
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isMobileViewport = window.matchMedia("(max-width: 1023px)").matches;
@@ -230,9 +256,11 @@ export function OfficialSponsorsSection({
 
           <div
             ref={sponsorCarouselRef}
+            data-sponsor-carousel="mobile"
             onScroll={handleSponsorCarouselScroll}
             onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
-            className="mt-3 flex snap-x snap-mandatory gap-0 overflow-x-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] sm:mt-4 lg:hidden [&::-webkit-scrollbar]:hidden"
+            style={mobileSponsorCarouselHeight ? { height: mobileSponsorCarouselHeight } : undefined}
+            className="mt-3 flex snap-x snap-mandatory items-start gap-0 overflow-x-auto transition-[height] duration-300 ease-out [scrollbar-width:none] [-ms-overflow-style:none] sm:mt-4 lg:hidden [&::-webkit-scrollbar]:hidden"
           >
             {OFFICIAL_SPONSOR_CARDS.map((configuredCard, index) => {
               const card = failedMobileSponsorSlots.has(index) ? OFFICIAL_SPONSOR_PLACEHOLDERS[index] : configuredCard;
@@ -249,7 +277,7 @@ export function OfficialSponsorsSection({
                   <div className={`relative aspect-video overflow-hidden bg-gradient-to-br ${card.accent ?? "from-white via-orange-50 to-primary/15"}`}>
                     {card.type === "sponsor" ? (
                       <a href={card.href} target="_blank" rel="noreferrer" aria-label={`Conhecer o ${card.sponsorName}`}>
-                        <img src={mobileImageSrc} alt={mobileAlt} onError={() => markSponsorSlotAsFailed(index, "mobile")} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
+                        <img src={mobileImageSrc} alt={mobileAlt} onLoad={updateMobileSponsorCarouselHeight} onError={() => markSponsorSlotAsFailed(index, "mobile")} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" loading="lazy" />
                       </a>
                     ) : (
                       <div className="flex h-full items-center justify-center px-6 text-center">
