@@ -57,6 +57,21 @@ type OfficialSponsorsSectionProps = {
 // }
 // Fonte única dos cards oficiais: landing e /eventos reaproveitam os mesmos placeholders e patrocinadores reais.
 const OFFICIAL_SPONSOR_CARDS: OfficialSponsorCard[] = [
+  // Par versionado completo: mobile abaixo de 1024 px e desktop a partir de 1024 px.
+  {
+    type: "sponsor",
+    sponsorName: "Patrocinador 02",
+    headline: "Patrocinador 02",
+    text: "Patrocinador oficial SmartBus BR.",
+    cta: "Conhecer patrocinador",
+    imageSrc: "/sponsors/patrocinador-02-mobile.png",
+    desktopImageSrc: "/sponsors/patrocinador-02-desktop.png",
+    mobileImageSrc: "/sponsors/patrocinador-02-mobile.png",
+    href: "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus%20BR.",
+    alt: "Banner do Patrocinador 02",
+    desktopAlt: "Banner desktop do Patrocinador 02",
+    mobileAlt: "Banner mobile do Patrocinador 02",
+  },
   {
     type: "placeholder",
     icon: Star,
