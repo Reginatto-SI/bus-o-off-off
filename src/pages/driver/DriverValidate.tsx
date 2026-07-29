@@ -174,6 +174,7 @@ export default function DriverValidate() {
   const phaseConfig = PHASE_CONFIG[activePhase];
 
   const streamRef = useRef<MediaStream | null>(null);
+  const streamOwnerInitRef = useRef(0);
   const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
   const scannerEngineRef = useRef<ScannerEngine>('none');
   const frameCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -181,6 +182,9 @@ export default function DriverValidate() {
   const initInProgressRef = useRef(false);
   const initCountRef = useRef(0);
   const scanIntervalRef = useRef<number | null>(null);
+  const timelineRef = useRef<string[]>([]);
+  const cameraReadyRef = useRef(false);
+  const roleResolvedRef = useRef(false);
 
   const [processing, setProcessing] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
