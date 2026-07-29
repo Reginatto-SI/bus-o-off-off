@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { BenefitProgram, BenefitProgramEligibleCpf } from '@/types/database';
+import { BenefitProgram } from '@/types/database';
 
 export const BENEFIT_PRICING_RULE_VERSION = 'beneficio_checkout_v1';
 
@@ -25,8 +25,8 @@ export interface BenefitEligibilityInput {
 }
 
 export interface EligibleBenefitMatch {
-  program: BenefitProgram;
-  cpfRecord: BenefitProgramEligibleCpf;
+  // A RPC pública retorna somente os campos necessários para cálculo/exibição.
+  program: Pick<BenefitProgram, 'id' | 'name' | 'benefit_type' | 'benefit_value'>;
 }
 
 export interface BenefitEligibilityResult {
@@ -36,28 +36,9 @@ export interface BenefitEligibilityResult {
 
 interface BenefitEligibilityMatchRow {
   program_id: string;
-  program_company_id: string;
   program_name: string;
-  program_description: string | null;
-  program_status: BenefitProgram['status'];
   benefit_type: BenefitProgram['benefit_type'];
   benefit_value: number;
-  program_valid_from: string | null;
-  program_valid_until: string | null;
-  applies_to_all_events: boolean;
-  program_created_at: string;
-  program_updated_at: string;
-  cpf_record_id: string;
-  cpf_record_company_id: string;
-  cpf_record_program_id: string;
-  cpf: string;
-  cpf_full_name: string | null;
-  cpf_status: BenefitProgramEligibleCpf['status'];
-  cpf_valid_from: string | null;
-  cpf_valid_until: string | null;
-  cpf_notes: string | null;
-  cpf_created_at: string;
-  cpf_updated_at: string;
 }
 
 export interface BenefitPriceResolution {
@@ -220,15 +201,13 @@ export function isValidCpfDigits(value: string): boolean {
 /**
  * Consulta os benefícios elegíveis para UM passageiro (CPF) em um evento/empresa.
  *
- * Regras consideradas (sem decidir automaticamente entre múltiplos programas):
+ * Regras consideradas pela RPC:
  * - Programa ativo e dentro da vigência
  * - CPF ativo e dentro da vigência
  * - Programa aplicável a todos os eventos OU explicitamente vinculado ao evento
  *
- * Observação importante para integração futura do checkout:
- * esta função retorna todos os matches elegíveis e NÃO escolhe um único programa.
- * A prioridade/desempate ficará para uma decisão de negócio posterior,
- * garantindo transparência e auditabilidade da regra final.
+ * Esta função retorna os matches mínimos; `resolveBestBenefitForPassengerPrice`
+ * aplica o desempate determinístico já usado nos checkouts público e administrativo.
  */
 export async function getEligibleBenefitsByPassenger({
   companyId,
@@ -286,32 +265,11 @@ export async function getEligibleBenefitsByPassenger({
   const rows = (data ?? []) as BenefitEligibilityMatchRow[];
 
   const eligibleMatches = rows.map((row) => ({
-      cpfRecord: {
-        id: row.cpf_record_id,
-        company_id: row.cpf_record_company_id,
-        benefit_program_id: row.cpf_record_program_id,
-        cpf: row.cpf,
-        full_name: row.cpf_full_name,
-        status: row.cpf_status,
-        valid_from: row.cpf_valid_from,
-        valid_until: row.cpf_valid_until,
-        notes: row.cpf_notes,
-        created_at: row.cpf_created_at,
-        updated_at: row.cpf_updated_at,
-      },
       program: {
         id: row.program_id,
-        company_id: row.program_company_id,
         name: row.program_name,
-        description: row.program_description,
-        status: row.program_status,
         benefit_type: row.benefit_type,
         benefit_value: Number(row.benefit_value),
-        valid_from: row.program_valid_from,
-        valid_until: row.program_valid_until,
-        applies_to_all_events: row.applies_to_all_events,
-        created_at: row.program_created_at,
-        updated_at: row.program_updated_at,
       },
     }));
 
@@ -326,11 +284,8 @@ export async function getEligibleBenefitsByPassenger({
       programs: eligibleMatches.map((match) => ({
         programId: match.program.id,
         name: match.program.name,
-        status: match.program.status,
         benefitType: match.program.benefit_type,
         benefitValue: Number(match.program.benefit_value),
-        appliesToAllEvents: match.program.applies_to_all_events,
-        cpfStatus: match.cpfRecord.status,
       })),
     });
   }

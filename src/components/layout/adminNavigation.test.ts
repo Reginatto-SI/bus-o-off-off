@@ -15,7 +15,7 @@ describe('chrome mobile administrativo', () => {
       '/admin/dashboard', '/admin/vendas', '/admin/eventos', '/admin/frota', '/admin/motoristas',
       '/admin/auxiliares-embarque', '/admin/locais', '/admin/vendedores', '/admin/usuarios',
       '/admin/empresa', '/admin/representante', '/admin/patrocinadores', '/admin/minha-conta',
-      '/admin/parceiros', '/admin/servicos', '/admin/relatorios/comissao-vendedores',
+      '/admin/parceiros', '/admin/programas-beneficio', '/admin/servicos', '/admin/relatorios/comissao-vendedores',
       '/admin/relatorios/lista-embarque', '/admin/relatorios/vendas', '/admin/relatorios/eventos',
       '/vendas/servicos',
     ];
@@ -23,7 +23,23 @@ describe('chrome mobile administrativo', () => {
     expect(CUSTOM_MOBILE_ADMIN_CHROME_ROUTES).toEqual(expectedRoutes);
     expectedRoutes.forEach((pathname) => expect(usesCustomMobileAdminChrome(pathname)).toBe(true));
     expect(usesCustomMobileAdminChrome('/admin/eventos/evento-123')).toBe(true);
+    expect(usesCustomMobileAdminChrome('/admin/programas-beneficio/novo')).toBe(true);
+    expect(usesCustomMobileAdminChrome('/admin/programas-beneficio/programa-123')).toBe(true);
     expect(usesCustomMobileAdminChrome('/admin/rota-legada')).toBe(false);
+  });
+});
+
+describe('programas de benefício na navegação administrativa', () => {
+  const benefitItem = navigationGroups
+    .flatMap((group) => group.items)
+    .find((item) => item.href === '/admin/programas-beneficio') ?? null;
+
+  it('permite gerente/developer no desktop e no menu Mais, sem ampliar para operador', () => {
+    expect(benefitItem?.desktopOnly).toBeUndefined();
+    expect(benefitItem?.roles).toEqual(['gerente', 'developer']);
+    expect(canViewAdminNavigationItem({ item: benefitItem, userRole: 'gerente', isDeveloper: false })).toBe(true);
+    expect(canViewAdminNavigationItem({ item: benefitItem, userRole: 'operador', isDeveloper: false })).toBe(false);
+    expect(canViewAdminNavigationItem({ item: benefitItem, userRole: 'developer', isDeveloper: true })).toBe(true);
   });
 });
 

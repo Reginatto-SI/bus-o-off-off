@@ -60,6 +60,11 @@ const formatBenefitValue = (program: Pick<BenefitProgram, 'benefit_type' | 'bene
   return `${formatCurrency(program.benefit_value)} (preço final)`;
 };
 
+const formatValidity = (program: Pick<BenefitProgram, 'valid_from' | 'valid_until'>) =>
+  program.valid_from || program.valid_until
+    ? `${program.valid_from ? new Date(program.valid_from).toLocaleDateString('pt-BR') : '—'} até ${program.valid_until ? new Date(program.valid_until).toLocaleDateString('pt-BR') : '—'}`
+    : 'Sem vigência';
+
 export default function BenefitPrograms() {
   const navigate = useNavigate();
   const { isGerente, isDeveloper, user, activeCompanyId, activeCompany } = useAuth();
@@ -129,10 +134,7 @@ export default function BenefitPrograms() {
         : `${program.event_links.length} evento(s)`,
       status_label: program.status === 'ativo' ? 'Ativo' : 'Inativo',
       eligible_cpf_count: program.eligible_cpf.length,
-      validity_label:
-        program.valid_from || program.valid_until
-          ? `${program.valid_from ? new Date(program.valid_from).toLocaleDateString('pt-BR') : '—'} até ${program.valid_until ? new Date(program.valid_until).toLocaleDateString('pt-BR') : '—'}`
-          : 'Sem vigência definida',
+      validity_label: formatValidity(program),
     }));
   }, [filteredPrograms]);
 
@@ -310,7 +312,33 @@ export default function BenefitPrograms() {
                 description="Crie o primeiro programa para começar a vincular benefícios por CPF."
               />
             ) : (
-              <Table>
+              <>
+                {/* Mobile/PWA: cards evitam tabela horizontal e mantêm todas as ações no menu existente. */}
+                <div className="space-y-3 p-3 md:hidden">
+                  {filteredPrograms.map((program) => (
+                    <article key={program.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="break-words font-semibold">{program.name}</p>
+                          <p className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground">{program.description || 'Sem descrição'}</p>
+                        </div>
+                        <ActionsDropdown actions={getProgramActions(program)} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={program.status === 'ativo' ? 'ativo' : 'inativo'} />
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{benefitTypeLabel[program.benefit_type]}</span>
+                      </div>
+                      <dl className="mt-4 grid grid-cols-1 gap-3 text-sm min-[420px]:grid-cols-2">
+                        <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-medium">{formatBenefitValue(program)}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">CPFs cadastrados</dt><dd className="font-medium">{program.eligible_cpf.length}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Abrangência</dt><dd className="break-words font-medium">{program.applies_to_all_events ? 'Todos os eventos' : `${program.event_links.length} evento(s)`}</dd></div>
+                        <div><dt className="text-xs text-muted-foreground">Vigência</dt><dd className="break-words font-medium">{formatValidity(program)}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Programa</TableHead>
@@ -334,9 +362,7 @@ export default function BenefitPrograms() {
                       <TableCell>{formatBenefitValue(program)}</TableCell>
                       <TableCell>{program.applies_to_all_events ? 'Todos os eventos' : `${program.event_links.length} evento(s)`}</TableCell>
                       <TableCell>
-                        {program.valid_from || program.valid_until
-                          ? `${program.valid_from ? new Date(program.valid_from).toLocaleDateString('pt-BR') : '—'} até ${program.valid_until ? new Date(program.valid_until).toLocaleDateString('pt-BR') : '—'}`
-                          : 'Sem vigência'}
+                        {formatValidity(program)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={program.status === 'ativo' ? 'ativo' : 'inativo'} />
@@ -348,7 +374,9 @@ export default function BenefitPrograms() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

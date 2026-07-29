@@ -322,26 +322,26 @@ const PASSENGER_STEPS = [
     desc: "A equipe confere presença com mais agilidade e reduz filas no embarque.",
   },
 ];
-// Fidelização em linguagem comercial: comunica recorrência e aumento de vendas sem expor termos técnicos internos.
-const CUSTOMER_LOYALTY_BENEFITS = [
+// Comunicação fiel ao cadastro explícito: o sistema não infere frequência nem histórico de compras.
+const CUSTOMER_CPF_BENEFITS = [
   {
     icon: Users,
     title: "Controle total",
-    // Copy ajustada para linguagem comercial e leiga (sem termos técnicos como "CPFs elegíveis").
-    desc: "Escolha quais clientes vão receber desconto e controle quando esse benefício estará ativo.",
+    desc: "Cadastre passageiros elegíveis por CPF e controle quando cada benefício estará ativo.",
   },
   {
     icon: Gift,
-    title: "Descontos inteligentes",
-    desc: "Aplique descontos automaticamente na compra, sem erros ou necessidade de operação manual.",
+    title: "Aplicação no checkout",
+    desc: "O benefício cadastrado é aplicado ao passageiro elegível durante a compra.",
   },
   {
     icon: TrendingUp,
-    title: "Fidelização real",
-    // Copy ajustada para destacar benefício comercial em linguagem simples.
-    desc: "Incentive seus clientes a comprar novamente e fortaleça o relacionamento com quem viaja sempre com você.",
+    title: "Condições especiais",
+    desc: "Ofereça condições especiais para passageiros selecionados pela sua empresa.",
   },
 ];
+// Feature flag local preserva a seção histórica sem renderizá-la e evita expressão JSX constante.
+const SHOW_SMARTGAIN_REFERRAL_SECTION = false;
 // Pilar comercial principal: reforça benefícios concretos da operação sem expor linguagem interna de produto.
 const PLATFORM_PILLARS = [
   {
@@ -1467,15 +1467,14 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
             <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              Transforme clientes em passageiros recorrentes
+              Crie Programas de Benefício por CPF
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              {/* Copy ajustada para remover linguagem técnica e reforçar recompra. */}
-              Crie descontos personalizados para seus melhores clientes e aumente a recompra.
+              Cadastre passageiros elegíveis e defina condições especiais com vigência e eventos aplicáveis.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
-            {CUSTOMER_LOYALTY_BENEFITS.map((item) => (
+            {CUSTOMER_CPF_BENEFITS.map((item) => (
               <div
                 key={item.title}
                 className="rounded-3xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-md"
@@ -1490,8 +1489,7 @@ export default function LandingPage() {
           </div>
           <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-3 text-sm text-foreground shadow-sm">
             <span className="font-semibold text-primary">Exemplo:</span>{" "}
-            {/* Exemplo ajustado para tom comercial simples e direto. */}
-            Seus clientes mais frequentes recebem 5% de desconto automaticamente na compra.
+            Um passageiro com CPF previamente cadastrado recebe o benefício configurado quando estiver elegível para o evento.
           </div>
           <div className="mt-8 flex justify-center">
             <Button
@@ -1504,7 +1502,7 @@ export default function LandingPage() {
                 })
               }
             >
-              Quero fidelizar meus clientes
+              Quero criar benefícios
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
@@ -1625,7 +1623,7 @@ export default function LandingPage() {
         NÃO remover este código.
         Pode ser reativado futuramente apenas restaurando a renderização.
       */}
-      {false && (
+      {SHOW_SMARTGAIN_REFERRAL_SECTION && (
         <section className="bg-muted/40 py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">

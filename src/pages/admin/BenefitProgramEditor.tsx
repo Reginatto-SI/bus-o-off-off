@@ -1139,7 +1139,28 @@ export default function BenefitProgramEditor() {
                       <p className="text-sm font-medium">{isNew ? 'CPFs pendentes para salvar no programa' : 'CPFs cadastrados no programa'}</p>
                       <Input className="w-full sm:w-72" placeholder="Buscar por CPF ou nome..." value={cpfListSearch} onChange={(e) => setCpfListSearch(e.target.value)} />
                     </div>
-                    <div className="rounded-md border overflow-x-auto">
+                    {/* Mobile/PWA: cartões preservam leitura e ações sem rolagem lateral. */}
+                    <div className="space-y-3 md:hidden">
+                      {filteredEligibleCpfRows.length === 0 ? (
+                        <p className="rounded-md border p-4 text-center text-sm text-muted-foreground">Nenhum CPF encontrado para os filtros informados.</p>
+                      ) : filteredEligibleCpfRows.map((record) => (
+                        <article key={record.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold tabular-nums">{formatCpfMask(record.cpf)}</p>
+                              <p className="break-words text-sm text-muted-foreground">{record.full_name ?? 'Nome não informado'}</p>
+                            </div>
+                            <ActionsDropdown actions={cpfRowActions(record)} />
+                          </div>
+                          <div className="mt-3"><StatusBadge status={record.status === 'ativo' ? 'ativo' : 'inativo'} /></div>
+                          <dl className="mt-3 space-y-2 text-sm">
+                            <div><dt className="text-xs text-muted-foreground">Vigência</dt><dd>{record.valid_from || record.valid_until ? `${record.valid_from ? new Date(record.valid_from).toLocaleDateString('pt-BR') : '—'} até ${record.valid_until ? new Date(record.valid_until).toLocaleDateString('pt-BR') : '—'}` : 'Sem vigência'}</dd></div>
+                            <div><dt className="text-xs text-muted-foreground">Observação</dt><dd className="break-words">{record.notes?.trim() ? record.notes : '—'}</dd></div>
+                          </dl>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="hidden rounded-md border overflow-x-auto md:block">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1184,7 +1205,7 @@ export default function BenefitProgramEditor() {
                       if (!open && !cpfSaving) resetCpfFormState();
                     }}
                   >
-                    <DialogContent className="sm:max-w-2xl">
+                    <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>{editingCpfId ? 'Editar CPF elegível' : 'Cadastro manual de CPF'}</DialogTitle>
                         <DialogDescription>
@@ -1196,7 +1217,7 @@ export default function BenefitProgramEditor() {
                         <div className="grid gap-3 sm:grid-cols-6">
                           <div className="space-y-1 sm:col-span-3">
                             <Label>CPF</Label>
-                            <Input placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
+                            <Input inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={cpfForm.cpf} onChange={(e) => setCpfForm({ ...cpfForm, cpf: e.target.value })} />
                             <p className="text-xs text-muted-foreground">Aceita CPF com ou sem pontos/traço. Ex.: 123.456.789-09 ou 12345678909.</p>
                           </div>
                           <div className="space-y-1 sm:col-span-3">
@@ -1242,7 +1263,7 @@ export default function BenefitProgramEditor() {
                   </Dialog>
 
                   <Dialog open={bulkImportModalOpen} onOpenChange={setBulkImportModalOpen}>
-                    <DialogContent className="sm:max-w-2xl">
+                    <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>Importação em massa (CSV/XLSX)</DialogTitle>
                         <DialogDescription>
