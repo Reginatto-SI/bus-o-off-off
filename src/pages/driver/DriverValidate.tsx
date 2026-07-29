@@ -863,7 +863,14 @@ export default function DriverValidate() {
     return () => window.clearTimeout(t);
   }, [loading, userRole, user]);
 
-  if (loading) {
+  // Depois que o perfil resolve uma vez, um refresh de sessão não pode desmontar a tela
+  // (isso encerraria o stream da câmera no meio da inicialização).
+  useEffect(() => {
+    if (userRole) roleResolvedRef.current = true;
+  }, [userRole]);
+
+  // Só bloqueia a tela inteira na carga inicial; refresh de token mantém o <video> montado.
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -871,8 +878,8 @@ export default function DriverValidate() {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
-  if (!userRole) {
+  if (!user && !loading) return <Navigate to="/login" replace />;
+  if (!userRole && !roleResolvedRef.current) {
     if (!roleTimedOut) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
@@ -897,6 +904,7 @@ export default function DriverValidate() {
       </div>
     );
   }
+
   if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
 
 
