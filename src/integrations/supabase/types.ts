@@ -3654,29 +3654,10 @@ export type Database = {
           p_reference_date?: string
         }
         Returns: {
-          applies_to_all_events: boolean
           benefit_type: string
           benefit_value: number
-          cpf: string
-          cpf_created_at: string
-          cpf_full_name: string
-          cpf_notes: string
-          cpf_record_company_id: string
-          cpf_record_id: string
-          cpf_record_program_id: string
-          cpf_status: string
-          cpf_updated_at: string
-          cpf_valid_from: string
-          cpf_valid_until: string
-          program_company_id: string
-          program_created_at: string
-          program_description: string
           program_id: string
           program_name: string
-          program_status: string
-          program_updated_at: string
-          program_valid_from: string
-          program_valid_until: string
         }[]
       }
       get_boarding_manifest_rows: {

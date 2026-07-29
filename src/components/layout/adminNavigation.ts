@@ -25,6 +25,7 @@ import {
   Sparkles,
   QrCode,
   LayoutDashboard,
+  Gift,
 } from 'lucide-react';
 import { normalizePublicSlug } from '@/lib/publicSlug';
 
@@ -120,6 +121,12 @@ export const navigationGroups: NavigationGroup[] = [{
     href: '/admin/parceiros',
     icon: Briefcase,
     roles: ['gerente']
+  }, {
+    // Cadastro eventual: aparece na sidebar desktop e na área secundária "Mais" do mobile.
+    name: 'Programas de Benefício',
+    href: '/admin/programas-beneficio',
+    icon: Gift,
+    roles: ['gerente', 'developer']
   }, {
     // Módulo Passeios & Serviços (base inicial). Acesso restrito ao gerente, igual aos demais cadastros sensíveis.
     name: 'Serviços',
@@ -256,6 +263,7 @@ export const CUSTOM_MOBILE_ADMIN_CHROME_ROUTES = [
   '/admin/patrocinadores',
   '/admin/minha-conta',
   '/admin/parceiros',
+  '/admin/programas-beneficio',
   '/admin/servicos',
   '/admin/relatorios/comissao-vendedores',
   '/admin/relatorios/lista-embarque',
@@ -267,7 +275,8 @@ export const CUSTOM_MOBILE_ADMIN_CHROME_ROUTES = [
 // Uma única definição evita divergência entre o espaçamento do layout e a ocultação do chrome legado.
 export function usesCustomMobileAdminChrome(pathname: string) {
   return CUSTOM_MOBILE_ADMIN_CHROME_ROUTES.some((route) => pathname === route)
-    || /^\/admin\/eventos\/[^/]+$/.test(pathname);
+    || /^\/admin\/eventos\/[^/]+$/.test(pathname)
+    || /^\/admin\/programas-beneficio\/[^/]+$/.test(pathname);
 }
 
 // Telas técnicas ocultas no mobile e disponíveis somente para usuários desenvolvedores no desktop.
