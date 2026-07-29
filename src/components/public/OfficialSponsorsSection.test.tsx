@@ -26,16 +26,20 @@ describe("OfficialSponsorsSection", () => {
   it("acompanha a altura do slide mobile ativo", () => {
     const { container } = render(<OfficialSponsorsSection />);
     const carousel = container.querySelector<HTMLElement>('[data-sponsor-carousel="mobile"]')!;
+    const viewport = container.querySelector<HTMLElement>('[data-sponsor-carousel-viewport="mobile"]')!;
     const cards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
     Object.defineProperty(cards[0], "offsetHeight", { configurable: true, value: 320 });
     Object.defineProperty(cards[1], "offsetHeight", { configurable: true, value: 470 });
     carousel.scrollTo = vi.fn();
 
     fireEvent.load(within(cards[0]).getByAltText("Banner mobile do Patrocinador 01"));
-    expect(carousel).toHaveStyle({ height: "320px" });
+    expect(viewport).toHaveStyle({ height: "320px" });
+    expect(viewport).toHaveClass("overflow-hidden", "transition-[height]");
+    expect(carousel).not.toHaveAttribute("style");
+    expect(carousel).toHaveClass("overflow-x-auto", "overflow-y-hidden");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Ver patrocinador 2" })[0]);
-    expect(carousel).toHaveStyle({ height: "470px" });
+    expect(viewport).toHaveStyle({ height: "470px" });
   });
 
   it("oculta os labels genéricos do patrocinador real e preserva sua imagem e ação", () => {

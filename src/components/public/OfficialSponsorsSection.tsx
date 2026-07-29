@@ -254,15 +254,20 @@ export function OfficialSponsorsSection({
             <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">{subtitle}</p>
           </div>
 
+          {/* O viewport controla apenas a altura; o trilho interno mantém exclusivamente o scroll horizontal. */}
           <div
-            ref={sponsorCarouselRef}
-            data-sponsor-carousel="mobile"
-            onScroll={handleSponsorCarouselScroll}
-            onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
+            data-sponsor-carousel-viewport="mobile"
             style={mobileSponsorCarouselHeight ? { height: mobileSponsorCarouselHeight } : undefined}
-            className="mt-3 flex snap-x snap-mandatory items-start gap-0 overflow-x-auto transition-[height] duration-300 ease-out [scrollbar-width:none] [-ms-overflow-style:none] sm:mt-4 lg:hidden [&::-webkit-scrollbar]:hidden"
+            className="mt-3 overflow-hidden transition-[height] duration-300 ease-out sm:mt-4 lg:hidden"
           >
-            {OFFICIAL_SPONSOR_CARDS.map((configuredCard, index) => {
+            <div
+              ref={sponsorCarouselRef}
+              data-sponsor-carousel="mobile"
+              onScroll={handleSponsorCarouselScroll}
+              onPointerDown={() => setHasInteractedWithMobileSponsorCarousel(true)}
+              className="flex w-full snap-x snap-mandatory items-start gap-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {OFFICIAL_SPONSOR_CARDS.map((configuredCard, index) => {
               const card = failedMobileSponsorSlots.has(index) ? OFFICIAL_SPONSOR_PLACEHOLDERS[index] : configuredCard;
               const cardHref = card.type === "sponsor" ? card.href : sponsorWhatsappUrl;
               const mobileImageSrc = card.type === "sponsor" ? card.mobileImageSrc ?? card.imageSrc : undefined;
@@ -305,7 +310,8 @@ export function OfficialSponsorsSection({
                   </div>
                 </article>
               );
-            })}
+              })}
+            </div>
           </div>
 
           <div className="mt-3 flex justify-center gap-2 lg:hidden">
