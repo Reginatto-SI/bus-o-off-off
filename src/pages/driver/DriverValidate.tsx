@@ -905,7 +905,7 @@ export default function DriverValidate() {
     );
   }
 
-  if (!canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
+  if (userRole && !canAccessDriverPortal) return <Navigate to="/admin/eventos" replace />;
 
 
   return (
