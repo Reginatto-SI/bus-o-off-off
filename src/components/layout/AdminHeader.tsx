@@ -31,8 +31,7 @@ import { toast } from 'sonner';
 import type { Company } from '@/types/database';
 
 export function AdminHeader() {
-  const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany } = useAuth();
-  const hasMultipleCompanies = userCompanies.length > 1;
+  const { profile, userRole, signOut, activeCompany, userCompanies, switchCompany, canSwitchCompany } = useAuth();
   const [companySelectorOpen, setCompanySelectorOpen] = useState(false);
   const [companySearch, setCompanySearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -210,7 +209,7 @@ export function AdminHeader() {
     <header className="hidden lg:flex h-16 items-center justify-between gap-4 border-b border-border bg-card px-6">
       {/* Company Selector / Indicator */}
       <div className="flex items-center gap-2">
-        {hasMultipleCompanies ? (
+        {canSwitchCompany ? (
           <Dialog open={companySelectorOpen} onOpenChange={handleCompanySelectorOpenChange}>
             <DialogTrigger asChild>
               <Button variant="ghost" className="flex h-auto max-w-[360px] items-center gap-2 py-1.5 px-3">
@@ -296,10 +295,14 @@ export function AdminHeader() {
                                 size="sm"
                                 variant="outline"
                                 disabled={!canSelectCompany}
-                                onClick={(event) => {
+                                onClick={async (event) => {
                                   event.stopPropagation();
                                   if (!canSelectCompany) return;
-                                  switchCompany(company.id);
+                                  const switched = await switchCompany(company.id);
+                                  if (!switched) {
+                                    toast.error('Não foi possível alterar a empresa. A empresa anterior foi mantida.');
+                                    return;
+                                  }
                                   setCompanySelectorOpen(false);
                                 }}
                               >
