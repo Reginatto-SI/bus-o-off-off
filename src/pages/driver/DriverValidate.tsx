@@ -87,6 +87,8 @@ type AttemptResult = {
 };
 
 type CameraStrategy = { label: string; constraints: MediaStreamConstraints; deviceId?: string };
+type CameraDeviceCandidate = { deviceId: string; label: string; classification: CameraDeviceClassification };
+type CameraPreferenceStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export async function runSerialCameraStrategies<T>(
   strategies: CameraStrategy[],
@@ -96,6 +98,7 @@ export async function runSerialCameraStrategies<T>(
     discard: (candidate: T, strategy: CameraStrategy) => Promise<void> | void;
     afterResolved?: (candidate: T, strategy: CameraStrategy) => Promise<void> | void;
     afterAttempt?: () => Promise<void> | void;
+    onFailure?: (strategy: CameraStrategy, detail: string) => Promise<void> | void;
   },
 ) {
   const attempts: AttemptResult[] = [];
@@ -111,10 +114,12 @@ export async function runSerialCameraStrategies<T>(
         return { selected: candidate, selectedStrategy: strategy, attempts };
       }
       attempts.push({ label: strategy.label, deviceId: strategy.deviceId?.slice(0, 8) ?? '-', result: 'stream_inutilizavel', detail: validation.detail });
+      await handlers.onFailure?.(strategy, validation.detail);
       await handlers.discard(candidate, strategy);
     } catch (error: unknown) {
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : `Error: ${String(error)}`;
       attempts.push({ label: strategy.label, deviceId: strategy.deviceId?.slice(0, 8) ?? '-', result: 'error', detail });
+      await handlers.onFailure?.(strategy, detail);
       if (candidate) await handlers.discard(candidate, strategy);
     }
     await handlers.afterAttempt?.();
@@ -152,6 +157,54 @@ export const runRawCameraAcquisition = <T,>(
 export const stopAllMediaStreamTracks = (stream: Pick<MediaStream, 'getTracks'>) => {
   stream.getTracks().forEach(track => track.stop());
 };
+
+export const createDeviceCameraConstraints = (deviceId: string): MediaStreamConstraints => ({
+  video: { deviceId: { exact: deviceId } },
+  audio: false,
+});
+
+export function readCameraPreference(storage: CameraPreferenceStorage, onError?: (error: unknown) => void) {
+  try { return storage.getItem(LAST_WORKING_BACK_CAMERA_KEY); }
+  catch (error) { onError?.(error); return null; }
+}
+
+export function saveCameraPreference(storage: CameraPreferenceStorage, deviceId: string, onError?: (error: unknown) => void) {
+  try { storage.setItem(LAST_WORKING_BACK_CAMERA_KEY, deviceId); return true; }
+  catch (error) { onError?.(error); return false; }
+}
+
+export function removeCameraPreference(storage: CameraPreferenceStorage, onError?: (error: unknown) => void) {
+  try { storage.removeItem(LAST_WORKING_BACK_CAMERA_KEY); return true; }
+  catch (error) { onError?.(error); return false; }
+}
+
+export function persistApprovedBackCamera(
+  device: CameraDeviceCandidate,
+  usable: boolean,
+  storage: CameraPreferenceStorage,
+  onError?: (error: unknown) => void,
+) {
+  if (!usable || device.classification !== 'traseira') return false;
+  return saveCameraPreference(storage, device.deviceId, onError);
+}
+
+export function buildCameraDeviceStrategies(devices: CameraDeviceCandidate[], preferredDeviceId: string | null) {
+  const rear = devices.filter(device => device.classification === 'traseira' && device.deviceId);
+  const unknown = devices.filter(device => device.classification === 'não classificada' && device.deviceId);
+  const preferred = rear.find(device => device.deviceId === preferredDeviceId) ?? null;
+  const ordered = [
+    ...(preferred ? [preferred] : []),
+    ...rear.filter(device => device.deviceId !== preferred?.deviceId),
+    ...unknown,
+  ];
+  const strategies: CameraStrategy[] = ordered.map(device => ({
+    label: `${device.classification}:${device.label || device.deviceId.slice(0, 8)}`,
+    deviceId: device.deviceId,
+    constraints: createDeviceCameraConstraints(device.deviceId),
+  }));
+  strategies.push({ label: 'video:true (fallback final)', constraints: { video: true, audio: false } });
+  return { strategies, preferredValid: !preferredDeviceId || Boolean(preferred) };
+}
 
 export function classifyCameraDevice(label: string): CameraDeviceClassification {
   const normalized = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -238,9 +291,10 @@ const CAMERA_WATCHDOG_MS = 12000;
 
 const REAL_FRAME_MIN_SIZE = 16;
 const FRAME_READY_WAIT_MS = 3000;
-// O fluxo antigo já chegou a aguardar 800 ms; 600 ms dá margem ao CameraService
+// O fluxo antigo já chegou a aguardar 800 ms; esse teto dá margem ao CameraService
 // sem criar repetição infinita nem alongar excessivamente o fallback.
-const CAMERA_RELEASE_WAIT_MS = 600;
+const CAMERA_RELEASE_WAIT_MS = 800;
+const LAST_WORKING_BACK_CAMERA_KEY = 'smartbus.validator.lastWorkingBackCameraDeviceId';
 
 export function isUsableCameraState(input: {
   streamActive: boolean;
@@ -301,9 +355,15 @@ export default function DriverValidate() {
     const value = new URLSearchParams(window.location.search).get('cameraRaw');
     return value === 'generic' || value === 'ideal' || value === 'exact' ? value : null;
   }, [cameraDebug]);
+  const cameraRawDevicesMode = useMemo(() => cameraDebug
+    && new URLSearchParams(window.location.search).get('cameraRaw') === 'devices', [cameraDebug]);
   const [minimalCameraMode, setMinimalCameraMode] = useState(false);
   const [rawTestExecuted, setRawTestExecuted] = useState(false);
   const rawTestExecutedRef = useRef(false);
+  const [rawDevices, setRawDevices] = useState<CameraDeviceCandidate[]>([]);
+  const [rawDevicesError, setRawDevicesError] = useState<string | null>(null);
+  const [approvedRawDevice, setApprovedRawDevice] = useState<CameraDeviceCandidate | null>(null);
+  const rawDiagnosticActive = Boolean(cameraRawMode) || cameraRawDevicesMode;
   const diagnosticLinesRef = useRef<string[]>([]);
   const knownStopReasonRef = useRef<string | null>(null);
   const interceptedStopCountRef = useRef(0);
@@ -341,6 +401,11 @@ export default function DriverValidate() {
     diagnosticLinesRef.current = [...diagnosticLinesRef.current, `${new Date().toISOString()} ${message}${detail}`].slice(-250);
     console.info(`[CAM-DIAG] ${message}`, data ?? '');
   }, [cameraDebug]);
+  const recordPreferenceStorageError = useCallback((error: unknown) => {
+    recordDiagnostic('cameraPreference:storage_error', {
+      detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+  }, [recordDiagnostic]);
 
   const videoRef = useCallback((node: HTMLVideoElement | null) => {
     recordDiagnostic(`video:${node ? 'mount' : 'unmount'}`, {
@@ -350,6 +415,26 @@ export default function DriverValidate() {
     });
     setVideoEl(node);
   }, [recordDiagnostic]);
+
+  useEffect(() => {
+    if (!cameraRawDevicesMode || !navigator.mediaDevices?.enumerateDevices) return;
+    // O catálogo bruto enumera uma única vez por carregamento e não abre câmera.
+    void navigator.mediaDevices.enumerateDevices().then(devices => {
+      const candidates = devices.filter(device => device.kind === 'videoinput').map(device => ({
+        deviceId: device.deviceId,
+        label: device.label || 'unnamed',
+        classification: classifyCameraDevice(device.label),
+      }));
+      recordDiagnostic('cameraDeviceTest:devices', candidates.map(device => ({
+        ...device, deviceId: device.deviceId.slice(0, 8),
+      })));
+      setRawDevices(candidates);
+    }).catch(error => {
+      const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      recordDiagnostic('cameraDeviceTest:enumerate_reject', { detail });
+      setRawDevicesError(detail);
+    });
+  }, [cameraRawDevicesMode, recordDiagnostic]);
 
   const reasonLabel = useMemo(() => {
     if (!overlay) return '';
@@ -686,11 +771,6 @@ export default function DriverValidate() {
         updateDebug({ scannerSupported: true, scannerEngine: scannerEngineRef.current });
       }
 
-      // Até os ensaios brutos concluírem, o fluxo normal usa somente opções flexíveis.
-      const strategies: CameraStrategy[] = [
-        { label: 'traseira preferencial', constraints: { video: { facingMode: { ideal: 'environment' } }, audio: false } },
-        { label: 'video:true (fallback final)', constraints: { video: true, audio: false } },
-      ];
       const discoverBackCameras = async (stage: string) => {
         try {
           const devices = (await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput');
@@ -705,7 +785,9 @@ export default function DriverValidate() {
             deviceId: device.deviceId.slice(0, 8), label: device.label || 'unnamed', classification,
           })));
           logStep(`dispositivos ${stage}: ${devices.length}; traseiras=${back.length}; não classificados=${unknown.length}`);
+          return classified.map(({ device, classification }) => ({ deviceId: device.deviceId, label: device.label, classification }));
         } catch (error) { recordDiagnostic('enumerateDevices:error', String(error)); }
+        return [] as CameraDeviceCandidate[];
       };
 
       const validateCandidate = async (candidate: MediaStream, stopCountBeforeRequest: number) => {
@@ -800,12 +882,51 @@ export default function DriverValidate() {
         };
       };
 
+      let availableDevices = await discoverBackCameras('antes da abertura');
+      const labelsAndIdsAvailable = availableDevices.some(device => device.deviceId && device.label);
+
+      if (!labelsAndIdsAvailable) {
+        // Bootstrap único: abre a opção flexível apenas para liberar labels/IDs,
+        // encerra completamente e só então monta a fila física por deviceId.
+        const bootstrapStopCount = interceptedStopCountRef.current;
+        recordDiagnostic('cameraBootstrap:start', { constraints: RAW_CAMERA_CONSTRAINTS.generic });
+        let bootstrap: MediaStream | null = null;
+        try {
+          bootstrap = await acquireWithImmediateSnapshot(
+            () => navigator.mediaDevices.getUserMedia(RAW_CAMERA_CONSTRAINTS.generic),
+            stream => captureImmediateSnapshot(stream, video, 'normal:bootstrap_autorizacao'),
+          );
+          const bootstrapValidation = await validateCandidate(bootstrap, bootstrapStopCount);
+          if (bootstrapValidation.usable) availableDevices = await discoverBackCameras('após bootstrap de autorização');
+        } catch (error) {
+          recordDiagnostic('cameraBootstrap:reject', { detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+        } finally {
+          if (bootstrap) {
+            stopStreamTracks(bootstrap, 'fim_bootstrap_autorizacao');
+            if (streamRef.current === bootstrap) streamRef.current = null;
+            if (video.srcObject === bootstrap) video.srcObject = null;
+            await new Promise(resolve => window.setTimeout(resolve, CAMERA_RELEASE_WAIT_MS));
+          }
+        }
+      }
+
+      const savedDeviceId = readCameraPreference(localStorage, recordPreferenceStorageError);
+      const strategyPlan = buildCameraDeviceStrategies(availableDevices, savedDeviceId);
+      if (!strategyPlan.preferredValid && savedDeviceId) removeCameraPreference(localStorage, recordPreferenceStorageError);
+      const strategies = strategyPlan.strategies;
+      const classificationById = new Map(availableDevices.map(device => [device.deviceId, device.classification]));
+      const failedDeviceIds = new Set<string>();
+
       const requestContext = new WeakMap<MediaStream, { callId: string; stopCountBeforeRequest: number }>();
       const serialResult = await runSerialCameraStrategies(strategies, {
         acquire: async (strategy, index) => {
           const callId = `${thisInitId}.${index + 1}`;
           const stopCountBeforeRequest = interceptedStopCountRef.current;
+          if (strategy.deviceId && failedDeviceIds.has(strategy.deviceId)) {
+            throw new DOMException('Dispositivo já falhou nesta inicialização.', 'InvalidStateError');
+          }
           updateDebug({ currentStrategy: strategy.label });
+          setScannerStatusMessage(index === 0 ? 'Procurando uma câmera traseira disponível…' : 'Tentando outra câmera…');
           logStep(`${index ? 'fallback serial' : 'tentativa inicial'} → ${strategy.label}`);
           recordDiagnostic('getUserMedia:start', { callId, label: strategy.label, stack: new Error().stack });
           try {
@@ -825,10 +946,17 @@ export default function DriverValidate() {
           }
         },
         afterResolved: async (candidate, strategy) => {
-          await discoverBackCameras(`após ${strategy.label}`);
           const context = requestContext.get(candidate);
           candidate.getVideoTracks().forEach(track => track.addEventListener('ended', () =>
             recordDiagnostic('track:ended', { callId: context?.callId, trackId: track.id, visibility: document.visibilityState })));
+          if (strategy.deviceId && classificationById.get(strategy.deviceId) === 'traseira') {
+            const saved = saveCameraPreference(localStorage, strategy.deviceId, recordPreferenceStorageError);
+            if (saved) recordDiagnostic('cameraPreference:saved', { deviceId: strategy.deviceId.slice(0, 8) });
+            setScannerStatusMessage('Câmera traseira configurada.');
+          } else if (!strategy.deviceId) {
+            setScannerStatusMessage('Usando a câmera frontal como alternativa.');
+            recordDiagnostic('cameraSelection:video_true_fallback', { label: candidate.getVideoTracks()[0]?.label || 'unnamed' });
+          }
         },
         validate: async (candidate, strategy) => {
           const context = requestContext.get(candidate);
@@ -841,6 +969,17 @@ export default function DriverValidate() {
           if (streamRef.current === candidate) streamRef.current = null;
           if (video.srcObject === candidate) video.srcObject = null;
           recordDiagnostic('video:srcObject_removed', { strategy: strategy.label });
+        },
+        onFailure: (strategy, detail) => {
+          if (!strategy.deviceId) return;
+          failedDeviceIds.add(strategy.deviceId);
+          recordDiagnostic('cameraDevice:temporarily_failed', {
+            deviceId: strategy.deviceId.slice(0, 8), detail, failedCount: failedDeviceIds.size,
+          });
+          if (strategy.deviceId === savedDeviceId) {
+            removeCameraPreference(localStorage, recordPreferenceStorageError);
+            recordDiagnostic('cameraPreference:removed_after_failure', { deviceId: strategy.deviceId.slice(0, 8), detail });
+          }
         },
         afterAttempt: () => new Promise(resolve => window.setTimeout(resolve, CAMERA_RELEASE_WAIT_MS)),
       });
@@ -879,43 +1018,50 @@ export default function DriverValidate() {
     }
   }, [logStep, logStreamSnapshot, minimalCameraMode, recordDiagnostic, stopCurrentStream, stopStreamTracks, updateDebug]);
 
-  const startRawCamera = useCallback(async (video: HTMLVideoElement, mode: CameraRawMode) => {
+  const startRawCamera = useCallback(async (
+    video: HTMLVideoElement,
+    testType: string,
+    constraints: MediaStreamConstraints,
+    device?: CameraDeviceCandidate,
+  ) => {
     if (rawTestExecutedRef.current || initInProgressRef.current) return;
     rawTestExecutedRef.current = true;
     setRawTestExecuted(true);
     initInProgressRef.current = true;
     const clickedAt = new Date().toISOString();
-    recordDiagnostic('cameraRaw:click', { mode, clickedAt });
+    recordDiagnostic(device ? 'cameraDeviceTest:click' : 'cameraRaw:click', {
+      testType, clickedAt, label: device?.label, classification: device?.classification,
+      deviceId: device?.deviceId.slice(0, 8), constraints,
+    });
     stopCurrentStream('inicio_teste_bruto');
     setCameraError(null);
-    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: 1, lastInitAt: clickedAt, currentStrategy: `bruto:${mode}`, scannerEngine: 'none' });
+    updateDebug({ ...INITIAL_DEBUG, initInProgress: true, initCount: 1, lastInitAt: clickedAt, currentStrategy: `bruto:${testType}`, scannerEngine: 'none' });
 
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         throw new DOMException('API de câmera indisponível.', 'SecurityError');
       }
-      recordDiagnostic('getUserMedia:start', { mode, at: new Date().toISOString(), constraints: RAW_CAMERA_CONSTRAINTS[mode] });
-      const stream = await runRawCameraAcquisition(
-        mode,
-        constraints => navigator.mediaDevices.getUserMedia(constraints),
-        candidate => captureImmediateSnapshot(candidate, video, `raw:${mode}`),
+      recordDiagnostic('getUserMedia:start', { testType, at: new Date().toISOString(), constraints });
+      const stream = await acquireWithImmediateSnapshot(
+        () => navigator.mediaDevices.getUserMedia(constraints),
+        candidate => captureImmediateSnapshot(candidate, video, `raw:${testType}`),
       );
-      recordDiagnostic('getUserMedia:resolve', { mode, at: new Date().toISOString() });
+      recordDiagnostic('getUserMedia:resolve', { testType, at: new Date().toISOString() });
       stream.getVideoTracks().forEach(track => {
-        track.addEventListener('ended', () => recordDiagnostic('track:ended', { mode, trackId: track.id }));
-        track.addEventListener('mute', () => recordDiagnostic('track:mute', { mode, trackId: track.id }));
-        track.addEventListener('unmute', () => recordDiagnostic('track:unmute', { mode, trackId: track.id }));
+        track.addEventListener('ended', () => recordDiagnostic('track:ended', { testType, trackId: track.id }));
+        track.addEventListener('mute', () => recordDiagnostic('track:mute', { testType, trackId: track.id }));
+        track.addEventListener('unmute', () => recordDiagnostic('track:unmute', { testType, trackId: track.id }));
       });
       streamRef.current = stream;
       streamOwnerInitRef.current = 1;
       video.srcObject = stream;
-      recordDiagnostic('video:srcObject_assigned', { mode, trackState: stream.getVideoTracks()[0]?.readyState ?? 'ausente' });
+      recordDiagnostic('video:srcObject_assigned', { testType, trackState: stream.getVideoTracks()[0]?.readyState ?? 'ausente' });
       try {
-        recordDiagnostic('video:play_start', { mode });
+        recordDiagnostic('video:play_start', { testType });
         await video.play();
-        recordDiagnostic('video:play_resolve', { mode });
+        recordDiagnostic('video:play_resolve', { testType });
       } catch (error) {
-        recordDiagnostic('video:play_reject', { mode, detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+        recordDiagnostic('video:play_reject', { testType, detail: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
       }
       const frameReady = await waitForUsableCameraState(
         () => ({
@@ -927,30 +1073,43 @@ export default function DriverValidate() {
         }),
         milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds)),
       );
-      if (frameReady) recordDiagnostic('video:first_frame', { mode, width: video.videoWidth, height: video.videoHeight });
+      if (frameReady) recordDiagnostic('video:first_frame', { testType, width: video.videoWidth, height: video.videoHeight });
       const track = stream.getVideoTracks()[0];
+      if (device) {
+        const saved = persistApprovedBackCamera(device, frameReady, localStorage, recordPreferenceStorageError);
+        if (saved) {
+          recordDiagnostic('cameraDeviceTest:approved_back_camera', {
+            label: device.label, deviceId: device.deviceId.slice(0, 8), preferenceSaved: true,
+          });
+          setApprovedRawDevice(device);
+        } else if (frameReady) {
+          recordDiagnostic('cameraDeviceTest:functional_not_saved_as_back', {
+            classification: device.classification, deviceId: device.deviceId.slice(0, 8),
+          });
+        }
+      }
       updateDebug({
         streamExists: true, trackCount: stream.getVideoTracks().length,
         trackStates: stream.getVideoTracks().map(item => item.readyState),
         liveTrackStates: stream.getVideoTracks().filter(item => item.readyState === 'live').map(item => item.readyState),
         trackLabels: stream.getVideoTracks().map(item => item.label || 'unnamed'),
-        constraintUsed: `raw:${mode}`, selectedDeviceId: track?.getSettings().deviceId?.slice(0, 8) ?? null,
+        constraintUsed: `raw:${testType}`, selectedDeviceId: track?.getSettings().deviceId?.slice(0, 8) ?? null,
         videoWidth: video.videoWidth, videoHeight: video.videoHeight, readyState: video.readyState,
-        cameraReady: frameReady, cameraError: frameReady ? null : 'sem_quadro_real', currentStrategy: `bruto:${mode}:finalizado`,
+        cameraReady: frameReady, cameraError: frameReady ? null : 'sem_quadro_real', currentStrategy: `bruto:${testType}:finalizado`,
       });
       cameraReadyRef.current = frameReady;
       setCameraReady(frameReady);
       if (!frameReady) setCameraError('O teste bruto terminou sem quadro real. Recarregue a página para repetir ou use outro link de teste.');
     } catch (error) {
       const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      recordDiagnostic('getUserMedia:reject', { mode, at: new Date().toISOString(), detail });
+      recordDiagnostic('getUserMedia:reject', { testType, at: new Date().toISOString(), detail });
       setCameraError(`Teste bruto rejeitado: ${detail}. Recarregue a página para outro ensaio.`);
-      updateDebug({ lastError: detail, cameraError: detail, currentStrategy: `bruto:${mode}:rejeitado` });
+      updateDebug({ lastError: detail, cameraError: detail, currentStrategy: `bruto:${testType}:rejeitado` });
     } finally {
       initInProgressRef.current = false;
       updateDebug({ initInProgress: false });
     }
-  }, [captureImmediateSnapshot, recordDiagnostic, stopCurrentStream, updateDebug]);
+  }, [captureImmediateSnapshot, recordDiagnostic, recordPreferenceStorageError, stopCurrentStream, updateDebug]);
 
   /* ---------- Libera o hardware apenas no desmonte real da tela ---------- */
 
@@ -991,7 +1150,7 @@ export default function DriverValidate() {
 
 
   useEffect(() => {
-    if (!shouldStartScanner(minimalCameraMode, scannerSupported, Boolean(cameraRawMode)) || !cameraReady || !videoEl || overlay || serviceOverlay || processing) return;
+    if (!shouldStartScanner(minimalCameraMode, scannerSupported, rawDiagnosticActive) || !cameraReady || !videoEl || overlay || serviceOverlay || processing) return;
 
     scanIntervalRef.current = window.setInterval(async () => {
       if (!videoEl || scanLocked || processing || overlay || serviceOverlay) return;
@@ -1047,10 +1206,10 @@ export default function DriverValidate() {
         scanIntervalRef.current = null;
       }
     };
-  }, [cameraReady, cameraRawMode, handleValidate, minimalCameraMode, overlay, processing, scanLocked, scannerSupported, serviceOverlay, startCamera, videoEl]);
+  }, [cameraReady, handleValidate, minimalCameraMode, overlay, processing, rawDiagnosticActive, scanLocked, scannerSupported, serviceOverlay, startCamera, videoEl]);
 
   useEffect(() => {
-    if (!cameraReady || cameraRawMode || minimalCameraMode || overlay || processing) return;
+    if (!cameraReady || rawDiagnosticActive || minimalCameraMode || overlay || processing) return;
 
     const id = window.setInterval(() => {
       if (Date.now() - lastScanSuccessAtRef.current >= 15000) {
@@ -1059,14 +1218,14 @@ export default function DriverValidate() {
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [cameraReady, cameraRawMode, minimalCameraMode, overlay, processing]);
+  }, [cameraReady, minimalCameraMode, overlay, processing, rawDiagnosticActive]);
 
   useEffect(() => {
-    if (!cameraReady || minimalCameraMode || cameraRawMode) return;
+    if (!cameraReady || minimalCameraMode || rawDiagnosticActive) return;
     if (!scannerSupported) {
       setScannerStatusMessage('Leitura indisponível neste navegador. Use o token manual do QR.');
     }
-  }, [cameraReady, cameraRawMode, minimalCameraMode, scannerSupported]);
+  }, [cameraReady, minimalCameraMode, rawDiagnosticActive, scannerSupported]);
 
   /* ---------- Keep debug in sync ---------- */
 
@@ -1208,7 +1367,7 @@ export default function DriverValidate() {
               />
 
               {/* Scan frame overlay */}
-              {cameraReady && !overlay && !minimalCameraMode && !cameraRawMode && (
+              {cameraReady && !overlay && !minimalCameraMode && !rawDiagnosticActive && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="relative h-48 w-48">
                     <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white/80 rounded-tl-lg" />
@@ -1224,11 +1383,11 @@ export default function DriverValidate() {
 
               {!cameraReady && !cameraError && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white/90">
-                  <p className="text-sm">{cameraRawMode ? `Teste bruto ativo: ${cameraRawMode}. Uma execução por carregamento.` : minimalCameraMode ? 'Abra somente a câmera para o teste mínimo.' : 'Abra a câmera para ler o QR Code da passagem.'}</p>
-                  <Button type="button" onClick={() => videoEl && (cameraRawMode ? startRawCamera(videoEl, cameraRawMode) : startCamera(videoEl))} disabled={debugInfo.initInProgress || (Boolean(cameraRawMode) && rawTestExecuted)}>
+                  <p className="text-sm">{cameraRawDevicesMode ? 'Selecione uma câmera na lista de dispositivos abaixo.' : cameraRawMode ? `Teste bruto ativo: ${cameraRawMode}. Uma execução por carregamento.` : minimalCameraMode ? 'Abra somente a câmera para o teste mínimo.' : 'Abra a câmera para ler o QR Code da passagem.'}</p>
+                  {!cameraRawDevicesMode && <Button type="button" onClick={() => videoEl && (cameraRawMode ? startRawCamera(videoEl, cameraRawMode, RAW_CAMERA_CONSTRAINTS[cameraRawMode]) : startCamera(videoEl))} disabled={debugInfo.initInProgress || (Boolean(cameraRawMode) && rawTestExecuted)}>
                     {debugInfo.initInProgress ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <QrCode className="mr-2 h-4 w-4" />}
                     {debugInfo.initInProgress ? 'Abrindo câmera...' : cameraRawMode && rawTestExecuted ? 'Teste executado — recarregue para repetir' : 'Abrir câmera'}
-                  </Button>
+                  </Button>}
                 </div>
               )}
 
@@ -1344,7 +1503,7 @@ export default function DriverValidate() {
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  disabled={debugInfo.initInProgress || Boolean(cameraRawMode)}
+                  disabled={debugInfo.initInProgress || rawDiagnosticActive}
                   onClick={() => videoEl && startCamera(videoEl)}
                 >
                   {debugInfo.initInProgress ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -1354,7 +1513,7 @@ export default function DriverValidate() {
             )}
 
             {/* Manual token fallback */}
-            {!minimalCameraMode && !cameraRawMode && <div className="space-y-2">
+            {!minimalCameraMode && !rawDiagnosticActive && <div className="space-y-2">
               <Label htmlFor="manual-token">Token do QR (fallback)</Label>
               <div className="flex gap-2">
                 <Input
@@ -1386,9 +1545,54 @@ export default function DriverValidate() {
             <a className="underline" href="?cameraDebug=1&cameraRaw=generic">Teste bruto — video:true</a>
             <a className="underline" href="?cameraDebug=1&cameraRaw=ideal">Teste bruto — traseira preferencial</a>
             <a className="underline" href="?cameraDebug=1&cameraRaw=exact">Teste bruto — traseira obrigatória</a>
+            <a className="underline" href="?cameraDebug=1&cameraRaw=devices">Teste bruto — dispositivo individual</a>
           </div>
-          <p className="mt-1 font-mono">teste bruto ativo: {cameraRawMode ?? 'nenhum'}</p>
-          {!cameraRawMode && <Button
+          <p className="mt-1 font-mono">teste bruto ativo: {cameraRawDevicesMode ? 'devices' : cameraRawMode ?? 'nenhum'}</p>
+          {cameraRawDevicesMode && <div className="mt-2 space-y-3">
+            {rawDevicesError && <p className="text-destructive">Falha ao listar: {rawDevicesError}</p>}
+            {approvedRawDevice && <div className="rounded border border-green-500/40 bg-green-500/10 p-3">
+              <p className="font-semibold text-green-700">Câmera traseira aprovada</p>
+              <p>{approvedRawDevice.label}</p>
+              <p className="font-mono">ID: {approvedRawDevice.deviceId.slice(0, 8)}…</p>
+              <p>Ela será priorizada no validador.</p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => {
+                  stopCurrentStream('voltar_validador_normal');
+                  window.location.assign('/validador/validar');
+                }}
+              >Voltar ao validador normal</Button>
+            </div>}
+            {(['traseira', 'frontal', 'não classificada'] as CameraDeviceClassification[]).map(classification => (
+              <div key={classification} className="space-y-1 rounded border p-2">
+                <p className="font-semibold capitalize">{classification}s</p>
+                {rawDevices.filter(device => device.classification === classification).length === 0
+                  ? <p className="text-muted-foreground">nenhuma</p>
+                  : rawDevices.filter(device => device.classification === classification).map(device => (
+                    <div key={device.deviceId} className="rounded bg-background p-2 font-mono">
+                      <p>{device.label}</p>
+                      <p>deviceId: {device.deviceId.slice(0, 8)}…</p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-1 w-full"
+                        disabled={rawTestExecuted || debugInfo.initInProgress || !videoEl}
+                        onClick={() => videoEl && startRawCamera(
+                          videoEl,
+                          `device:${device.deviceId.slice(0, 8)}`,
+                          createDeviceCameraConstraints(device.deviceId),
+                          device,
+                        )}
+                      >{rawTestExecuted ? 'Recarregue para outro teste' : 'Testar esta câmera'}</Button>
+                    </div>
+                  ))}
+              </div>
+            ))}
+          </div>}
+          {!rawDiagnosticActive && <Button
             type="button"
             variant="outline"
             size="sm"
@@ -1400,7 +1604,7 @@ export default function DriverValidate() {
               setCameraError(null);
             }}
           >{minimalCameraMode ? 'Usar câmera com scanner' : 'Ativar teste mínimo sem scanner'}</Button>}
-          <p className="mt-1 font-mono">modo: {cameraRawMode ? `bruto:${cameraRawMode}` : minimalCameraMode ? 'mínimo (scanner desativado)' : 'com scanner'}</p>
+          <p className="mt-1 font-mono">modo: {cameraRawDevicesMode ? 'bruto:devices' : cameraRawMode ? `bruto:${cameraRawMode}` : minimalCameraMode ? 'mínimo (scanner desativado)' : 'com scanner'}</p>
           <button
             type="button"
             className="mt-2 mb-1 w-full rounded border border-muted bg-background px-2 py-1 font-mono text-xs active:bg-muted"

@@ -206,7 +206,7 @@ A atribuição a Chrome/Android permanece condicionada à matriz de controle: au
 
 A preparação do vídeo agora segue track `live` → `srcObject` → espera limitada por `loadedmetadata`/`canplay` → `play()` →, em rejeição transitória, espera por estado reproduzível e uma única repetição → janela limitada do primeiro quadro. Rejeição nas duas chamadas de `play()` invalida a tentativa. O diagnóstico registra cada etapa e o estado contemporâneo da track.
 
-A descoberta classifica labels multilíngues como traseira, frontal ou não classificada. A classificação multilíngue permanece no diagnóstico, mas a seleção por `deviceId` foi retirada da abertura normal até a conclusão dos ensaios brutos; `video:true` continua como controle flexível final. O intervalo de liberação foi elevado de 350 para 600 ms, abaixo do histórico conservador de 800 ms.
+A descoberta classifica labels multilíngues como traseira, frontal ou não classificada. Após os controles brutos confirmarem a limitação de `facingMode`, a seleção por `deviceId` retornou de forma dinâmica, sem IDs fixos; `video:true` continua como fallback final. O intervalo de liberação foi elevado de 350 para o teto conservador de 800 ms.
 
 A orquestração serial foi isolada somente o suficiente para teste de contrato: aquisição pendente bloqueia a próxima, descarte antecede a próxima aquisição, stream válido encerra a fila e o fallback final é alcançável. O watchdog continua informativo e não libera a trava; o botão de retry permanece desabilitado e mostra a estratégia atual.
 
@@ -214,4 +214,17 @@ A orquestração serial foi isolada somente o suficiente para teste de contrato:
 
 O evento `getUserMedia:immediate_snapshot` agora é produzido na instrução síncrona imediatamente posterior ao `await getUserMedia`, antes de WeakMap, estado React, `streamRef`, `srcObject`, callback assíncrono ou enumeração. A validação completa de track/vídeo/quadro ocorre antes de `afterResolved`; `enumerateDevices` só é chamado depois que uma tentativa já foi considerada funcional.
 
-Até os três controles brutos serem executados, o fluxo normal deixa de iniciar por `exact`: tenta traseira `ideal` e depois `video:true`. O modo bruto não usa essa fila. Cada URL (`cameraRaw=generic`, `ideal` ou `exact`) permite um clique e uma chamada, sem permissions query, enumeração, scanner, deviceId, fallback, watchdog ou retry. Para trocar de ensaio é necessário carregar outro link, o que também libera o stream pelo cleanup existente.
+Na etapa intermediária dos três controles, o fluxo normal deixou de iniciar por `exact`. Com a evidência de que `ideal` e `exact` escolhem o mesmo dispositivo encerrado, o fluxo normal passou a usar a fila dinâmica por `deviceId` descrita na seção seguinte. O modo bruto não usa essa fila. Cada URL (`cameraRaw=generic`, `ideal` ou `exact`) permite um clique e uma chamada, sem permissions query, enumeração, scanner, deviceId, fallback, watchdog ou retry. Para trocar de ensaio é necessário carregar outro link, o que também libera o stream pelo cleanup existente.
+
+## 19. Seleção dinâmica por dispositivo físico
+
+Os ensaios `ideal` e `exact` escolheram o mesmo deviceId da `camera 2`, enquanto `video:true` comprovou que a captura funciona com a frontal. Isso não determina o resultado da outra traseira. O catálogo `/validador/validar?cameraDebug=1&cameraRaw=devices` enumera uma vez, agrupa traseiras/frontais/não classificadas e permite uma única aquisição por `deviceId exact` a cada carregamento.
+
+O fluxo normal não usa mais `facingMode`. Se a enumeração já expõe labels e IDs, prioriza a última traseira funcional ainda presente, depois as demais traseiras, não classificadas e `video:true`. Se os labels estiverem ocultos, faz um bootstrap único com `video:true`, valida o quadro, enumera, encerra o bootstrap, aguarda 800 ms e monta a mesma fila por deviceId. Uma traseira só é memorizada depois de track `live` e quadro real; preferência ausente ou que falha é removida do `localStorage` sem bloquear os demais dispositivos.
+
+
+## 20. Promoção do teste individual para o fluxo normal
+
+Uma câmera traseira aprovada no catálogo individual agora grava a mesma preferência tolerante a falhas usada pelo fluxo normal, mas somente após stream ativo, track `live`, vídeo conectado e quadro real. Câmeras frontais ou ensaios sem quadro não são gravados. A tela confirma label/ID reduzido e oferece retorno ao validador normal.
+
+A preferência é uma otimização: leitura, escrita e remoção são protegidas; uma exceção do armazenamento vira apenas diagnóstico. A câmera preferida é validada na enumeração, removida se incompatível, ausente, rejeitada antes de criar stream ou inutilizável depois da aquisição. Falhas por dispositivo ficam em um `Set` somente durante a inicialização, aparecem no log e não se repetem. Toda falha com stream executa stop/desvínculo e toda próxima tentativa aguarda 800 ms. O primeiro dispositivo funcional encerra a fila; `video:true` permanece no final e nunca é salvo como traseira.
