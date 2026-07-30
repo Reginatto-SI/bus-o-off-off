@@ -17,7 +17,7 @@ describe("OfficialSponsorsSection", () => {
     const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
 
     expect(mobileCards).toHaveLength(3);
-    expect(within(mobileCards[0]).getByAltText("Banner mobile do Patrocinador 01")).toBeInTheDocument();
+    expect(within(mobileCards[0]).getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros")).toBeInTheDocument();
     expect(within(mobileCards[1]).getByAltText("Banner mobile do Patrocinador 02")).toBeInTheDocument();
     expect(within(mobileCards[2]).getByAltText("Banner mobile do Patrocinador 03")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Ver patrocinador \d/ })).toHaveLength(6);
@@ -32,7 +32,7 @@ describe("OfficialSponsorsSection", () => {
     Object.defineProperty(cards[1], "offsetHeight", { configurable: true, value: 470 });
     carousel.scrollTo = vi.fn();
 
-    fireEvent.load(within(cards[0]).getByAltText("Banner mobile do Patrocinador 01"));
+    fireEvent.load(within(cards[0]).getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros"));
     expect(viewport).toHaveStyle({ height: "320px" });
     expect(viewport).toHaveClass("overflow-hidden", "transition-[height]");
     expect(carousel).not.toHaveAttribute("style");
@@ -42,18 +42,24 @@ describe("OfficialSponsorsSection", () => {
     expect(viewport).toHaveStyle({ height: "470px" });
   });
 
-  it("oculta os labels genéricos do patrocinador real e preserva sua imagem e ação", () => {
+  it("usa o WhatsApp individual da AEG na imagem mobile, na imagem desktop e no CTA", () => {
     const { container } = render(<OfficialSponsorsSection />);
     const firstMobileCard = container.querySelectorAll<HTMLElement>("[data-sponsor-card]")[0];
+    const expectedUrl =
+      "https://wa.me/553133333065?text=Ol%C3%A1!%20Gostaria%20de%20saber%20mais%20sobre%20o%20Seguro%20Viagem%20da%20AEG%20Corretora%20de%20Seguros.%20Conheci%20a%20empresa%20pela%20p%C3%A1gina%20do%20SmartBus%20BR.";
 
     expect(within(firstMobileCard).queryByText("Patrocinador 01")).not.toBeInTheDocument();
     expect(within(firstMobileCard).queryByText("Patrocinador oficial SmartBus BR.")).not.toBeInTheDocument();
-    expect(within(firstMobileCard).getByAltText("Banner mobile do Patrocinador 01")).toBeInTheDocument();
-    expect(within(firstMobileCard).getByRole("link", { name: "Conhecer o Patrocinador 01" })).toHaveAttribute(
-      "href",
-      "https://wa.me/5531992074309?text=Ol%C3%A1!%20Quero%20conhecer%20os%20espa%C3%A7os%20de%20Patrocinadores%20Oficiais%20do%20SmartBus.",
-    );
-    expect(within(firstMobileCard).getByRole("link", { name: /Conhecer patrocinador/ })).toBeInTheDocument();
+    expect(within(firstMobileCard).getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros")).toHaveAttribute("src", "/sponsors/patrocinador-01-mobile.png");
+    const aegMobileLinks = within(firstMobileCard).getAllByRole("link", {
+      name: "Conhecer o Seguro Viagem da AEG Corretora de Seguros",
+    });
+    expect(aegMobileLinks).toHaveLength(2);
+    aegMobileLinks.forEach((link) => expect(link).toHaveAttribute("href", expectedUrl));
+    expect(screen.getByAltText("Banner desktop de Seguro Viagem da AEG Corretora de Seguros")).toHaveAttribute("src", "/sponsors/patrocinador-01-desktop.png");
+    expect(screen.getAllByRole("link", { name: "Conhecer o Seguro Viagem da AEG Corretora de Seguros" })[2]).toHaveAttribute("href", expectedUrl);
+    expect(decodeURIComponent(expectedUrl)).toContain("Seguro Viagem");
+    expect(decodeURIComponent(expectedUrl)).toContain("SmartBus BR");
     expect(screen.queryByRole("link", { name: /Abrir site/ })).not.toBeInTheDocument();
     expect(firstMobileCard).toHaveClass("self-start");
     expect(firstMobileCard.lastElementChild).not.toHaveClass("flex-1");
@@ -63,7 +69,7 @@ describe("OfficialSponsorsSection", () => {
     const { container } = render(<OfficialSponsorsSection />);
     const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
 
-    fireEvent.error(within(mobileCards[0]).getByAltText("Banner mobile do Patrocinador 01"));
+    fireEvent.error(within(mobileCards[0]).getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros"));
     fireEvent.error(within(mobileCards[2]).getByAltText("Banner mobile do Patrocinador 03"));
 
     const updatedMobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
@@ -77,13 +83,13 @@ describe("OfficialSponsorsSection", () => {
       "/sponsors/patrocinador-02-mobile.png",
     );
     expect(within(updatedMobileCards[2]).getAllByText("Anuncie aqui").length).toBeGreaterThan(0);
-    expect(screen.getByAltText("Banner desktop do Patrocinador 01")).toBeInTheDocument();
+    expect(screen.getByAltText("Banner desktop de Seguro Viagem da AEG Corretora de Seguros")).toBeInTheDocument();
   });
 
   it("mantém três placeholders quando todas as imagens mobile falharem", () => {
     const { container } = render(<OfficialSponsorsSection />);
 
-    screen.getAllByAltText(/Banner mobile do Patrocinador/).forEach((image) => fireEvent.error(image));
+    screen.getAllByAltText(/Banner mobile/).forEach((image) => fireEvent.error(image));
 
     const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
     expect(mobileCards).toHaveLength(3);
@@ -92,13 +98,26 @@ describe("OfficialSponsorsSection", () => {
 
   it("troca somente o viewport desktop cuja imagem falhar pelo placeholder", () => {
     const { container } = render(<OfficialSponsorsSection />);
-    const desktopImage = screen.getByAltText("Banner desktop do Patrocinador 01");
+    const desktopImage = screen.getByAltText("Banner desktop de Seguro Viagem da AEG Corretora de Seguros");
 
     fireEvent.error(desktopImage);
 
     const desktopCarousel = container.querySelector<HTMLElement>(".lg\\:block");
     expect(desktopCarousel).not.toBeNull();
     expect(within(desktopCarousel!).getByText("Anuncie aqui")).toBeInTheDocument();
-    expect(screen.getByAltText("Banner mobile do Patrocinador 01")).toBeInTheDocument();
+    expect(screen.getByAltText("Banner mobile de Seguro Viagem da AEG Corretora de Seguros")).toBeInTheDocument();
+  });
+
+  it("preserva o fallback SmartBus nos slots sem contato individual", () => {
+    const { container } = render(<OfficialSponsorsSection />);
+    const mobileCards = container.querySelectorAll<HTMLElement>("[data-sponsor-card]");
+    const smartBusUrl = "https://wa.me/5531992074309?text=";
+
+    [mobileCards[1], mobileCards[2]].forEach((card) => {
+      within(card).getAllByRole("link").forEach((link) => {
+        expect(link.getAttribute("href")).toContain(smartBusUrl);
+        expect(link.getAttribute("href")).not.toContain("553133333065");
+      });
+    });
   });
 });
