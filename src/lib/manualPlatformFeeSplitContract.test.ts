@@ -55,7 +55,8 @@ describe('manual platform fee split contract', () => {
     expect(source).toContain('computeProgressiveFeeForPassengers');
     expect(source).toContain('resolveAsaasSplitRecipients');
     expect(source).toContain('distributePlatformFee');
-    expect(source).toContain('split: splitArray');
+    expect(source).toContain('if (splitArray.length > 0) paymentPayload.split = splitArray');
+    expect(source).toContain('paymentPayload = withoutSplit(paymentPayload)');
     expect(source).toContain('split_snapshot_source: "create-platform-fee-checkout"');
     expect(source).toContain('platform_fee_checkout_blocked_amount_mismatch_existing_payment');
     expect(source).toContain('legacy_pending_platform_fee_without_split_snapshot');

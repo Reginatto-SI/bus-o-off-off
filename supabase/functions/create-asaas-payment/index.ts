@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const serve = (handler: (req: Request) => Response | Promise<Response>) => Deno.serve(handler);
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -17,6 +18,11 @@ import {
   distributePlatformFee,
   logFeeEngineTrace,
 } from "../_shared/platform-fee-engine.ts";
+import {
+  buildAsaasSplitPayload,
+  isExplicitAsaasSplitRejection,
+  withoutSplit,
+} from "../_shared/asaas-split-continuity.ts";
 import {
   buildCheckoutFinancialIntegritySnapshot,
   resolvePassengerFinancialUnitPrice,
@@ -137,7 +143,7 @@ function getPayloadAcceptedTerms(payload: TermsAcceptancePayload | null): TermsA
 }
 
 async function ensureSaleTermsAcceptance(params: {
-  supabaseAdmin: ReturnType<typeof createClient>;
+  supabaseAdmin: any;
   sale: Record<string, unknown>;
   termsAcceptance: TermsAcceptancePayload | null;
 }) {
@@ -350,7 +356,7 @@ async function ensureSaleTermsAcceptance(params: {
 
     const { error: insertError } = await supabaseAdmin
       .from("sale_term_acceptances")
-      .insert(rows);
+      .insert(rows as any);
 
     if (insertError && insertError.code !== "23505") {
       console.error("[create-asaas-payment] terms_acceptance_insert_failed", {
@@ -704,7 +710,7 @@ serve(async (req) => {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
-              access_token: companyApiKey,
+              access_token: companyApiKey!,
             },
           },
         );
@@ -1288,39 +1294,12 @@ serve(async (req) => {
       ? Deno.env.get(paymentContext.platformWalletSecretName)
       : null;
 
-    // Fase 2: resolvedor único do split (plataforma/sócio/representante).
-    // Mantém regra determinística e evita espalhar validações por função.
-    let splitResolution;
-    let feeDistribution;
+    // A elegibilidade é consultada uma vez. Distribuição, payload, snapshot e
+    // logs derivam do mesmo objeto; qualquer exceção interna degrada para uma
+    // cobrança sem split e abre pendência de conciliação, sem abortar checkout.
+    let splitResolution: Awaited<ReturnType<typeof resolveAsaasSplitRecipients>>;
+    let splitInternalException: string | null = null;
     try {
-      const preResolution = await resolveAsaasSplitRecipients({
-        supabaseAdmin,
-        source: "create-asaas-payment",
-        saleId: sale.id,
-        companyId: sale.company_id,
-        paymentEnvironment: paymentContext.environment,
-        splitEnabled,
-        platformFeePercent: feeTotalPercent,
-        socioSplitPercent: feeTotalPercent,
-        representativeId: sale.representative_id ?? null,
-        includePlatformRecipient: true,
-        platformWalletId,
-        distributionPercentages: {
-          platform: feeTotalPercent,
-          socio: feeTotalPercent,
-          representative: feeTotalPercent,
-        },
-      });
-
-      feeDistribution = distributePlatformFee({
-        totalFee: platformFeeEngine.totalFee,
-        representativeEligible: preResolution.representative.eligible,
-      });
-
-      const platformSplitPercent = amountToGrossPercent(feeDistribution.platformAmount, grossAmount);
-      const socioSplitPercentByEngine = amountToGrossPercent(feeDistribution.socioAmount, grossAmount);
-      const representativeSplitPercentByEngine = amountToGrossPercent(feeDistribution.representativeAmount, grossAmount);
-
       splitResolution = await resolveAsaasSplitRecipients({
         supabaseAdmin,
         source: "create-asaas-payment",
@@ -1328,77 +1307,72 @@ serve(async (req) => {
         companyId: sale.company_id,
         paymentEnvironment: paymentContext.environment,
         splitEnabled,
-        platformFeePercent: platformSplitPercent,
-        socioSplitPercent: socioSplitPercentByEngine,
         representativeId: sale.representative_id ?? null,
-        includePlatformRecipient: true,
-        platformWalletId,
-        distributionPercentages: {
-          platform: platformSplitPercent,
-          socio: socioSplitPercentByEngine,
-          representative: representativeSplitPercentByEngine,
-        },
       });
+
     } catch (splitError) {
-      const splitErrorMessage = splitError instanceof Error
+      splitInternalException = splitError instanceof Error
         ? splitError.message
         : String(splitError);
-      const [splitErrorCode, ...rest] = splitErrorMessage.split(":");
-      const splitErrorDetail = rest.join(":").trim();
-
-      await logSaleOperationalEvent({
+      splitResolution = {
+        socioValidation: null,
+        socio: { included: false, reason: "query_failed", walletId: null },
+        representative: {
+          eligible: false,
+          reason: "representative_lookup_failed",
+          representativeId: sale.representative_id ?? null,
+          walletId: null,
+        },
+      };
+      await logCriticalPaymentIssue({
         supabaseAdmin,
+        source: "create-asaas-payment",
+        errorCode: "split_resolution_internal_exception_degraded",
         saleId: sale.id,
         companyId: sale.company_id,
-        action: "payment_create_failed",
-        source: "create-asaas-payment",
-        result: "error",
         paymentEnvironment: paymentContext.environment,
-        errorCode: splitErrorCode || "split_resolution_failed",
-        detail: splitErrorDetail || splitErrorMessage,
+        detail: splitInternalException,
       });
-
-      if (splitErrorCode === "missing_platform_wallet") {
-        return jsonResponse(
-          {
-            error: "Wallet da plataforma não configurada",
-            error_code: "missing_platform_wallet",
-          },
-          500,
-        );
-      }
-
-      if (splitErrorCode === "split_socio_query_failed") {
-        return jsonResponse(
-          {
-            error: "Falha ao validar o sócio do split",
-            error_code: "split_socio_query_failed",
-          },
-          500,
-        );
-      }
-
-      return jsonResponse(
-        {
-          error: splitErrorDetail || "Falha ao validar o split financeiro",
-          error_code: splitErrorCode || "split_resolution_failed",
-        },
-        409,
-      );
     }
 
-    const splitArray = splitResolution.recipients.map((recipient) => ({
-      walletId: recipient.walletId,
-      percentualValue: recipient.percentualValue,
-    }));
+    const feeDistribution = distributePlatformFee({
+      totalFee: platformFeeEngine.totalFee,
+      socioEligible: splitResolution.socio.included,
+      representativeEligible: splitResolution.representative.eligible,
+    });
+    const finalSplitDecision = buildAsaasSplitPayload({
+      eligibility: splitResolution,
+      distribution: feeDistribution,
+      platformWalletId: platformWalletId ?? null,
+      issuerWalletId: paymentContext.companyWalletByEnvironment,
+      issuerKind: "company",
+      includePlatformRecipient: true,
+      installmentCount: null,
+    });
+    let splitArray = finalSplitDecision.recipients.map(({ kind: _kind, ...recipient }) => recipient);
+    if (splitInternalException || finalSplitDecision.pendingAmount > 0) {
+      await logCriticalPaymentIssue({
+        supabaseAdmin,
+        source: "create-asaas-payment",
+        errorCode: "split_degraded_reconciliation_pending",
+        saleId: sale.id,
+        companyId: sale.company_id,
+        paymentEnvironment: paymentContext.environment,
+        detail: JSON.stringify({
+          reasons: finalSplitDecision.reasons,
+          pending_amount: finalSplitDecision.pendingAmount,
+          internal_exception: splitInternalException,
+        }),
+      });
+    }
     const financialSnapshot = buildFinancialSplitSnapshot({
       grossAmount,
       platformFeePercent: amountToGrossPercent(platformFeeEngine.totalFee, grossAmount),
-      socioSplitPercent: splitResolution.representative.eligible
-        ? 33.33
-        : 50,
+      socioSplitPercent: platformFeeEngine.totalFee > 0
+        ? (feeDistribution.socioAmount / platformFeeEngine.totalFee) * 100
+        : 0,
       representativePercent: splitResolution.representative.eligible
-        ? splitResolution.representative.percent
+        ? amountToGrossPercent(feeDistribution.representativeAmount, grossAmount)
         : 0,
     });
 
@@ -1413,16 +1387,19 @@ serve(async (req) => {
         platformAmount: 0,
         socioAmount: 0,
         representativeAmount: 0,
-        mode: "half_half",
+        mode: "platform_only",
       },
     });
 
-    const totalFee = splitArray.reduce((sum, recipient) => sum + recipient.percentualValue, 0);
-    if (totalFee > 100) {
+    const totalFixedSplit = splitArray.reduce(
+      (sum, recipient) => sum + Number(recipient.fixedValue ?? recipient.totalFixedValue ?? 0),
+      0,
+    );
+    if (totalFixedSplit > grossAmount) {
       return jsonResponse(
         {
-          error: "Soma das taxas (plataforma + sócio + representante) excede 100%",
-          error_code: "fee_exceeds_limit",
+          error: "Soma do split fixo excede o valor bruto da cobrança",
+          error_code: "fixed_split_exceeds_charge",
         },
         400,
       );
@@ -1434,7 +1411,6 @@ serve(async (req) => {
         company_id: sale.company_id,
         payment_environment: paymentContext.environment,
         representative_id: splitResolution.representative.representativeId,
-        representative_percent: splitResolution.representative.percent,
       });
     } else if (sale.representative_id) {
       // Regra desta fase: ausência de wallet ou elegibilidade inválida nunca derruba checkout.
@@ -1451,36 +1427,47 @@ serve(async (req) => {
       sale_id: sale.id,
       company_id: sale.company_id,
       payment_environment: paymentContext.environment,
-      split_recipients: splitResolution.recipients.map((recipient) => ({
-        kind: recipient.kind,
-        percentual_value: recipient.percentualValue,
-      })),
-      split_recipients_count: splitResolution.recipients.length,
+      split_recipients: splitArray,
+      split_recipients_count: splitArray.length,
+      fee_base: platformFeeEngine.passengerBreakdown.map((item) => item.unitPrice),
+      total_fee: platformFeeEngine.totalFee,
+      minimum_applied: platformFeeEngine.totalFee === 5 && platformFeeEngine.totalUncappedFee < 5,
+      cap_hits: platformFeeEngine.capHits,
+      socio_wallet_present: splitResolution.socio.included,
+      representative_associated_to_sale: Boolean(sale.representative_id),
+      representative_wallet_present: splitResolution.representative.eligible,
+      distribution_scenario: feeDistribution.mode,
+      distribution_amounts: feeDistribution,
+      exclusions: {
+        socio: splitResolution.socio.included ? null : splitResolution.socio.reason,
+        representative: splitResolution.representative.eligible ? null : splitResolution.representative.reason,
+      },
+      degraded: finalSplitDecision.reasons.length > 0,
+      degradation_reasons: finalSplitDecision.reasons,
+      pending_reconciliation_amount: finalSplitDecision.pendingAmount,
     });
 
-    // Regra fail-open obrigatória: ausência de wallet interna nunca bloqueia a venda.
-    // Mantemos o valor na plataforma e registramos pendência de repasse para auditoria.
+    // Wallet realmente ausente escolhe o cenário oficial sem o recebedor. Isso
+    // não cria dívida: pendência existe apenas para consulta/ambiguidade.
     const failOpenReasons: string[] = [];
 
     if (splitResolution.socio.reason === "wallet_missing") {
       failOpenReasons.push("socio_wallet_missing");
-      logPaymentTrace("warn", "create-asaas-payment", "socio_wallet_missing_repass_pending", {
+      logPaymentTrace("warn", "create-asaas-payment", "socio_wallet_missing_official_scenario_applied", {
         sale_id: sale.id,
         company_id: sale.company_id,
         payment_environment: paymentContext.environment,
         socio_reason: splitResolution.socio.reason,
-        socio_percent: splitResolution.socio.percent,
       });
     }
 
     if (splitResolution.representative.reason === "representative_wallet_missing") {
       failOpenReasons.push("representative_wallet_missing");
-      logPaymentTrace("warn", "create-asaas-payment", "representative_wallet_missing_repass_pending", {
+      logPaymentTrace("warn", "create-asaas-payment", "representative_wallet_missing_official_scenario_applied", {
         sale_id: sale.id,
         company_id: sale.company_id,
         payment_environment: paymentContext.environment,
         representative_id: splitResolution.representative.representativeId,
-        representative_percent: splitResolution.representative.percent,
       });
     }
 
@@ -1490,7 +1477,7 @@ serve(async (req) => {
         company_id: sale.company_id,
         payment_environment: paymentContext.environment,
         reasons: failOpenReasons,
-        split_recipients_count: splitResolution.recipients.length,
+        split_recipients_count: splitArray.length,
       });
     }
 
@@ -1657,7 +1644,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          access_token: companyApiKey,
+          access_token: companyApiKey!,
         },
         body: JSON.stringify({
           name: sale.customer_name,
@@ -1669,7 +1656,7 @@ serve(async (req) => {
         }),
       });
 
-      const customerData = await safeJson(createCustomerRes);
+      const customerData = await safeJson(createCustomerRes) as Record<string, any> | null;
       if (!customerData) {
         await insertIntegrationLog(
           "failed",
@@ -1755,17 +1742,17 @@ serve(async (req) => {
       customerName: sale.customer_name,
     });
 
-    const paymentPayload: Record<string, unknown> = {
+    let paymentPayload: Record<string, unknown> = {
       customer: customerId,
       billingType,
       value: grossAmount,
       dueDate: dueDateStr,
       description: paymentDescription,
       externalReference: sale.id,
-      split: splitArray,
       // Não enviamos callback.successUrl porque a cobrança usa a conta Asaas da empresa.
       // O domínio SmartBus pode não estar cadastrado nessa conta e bloquear a criação da cobrança.
     };
+    if (splitArray.length > 0) paymentPayload.split = splitArray;
 
     console.log("[create-asaas-payment] sending payment payload", {
       sale_id: sale.id,
@@ -1787,16 +1774,47 @@ serve(async (req) => {
       null,
     );
 
-    const paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        access_token: companyApiKey,
-      },
-      body: JSON.stringify(paymentPayload),
-    });
+    const findCreatedPaymentByExternalReference = async () => {
+      const lookupRes = await fetch(
+        `${asaasBaseUrl}/payments?externalReference=${encodeURIComponent(sale.id)}&limit=2`,
+        { headers: { "Content-Type": "application/json", access_token: companyApiKey } },
+      );
+      const lookupData = await safeJson(lookupRes) as { data?: unknown[] } | null;
+      const matches = lookupRes.ok && Array.isArray(lookupData?.data) ? lookupData.data : [];
+      return matches.length === 1 ? matches[0] : null;
+    };
 
-    const paymentData = await safeJson(paymentRes);
+    let paymentRes: Response;
+    let paymentData: Record<string, any> | null;
+    try {
+      paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", access_token: companyApiKey },
+        body: JSON.stringify(paymentPayload),
+      });
+      paymentData = await safeJson(paymentRes) as Record<string, any> | null;
+    } catch (createNetworkError) {
+      // Resultado ambíguo: nunca repetimos POST. Primeiro procuramos pela chave
+      // idempotente externalReference; somente reutilizamos um único resultado.
+      const recovered = await findCreatedPaymentByExternalReference().catch(() => null);
+      if (!recovered) throw createNetworkError;
+      paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+      paymentData = recovered;
+      logPaymentTrace("warn", "create-asaas-payment", "payment_create_ambiguous_recovered", {
+        sale_id: sale.id,
+        company_id: sale.company_id,
+        payment_environment: paymentEnv,
+        lookup: "externalReference",
+      });
+    }
+
+    if (!paymentData) {
+      const recovered = await findCreatedPaymentByExternalReference().catch(() => null);
+      if (recovered) {
+        paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+        paymentData = recovered;
+      }
+    }
     if (!paymentData) {
       await insertIntegrationLog(
         "failed",
@@ -1823,6 +1841,59 @@ serve(async (req) => {
             .toLowerCase()
             .includes("não há nenhuma chave pix disponível para receber cobranças")
         );
+
+      if (splitArray.length > 0 && isExplicitAsaasSplitRejection(paymentRes.status, paymentData)) {
+        // Resposta HTTP explícita comprova que nenhuma cobrança foi criada. Só
+        // neste caso fazemos uma única recuperação sem split; timeout/rede/vazio
+        // seguem a consulta por externalReference e nunca repetem o POST.
+        await logCriticalPaymentIssue({
+          supabaseAdmin,
+          source: "create-asaas-payment",
+          errorCode: "gateway_split_rejected_degraded",
+          saleId: sale.id,
+          companyId: sale.company_id,
+          paymentEnvironment: paymentEnv,
+          detail: gatewayErrorDescription,
+        });
+        splitArray = [];
+        paymentPayload = withoutSplit(paymentPayload);
+        try {
+          paymentRes = await fetch(`${asaasBaseUrl}/payments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", access_token: companyApiKey },
+            body: JSON.stringify(paymentPayload),
+          });
+          paymentData = await safeJson(paymentRes) as Record<string, any> | null;
+        } catch (fallbackNetworkError) {
+          const recovered = await findCreatedPaymentByExternalReference().catch(() => null);
+          if (!recovered) throw fallbackNetworkError;
+          paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+          paymentData = recovered;
+        }
+        if (!paymentData) {
+          const recovered = await findCreatedPaymentByExternalReference().catch(() => null);
+          if (recovered) {
+            paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+            paymentData = recovered;
+          }
+        }
+        if (paymentRes.ok && paymentData) {
+          finalSplitDecision.recipients.splice(0, finalSplitDecision.recipients.length);
+          finalSplitDecision.reasons.push("gateway_split_rejected");
+          finalSplitDecision.pendingAmount = platformFeeEngine.totalFee;
+          logPaymentTrace("warn", "create-asaas-payment", "gateway_split_fallback_succeeded", {
+            sale_id: sale.id,
+            company_id: sale.company_id,
+            payment_environment: paymentEnv,
+            pending_reconciliation_amount: platformFeeEngine.totalFee,
+          });
+        }
+      }
+
+      if (paymentRes.ok && paymentData) {
+        // A recuperação explícita sem split foi concluída; segue o mesmo fluxo
+        // de persistência e snapshot abaixo.
+      } else {
 
       if (pixKeyUnavailableOnGateway) {
         // Observabilidade isolada ao Pix: logamos divergência entre readiness persistido e retorno real do gateway.
@@ -1898,6 +1969,7 @@ serve(async (req) => {
         },
         400,
       );
+      }
     }
 
     console.log("[create-asaas-payment] payment created", {
@@ -1938,12 +2010,26 @@ serve(async (req) => {
         // Bloqueante crítico: congelamos o snapshot financeiro usado na criação da cobrança.
         // Webhook/verify reutilizam estes valores para evitar recalcular com configuração mutável.
         split_snapshot_platform_fee_percent: feeTotalPercent,
-        split_snapshot_socio_split_percent: splitResolution.representative.eligible ? 33.33 : 50,
-        split_snapshot_representative_percent: financialSnapshot.representativePercent,
+        split_snapshot_socio_split_percent: splitArray.length > 0 &&
+            finalSplitDecision.recipients.some((recipient) => recipient.kind === "socio")
+          ? (financialSnapshot.socioFeeAmount / platformFeeEngine.totalFee) * 100
+          : 0,
+        split_snapshot_representative_percent: splitArray.length > 0 &&
+            finalSplitDecision.recipients.some((recipient) => recipient.kind === "representative")
+          ? financialSnapshot.representativePercent
+          : 0,
         split_snapshot_platform_fee_total: platformFeeEngine.totalFee,
-        split_snapshot_socio_fee_amount: feeDistribution?.socioAmount ?? 0,
-        split_snapshot_platform_net_amount: feeDistribution?.platformAmount ?? 0,
-        split_snapshot_source: "create-asaas-payment",
+        split_snapshot_socio_fee_amount: splitArray.length > 0 &&
+            finalSplitDecision.recipients.some((recipient) => recipient.kind === "socio")
+          ? feeDistribution.socioAmount
+          : 0,
+        split_snapshot_platform_net_amount: splitArray.length > 0 &&
+            finalSplitDecision.recipients.some((recipient) => recipient.kind === "platform")
+          ? feeDistribution.platformAmount
+          : 0,
+        split_snapshot_source: finalSplitDecision.reasons.length > 0
+          ? `create-asaas-payment:degraded:${finalSplitDecision.reasons.join(",")}`
+          : "create-asaas-payment",
         split_snapshot_captured_at: new Date().toISOString(),
       })
       .eq("id", sale.id);

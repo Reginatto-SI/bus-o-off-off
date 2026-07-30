@@ -278,7 +278,7 @@ const PRICING_POINTS = [
   "Sem mensalidade",
   "Sem custo fixo",
   "Sem taxa de adesão",
-  "Apenas uma pequena taxa por venda realizada",
+  "Apenas uma pequena taxa por passagem vendida",
 ];
 // Navegação estratégica entre cenários: reaproveita o padrão de cards para ampliar descoberta sem adicionar nova arquitetura.
 const LANDING_SCENARIO_LINKS = [
@@ -496,7 +496,7 @@ const LANDING_FAQS = [
     question: "Como funciona a taxa da plataforma?",
     // Linguagem comercial e escaneável para reduzir objeção de preço sem entrar em regra detalhada da tabela.
     answer:
-      "A taxa do Smartbus é inteligente e varia conforme o valor da passagem. Você paga a partir de 6% nas vendas menores e, quanto maior o valor da passagem, menor é a taxa. Além disso, existe um teto máximo por venda para você não pagar caro em passagens de maior valor. Na prática, é um modelo justo, previsível e pensado para não comprometer seu lucro.",
+      "A taxa do Smartbus é calculada pelo valor individual de cada passagem. Mesmo quando o cliente compra várias passagens na mesma venda, cada uma mantém sua própria faixa, com teto máximo de R$ 25 por passagem. Na prática, é um modelo justo, previsível e pensado para não comprometer seu lucro.",
   },
   {
     question: "Preciso ter conta no Asaas?",
@@ -1858,18 +1858,18 @@ export default function LandingPage() {
               Você só paga quando vende e nunca paga caro
             </h2>
             <p className="mx-auto mt-3 max-w-3xl text-muted-foreground sm:text-lg">
-              Diferente de outras plataformas, nossa taxa é inteligente: quanto maior o valor da passagem, menor o
-              impacto no seu lucro.
+              A taxa é calculada pelo valor individual de cada passagem. Mesmo quando o cliente compra várias
+              passagens na mesma venda, cada uma mantém sua própria faixa.
             </p>
           </div>
 
           {/* Grid de cards de taxa */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {[
-              { range: "Até R$ 100", rate: "6%", label: "por venda" },
-              { range: "R$ 100 a R$ 300", rate: "5%", label: "por venda" },
-              { range: "R$ 300 a R$ 600", rate: "4%", label: "por venda" },
-              { range: "Acima de R$ 600", rate: "3%", label: "por venda" },
+              { range: "Passagem até R$ 100", rate: "6%", label: "por passagem vendida" },
+              { range: "Passagem de R$ 100,01 a R$ 300", rate: "5%", label: "por passagem vendida" },
+              { range: "Passagem de R$ 300,01 a R$ 600", rate: "4%", label: "por passagem vendida" },
+              { range: "Passagem acima de R$ 600", rate: "3%", label: "por passagem vendida" },
             ].map((tier) => (
               <div
                 key={tier.range}

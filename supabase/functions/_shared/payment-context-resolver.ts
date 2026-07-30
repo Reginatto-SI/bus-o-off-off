@@ -123,7 +123,7 @@ export function resolveSocioWalletByEnvironment(
   if (environment === "production") {
     return socio.asaas_wallet_id_production ?? socio.asaas_wallet_id ?? null;
   }
-  return socio.asaas_wallet_id_sandbox ?? socio.asaas_wallet_id ?? null;
+  return socio.asaas_wallet_id_sandbox ?? null;
 }
 
 // Comentário de suporte: após a neutralização final do legado Stripe no schema,
@@ -155,16 +155,23 @@ export function validateFinancialSocioForSplit(params: {
   provider: FinancialSocioValidationProvider;
   environment: PaymentEnvironment;
 }): FinancialSocioValidationResult {
-  const activeSocios = (params.socios ?? []).filter(
-    (socio) => socio?.status === "ativo",
+  // Elegibilidade financeira é definida somente pela wallet do ambiente. O
+  // campo status é administrativo/legado e não pode contradizer essa regra.
+  const configuredSocios = params.socios ?? [];
+  const activeSocios = configuredSocios.filter((socio) =>
+    Boolean(resolveSocioWalletByEnvironment(socio, params.environment))
   );
 
   if (activeSocios.length === 0) {
     return {
       ok: false,
-      code: "split_socio_missing_active",
-      message: "Split configurado, mas nenhum sócio ativo encontrado",
-      socio: null,
+      code: configuredSocios.length > 0
+        ? "split_socio_wallet_missing"
+        : "split_socio_missing_active",
+      message: configuredSocios.length > 0
+        ? "Sócio global sem wallet no ambiente da venda"
+        : "Nenhum cadastro de sócio global encontrado",
+      socio: configuredSocios[0] ?? null,
       walletId: null,
     };
   }

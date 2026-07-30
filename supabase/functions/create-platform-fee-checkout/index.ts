@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -13,6 +14,12 @@ import {
   distributePlatformFee,
   logFeeEngineTrace,
 } from "../_shared/platform-fee-engine.ts";
+import {
+  buildAsaasSplitPayload,
+  isExplicitAsaasSplitRejection,
+  type AsaasSplitPayloadRecipient,
+  withoutSplit,
+} from "../_shared/asaas-split-continuity.ts";
 import {
   resolvePassengerFinancialUnitPrice,
   roundCurrency,
@@ -43,7 +50,7 @@ type AsaasPaymentStatus =
   | string;
 
 
-type SupabaseAdminClient = ReturnType<typeof createClient>;
+type SupabaseAdminClient = any;
 
 type ManualPlatformFeeSale = {
   id: string;
@@ -370,7 +377,7 @@ serve(async (req) => {
       sale,
       paymentEnvironment: paymentContext.environment,
       feeAmount,
-      chargeAmount: feeAmount,
+      issuerWalletId: Deno.env.get(paymentContext.platformWalletSecretName) ?? null,
     });
 
     if (!splitResolutionContext.ok) {
@@ -567,24 +574,26 @@ serve(async (req) => {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
 
-    const splitArray = splitResolutionContext.splitResolution.recipients.map((recipient) => ({
-      walletId: recipient.walletId,
-      percentualValue: recipient.percentualValue,
-    }));
-    const totalSplitPercent = roundCurrency(
-      splitArray.reduce((sum, recipient) => sum + recipient.percentualValue, 0),
+    const splitArray = splitResolutionContext.asaasSplitRecipients.map(
+      ({ kind: _kind, ...recipient }) => recipient,
     );
-    if (totalSplitPercent > 100) {
+    const totalFixedSplitAmount = roundCurrency(
+      splitArray.reduce(
+        (sum, recipient) => sum + Number(recipient.fixedValue ?? recipient.totalFixedValue ?? 0),
+        0,
+      ),
+    );
+    if (totalFixedSplitAmount > feeAmount) {
       return new Response(JSON.stringify({
-        error: "Soma do split da taxa manual excede 100%",
-        error_code: "manual_platform_fee_split_exceeds_limit",
+        error: "Soma do split fixo da taxa manual excede a cobrança",
+        error_code: "manual_platform_fee_fixed_split_exceeds_charge",
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const paymentPayload = {
+    let paymentPayload: Record<string, unknown> = {
       customer: customerId,
       // Boleto não é permitido no SmartBus: a taxa administrativa também sai restrita a Pix.
       billingType: "PIX",
@@ -592,9 +601,8 @@ serve(async (req) => {
       dueDate: dueDate.toISOString().split("T")[0],
       description: `Taxa da Plataforma — Venda Manual "${eventName}" (${sale.quantity} passagem(ns))`,
       externalReference: `platform_fee_${sale.id}`,
-      // Cobrança continua separada, mas o split oficial da taxa sai no próprio payload.
-      split: splitArray,
     };
+    if (splitArray.length > 0) paymentPayload.split = splitArray;
 
     await logSaleIntegrationEvent({
       supabaseAdmin,
@@ -619,16 +627,76 @@ serve(async (req) => {
       }),
     });
 
-    const paymentRes = await fetch(`${paymentContext.baseUrl}/payments`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "access_token": platformApiKey,
-      },
-      body: JSON.stringify(paymentPayload),
-    });
+    const externalReference = `platform_fee_${sale.id}`;
+    const findManualPayment = async () => {
+      const lookup = await fetch(`${paymentContext.baseUrl}/payments?externalReference=${encodeURIComponent(externalReference)}&limit=2`, {
+        headers: { "Content-Type": "application/json", "access_token": platformApiKey },
+      });
+      const body = await lookup.json().catch(() => null);
+      return lookup.ok && Array.isArray(body?.data) && body.data.length === 1 ? body.data[0] : null;
+    };
+    let paymentRes: Response;
+    let paymentData: Record<string, unknown> | null;
+    try {
+      paymentRes = await fetch(`${paymentContext.baseUrl}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "access_token": platformApiKey },
+        body: JSON.stringify(paymentPayload),
+      });
+      paymentData = await paymentRes.json().catch(() => null) as Record<string, unknown> | null;
+    } catch (networkError) {
+      const recovered = await findManualPayment().catch(() => null);
+      if (!recovered) throw networkError;
+      paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+      paymentData = recovered as Record<string, unknown>;
+    }
+    if (!paymentData) {
+      const recovered = await findManualPayment().catch(() => null);
+      if (recovered) {
+        paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+        paymentData = recovered as Record<string, unknown>;
+      }
+    }
 
-    const paymentData = await paymentRes.json();
+    if (!paymentRes.ok && splitArray.length > 0 && isExplicitAsaasSplitRejection(paymentRes.status, paymentData)) {
+      paymentPayload = withoutSplit(paymentPayload);
+      try {
+        paymentRes = await fetch(`${paymentContext.baseUrl}/payments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "access_token": platformApiKey },
+          body: JSON.stringify(paymentPayload),
+        });
+        paymentData = await paymentRes.json().catch(() => null) as Record<string, unknown> | null;
+      } catch (fallbackNetworkError) {
+        const recovered = await findManualPayment().catch(() => null);
+        if (!recovered) throw fallbackNetworkError;
+        paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+        paymentData = recovered as Record<string, unknown>;
+      }
+      if (!paymentData) {
+        const recovered = await findManualPayment().catch(() => null);
+        if (recovered) {
+          paymentRes = new Response(JSON.stringify(recovered), { status: 200 });
+          paymentData = recovered as Record<string, unknown>;
+        }
+      }
+      if (paymentRes.ok && paymentData) {
+        splitArray.splice(0, splitArray.length);
+        splitResolutionContext.socioAmount = 0;
+        splitResolutionContext.representativeAmount = 0;
+        splitResolutionContext.platformAmount = feeAmount;
+        splitResolutionContext.splitPercentages = { socio: 0, representative: 0 };
+        splitResolutionContext.asaasSplitRecipients = [];
+        splitResolutionContext.degradationReasons.push("gateway_split_rejected");
+        splitResolutionContext.pendingAmount = feeAmount;
+        logPaymentTrace("warn", "create-platform-fee-checkout", "gateway_split_fallback_succeeded", {
+          sale_id: sale.id,
+          company_id: sale.company_id,
+          payment_environment: paymentContext.environment,
+          pending_reconciliation_amount: feeAmount,
+        });
+      }
+    }
 
     if (!paymentRes.ok) {
       await logSaleIntegrationEvent({
@@ -657,9 +725,19 @@ serve(async (req) => {
       });
 
       return new Response(
-        JSON.stringify({ error: paymentData?.errors?.[0]?.description || "Erro ao criar cobrança no Asaas" }),
+        JSON.stringify({
+          error: (paymentData as { errors?: Array<{ description?: string }> } | null)
+            ?.errors?.[0]?.description || "Erro ao criar cobrança no Asaas",
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (!paymentData) {
+      return new Response(JSON.stringify({ error: "Resposta vazia ao criar cobrança no Asaas" }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const saleSnapshotUpdate = buildManualPlatformFeeSaleSnapshotUpdate({
@@ -691,7 +769,7 @@ serve(async (req) => {
       provider: "asaas",
       direction: "outgoing_request",
       eventType: "platform_fee_checkout_create",
-      paymentId: paymentData.id,
+      paymentId: String(paymentData.id ?? ""),
       externalReference: `platform_fee_${sale.id}`,
       httpStatus: 200,
       processingStatus: "success",
@@ -747,6 +825,9 @@ type ManualPlatformFeeComputationResult =
 type ManualPlatformFeeSplitContext = {
   splitResolution: Awaited<ReturnType<typeof resolveAsaasSplitRecipients>>;
   distribution: ReturnType<typeof distributePlatformFee>;
+  asaasSplitRecipients: AsaasSplitPayloadRecipient[];
+  degradationReasons: string[];
+  pendingAmount: number;
   platformAmount: number;
   socioAmount: number;
   representativeAmount: number;
@@ -775,12 +856,6 @@ function centsToMoney(value: number): number {
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function splitAmountToChargePercent(amount: number, chargeAmount: number): number {
-  const charge = Number(chargeAmount || 0);
-  if (!Number.isFinite(charge) || charge <= 0) return 0;
-  return roundCurrency((Number(amount || 0) / charge) * 100);
 }
 
 async function computeOfficialManualPlatformFee(params: {
@@ -833,41 +908,11 @@ async function resolveManualPlatformFeeSplit(params: {
   sale: ManualPlatformFeeSale;
   paymentEnvironment: "production" | "sandbox";
   feeAmount: number;
-  chargeAmount: number;
+  issuerWalletId: string | null;
 }): Promise<ManualPlatformFeeSplitResult> {
   try {
-    // Primeiro resolvemos apenas a elegibilidade do representante; a divisão oficial
-    // depende desta resposta, mas a cobrança manual continua sendo da plataforma.
-    const preResolution = await resolveAsaasSplitRecipients({
-      supabaseAdmin: params.supabaseAdmin,
-      source: "create-platform-fee-checkout",
-      saleId: params.sale.id,
-      companyId: params.sale.company_id,
-      paymentEnvironment: params.paymentEnvironment,
-      splitEnabled: params.feeAmount > 0,
-      platformFeePercent: 100,
-      socioSplitPercent: 100,
-      representativeId: params.sale.representative_id ?? null,
-      includePlatformRecipient: false,
-      platformWalletId: null,
-      distributionPercentages: {
-        platform: 0,
-        socio: 1,
-        representative: 1,
-      },
-    });
-
-    const distribution = distributePlatformFee({
-      totalFee: params.feeAmount,
-      representativeEligible: preResolution.representative.eligible,
-    });
-
-    const socioChargePercent = splitAmountToChargePercent(distribution.socioAmount, params.chargeAmount);
-    const representativeChargePercent = splitAmountToChargePercent(
-      distribution.representativeAmount,
-      params.chargeAmount,
-    );
-
+    // Uma única consulta resolve as elegibilidades. A cobrança manual pertence
+    // à plataforma; somente sócio/representante elegíveis viram itens de split.
     const splitResolution = await resolveAsaasSplitRecipients({
       supabaseAdmin: params.supabaseAdmin,
       source: "create-platform-fee-checkout",
@@ -875,26 +920,33 @@ async function resolveManualPlatformFeeSplit(params: {
       companyId: params.sale.company_id,
       paymentEnvironment: params.paymentEnvironment,
       splitEnabled: params.feeAmount > 0,
-      platformFeePercent: 100,
-      socioSplitPercent: socioChargePercent,
       representativeId: params.sale.representative_id ?? null,
-      includePlatformRecipient: false,
-      platformWalletId: null,
-      distributionPercentages: {
-        // Em cobrança criada pela conta da plataforma, Marketplace é o saldo retido
-        // pela própria cobrança; sócio/representante entram como split efetivo.
-        platform: splitAmountToChargePercent(distribution.platformAmount, params.chargeAmount),
-        socio: socioChargePercent,
-        representative: representativeChargePercent,
-      },
     });
 
-    const socioAmountCents = splitResolution.socio.included
-      ? toCents(distribution.socioAmount)
-      : 0;
-    const representativeAmountCents = splitResolution.representative.eligible
-      ? toCents(distribution.representativeAmount)
-      : 0;
+    const distribution = distributePlatformFee({
+      totalFee: params.feeAmount,
+      socioEligible: splitResolution.socio.included,
+      representativeEligible: splitResolution.representative.eligible,
+    });
+
+    const asaasSplitDecision = buildAsaasSplitPayload({
+      eligibility: splitResolution,
+      distribution,
+      platformWalletId: null,
+      issuerWalletId: params.issuerWalletId,
+      issuerKind: "platform",
+      includePlatformRecipient: false,
+      installmentCount: null,
+    });
+
+    // O snapshot efetivo nasce dos itens que serão enviados, não da divisão
+    // comercial prevista. Uma omissão nunca aparece como repasse realizado.
+    const socioSent = asaasSplitDecision.recipients.some((recipient) => recipient.kind === "socio");
+    const representativeSent = asaasSplitDecision.recipients.some(
+      (recipient) => recipient.kind === "representative",
+    );
+    const socioAmountCents = socioSent ? toCents(distribution.socioAmount) : 0;
+    const representativeAmountCents = representativeSent ? toCents(distribution.representativeAmount) : 0;
     const platformAmountCents = Math.max(
       toCents(params.feeAmount) - socioAmountCents - representativeAmountCents,
       0,
@@ -904,12 +956,19 @@ async function resolveManualPlatformFeeSplit(params: {
       ok: true,
       splitResolution,
       distribution,
+      asaasSplitRecipients: asaasSplitDecision.recipients,
+      degradationReasons: asaasSplitDecision.reasons,
+      pendingAmount: asaasSplitDecision.pendingAmount,
       platformAmount: centsToMoney(platformAmountCents),
       socioAmount: centsToMoney(socioAmountCents),
       representativeAmount: centsToMoney(representativeAmountCents),
       splitPercentages: {
-        socio: splitResolution.socio.included ? socioChargePercent : 0,
-        representative: splitResolution.representative.eligible ? representativeChargePercent : 0,
+        socio: params.feeAmount > 0 && socioSent
+          ? roundCurrency((distribution.socioAmount / params.feeAmount) * 100)
+          : 0,
+        representative: params.feeAmount > 0 && representativeSent
+          ? roundCurrency((distribution.representativeAmount / params.feeAmount) * 100)
+          : 0,
       },
     };
   } catch (error) {
@@ -919,7 +978,7 @@ async function resolveManualPlatformFeeSplit(params: {
       supabaseAdmin: params.supabaseAdmin,
       saleId: params.sale.id,
       companyId: params.sale.company_id,
-      action: "platform_fee_checkout_split_resolution_failed",
+      action: "platform_fee_checkout_split_resolution_degraded",
       source: "create-platform-fee-checkout",
       result: "error",
       paymentEnvironment: params.paymentEnvironment,
@@ -928,10 +987,30 @@ async function resolveManualPlatformFeeSplit(params: {
     });
 
     return {
-      ok: false,
-      httpStatus: errorCode === "missing_platform_wallet" ? 500 : 409,
-      errorCode: errorCode || "manual_platform_fee_split_resolution_failed",
-      message: "Falha ao resolver split financeiro da taxa manual.",
+      ok: true,
+      splitResolution: {
+        socioValidation: null,
+        socio: { included: false, reason: "query_failed", walletId: null },
+        representative: {
+          eligible: false,
+          reason: "representative_lookup_failed",
+          representativeId: params.sale.representative_id ?? null,
+          walletId: null,
+        },
+      },
+      distribution: {
+        platformAmount: params.feeAmount,
+        socioAmount: 0,
+        representativeAmount: 0,
+        mode: "platform_only",
+      },
+      asaasSplitRecipients: [],
+      degradationReasons: ["split_resolution_internal_exception"],
+      pendingAmount: params.feeAmount,
+      platformAmount: params.feeAmount,
+      socioAmount: 0,
+      representativeAmount: 0,
+      splitPercentages: { socio: 0, representative: 0 },
     };
   }
 }
@@ -959,6 +1038,8 @@ function buildManualPlatformFeeSaleSnapshotUpdate(params: {
     split_snapshot_platform_fee_total: params.feeAmount,
     split_snapshot_socio_fee_amount: params.splitResolutionContext.socioAmount,
     split_snapshot_platform_net_amount: params.splitResolutionContext.platformAmount,
+    // Mantém o discriminador consumido pela confirmação/ledger. Detalhes de
+    // degradação e pendência ficam no log de integração da mesma cobrança.
     split_snapshot_source: "create-platform-fee-checkout",
     split_snapshot_captured_at: new Date().toISOString(),
   };
@@ -994,11 +1075,12 @@ function buildManualPlatformFeeAuditPayload(params: {
       representative_eligible: params.splitResolutionContext.splitResolution.representative.eligible,
       representative_reason: params.splitResolutionContext.splitResolution.representative.reason,
     },
-    split_effective_sent: params.splitResolutionContext.splitResolution.recipients.map((recipient) => ({
-      kind: recipient.kind,
-      walletId: recipient.walletId,
-      percentualValue: recipient.percentualValue,
-    })),
+    split_degradation: {
+      applied: params.splitResolutionContext.degradationReasons.length > 0,
+      reasons: params.splitResolutionContext.degradationReasons,
+      pending_reconciliation_amount: params.splitResolutionContext.pendingAmount,
+    },
+    split_effective_sent: params.splitResolutionContext.asaasSplitRecipients,
     omitted_recipients: {
       socio: params.splitResolutionContext.splitResolution.socio.included
         ? null
@@ -1068,8 +1150,8 @@ async function resolveExistingPlatformFeePayment(params: {
       .filter((row: Record<string, unknown>) => row?.id)
       .filter((row: Record<string, unknown>) => row?.externalReference === externalReference)
       .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
-        const aTs = new Date(a?.dateCreated ?? 0).getTime();
-        const bTs = new Date(b?.dateCreated ?? 0).getTime();
+        const aTs = new Date(String(a?.dateCreated ?? 0)).getTime();
+        const bTs = new Date(String(b?.dateCreated ?? 0)).getTime();
         return bTs - aTs;
       });
 
@@ -1404,9 +1486,9 @@ function normalizeAsaasStatus(status: unknown): AsaasPaymentStatus {
 function resolveAsaasConfirmedAtFromPayment(payment: Record<string, unknown> | null): string {
   if (!payment) return new Date().toISOString();
 
-  return payment?.confirmedDate
+  return String(payment?.confirmedDate
     || payment?.clientPaymentDate
     || payment?.paymentDate
     || payment?.dateCreated
-    || new Date().toISOString();
+    || new Date().toISOString());
 }

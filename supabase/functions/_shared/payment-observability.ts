@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export type PaymentOwnerType = "company" | "platform" | "unknown";
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -5,7 +6,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 export type PaymentTraceLevel = "info" | "warn" | "error";
 export type CriticalPaymentErrorCode =
   | "sale_update_after_gateway_payment_failed"
-  | "payment_confirmed_ticket_generation_failed";
+  | "payment_confirmed_ticket_generation_failed"
+  | "split_resolution_internal_exception_degraded"
+  | "split_degraded_reconciliation_pending"
+  | "gateway_split_rejected_degraded";
 export type PaymentFlowResult =
   | "started"
   | "success"
