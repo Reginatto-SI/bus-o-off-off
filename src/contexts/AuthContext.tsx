@@ -42,7 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [userCompanies, setUserCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
   const [representativeProfile, setRepresentativeProfile] = useState<Representative | null>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('cameraDebug') === '1') window.dispatchEvent(new CustomEvent('smartbus:auth-diagnostic', { detail: {
+      event: 'state',
+      at: new Date().toISOString(), loading, authenticated: Boolean(user),
+      role: userRole, hasActiveCompany: Boolean(activeCompanyId), visibility: document.visibilityState,
+    } }));
+  }, [activeCompanyId, loading, user, userRole]);
 
   const resolveEffectiveRole = (userId: string, role: UserRole): UserRole => {
     // Regra de negócio obrigatória: este usuário nunca pode assumir gerente/operador.
@@ -246,6 +256,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (new URLSearchParams(window.location.search).get('cameraDebug') === '1') window.dispatchEvent(new CustomEvent('smartbus:auth-diagnostic', { detail: {
+          at: new Date().toISOString(), event, authenticated: Boolean(session?.user),
+          loadingBefore: loadingRef.current, visibility: document.visibilityState, url: window.location.href,
+        } }));
         setSession(session);
         setUser(session?.user ?? null);
 
